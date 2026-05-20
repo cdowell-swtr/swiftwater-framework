@@ -197,15 +197,36 @@ Hooks are surgical — they fire on the specific file being changed, not the who
 
 ## 5. Pre-commit Layer
 
-Runs before every commit. Target: <10 seconds. No AI, no network calls.
+Runs before every commit. Target: <10 seconds total — all tools run on staged files only, not the whole project. No AI, no network calls.
 
-| Check | Tool | Failure behaviour |
+**Always active:**
+
+| Check | Tool | File types |
 |---|---|---|
-| Lint + format | `ruff` | Blocking |
-| Type checking | `mypy` | Blocking |
-| Coverage threshold on changed modules | `coverage` | Blocking (threshold configurable, default 80%) |
-| Secrets scan | `gitleaks` | Blocking |
-| Line endings | `.gitattributes` + pre-commit check | Blocking |
+| Lint + format | `ruff` | `.py` |
+| Type checking | `mypy` | `.py` |
+| TOML formatting | `taplo` | `.toml` |
+| YAML lint | `yamllint` | `.yml`, `.yaml` |
+| GitHub Actions lint | `actionlint` | `.github/workflows/*.yml` |
+| Dockerfile lint | `hadolint` | `Dockerfile*` |
+| Shell script lint | `shellcheck` | `.sh` |
+| JSON format | `prettier` | `.json` |
+| Secrets scan | `gitleaks` | All files |
+| Line endings | `.gitattributes` + pre-commit check | All files |
+| Coverage threshold on changed modules | `coverage` | `.py` (default 80%, configurable) |
+
+All checks above are blocking.
+
+**Active when React battery is included:**
+
+| Check | Tool | File types |
+|---|---|---|
+| Lint | `eslint` (with TypeScript plugin) | `.ts`, `.tsx`, `.js`, `.jsx` |
+| Type checking | `tsc --noEmit` | `.ts`, `.tsx` |
+| CSS / SCSS lint | `stylelint` | `.css`, `.scss` |
+| Format | `prettier` | `.ts`, `.tsx`, `.js`, `.jsx`, `.css`, `.scss`, `.html`, `.md` |
+
+All React checks are blocking.
 
 ---
 
@@ -364,7 +385,7 @@ When the `react` battery is active:
 
 ### CI (`ci.yml`) — triggers on every push and PR
 1. Pre-flight: install deps, run `pip-audit`
-2. Lint + type check: `ruff`, `mypy`
+2. Lint + type check: `ruff`, `mypy`, `taplo`, `yamllint`, `actionlint`, `hadolint`, `shellcheck`, `prettier` (JSON); plus `eslint`, `tsc`, `stylelint`, `prettier` (full) when React battery active
 3. Unit + functional tests with coverage threshold
 4. Build Docker images
 5. Start CI Compose stack
