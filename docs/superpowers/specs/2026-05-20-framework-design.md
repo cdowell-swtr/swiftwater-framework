@@ -103,11 +103,20 @@ template/
       deploy-staging.yml
       deploy-prod.yml
       review-security.yml
-      review-accessibility.yml
       review-data-integrity.yml
+      review-data-lineage.yml
       review-application-logic.yml
+      review-observability.yml
+      review-test-quality.yml
+      review-architecture.yml
+      review-performance.yml
       review-compliance.yml
+      review-privacy.yml
+      review-api-design.yml
+      review-accessibility.yml
       review-usability.yml
+      review-documentation.yml
+      review-dependency.yml
       review-aggregator.yml
     dependabot.yml
   .claude/
@@ -279,23 +288,38 @@ Sniff tests run against real deployed environments and cannot collect applicatio
 ## 7. Layer 3 — Integration Intelligence Layer
 
 ### AI Review Agents
-Each agent runs as a named GitHub Check Run. Findings are posted as inline diff annotations.
+Each agent runs as a named GitHub Check Run. Findings are posted as inline diff annotations. Agents run in parallel.
 
-| Agent | Domain | Blocks merge |
-|---|---|---|
-| `review-security` | Auth, injection, secrets, CVEs, OWASP Top 10 | HIGH / CRITICAL findings |
-| `review-data-integrity` | Data model, validation, migrations, consistency | Any finding |
-| `review-application-logic` | Correctness, edge cases, error handling, recoverability | Any finding |
-| `review-compliance` | GDPR, data retention, audit logging, PII handling | Clear violations |
-| `review-accessibility` | ARIA, semantic HTML, WCAG 2.1 AA | Advisory (warning) |
-| `review-usability` | UX patterns, error messages, loading/empty states | Advisory (warning) |
+| Agent | Domain | Blocks merge on | Active when |
+|---|---|---|---|
+| `review-security` | Auth, injection, secrets, CVEs, OWASP Top 10 | HIGH / CRITICAL findings | Always |
+| `review-data-integrity` | Data model, validation, migrations, store consistency | Any finding | Always |
+| `review-data-lineage` | Data flow documentation, multi-store ownership, PII routing, deletion cascade coverage, cross-paradigm consistency, audit trails | PII to undocumented locations; deletion gaps; cross-paradigm writes with no consistency strategy | Always |
+| `review-application-logic` | Correctness, edge cases, error handling, recoverability | Any finding | Always |
+| `review-observability` | Metrics/logs/traces on new code paths, SLO thresholds defined, correlation ID propagation, error paths logged with context | New untraced/unmetered code paths | Always |
+| `review-test-quality` | Tests assert behaviour not implementation; mocks match real interfaces; unhappy paths assert failure behaviour; NFR heuristics addressed | Tests that could pass regardless of code behaviour | Always |
+| `review-architecture` | Layering violations (routes calling DB directly), circular dependencies, inappropriate coupling, boundary adherence | Layering violations; circular deps | Always |
+| `review-performance` | N+1 queries, algorithm complexity, memory allocation in hot paths, missed caching opportunities, connection pool exhaustion | Clear regressions against defined SLOs | Always |
+| `review-compliance` | GDPR, data retention, audit logging, right-to-erasure coverage | Clear violations | Always |
+| `review-privacy` | PII data minimisation, logging of sensitive fields, data flow necessity, retention beyond purpose | PII in logs; unnecessary PII collection | Always |
+| `review-api-design` | Naming consistency, error response consistency (RFC 7807), pagination patterns, versioning adherence, rate limiting headers | Advisory (warning) | REST or GraphQL battery |
+| `review-accessibility` | ARIA, semantic HTML, WCAG 2.1 AA, axe-core findings | Advisory (warning) | React battery |
+| `review-usability` | UX patterns, error messages, loading/empty/error states, form validation feedback | Advisory (warning) | React battery |
+| `review-documentation` | Public interfaces documented, `.env.example` updated for new vars, complex logic explained, API spec current | Advisory (warning) | Always |
+| `review-dependency` | New dependency justification, maintenance health, existing alternatives, supply chain risk | Advisory (warning) | Only fires when dependency files change |
+
+### Agent Interactions
+Some findings should propagate across agents automatically:
+- A lineage finding (PII reaching an undocumented store) automatically triggers privacy and compliance agents to re-evaluate in that context
+- A performance finding (unbounded query) cross-references data integrity (missing index)
+- The aggregator surfaces these cross-agent relationships in its PR summary
 
 ### Aggregator
-A `review-aggregator` job runs after all agents complete and posts a single PR comment with the full picture: all findings, severities, affected files, and suggested fixes. The builder sees everything in one place.
+A `review-aggregator` job runs after all agents complete and posts a single PR comment containing: all findings grouped by severity, cross-agent relationships, affected files, suggested fixes, and a pass/fail summary. The builder sees the full picture in one place without hunting through individual check runs.
 
 ### Triggering
-- All agents run on every PR
-- Security and data integrity agents also run on direct pushes to `main`
+- All applicable agents run on every PR
+- Security, data-integrity, data-lineage, and observability agents also run on direct pushes to `main`
 
 ---
 
