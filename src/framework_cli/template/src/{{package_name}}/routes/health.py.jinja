@@ -1,0 +1,32 @@
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse, PlainTextResponse
+
+router = APIRouter()
+
+_METRICS_BODY = (
+    "# HELP app_up Application up indicator\n"
+    "# TYPE app_up gauge\n"
+    "app_up 1\n"
+)
+
+
+@router.get("/heartbeat", response_class=PlainTextResponse)
+def heartbeat() -> PlainTextResponse:
+    """Liveness ping — the process is up. No dependency checks."""
+    return PlainTextResponse("OK", status_code=200)
+
+
+@router.get("/health")
+def health() -> JSONResponse:
+    """Readiness + SLO status. Walking skeleton: SLO evaluation arrives in a later plan."""
+    return JSONResponse({"status": "ok", "slos": {}}, status_code=200)
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+def metrics() -> PlainTextResponse:
+    """Prometheus exposition format. Walking skeleton: a single static gauge."""
+    return PlainTextResponse(
+        _METRICS_BODY,
+        status_code=200,
+        media_type="text/plain; version=0.0.4",
+    )

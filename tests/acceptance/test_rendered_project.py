@@ -1,0 +1,26 @@
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from framework_cli.copier_runner import render_project
+
+DATA = {
+    "project_name": "Demo",
+    "project_slug": "demo",
+    "package_name": "demo",
+    "python_version": "3.12",
+}
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
+def test_rendered_project_passes_its_own_tests(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    result = subprocess.run(["uv", "run", "pytest", "-q"], cwd=dest)
+    assert result.returncode == 0, "the generated project's test suite did not pass"

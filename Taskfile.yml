@@ -1,0 +1,13 @@
+version: '3'
+
+tasks:
+  test:
+    desc: Run the framework test suite
+    cmds:
+      - uv run pytest -q
+
+  lint:
+    desc: Lint and type-check the framework
+    cmds:
+      - uv run ruff check .
+      - uv run mypy src
