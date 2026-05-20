@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProjectNames:
     project_name: str
     project_slug: str
