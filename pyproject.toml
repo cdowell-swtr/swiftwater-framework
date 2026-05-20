@@ -37,3 +37,4 @@ src = ["src", "tests"]
 [tool.mypy]
 files = ["src"]
 python_version = "3.12"
+exclude = ["src/framework_cli/template/"]
