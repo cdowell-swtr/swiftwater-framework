@@ -18,6 +18,7 @@ task lint      # ruff + mypy
 - TDD is the workflow — see `CLAUDE.md`.
 - `task test:cov` enforces a 70% coverage floor.
 - Pre-commit runs ruff, mypy, gitleaks, file hygiene, and the coverage gate on every commit (`task hooks` to install).
+- A Claude Code hook lints each Python file right after it is edited (`.claude/settings.json`).
 
 ## Endpoints
 

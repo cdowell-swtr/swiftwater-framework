@@ -92,3 +92,10 @@ def test_render_includes_claude_hooks(tmp_path: Path):
     hook = dest / ".claude" / "hooks" / "lint_changed.py"
     assert hook.is_file()
     assert "tool_input" in hook.read_text()
+
+
+def test_render_docs_mention_editor_hook(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert "editor hook" in (dest / "CLAUDE.md").read_text().lower()
+    assert ".claude/settings.json" in (dest / "README.md").read_text()

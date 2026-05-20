@@ -37,6 +37,7 @@ Scaffold a non-functional test (with an explicit threshold) when code: operates 
 - `task test:cov` — tests with coverage (must stay >= 70%)
 - `task lint` — ruff + mypy
 - `task hooks` — install pre-commit; `task hooks:run` — run all hooks
+- An editor hook runs ruff + mypy on each Python file as it is edited; fix what it reports before moving on.
 
 <!-- FRAMEWORK:END -->
 
