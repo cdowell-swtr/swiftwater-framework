@@ -26,7 +26,7 @@ A CLI scaffold framework that allows any builder — regardless of experience le
 
 ## 2. Core Architecture
 
-The framework has three layers plus an observability stack that runs across all of them.
+The framework has three primary layers (development-time, pre-commit, CI-time), plus an observability stack and a coverage model that cut across all of them.
 
 ### Layer 1 — Template Layer (structural)
 A [Copier](https://copier.readthedocs.io/) template repository that generates and maintains project skeletons. Owns: directory layout, Docker Compose files, GitHub Actions workflows, `pyproject.toml`, pre-commit config, Taskfile, environment conventions, and all scaffolded code patterns. `copier update` (exposed as `framework upskill`) keeps generated projects in sync with the evolving template — merging non-destructively and flagging conflicts.
@@ -67,6 +67,8 @@ template/
       resilience/
         retry.py                # tenacity decorators
         circuit_breaker.py      # pybreaker setup
+  migrations/                   # Alembic migrations (relational paradigm only)
+  seeds/                        # seed data loaded by db:seed on first dev run
   tests/
     unit/
     functional/
@@ -75,7 +77,11 @@ template/
     sniff/                      # fast stateless probes run post-deploy against real environments
   scripts/
     export-openapi.sh           # generates openapi.json; run by CI, output committed
+    export-graphql-schema.sh    # generates schema.graphql; run by CI (graphql battery)
   infra/
+    docker/
+      Dockerfile                # multi-stage build for app/worker services
+      Dockerfile.frontend       # React battery only
     compose/
       base.yml
       dev.yml
@@ -95,8 +101,13 @@ template/
         datasources/
       loki/
       alertmanager/
+        alertmanager.yml        # channel config from scaffold wizard (§3)
       otel/
         otel-collector.yml
+  .devcontainer/
+    devcontainer.json           # VS Code containerised development
+  .vscode/
+    launch.json                 # Python debugger attach to running containers
   .github/
     workflows/
       ci.yml
@@ -125,13 +136,18 @@ template/
     integrity.lock              # checksums of locked + hybrid files; two-tier (tracked / gitignored)
   CLAUDE.md                     # TDD contract, testing obligations, conventions (hybrid: managed section)
   TASKFILE.yml                  # cross-platform task runner
+  SERVICES.md                   # internal + external address of every service
   pyproject.toml
+  uv.lock                       # locked dependencies (committed)
   .env.example                  # all required vars documented
+  .gitignore                    # excludes .env, certs, build artefacts (read by integrity check)
   .gitattributes                # enforce LF
   .pre-commit-config.yaml
   .copier-answers.yml
   .python-version
 ```
+
+JetBrains run configurations (`.idea/`) are generated on request rather than committed, to avoid IDE-specific noise in the repository.
 
 ### Available Batteries
 Batteries are activated at scaffold time via `framework new my-app --with <battery>` and added later via `framework upskill my-app --with <battery>`.
@@ -144,9 +160,22 @@ Batteries are activated at scaffold time via `framework new my-app --with <batte
 | `webhooks` | Inbound webhook handler, signature validation, idempotency |
 | `websockets` | FastAPI WebSocket routes, connection manager |
 | `react` | Vite + TypeScript frontend, Vitest, Playwright, axe-core |
-| `database` | Database paradigm wizard (see §8) |
+| `database` | Database paradigm wizard (see §9) |
 | `consumers` | Pact contract testing for inter-service contracts |
 | `observability` | Full observability stack **(default-on — opt out with `--without observability`)** |
+
+### Scaffold-Time Configuration Wizard
+`framework new` is interactive. Beyond project name, package name, and battery selection, it collects the cross-cutting configuration a project needs to be fully wired on first run. The questions and conditionals are defined in `copier.yml`.
+
+| Collected | Where it goes |
+|---|---|
+| Database paradigms (when `--with database`) | Scaffolds stores + Compose services (see §9) |
+| Alert channels (Slack webhook / email / PagerDuty) | `infra/observability/alertmanager/alertmanager.yml`; required secret names recorded in `.env.example` |
+| CD notification target (deploy success / failure / rollback) | `deploy-staging.yml` / `deploy-prod.yml` notify steps |
+| Claude API key (for AI review agents) | Local `.env` for `task ci`; wizard prints the exact `gh secret set` command to register it for CI |
+| Container image registry (default: GHCR) | CI build/push and CD pull configuration |
+
+**Secrets collected by the wizard never land in committed files.** They are written to `.env` (gitignored) for local use, and the wizard emits the exact `gh secret set ...` commands to register them as GitHub Secrets for CI/CD. The committed `.env.example` records only the variable *names* and descriptions.
 
 ---
 
@@ -206,7 +235,7 @@ Hooks are surgical — they fire on the specific file being changed, not the who
 - All configuration access via `settings.*` — never hardcoded
 - `log.*` not `print()` — always include context keys
 - Never use bare `except` — handle every identified error case explicitly
-- Schema changes require a new migration — never modify existing migrations
+- Relational schema changes require a new Alembic migration — never modify existing migrations (document/key-value paradigms follow their own paradigm-specific migration guidance)
 - Updating an endpoint requires updating its contract test
 - API routes versioned as `/api/v1/`
 
@@ -262,7 +291,7 @@ pytest tests/e2e        --cov --cov-context=e2e
 
 This produces a combined report showing, for every line: which test types covered it and which did not. This is the mechanism that distinguishes a genuinely uncovered line from a line that is covered only at the integration level.
 
-For the React frontend, Vitest runs with Istanbul coverage contexts for unit/functional, and Playwright is configured to collect Istanbul coverage from the running browser for E2E.
+For the React frontend, Vitest runs with Istanbul coverage contexts for unit/functional, and Playwright is configured to collect Istanbul coverage from the running browser for E2E. Frontend coverage uses the same stage thresholds as the backend (70% pre-commit, 85% CI), evaluated separately against the frontend codebase.
 
 ### Coverage Thresholds by Stage
 
@@ -340,7 +369,15 @@ Runs identically in dev, CI, staging, and prod. A developer can see their SLO da
 | OpenTelemetry Collector | Unified trace / metric / log pipeline |
 
 ### SLO-Defined Monitoring Endpoints
-Every scaffolded service ships `/health`, `/heartbeat`, and `/metrics` endpoints. These return structured SLO status — not booleans:
+Every scaffolded service ships three distinct endpoints, each with a specific role:
+
+| Endpoint | Format | Purpose |
+|---|---|---|
+| `/heartbeat` | Minimal `200 OK` | Liveness — is the process up? Used by container orchestration and the smoke-test Phase 1. Cheap, no dependency checks. |
+| `/health` | Structured SLO JSON (below) | Readiness + SLO status — are dependencies reachable and are SLOs being met? Used by load balancers and deployment validation. |
+| `/metrics` | Prometheus text exposition format | Scraped by Prometheus. Raw counters, gauges, and histograms — *not* the SLO JSON. |
+
+`/health` returns structured SLO status, not a boolean:
 
 ```json
 {
@@ -353,7 +390,10 @@ Every scaffolded service ships `/health`, `/heartbeat`, and `/metrics` endpoints
 }
 ```
 
-SLO definitions live in code as configuration. Grafana dashboards and Alertmanager rules are auto-generated from them — single source of truth across all environments.
+SLO definitions live in code as configuration. They drive the `/health` evaluation, and Grafana dashboards plus Alertmanager rules are auto-generated from the same definitions (computed over the raw `/metrics` data) — a single source of truth across all environments.
+
+### Alert Routing
+Alertmanager routes breaches to the channels chosen in the `framework new` wizard (§3) — Slack webhook, email, and/or PagerDuty — written to `infra/observability/alertmanager/alertmanager.yml`. The CD `notify` steps (deploy success / failure / rollback) use the same configured channels, so alerting and deployment notifications share one destination set. Locally, alerts surface in the Alertmanager UI without requiring external channels.
 
 ### Recoverability Metrics (first-class)
 - Error counts by type and recovery outcome (recovered / unrecovered / escalated)
@@ -458,9 +498,9 @@ When multiple paradigms are active, the data lineage review agent tracks data fl
 
 ## 11. API Contracts and Versioning
 
-- FastAPI auto-generates OpenAPI spec; `scripts/export-openapi.sh` runs in CI to produce `openapi.json` which is committed back to the branch
-- CI diffs `openapi.json` on every PR — breaking changes (removed fields, changed types) fail the pipeline
-- All API routes are versioned: `/api/v1/`
+- **REST:** FastAPI auto-generates OpenAPI spec; `scripts/export-openapi.sh` runs in CI to produce `openapi.json` which is committed back to the branch. CI diffs it on every PR — breaking changes (removed fields, changed types) fail the pipeline.
+- **GraphQL:** `scripts/export-graphql-schema.sh` produces `schema.graphql` (SDL), committed back to the branch. CI diffs it on every PR using a GraphQL-aware comparison — breaking changes (removed types/fields, changed nullability or argument types) fail the pipeline.
+- All REST routes are versioned: `/api/v1/`
 - When the `consumers` battery is active, Pact contract tests are scaffolded for inter-service contracts
 
 ---
@@ -489,15 +529,16 @@ When the `react` battery is active:
 
 ### CI (`ci.yml`) — triggers on every push and PR
 0. **Framework integrity** — `framework integrity --ci` verifies the tracked + checksummed tier (gitignored existence checks skipped). Fails fast if scaffolding is compromised.
-1. Pre-flight: install deps, run `pip-audit`
+1. Pre-flight: install deps, run `pip-audit`, run `gitleaks` (full-history secrets scan)
 2. Lint + type check: `ruff`, `mypy`, `taplo`, `yamllint`, `actionlint`, `hadolint`, `shellcheck`, `prettier` (JSON); plus `eslint`, `tsc`, `stylelint`, `prettier` (full) when React battery active
-3. Unit + functional tests with coverage threshold
+3. Unit + functional tests — run with coverage contexts (no gate yet; the combined gate is step 8)
 4. Build Docker images
 5. Start CI Compose stack
-6. E2E tests (including unhappy paths)
-7. Export and diff `openapi.json`
-8. All Layer 3 AI review agents (parallel)
-9. Review aggregator — post PR summary comment
+6. E2E tests (including unhappy paths) — run with coverage context
+7. Export and diff `openapi.json` (and `schema.graphql` when GraphQL battery active)
+8. **Combined coverage gate** — assert ≥85% over the merged unit + functional + E2E contexts (now that all three have run); report integration-only lines
+9. AI review agents (parallel): **on a PR, all applicable agents run; on a direct push to `main`, only `review-security`, `review-data-integrity`, `review-data-lineage`, and `review-observability` run** (per §7)
+10. Review aggregator — post PR summary comment
 
 ### CD Staging (`deploy-staging.yml`) — triggers on merge to `main`
 
@@ -568,7 +609,7 @@ All tasks defined in `TASKFILE.yml` using [Taskfile](https://taskfile.dev/) — 
 | `task ci` | Full local CI suite against the running dev stack (fast pre-flight before push) |
 | `task push` | `git push` — triggers authoritative GitHub Actions CI pipeline |
 | `task integrity` | `framework integrity` — verify framework scaffolding (auto-runs as precondition on every task) |
-| `task lint` | ruff + mypy |
+| `task lint` | Full linter set: ruff, mypy, taplo, yamllint, actionlint, hadolint, shellcheck, prettier (+ eslint, tsc, stylelint when React battery active) |
 | `task db:migrate` | Run pending migrations |
 | `task db:seed` | Load seed data |
 | `task certs` | Regenerate local mkcert certificates |
@@ -580,7 +621,8 @@ All tasks defined in `TASKFILE.yml` using [Taskfile](https://taskfile.dev/) — 
 - Python version matches `.python-version`
 - `uv` is installed
 - mkcert is installed (installs if absent)
-- Required environment variables are present in `.env` (compared against `.env.example`)
+- `.env` exists — if absent, it is created by copying `.env.example`, then the run pauses with a message listing the secret values the builder must fill in (the wizard-collected secrets from `framework new` are already populated locally)
+- All variables named in `.env.example` are present in `.env` (the contract is enforced; missing vars fail with the specific names listed)
 
 Any failure produces a specific, actionable error message — not a stack trace.
 
