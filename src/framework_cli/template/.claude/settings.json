@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lint_changed.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
