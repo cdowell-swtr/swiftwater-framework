@@ -68,3 +68,11 @@ def test_render_includes_claude_md(tmp_path: Path):
     assert "<!-- FRAMEWORK:END -->" in text
     assert "Demo" in text
     assert "write the failing test first" in text.lower()
+
+
+def test_render_readme_documents_gates(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    readme = (dest / "README.md").read_text()
+    assert "Quality gates" in readme
+    assert "task test:cov" in readme
