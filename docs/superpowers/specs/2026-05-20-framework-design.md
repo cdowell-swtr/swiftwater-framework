@@ -180,10 +180,16 @@ Claude Code and all Layer 3 agents explicitly map the full outcome space before 
 ### Claude Code Hooks (`.claude/settings.json`)
 Hooks are surgical — they fire on the specific file being changed, not the whole project:
 
-- Python file saved → run `ruff check` and `mypy` on that file only
-- Test file saved → run that test file with `pytest` and report coverage delta
-- `requirements` or `pyproject.toml` changed → run `pip-audit`
-- `.env` changed → run `gitleaks` scan
+- `.py` saved → `ruff check` + `mypy` on that file only
+- Python test file saved → run that test file with `pytest`, report coverage delta
+- `.ts` / `.tsx` / `.js` / `.jsx` saved → `eslint` + `tsc --noEmit` on that file (React battery)
+- `.css` / `.scss` saved → `stylelint` on that file (React battery)
+- `.yml` / `.yaml` saved → `yamllint` on that file; `actionlint` if under `.github/workflows/`
+- `Dockerfile*` saved → `hadolint` on that file
+- `.sh` saved → `shellcheck` on that file
+- `.toml` saved → `taplo fmt --check` on that file
+- `pyproject.toml` or `requirements*.txt` changed → `pip-audit`
+- `.env` changed → `gitleaks` scan
 
 ### CLAUDE.md Conventions
 - All configuration access via `settings.*` — never hardcoded
