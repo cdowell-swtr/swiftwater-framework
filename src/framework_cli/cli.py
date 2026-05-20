@@ -26,7 +26,7 @@ def new(
     dest = Path.cwd() / names.project_slug
 
     if dest.exists():
-        typer.echo(f"Error: {dest} already exists")
+        typer.echo(f"Error: {dest} already exists", err=True)
         raise typer.Exit(code=1)
 
     render_project(
