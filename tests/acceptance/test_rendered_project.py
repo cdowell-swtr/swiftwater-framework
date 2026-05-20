@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -74,3 +75,56 @@ def test_rendered_project_precommit_runs_clean(tmp_path: Path):
 
     result = subprocess.run(["uv", "run", "pre-commit", "run", "--all-files"], cwd=dest)
     assert result.returncode == 0, "pre-commit hooks did not pass cleanly on a fresh project"
+
+
+def _run_hook(dest: Path, file_path: Path) -> subprocess.CompletedProcess[str]:
+    payload = json.dumps(
+        {"tool_name": "Write", "tool_input": {"file_path": str(file_path)}}
+    )
+    return subprocess.run(
+        ["uv", "run", "python", ".claude/hooks/lint_changed.py"],
+        cwd=dest,
+        input=payload,
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
+def test_lint_hook_blocks_on_bad_python(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+
+    bad = dest / "src" / "demo" / "scratch_bad.py"
+    bad.write_text("import os\n")  # unused import -> ruff F401
+
+    result = _run_hook(dest, bad)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "F401" in (result.stdout + result.stderr)
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
+def test_lint_hook_passes_clean_python(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+
+    clean = dest / "src" / "demo" / "scratch_clean.py"
+    clean.write_text("VALUE: int = 1\n")
+
+    result = _run_hook(dest, clean)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
+def test_lint_hook_ignores_non_python(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+
+    note = dest / "notes.txt"
+    note.write_text("not python\n")
+
+    result = _run_hook(dest, note)
+    assert result.returncode == 0, result.stdout + result.stderr
