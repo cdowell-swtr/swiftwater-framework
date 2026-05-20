@@ -100,10 +100,12 @@ template/
         dashboards/             # auto-provisioned from SLO definitions
         datasources/
       loki/
+      tempo/
+        tempo.yml               # distributed trace storage
       alertmanager/
         alertmanager.yml        # channel config from scaffold wizard (§3)
       otel/
-        otel-collector.yml
+        otel-collector.yml      # exports traces→Tempo, metrics→Prometheus, logs→Loki
   .devcontainer/
     devcontainer.json           # VS Code containerised development
   .vscode/
@@ -362,11 +364,12 @@ Runs identically in dev, CI, staging, and prod. A developer can see their SLO da
 | Component | Role |
 |---|---|
 | Prometheus | Scrapes `/metrics` from all services |
-| Grafana | Auto-provisioned dashboards from SLO definitions |
+| Grafana | Auto-provisioned dashboards from SLO definitions; unified view over metrics, logs, and traces |
 | Alertmanager | Fires alerts when SLOs breach thresholds |
 | Loki | Structured log aggregation |
 | Promtail | Log shipping to Loki |
-| OpenTelemetry Collector | Unified trace / metric / log pipeline |
+| Tempo | Distributed trace storage; OTEL Collector exports traces here; viewable in Grafana with trace-to-log correlation via Loki |
+| OpenTelemetry Collector | Unified trace / metric / log pipeline; exports traces to Tempo, metrics to Prometheus, logs to Loki |
 
 ### SLO-Defined Monitoring Endpoints
 Every scaffolded service ships three distinct endpoints, each with a specific role:
@@ -540,9 +543,21 @@ When the `react` battery is active:
 9. AI review agents (parallel): **on a PR, all applicable agents run; on a direct push to `main`, only `review-security`, `review-data-integrity`, `review-data-lineage`, and `review-observability` run** (per §7)
 10. Review aggregator — post PR summary comment
 
+### Deployment Contract (the seam)
+The framework defines deployment as a **contract**, not a specific mechanism. Every deploy — staging or prod — follows the same invariant sequence:
+
+1. Build images
+2. Push images to the container registry (default GHCR, set in the scaffold wizard)
+3. Invoke the configured **deploy strategy** to run those exact images on the target
+4. Run the validation phases below
+
+The deploy strategy is a pluggable seam: it receives the pushed image references and the target environment, and is responsible for making them run. Because every strategy runs the *same images* against the *same Compose definitions*, environment parity holds regardless of which strategy is chosen.
+
+**Concrete deploy strategies are deferred — see §20 (Deferred Decisions).** This spec defines the contract and the validation phases; the specific strategies (compose-over-SSH, Fly.io, Render, Kubernetes, etc.) are designed separately so the framework can support a range of targets for different builders.
+
 ### CD Staging (`deploy-staging.yml`) — triggers on merge to `main`
 
-Staging deployment runs a four-phase validation sequence. Each phase must pass before the next begins. Any failure triggers auto-rollback and blocks the prod promotion gate.
+After the deploy strategy places the new images on staging, a four-phase validation sequence runs. Each phase must pass before the next begins. Any failure triggers auto-rollback (delegated to the deploy strategy) and blocks the prod promotion gate.
 
 **Phase 1 — Smoke tests (immediate, ~30s)**
 Runs immediately after deploy. Fast enough to catch a broken deployment before anything else runs.
@@ -565,7 +580,7 @@ Sniff tests run against the real deployed staging environment — they catch env
 The same E2E suite from CI, now run against the real staging environment. This includes all happy paths and all unhappy paths (dependency failures, auth failures, rate limits, malformed input). Staging E2E is the definitive confidence gate before prod — if it passes here, prod promotion is permitted.
 
 **Phase 4 — SLO load validation (~5–10 min)**
-A lightweight load test (k6, scaffolded by the framework) runs the primary API paths at a configurable request rate and asserts that SLO thresholds hold under load. k6's `thresholds` map 1:1 to the framework's SLO definitions — a threshold breach is an SLO breach, expressed once. Results are written via Prometheus remote-write into the same Grafana stack the framework already runs, so load results appear on the same dashboards as application metrics, and are stored as a CI artefact for comparison across deploys. This catches performance regressions that pass unit and E2E tests but degrade under realistic concurrency.
+A lightweight load test runs the primary API paths at a configurable request rate and asserts that SLO thresholds hold under load. k6 runs via its official Docker image — no local install, no pre-flight check, works identically in `task ci` locally and in GitHub Actions. k6's `thresholds` map 1:1 to the framework's SLO definitions — a threshold breach is an SLO breach, expressed once. Results are written via Prometheus remote-write into the same Grafana stack the framework already runs, so load results appear on the same dashboards as application metrics, and are stored as a CI artefact for comparison across deploys. This catches performance regressions that pass unit and E2E tests but degrade under realistic concurrency.
 
 **On success:** the staging deployment is marked prod-ready and the prod promotion gate opens.
 **On any failure:** auto-rollback, deployment marked failed, prod gate stays closed, notify.
@@ -574,11 +589,11 @@ A lightweight load test (k6, scaffolded by the framework) runs the primary API p
 Prod deployment only opens after staging has passed all four phases above.
 
 1. Manual approval gate — a human reviews the staging validation results before proceeding
-2. Build prod images (same artefacts as staging — no rebuild)
-3. Deploy to prod
+2. Reuse the staging image artefacts (already in the registry — no rebuild)
+3. Invoke the configured deploy strategy against prod
 4. Smoke tests — same as staging Phase 1, against prod endpoints
 5. Sniff tests — same as staging Phase 2, against prod endpoints (read-only paths only — no writes in prod sniff)
-6. Auto-rollback if smoke or sniff fails
+6. Auto-rollback (via the deploy strategy) if smoke or sniff fails
 7. Notify with link to Grafana prod dashboard
 
 The framework never deploys to prod without: a passing staging validation, a human approval, and a passing post-deploy smoke + sniff.
@@ -718,6 +733,17 @@ Every service ships the following patterns from day one — builders extend them
 - **Graceful shutdown** — services handle `SIGTERM` gracefully, finish in-flight requests, close DB connections cleanly
 
 CLAUDE.md instruction: no bare `except` clauses; every identified error case is handled explicitly; recovery paths are part of outcome space mapping.
+
+---
+
+## 20. Deferred Decisions
+
+These are intentionally out of scope for this spec and will be designed separately. They do not block the initial implementation, because the architecture defines the seams they plug into.
+
+### Concrete Deploy Strategies
+This spec defines the deployment *contract* (§14: build → push to registry → invoke deploy strategy → validate) but not the concrete strategies. The framework will likely need to support a range of targets for different builders — compose-over-SSH to a VPS, PaaS providers (Fly.io, Render, Railway), and Kubernetes among them. Each is a deploy-strategy implementation behind the contract. The first concrete strategy will be chosen and designed when a target is selected; until then, the contract and validation phases are fully specified and the deploy step is a defined seam.
+
+**Why deferred:** no specific deployment target is chosen yet, and pinning one prematurely would couple the framework to it. The parity guarantee holds regardless of strategy, because every strategy runs the same registry images against the same Compose definitions.
 
 ---
 
