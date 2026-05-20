@@ -28,3 +28,51 @@ def test_render_substitutes_package_name(tmp_path: Path):
 
     main_py = (dest / "src" / "demo" / "main.py").read_text()
     assert "from demo.routes import health" in main_py
+
+
+def test_render_includes_coverage_config(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "pytest-cov" in pyproject
+    assert "[tool.coverage.run]" in pyproject
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "test:cov" in taskfile
+
+
+def test_render_includes_precommit_config(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    cfg = dest / ".pre-commit-config.yaml"
+    assert cfg.is_file()
+    text = cfg.read_text()
+    assert "ruff" in text
+    assert "mypy" in text
+    assert "gitleaks" in text
+
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "pre-commit" in pyproject
+
+
+def test_render_includes_claude_md(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    claude = dest / "CLAUDE.md"
+    assert claude.is_file()
+    text = claude.read_text()
+    assert "<!-- FRAMEWORK:BEGIN -->" in text
+    assert "<!-- FRAMEWORK:END -->" in text
+    assert "Demo" in text
+    assert "write the failing test first" in text.lower()
+
+
+def test_render_readme_documents_gates(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    readme = (dest / "README.md").read_text()
+    assert "Quality gates" in readme
+    assert "task test:cov" in readme

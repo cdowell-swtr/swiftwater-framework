@@ -4,9 +4,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 router = APIRouter()
 
 _METRICS_BODY = (
-    "# HELP app_up Application up indicator\n"
-    "# TYPE app_up gauge\n"
-    "app_up 1\n"
+    "# HELP app_up Application up indicator\n# TYPE app_up gauge\napp_up 1\n"
 )
 
 
