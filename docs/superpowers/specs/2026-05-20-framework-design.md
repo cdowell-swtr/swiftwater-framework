@@ -219,9 +219,11 @@ Runs before every commit. Target: <10 seconds total — all tools run on staged 
 | JSON format | `prettier` | `.json` |
 | Secrets scan | `gitleaks` | All files |
 | Line endings | `.gitattributes` + pre-commit check | All files |
-| Coverage threshold on changed modules | `coverage` | `.py` (default 80%, configurable) |
+| Unit + functional coverage on changed modules | `coverage` (unit + functional contexts only) | `.py` (default 70%, configurable) |
 
 All checks above are blocking.
+
+**Why unit + functional only in pre-commit:** E2E tests require the full Docker stack and take minutes. NFR tests are slow by nature. Running either in pre-commit would make the hook unusable. The pre-commit threshold is intentionally lower (default 70%) to reflect partial coverage — the full picture is only available in CI where all test types run.
 
 **Active when React battery is included:**
 
@@ -236,7 +238,45 @@ All React checks are blocking.
 
 ---
 
-## 6. Layer 3 — Integration Intelligence Layer
+## 6. Coverage Model
+
+### Coverage Contexts
+The framework uses `coverage.py` **dynamic contexts** to tag which test type covered each line. Each suite runs separately with its own context label:
+
+```bash
+pytest tests/unit       --cov --cov-context=unit
+pytest tests/functional --cov --cov-context=functional
+pytest tests/e2e        --cov --cov-context=e2e
+```
+
+This produces a combined report showing, for every line: which test types covered it and which did not. This is the mechanism that distinguishes a genuinely uncovered line from a line that is covered only at the integration level.
+
+For the React frontend, Vitest runs with Istanbul coverage contexts for unit/functional, and Playwright is configured to collect Istanbul coverage from the running browser for E2E.
+
+### Coverage Thresholds by Stage
+
+| Stage | Test types run | Threshold | Rationale |
+|---|---|---|---|
+| Pre-commit | Unit + functional | 70% (configurable) | E2E requires full stack; NFR is slow. Lower threshold reflects partial picture. |
+| CI | Unit + functional + E2E | 85% (configurable) | Full picture. E2E fills the gap on integration paths. |
+| CI (combined) | All types | Reported, not gated | Total visibility; NFR paths are tracked separately (see below). |
+
+### Lines Covered Only by E2E
+A line covered by E2E but not by any unit or functional test is **not a failure** — some lines are only reachable via full integration. However, CI flags these as "integration-only coverage" in the report and the review-application-logic agent is instructed to assess whether a unit test is warranted. This creates pressure toward the right level of isolation without making it a hard gate.
+
+### NFR Coverage
+NFR tests (performance, load, resilience) execute the same code paths as unit/functional tests but assert on timing, throughput, and failure behaviour — they do not add unique line coverage. NFR coverage is therefore tracked by the presence and completeness of NFR scaffolds, not by line counters:
+
+- A function that triggered an NFR heuristic (§4) must have a corresponding test in `tests/non_functional/`
+- That test must have a defined threshold (no `# SLO: p99 < ???ms` markers remaining)
+- CI fails on undefined NFR thresholds after a configurable grace period (default: 5 commits)
+
+### Sniff Test Coverage
+Sniff tests run against real deployed environments and cannot collect application-level coverage (the app is not instrumented in staging/prod). Sniff coverage is tracked by whether every consumer-facing surface defined in the project has a corresponding entry in `tests/sniff/`. CI fails if a consumer-facing surface exists with no sniff test.
+
+---
+
+## 7. Layer 3 — Integration Intelligence Layer
 
 ### AI Review Agents
 Each agent runs as a named GitHub Check Run. Findings are posted as inline diff annotations.
@@ -259,7 +299,7 @@ A `review-aggregator` job runs after all agents complete and posts a single PR c
 
 ---
 
-## 7. Observability Stack
+## 8. Observability Stack
 
 Runs identically in dev, CI, staging, and prod. A developer can see their SLO dashboard locally before anything touches CI.
 
@@ -302,7 +342,7 @@ SLO definitions live in code as configuration. Grafana dashboards and Alertmanag
 
 ---
 
-## 8. Environment Model
+## 9. Environment Model
 
 ### Docker Compose Profiles
 
@@ -347,7 +387,7 @@ Based on answers, the framework recommends and scaffolds the appropriate paradig
 
 ---
 
-## 9. Secrets and Configuration Management
+## 10. Secrets and Configuration Management
 
 - `.env.example` is committed — documents every required variable with description and example value
 - `.env` is gitignored — never committed
@@ -358,7 +398,7 @@ Based on answers, the framework recommends and scaffolds the appropriate paradig
 
 ---
 
-## 10. API Contracts and Versioning
+## 11. API Contracts and Versioning
 
 - FastAPI auto-generates OpenAPI spec; `scripts/export-openapi.sh` runs in CI to produce `openapi.json` which is committed back to the branch
 - CI diffs `openapi.json` on every PR — breaking changes (removed fields, changed types) fail the pipeline
@@ -367,7 +407,7 @@ Based on answers, the framework recommends and scaffolds the appropriate paradig
 
 ---
 
-## 11. Dependency Security
+## 12. Dependency Security
 
 - `pip-audit` runs in CI after every dependency install step — failing CVEs block the pipeline
 - `dependabot.yml` is scaffolded — auto-opens PRs for dependency updates weekly
@@ -375,7 +415,7 @@ Based on answers, the framework recommends and scaffolds the appropriate paradig
 
 ---
 
-## 12. Frontend (React Battery)
+## 13. Frontend (React Battery)
 
 When the `react` battery is active:
 - TypeScript is mandatory
@@ -387,7 +427,7 @@ When the `react` battery is active:
 
 ---
 
-## 13. CI/CD Pipeline
+## 14. CI/CD Pipeline
 
 ### CI (`ci.yml`) — triggers on every push and PR
 1. Pre-flight: install deps, run `pip-audit`
@@ -445,7 +485,7 @@ The framework never deploys to prod without: a passing staging validation, a hum
 
 ---
 
-## 14. Local Development Experience
+## 15. Local Development Experience
 
 ### Single Command Startup
 `task dev` brings up the full local world: all application services, observability stack (Prometheus, Grafana, Loki, Alertmanager), local HTTPS via Traefik + mkcert, hot reload, database with seed data.
@@ -502,7 +542,7 @@ A `SERVICES.md` in every generated project documents each service's internal Doc
 
 ---
 
-## 15. Framework Version and Upgrade
+## 16. Framework Version and Upgrade
 
 - `.copier-answers.yml` records the framework version used to scaffold the project
 - `framework check` compares the local version to the latest release and shows a changelog diff with breaking changes clearly marked
@@ -510,7 +550,7 @@ A `SERVICES.md` in every generated project documents each service's internal Doc
 
 ---
 
-## 16. Emergent CLI Surface
+## 17. Emergent CLI Surface
 
 The CLI is a thin shell over Copier and the task runner. Commands are defined as they become necessary — not designed upfront.
 
@@ -526,7 +566,7 @@ Additional commands emerge from builder needs. The CLI is UX sugar — the subst
 
 ---
 
-## 17. Error Handling and Recoverability Scaffold
+## 18. Error Handling and Recoverability Scaffold
 
 Every service ships the following patterns from day one — builders extend them, not create them:
 
