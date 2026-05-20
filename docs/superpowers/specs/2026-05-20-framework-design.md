@@ -71,7 +71,7 @@ template/
     unit/
     functional/
     e2e/
-    non_functional/
+    non_functional/             # k6 scripts; thresholds map 1:1 to SLO definitions
     sniff/                      # fast stateless probes run post-deploy against real environments
   scripts/
     export-openapi.sh           # generates openapi.json; run by CI, output committed
@@ -121,7 +121,9 @@ template/
     dependabot.yml
   .claude/
     settings.json               # hooks: ruff, mypy, targeted test runner
-  CLAUDE.md                     # TDD contract, testing obligations, conventions
+  .framework/
+    integrity.lock              # checksums of locked + hybrid files; two-tier (tracked / gitignored)
+  CLAUDE.md                     # TDD contract, testing obligations, conventions (hybrid: managed section)
   TASKFILE.yml                  # cross-platform task runner
   pyproject.toml
   .env.example                  # all required vars documented
@@ -486,6 +488,7 @@ When the `react` battery is active:
 ## 14. CI/CD Pipeline
 
 ### CI (`ci.yml`) — triggers on every push and PR
+0. **Framework integrity** — `framework integrity --ci` verifies the tracked + checksummed tier (gitignored existence checks skipped). Fails fast if scaffolding is compromised.
 1. Pre-flight: install deps, run `pip-audit`
 2. Lint + type check: `ruff`, `mypy`, `taplo`, `yamllint`, `actionlint`, `hadolint`, `shellcheck`, `prettier` (JSON); plus `eslint`, `tsc`, `stylelint`, `prettier` (full) when React battery active
 3. Unit + functional tests with coverage threshold
@@ -521,7 +524,7 @@ Sniff tests run against the real deployed staging environment — they catch env
 The same E2E suite from CI, now run against the real staging environment. This includes all happy paths and all unhappy paths (dependency failures, auth failures, rate limits, malformed input). Staging E2E is the definitive confidence gate before prod — if it passes here, prod promotion is permitted.
 
 **Phase 4 — SLO load validation (~5–10 min)**
-A lightweight load test (k6 or Locust, scaffolded by the framework) runs the primary API paths at a configurable request rate and asserts that SLO thresholds hold under load. This catches performance regressions that pass unit and E2E tests but degrade under realistic concurrency. Results are posted to the Grafana staging dashboard and stored as a CI artefact for comparison across deploys.
+A lightweight load test (k6, scaffolded by the framework) runs the primary API paths at a configurable request rate and asserts that SLO thresholds hold under load. k6's `thresholds` map 1:1 to the framework's SLO definitions — a threshold breach is an SLO breach, expressed once. Results are written via Prometheus remote-write into the same Grafana stack the framework already runs, so load results appear on the same dashboards as application metrics, and are stored as a CI artefact for comparison across deploys. This catches performance regressions that pass unit and E2E tests but degrade under realistic concurrency.
 
 **On success:** the staging deployment is marked prod-ready and the prod promotion gate opens.
 **On any failure:** auto-rollback, deployment marked failed, prod gate stays closed, notify.
@@ -564,6 +567,7 @@ All tasks defined in `TASKFILE.yml` using [Taskfile](https://taskfile.dev/) — 
 | `task test:sniff` | Sniff tests against a target environment (`SNIFF_TARGET=https://staging.example.com`) |
 | `task ci` | Full local CI suite against the running dev stack (fast pre-flight before push) |
 | `task push` | `git push` — triggers authoritative GitHub Actions CI pipeline |
+| `task integrity` | `framework integrity` — verify framework scaffolding (auto-runs as precondition on every task) |
 | `task lint` | ruff + mypy |
 | `task db:migrate` | Run pending migrations |
 | `task db:seed` | Load seed data |
@@ -608,7 +612,42 @@ A `SERVICES.md` in every generated project documents each service's internal Doc
 
 ---
 
-## 17. Emergent CLI Surface
+## 17. Framework Integrity
+
+A self-check that verifies the framework's own scaffolding is intact — that the builder hasn't moved, deleted, or altered the files the framework relies on to support them. Distinct from `framework check` (version/changelog) and `framework upskill` (add batteries). Where `check` asks "is there a newer framework?", `integrity` asks "is *this* framework still whole?"
+
+### File Classification
+Every scaffolded file is declared in the Copier template as one of three classes:
+
+1. **Locked** — full-file checksum. Pure framework infrastructure the builder should never edit: CI workflows, review-agent definitions, observability config, Compose files, pre-commit config, resilience scaffolds. Modifying these breaks the upskill contract.
+2. **Hybrid (managed sections)** — files the builder is expected to extend, containing a framework-owned block delimited by `<!-- FRAMEWORK:BEGIN -->` … `<!-- FRAMEWORK:END -->` (comment syntax varies by file type). The delimited section is checksummed; everything outside it is the builder's to edit freely. Applies to `CLAUDE.md` (TDD contract and conventions locked; project-specific context free), `.env.example`, `pyproject.toml` (framework-managed dependency block), and `TASKFILE.yml` (framework tasks vs. builder tasks).
+3. **Builder-owned** — not checked. Application code, tests, migrations.
+
+### The Manifest
+`.framework/integrity.lock` records every locked and hybrid entry with its expected checksum. Generated at `framework new`, updated on `framework upskill`. The manifest is itself checksummed to detect tampering.
+
+The manifest has **two tiers**:
+- **Tracked + checksummed** — git-tracked files, verified in every environment (local, CI, staging, prod)
+- **Gitignored + existence-only** — framework-managed files legitimately absent from a fresh clone (`.env` derived from `.env.example`; mkcert certs in `infra/traefik/certs/`). Verified locally only; never in CI.
+
+**Invariant:** checksummed files must be git-tracked. You cannot reliably checksum-verify a file that was never committed. The Copier template generation enforces this — if a file marked for checksumming matches a `.gitignore` pattern, that is flagged as a framework authoring error and not shipped.
+
+### Execution
+`framework integrity` is wired into `TASKFILE.yml` as a precondition on every target — it runs before `task dev`, `task test`, `task ci`, and all others. Taskfile dedupes preconditions within a run, so a chained task triggers it once. Performance budget is sub-second (hashing ~30–50 files), so it never becomes friction.
+
+It is also **step 0 of the GitHub Actions CI pipeline**, so CI fails fast if scaffolding is compromised. In CI (detected via a known env var, and by reading `.gitignore`), only the tracked + checksummed tier is verified — gitignored existence checks are skipped, so a fresh checkout never fails spuriously.
+
+The integrity logic lives in the installed CLI (`uv tool install framework`), not in the project's scaffolded code — so a builder deleting project files cannot disable the very check that detects it.
+
+### Failure and Remediation
+- **Missing locked/hybrid file** → hard fail with specific guidance
+- **Altered locked file** → hard fail by default; `framework restore <file>` re-fetches the canonical version from the template at the project's recorded version
+- **Altered hybrid framework section** → hard fail; `framework restore` rewrites only the framework block, preserving the builder's surrounding content
+- **Intentional divergence** → `--allow-drift` escape hatch, set per-file and recorded in the manifest so the divergence is explicit and visible (and surfaced during `upskill`)
+
+---
+
+## 18. Emergent CLI Surface
 
 The CLI is a thin shell over Copier and the task runner. Commands are defined as they become necessary — not designed upfront.
 
@@ -619,12 +658,14 @@ The CLI is a thin shell over Copier and the task runner. Commands are defined as
 | `framework new <name> [--with <battery>...]` | Scaffold a new project |
 | `framework upskill <name> [--with <battery>...]` | Add batteries to an existing project |
 | `framework check` | Check framework version and show changelog diff |
+| `framework integrity [--ci] [--allow-drift <file>]` | Verify framework scaffolding is intact (runs as a Taskfile precondition and CI step 0) |
+| `framework restore <file>` | Re-fetch a canonical framework file from the template at the recorded version |
 
 Additional commands emerge from builder needs. The CLI is UX sugar — the substance lives in the layers beneath it.
 
 ---
 
-## 18. Error Handling and Recoverability Scaffold
+## 19. Error Handling and Recoverability Scaffold
 
 Every service ships the following patterns from day one — builders extend them, not create them:
 
