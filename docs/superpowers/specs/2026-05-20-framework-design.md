@@ -551,9 +551,31 @@ The framework defines deployment as a **contract**, not a specific mechanism. Ev
 3. Invoke the configured **deploy strategy** to run those exact images on the target
 4. Run the validation phases below
 
-The deploy strategy is a pluggable seam: it receives the pushed image references and the target environment, and is responsible for making them run. Because every strategy runs the *same images* against the *same Compose definitions*, environment parity holds regardless of which strategy is chosen.
+The deploy strategy is a pluggable seam, but it is a *contract* — not a free-for-all. Any valid strategy must implement a minimum interface and uphold a set of guarantees, because the framework's safety properties (rollback, validation gating, no-downtime cutover) depend on them.
 
-**Concrete deploy strategies are deferred — see §20 (Deferred Decisions).** This spec defines the contract and the validation phases; the specific strategies (compose-over-SSH, Fly.io, Render, Kubernetes, etc.) are designed separately so the framework can support a range of targets for different builders.
+**Minimum strategy interface** (conceptual — language binding defined with the first concrete strategy):
+
+| Operation | Responsibility |
+|---|---|
+| `deploy(release)` | Place the given versioned image set on the target; must not route traffic to it until healthy |
+| `endpoints()` | Return reachable URLs per service, so the framework can run smoke / sniff / E2E / load against the real deployment |
+| `await_healthy(timeout)` | Block until the new release is serving, or fail |
+| `rollback()` | Restore the previous known-good release; callable on any validation-phase failure |
+| `releases()` / `current_release()` | Versioned, addressable releases so rollback has a defined target |
+| `teardown()` | Clean up a failed or rolled-back release |
+
+**Guarantees every strategy must uphold:**
+- Versioned, addressable releases (a rollback target always exists)
+- No-downtime cutover — the previous release keeps serving until the new one passes smoke (Phase 1)
+- Idempotent, re-runnable deploys
+- Secrets injected from the configured secret source at runtime — never baked into images
+- The *same* registry images are promoted staging → prod (no rebuild)
+
+**Division of responsibility.** The framework's CD orchestration owns the validation sequence (smoke → sniff → E2E → load) and the *decision* to roll back (any phase failure calls `rollback()`), plus the prod promotion gate and human approval. The strategy owns only the *mechanism* of placing images and reverting them. A strategy that cannot roll back, or cannot expose endpoints for validation, is not a valid strategy.
+
+Because every strategy runs the *same images* against the *same Compose definitions* and satisfies the same contract, environment parity and the rollback/validation safety net hold regardless of which strategy is chosen.
+
+**Concrete deploy strategies are deferred — see §21 (Deferred Decisions).** This spec defines the contract, guarantees, and validation phases; the specific strategies (compose-over-SSH, Fly.io, Render, Kubernetes, etc.) are designed separately so the framework can support a range of targets for different builders.
 
 ### CD Staging (`deploy-staging.yml`) — triggers on merge to `main`
 
@@ -736,7 +758,37 @@ CLAUDE.md instruction: no bare `except` clauses; every identified error case is 
 
 ---
 
-## 20. Deferred Decisions
+## 20. Framework Self-Quality (Dogfooding)
+
+The framework imposes TDD, linting, CI, and quality gates on generated projects — and holds itself to the same standard. The framework repository is itself a project with these gates. A framework that exempts itself from its own discipline cannot be trusted to enforce it.
+
+### The `framework` CLI
+The CLI is a Python package and gets the same Python gates the framework imposes on builders: unit + functional tests (pytest with coverage contexts), `ruff`, `mypy`, coverage thresholds, and its own GitHub Actions CI.
+
+### The Copier Template — Rendered-Output Testing
+A broken template silently breaks every new project, so the template is the most safety-critical asset. Template tests **render** projects from the template and then validate the rendered output:
+
+- For each rendered project: assert it lints clean, its `.framework/integrity.lock` verifies, and its own `task ci` passes green.
+- Tests run across a **representative matrix** of battery combinations on every PR (e.g., `rest`; `rest+workers`; `rest+graphql+react`; `workers+webhooks`; full stack), because conditionals in `copier.yml` interact.
+- The fuller cartesian product runs on a nightly schedule rather than per-PR to bound CI time.
+- `copier.yml` itself is schema-validated.
+- **The template is never released unless rendered projects are green.**
+
+### The `upskill` / `copier update` Path
+Tests scaffold a project at an older template version, run `copier update` to the current version, and assert the merge is non-destructive and the upgraded project stays green. This protects the upgrade promise that makes `upskill` safe.
+
+### The Integrity Logic
+Unit tests for the integrity checker: tamper a locked file → fail; alter a hybrid managed section → fail; edit *outside* a managed section → pass; gitignored file absent in `--ci` mode → pass; tampered manifest → fail.
+
+### The Review Agents — Eval Tests
+Each agent has golden fixtures: known-bad diffs it must flag (true positives) and known-good diffs it must pass (no false positives). Because LLM output is non-deterministic, evals assert detection of seeded issues against a pass threshold rather than exact-match. Agent evals run on a schedule and whenever an agent's prompt or logic changes.
+
+### The Framework's Own CI
+The framework repo's GitHub Actions runs: full-file-type linting, CLI tests, the template render matrix, integrity-logic tests, upskill tests, and agent evals (on agent changes). The framework eats its own dog food end to end.
+
+---
+
+## 21. Deferred Decisions
 
 These are intentionally out of scope for this spec and will be designed separately. They do not block the initial implementation, because the architecture defines the seams they plug into.
 
