@@ -1,0 +1,45 @@
+# {{ project_name }} — Working Agreement
+
+<!-- FRAMEWORK:BEGIN -->
+<!-- This section is managed by the framework. Edit outside the markers; framework upgrades may rewrite this block. -->
+
+## Test-Driven Development (required)
+
+Write the failing test first, confirm it fails (red), implement the minimum to pass, confirm it passes (green). Do not write implementation code before its test.
+
+Apply the testing obligation that matches what you are building:
+
+| What you are building | Required tests |
+|---|---|
+| Any code unit | Unit tests — red first, then green |
+| Any behaviour or feature | Functional tests — assert outcomes, not implementation |
+| A non-functional requirement | Non-functional tests (performance, load, resilience) |
+| Any service | Health / heartbeat / metrics endpoints as part of the skeleton |
+| A consumer-facing surface (API, webhook, UI, WebSocket) | End-to-end tests against the running stack |
+
+Map the full outcome space before considering a unit done: happy path; every error case; edge cases (empty, null, boundary, concurrent, maximum); and — for consumer-facing surfaces — at least one unhappy end-to-end path.
+
+## Non-functional heuristics
+
+Scaffold a non-functional test (with an explicit threshold) when code: operates on an unbounded/variable-size collection; is I/O-bound (DB, HTTP, file); sits in a hot path; does CPU-bound processing; has retry/circuit-breaker logic; or depends on an external service.
+
+## Conventions
+
+- Read all configuration through the settings object — never hardcode config or secrets.
+- Use the structured logger, not `print()`; include context with each log entry.
+- Never use a bare `except`; handle every identified error case explicitly.
+- Relational schema changes require a new migration; never edit an existing migration.
+- Updating an API endpoint requires updating its contract test.
+
+## Quality commands
+
+- `task test` — fast test run
+- `task test:cov` — tests with coverage (must stay >= 70%)
+- `task lint` — ruff + mypy
+- `task hooks` — install pre-commit; `task hooks:run` — run all hooks
+
+<!-- FRAMEWORK:END -->
+
+## Project notes
+
+_Add project-specific context for collaborators and AI assistants here. This area is yours; the framework will not overwrite it._

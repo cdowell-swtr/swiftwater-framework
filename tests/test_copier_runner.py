@@ -55,3 +55,16 @@ def test_render_includes_precommit_config(tmp_path: Path):
 
     pyproject = (dest / "pyproject.toml").read_text()
     assert "pre-commit" in pyproject
+
+
+def test_render_includes_claude_md(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    claude = dest / "CLAUDE.md"
+    assert claude.is_file()
+    text = claude.read_text()
+    assert "<!-- FRAMEWORK:BEGIN -->" in text
+    assert "<!-- FRAMEWORK:END -->" in text
+    assert "Demo" in text
+    assert "write the failing test first" in text.lower()
