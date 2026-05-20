@@ -379,11 +379,35 @@ SLO definitions live in code as configuration. Grafana dashboards and Alertmanag
 | `staging` | `deploy-staging.yml` | Full stack, production-equivalent config |
 | `prod` | `deploy-prod.yml` | Full stack, no dev tooling |
 
+**`task ci` vs `task push`:** These are distinct and intentionally separate.
+
+`task ci` runs the full local CI suite against the already-running dev stack — no container spin-up cost, warm services, fast feedback. It runs: lint + type checks across all file types; unit + functional + E2E tests with coverage; pip-audit; OpenAPI export and diff; NFR/load tests; and, if a Claude API key is present in the environment, the AI review agents. This catches the vast majority of issues before anything touches GitHub.
+
+`task push` does `git push`, which triggers GitHub Actions to run the authoritative CI pipeline. The Actions run is the canonical green-badge source — it runs on a clean environment, builds fresh images, and is what gates staging deployment. A builder should typically run `task ci` first, address any findings, then `task push`.
+
+The local `task ci` is not a substitute for the Actions run — it is a fast pre-flight that makes the Actions run more likely to pass on the first attempt.
+
 ### Local HTTPS (mkcert)
 The pre-flight check on first `task dev` installs mkcert if absent, generates certificates for `localhost` and `*.localhost`, and installs them into the system trust store. Traefik runs as a local reverse proxy terminating SSL — its label-based Docker service discovery makes it the natural fit for Compose. All local endpoints are HTTPS. No `verify=False` anywhere in code. Works on Windows, Mac, and Linux.
 
 ### Container Startup Ordering
-Every service defines a `healthcheck` in the Compose file. All dependent services use `depends_on: condition: service_healthy`. The database is not "up" until it accepts connections. Workers do not start until the broker (Redis) is healthy. First-run `task dev` never fails due to race conditions.
+Every service defines a `healthcheck` in the Compose file. All dependent services use `depends_on: condition: service_healthy`. The dependency graph is kept **minimal** — a service declares only the dependencies that genuinely block it from starting, not convenience groupings. Services with no mutual dependency start in parallel automatically; Docker Compose's scheduler handles this without explicit configuration.
+
+Example dependency graph for a full stack (arrows = blocks):
+```
+postgres ──┐
+            ├──► app
+redis ─────┤
+            └──► worker
+traefik ─────────────── (no deps, starts immediately)
+otel-collector ──────── (no deps, starts immediately)
+prometheus ──┐
+loki ────────┴──► grafana
+alertmanager ─────────── (no deps, starts immediately)
+promtail ─────────────── (no deps, starts immediately)
+```
+
+In this graph, postgres + redis + traefik + otel-collector + alertmanager + promtail all start in parallel on `task dev`. App and worker start as soon as their actual dependencies (postgres + redis) are healthy. Grafana waits only for prometheus and loki. First-run `task dev` never fails due to race conditions.
 
 ### Database Initialisation
 `task dev` on first run: waits for DB health, runs migrations, loads seed data — automatically. `task dev:reset` tears down and rebuilds. Subsequent `task dev` runs detect existing data and skip seeding.
@@ -392,22 +416,30 @@ Every service defines a `healthcheck` in the Compose file. All dependent service
 A separate test database service exists in the `test` Compose profile. The test suite is configured to use it automatically. The test database is reset to a known state between test runs.
 
 ### Database Paradigm Wizard
-`framework new` (when `--with database` is active) asks the builder:
-- What is the shape of your data? (structured / semi-structured / graph / time-series / vector)
-- How dense are the relationships between entities?
-- What are the primary query patterns?
-- What are the rough scale expectations?
+`framework new` (when `--with database` is active) does not assume a single-paradigm answer. Most real projects need more than one paradigm. The wizard reasons about use cases and composes a multi-paradigm recommendation.
 
-Based on answers, the framework recommends and scaffolds the appropriate paradigm:
+For each distinct use case the builder describes, the wizard asks:
+- What is the shape of this data? (structured / semi-structured / graph / time-series / vector / ephemeral)
+- How dense are the relationships between entities in this use case?
+- What are the primary query patterns? (relational joins / document lookup / graph traversal / time-range / similarity search / key lookup)
+- What are the rough scale and retention expectations?
 
-| Paradigm | Technology |
-|---|---|
-| Relational | PostgreSQL + SQLAlchemy + Alembic |
-| Document | MongoDB + Motor (async) |
-| Key-value / cache | Redis |
-| Time-series | TimescaleDB |
-| Vector / semantic search | pgvector or Qdrant |
-| Graph | Neo4j |
+The wizard then recommends a paradigm per use case, identifies overlaps (e.g., Redis serves both caching and session storage), and presents a composed recommendation:
+
+> "For user data with relationships → PostgreSQL. For session management and rate limiting → Redis. For semantic search over user content → pgvector (as a PostgreSQL extension, no extra service needed)."
+
+All recommended paradigms are scaffolded. The builder can accept the full recommendation or deselect individual paradigms. Paradigms can be added later via `framework upskill --with database:<paradigm>`.
+
+| Paradigm | Technology | Notes |
+|---|---|---|
+| Relational | PostgreSQL + SQLAlchemy + Alembic | Default for structured data with relationships |
+| Document | MongoDB + Motor (async) | Semi-structured, flexible schema |
+| Key-value / cache / session | Redis | Often needed alongside another paradigm |
+| Time-series | TimescaleDB | PostgreSQL extension — no extra service if already using PostgreSQL |
+| Vector / semantic search | pgvector (PostgreSQL ext.) or Qdrant | pgvector preferred if PostgreSQL already present |
+| Graph | Neo4j | Dense relationship traversal |
+
+When multiple paradigms are active, the data lineage review agent tracks data flows across all stores.
 
 ---
 
@@ -530,6 +562,8 @@ All tasks defined in `TASKFILE.yml` using [Taskfile](https://taskfile.dev/) — 
 | `task test:unit` | Unit tests only |
 | `task test:e2e` | E2E tests only |
 | `task test:sniff` | Sniff tests against a target environment (`SNIFF_TARGET=https://staging.example.com`) |
+| `task ci` | Full local CI suite against the running dev stack (fast pre-flight before push) |
+| `task push` | `git push` — triggers authoritative GitHub Actions CI pipeline |
 | `task lint` | ruff + mypy |
 | `task db:migrate` | Run pending migrations |
 | `task db:seed` | Load seed data |
