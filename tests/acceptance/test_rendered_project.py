@@ -55,3 +55,22 @@ def test_rendered_project_precommit_config_is_valid(tmp_path: Path):
         cwd=dest,
     )
     assert result.returncode == 0, "pre-commit config is invalid"
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("git") is None,
+    reason="uv and git are required for this test",
+)
+def test_rendered_project_precommit_runs_clean(tmp_path: Path):
+    # A freshly generated project must make a clean first commit: every hook the
+    # framework installs must pass on the scaffolded files (no hook rewrites them).
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    result = subprocess.run(["uv", "run", "pre-commit", "run", "--all-files"], cwd=dest)
+    assert result.returncode == 0, "pre-commit hooks did not pass cleanly on a fresh project"

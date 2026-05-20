@@ -4,6 +4,7 @@ repos:
     rev: v5.0.0
     hooks:
       - id: end-of-file-fixer
+        exclude: ^\.copier-answers\.yml$
       - id: trailing-whitespace
       - id: mixed-line-ending
         args: [--fix=lf]
