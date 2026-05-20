@@ -36,7 +36,10 @@ def main() -> int:
 
     findings: list[str] = []
     for cmd in (["ruff", "check", path], ["mypy", path]):
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+        except OSError:
+            continue  # Tool not available: fail open rather than crash.
         if result.returncode != 0:
             output = (result.stdout + result.stderr).strip()
             if output:
