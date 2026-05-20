@@ -1,0 +1,18 @@
+version: '3'
+
+tasks:
+  dev:
+    desc: Run the app locally with hot reload
+    cmds:
+      - uv run uvicorn {{ package_name }}.main:app --reload --port 8000
+
+  test:
+    desc: Run the test suite
+    cmds:
+      - uv run pytest -q
+
+  lint:
+    desc: Lint and type-check
+    cmds:
+      - uv run ruff check .
+      - uv run mypy src

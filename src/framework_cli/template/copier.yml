@@ -1,0 +1,20 @@
+_templates_suffix: .jinja
+
+project_name:
+  type: str
+  help: Human-readable project name
+
+project_slug:
+  type: str
+  help: Directory / repository slug
+  default: "{{ project_name | lower | replace(' ', '-') | replace('_', '-') }}"
+
+package_name:
+  type: str
+  help: Python package name
+  default: "{{ project_slug | lower | replace('-', '_') }}"
+
+python_version:
+  type: str
+  help: Python version to target
+  default: "3.12"
