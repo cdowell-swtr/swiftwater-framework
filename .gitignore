@@ -7,3 +7,6 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Personal, machine-local Claude Code settings (shared config lives in settings.json)
+.claude/settings.local.json

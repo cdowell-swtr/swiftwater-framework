@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(systeminfo*)",
+      "PowerShell(uv run pytest*)",
+      "PowerShell(uv run mypy*)",
+      "PowerShell(uv run ruff check*)",
+      "PowerShell(Get-ChildItem*)",
+      "PowerShell(Get-Command*)",
+      "PowerShell(Test-Path*)"
+    ]
+  }
+}
