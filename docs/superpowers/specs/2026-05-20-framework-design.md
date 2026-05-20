@@ -72,6 +72,7 @@ template/
     functional/
     e2e/
     non_functional/
+    sniff/                      # fast stateless probes run post-deploy against real environments
   scripts/
     export-openapi.sh           # generates openapi.json; run by CI, output committed
   infra/
@@ -373,16 +374,47 @@ When the `react` battery is active:
 9. Review aggregator — post PR summary comment
 
 ### CD Staging (`deploy-staging.yml`) — triggers on merge to `main`
-1. Build production images
-2. Deploy to staging
-3. Smoke test: hit `/health` on all services — if any fail, auto-rollback
-4. Notify
+
+Staging deployment runs a four-phase validation sequence. Each phase must pass before the next begins. Any failure triggers auto-rollback and blocks the prod promotion gate.
+
+**Phase 1 — Smoke tests (immediate, ~30s)**
+Runs immediately after deploy. Fast enough to catch a broken deployment before anything else runs.
+- Hit `/health` and `/heartbeat` on every service — any non-200 response triggers rollback
+- Verify SLO status blocks report no `breached` entries
+- Verify all services respond within 2× their defined p99 latency threshold
+
+**Phase 2 — Sniff tests (~2–5 min)**
+Lightweight probes of critical paths — not exhaustive, but covers the skeleton of the system. These are a dedicated `tests/sniff/` suite, distinct from E2E, written to be fast and stateless.
+- Auth flow: can a token be issued and validated?
+- Core read path: does the primary data surface return expected shape?
+- Core write path: does a minimal write operation succeed end-to-end?
+- Worker heartbeat: is the task broker accepting and processing jobs?
+- Webhook ingress: does an inbound webhook reach the handler?
+- WebSocket handshake: does a connection upgrade succeed? (if battery active)
+
+Sniff tests run against the real deployed staging environment — they catch environment-specific config issues (wrong secrets, misconfigured DNS, real SSL problems) that CI's containerised environment cannot surface.
+
+**Phase 3 — Full E2E suite against staging (~10–20 min)**
+The same E2E suite from CI, now run against the real staging environment. This includes all happy paths and all unhappy paths (dependency failures, auth failures, rate limits, malformed input). Staging E2E is the definitive confidence gate before prod — if it passes here, prod promotion is permitted.
+
+**Phase 4 — SLO load validation (~5–10 min)**
+A lightweight load test (k6 or Locust, scaffolded by the framework) runs the primary API paths at a configurable request rate and asserts that SLO thresholds hold under load. This catches performance regressions that pass unit and E2E tests but degrade under realistic concurrency. Results are posted to the Grafana staging dashboard and stored as a CI artefact for comparison across deploys.
+
+**On success:** the staging deployment is marked prod-ready and the prod promotion gate opens.
+**On any failure:** auto-rollback, deployment marked failed, prod gate stays closed, notify.
 
 ### CD Prod (`deploy-prod.yml`) — triggers on manual approval or tagged release
-1. Same sequence as staging
-2. Manual approval gate is required before deployment
-3. Post-deployment smoke test with auto-rollback on failure
-4. The framework never deploys to prod without a human in the loop
+Prod deployment only opens after staging has passed all four phases above.
+
+1. Manual approval gate — a human reviews the staging validation results before proceeding
+2. Build prod images (same artefacts as staging — no rebuild)
+3. Deploy to prod
+4. Smoke tests — same as staging Phase 1, against prod endpoints
+5. Sniff tests — same as staging Phase 2, against prod endpoints (read-only paths only — no writes in prod sniff)
+6. Auto-rollback if smoke or sniff fails
+7. Notify with link to Grafana prod dashboard
+
+The framework never deploys to prod without: a passing staging validation, a human approval, and a passing post-deploy smoke + sniff.
 
 ---
 
@@ -406,6 +438,7 @@ All tasks defined in `TASKFILE.yml` using [Taskfile](https://taskfile.dev/) — 
 | `task test` | Run full test suite in isolated test environment |
 | `task test:unit` | Unit tests only |
 | `task test:e2e` | E2E tests only |
+| `task test:sniff` | Sniff tests against a target environment (`SNIFF_TARGET=https://staging.example.com`) |
 | `task lint` | ruff + mypy |
 | `task db:migrate` | Run pending migrations |
 | `task db:seed` | Load seed data |
