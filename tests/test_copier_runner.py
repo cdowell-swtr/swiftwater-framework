@@ -28,3 +28,15 @@ def test_render_substitutes_package_name(tmp_path: Path):
 
     main_py = (dest / "src" / "demo" / "main.py").read_text()
     assert "from demo.routes import health" in main_py
+
+
+def test_render_includes_coverage_config(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "pytest-cov" in pyproject
+    assert "[tool.coverage.run]" in pyproject
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "test:cov" in taskfile

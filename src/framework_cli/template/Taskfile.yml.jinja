@@ -11,6 +11,11 @@ tasks:
     cmds:
       - uv run pytest -q
 
+  test:cov:
+    desc: Run tests with coverage and enforce the threshold
+    cmds:
+      - uv run pytest --cov --cov-context=test --cov-report=term-missing --cov-fail-under=70 -q
+
   lint:
     desc: Lint and type-check
     cmds:
