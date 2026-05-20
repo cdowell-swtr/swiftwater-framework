@@ -16,6 +16,16 @@ tasks:
     cmds:
       - uv run pytest --cov --cov-context=test --cov-report=term-missing --cov-fail-under=70 -q
 
+  hooks:
+    desc: Install git pre-commit hooks
+    cmds:
+      - uv run pre-commit install
+
+  hooks:run:
+    desc: Run all pre-commit hooks against all files
+    cmds:
+      - uv run pre-commit run --all-files
+
   lint:
     desc: Lint and type-check
     cmds:

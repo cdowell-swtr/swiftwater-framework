@@ -40,3 +40,18 @@ def test_render_includes_coverage_config(tmp_path: Path):
 
     taskfile = (dest / "Taskfile.yml").read_text()
     assert "test:cov" in taskfile
+
+
+def test_render_includes_precommit_config(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    cfg = dest / ".pre-commit-config.yaml"
+    assert cfg.is_file()
+    text = cfg.read_text()
+    assert "ruff" in text
+    assert "mypy" in text
+    assert "gitleaks" in text
+
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "pre-commit" in pyproject
