@@ -549,3 +549,28 @@ def test_render_workflow_and_shell_linters(tmp_path: Path):
     taskfile = (dest / "Taskfile.yml").read_text()
     assert "actionlint" in taskfile
     assert "shellcheck" in taskfile
+
+
+def test_render_includes_ci_pipeline(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    wf = dest / ".github" / "workflows" / "ci.yml"
+    assert wf.is_file()
+    ci = yaml.safe_load(wf.read_text())
+
+    # NB: PyYAML parses the workflow `on:` key as the boolean True.
+    assert True in ci or "on" in ci
+    jobs = ci["jobs"]
+    # the spec §14 ordering, with integrity (Plan 6) + review (Plan 7) as seam jobs
+    for job in ("integrity", "lint", "test", "build", "contract", "security", "review"):
+        assert job in jobs, f"ci.yml missing the {job} job"
+    assert jobs["lint"]["needs"] == "integrity"
+    assert jobs["review"]["needs"] == ["test", "contract"]
+
+    # the test job runs the combined 85% gate via the shared script
+    test_run = " ".join(str(s.get("run", "")) for s in jobs["test"]["steps"])
+    assert "scripts/coverage.sh 85 unit functional e2e" in test_run
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "ci:" in taskfile

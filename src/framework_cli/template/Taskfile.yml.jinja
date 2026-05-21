@@ -116,3 +116,11 @@ tasks:
     desc: Scan dependencies for known vulnerabilities (CVEs).
     cmds:
       - uv run pip-audit
+
+  ci:
+    desc: Full local CI pre-flight before `task push` (lint, 85% gate, audit, OpenAPI export).
+    cmds:
+      - task: lint
+      - task: test:cov:ci
+      - task: audit
+      - task: openapi:export

@@ -1,0 +1,114 @@
+# Authoritative CI pipeline (spec §14). `task push` triggers this; the local `task ci` is a
+# fast pre-flight against the same checks. Steps 0 (integrity) and 9-10 (AI review agents)
+# are seam jobs until framework v6/v7 (Plans 6/7) wire them in.
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Step 0: framework integrity. Wired in framework v6 (Plan 6 — `framework integrity --ci`).
+  integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "framework integrity --ci runs here once the integrity CLI ships (Plan 6)."
+
+  # Step 2: lint + type-check across file types.
+  lint:
+    needs: integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy src
+      - name: actionlint + shellcheck
+        run: |
+          uv run pre-commit run actionlint --all-files
+          uv run pre-commit run shellcheck --all-files
+
+  # Step 1 (security half) + 12: dependency CVEs + full-history secret scan.
+  security:
+    needs: integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: pip-audit (fail on known CVEs)
+        run: uv run pip-audit
+      - name: gitleaks (full-history secrets scan)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: {% raw %}${{ secrets.GITLEAKS_LICENSE }}{% endraw %}
+
+  # Steps 3, 5, 6, 8: unit + functional + e2e with coverage contexts, then the combined gate.
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: unit + functional + e2e (contexts) + combined >=85% gate
+        run: bash scripts/coverage.sh 85 unit functional e2e
+      - name: coverage report with contexts
+        if: always()
+        run: uv run coverage json --show-contexts -o coverage-contexts.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-contexts
+          path: coverage-contexts.json
+          if-no-files-found: ignore
+
+  # Step 4: build the application image (validates the Dockerfile builds).
+  build:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker build (app image)
+        run: docker build -f infra/docker/Dockerfile -t {{ project_slug }}:ci .
+
+  # Step 7: OpenAPI contract — the committed spec must be current; breaking changes fail.
+  contract:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: fail if openapi.json is missing or stale
+        run: |
+          bash scripts/export-openapi.sh
+          if [ -n "$(git status --porcelain -- openapi.json)" ]; then
+            echo "::error::openapi.json is missing or out of date. Run 'task openapi:export' and commit it."
+            git --no-pager diff -- openapi.json
+            exit 1
+          fi
+      - name: breaking-change check (oasdiff)
+        if: {% raw %}${{ github.event_name == 'pull_request' }}{% endraw %}
+        uses: oasdiff/oasdiff-action/breaking@v0.0.21
+        with:
+          base: https://raw.githubusercontent.com/{% raw %}${{ github.repository }}/${{ github.base_ref }}{% endraw %}/openapi.json
+          revision: openapi.json
+          fail-on: ERR
+
+  # Steps 9-10: AI review agents + aggregator. Wired in framework v7 (Plan 7).
+  review:
+    needs: [test, contract]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Layer-3 AI review agents + aggregator run here (Plan 7)."
