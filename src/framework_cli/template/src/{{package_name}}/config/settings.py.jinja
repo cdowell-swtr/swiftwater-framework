@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     slo_request_latency_p99_ms: float = 200.0
     slo_error_rate_pct: float = 1.0
 
+    # OpenTelemetry tracing (off unless enabled; the dev Compose app turns it on).
+    otel_enabled: bool = False
+    otel_exporter_otlp_endpoint: str = "http://otel-collector:4317"
+
     @property
     def resolved_log_level(self) -> str:
         if self.log_level is not None:

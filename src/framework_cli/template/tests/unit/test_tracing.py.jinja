@@ -1,0 +1,16 @@
+from fastapi import FastAPI
+
+from {{ package_name }}.config.settings import Settings
+from {{ package_name }}.observability.tracing import configure_tracing
+
+
+def test_otel_settings_default_off():
+    s = Settings()
+    assert s.otel_enabled is False
+    assert s.otel_exporter_otlp_endpoint == "http://otel-collector:4317"
+
+
+def test_configure_tracing_disabled_is_noop():
+    app = FastAPI()
+    assert configure_tracing(app, Settings(otel_enabled=False)) is None
+    assert all("OpenTelemetry" not in m.cls.__name__ for m in app.user_middleware)
