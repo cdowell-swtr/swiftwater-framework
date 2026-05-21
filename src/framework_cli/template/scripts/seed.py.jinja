@@ -1,0 +1,16 @@
+from pathlib import Path
+
+from {{ package_name }}.db.engine import SessionLocal
+from {{ package_name }}.db.seed import seed
+
+
+def main() -> None:
+    # Run from the project root: the seeds path is cwd-relative (the container
+    # entrypoint runs this from /app, and `task db:seed` runs from the repo root).
+    with SessionLocal() as session:
+        count = seed(session, Path("seeds/items.json"))
+        print(f"seeded {count} items")
+
+
+if __name__ == "__main__":
+    main()

@@ -380,3 +380,14 @@ def test_render_includes_db_model_and_repository(tmp_path: Path):
     repo = (dest / "src" / "demo" / "db" / "repository.py").read_text()
     assert "def list_items" in repo
     assert "def create_item" in repo
+
+
+def test_render_includes_seed(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    seed_mod = (dest / "src" / "demo" / "db" / "seed.py").read_text()
+    assert "def seed" in seed_mod
+    data = json.loads((dest / "seeds" / "items.json").read_text())
+    assert isinstance(data, list) and data and "name" in data[0]
+    cli = (dest / "scripts" / "seed.py").read_text()
+    assert "from demo.db.seed import seed" in cli

@@ -1,0 +1,15 @@
+import json
+from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.repository import list_items
+from {{ package_name }}.db.seed import seed
+
+
+def test_seed_is_idempotent(tmp_path: Path, db_session: Session):
+    seeds = tmp_path / "items.json"
+    seeds.write_text(json.dumps([{"name": "one"}, {"name": "two"}]))
+    assert seed(db_session, seeds) == 2
+    assert seed(db_session, seeds) == 0  # already seeded → no-op
+    assert len(list_items(db_session)) == 2
