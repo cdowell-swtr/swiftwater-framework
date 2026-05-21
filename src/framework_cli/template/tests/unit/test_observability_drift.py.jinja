@@ -1,0 +1,29 @@
+import json
+from pathlib import Path
+
+import yaml
+
+from {{ package_name }}.config.settings import Settings
+from {{ package_name }}.observability.provisioning import (
+    grafana_dashboard,
+    prometheus_alert_rules,
+)
+from {{ package_name }}.observability.slo import default_slos
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def test_committed_alert_rules_match_generator():
+    slos = default_slos(Settings())
+    committed = yaml.safe_load(
+        (ROOT / "infra/observability/prometheus/alerts/slo_alerts.yml").read_text()
+    )
+    assert committed == prometheus_alert_rules(slos), "run `task observability:gen`"
+
+
+def test_committed_dashboard_matches_generator():
+    slos = default_slos(Settings())
+    committed = json.loads(
+        (ROOT / "infra/observability/grafana/dashboards/slo.json").read_text()
+    )
+    assert committed == grafana_dashboard(slos), "run `task observability:gen`"

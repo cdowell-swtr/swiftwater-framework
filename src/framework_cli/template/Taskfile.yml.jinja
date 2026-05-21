@@ -74,3 +74,8 @@ tasks:
     cmds:
       - uv run ruff check .
       - uv run mypy src
+
+  observability:gen:
+    desc: Regenerate Prometheus alert rules + Grafana dashboard from the SLO definitions.
+    cmds:
+      - uv run python scripts/gen_observability.py

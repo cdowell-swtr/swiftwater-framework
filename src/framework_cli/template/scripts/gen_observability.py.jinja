@@ -1,0 +1,36 @@
+"""Regenerate infra/observability config from the SLO definitions. Run via `task observability:gen`.
+
+Pure transforms live in observability/provisioning.py; this only serialises + writes files.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import yaml
+
+from {{ package_name }}.config.settings import get_settings
+from {{ package_name }}.observability.provisioning import (
+    grafana_dashboard,
+    prometheus_alert_rules,
+)
+from {{ package_name }}.observability.slo import default_slos
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def main() -> None:
+    slos = default_slos(get_settings())
+
+    alerts = ROOT / "infra/observability/prometheus/alerts/slo_alerts.yml"
+    alerts.parent.mkdir(parents=True, exist_ok=True)
+    alerts.write_text(yaml.safe_dump(prometheus_alert_rules(slos), sort_keys=False))
+
+    dashboard = ROOT / "infra/observability/grafana/dashboards/slo.json"
+    dashboard.parent.mkdir(parents=True, exist_ok=True)
+    dashboard.write_text(json.dumps(grafana_dashboard(slos), indent=2) + "\n")
+
+
+if __name__ == "__main__":
+    main()

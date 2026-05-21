@@ -1,0 +1,19 @@
+groups:
+- name: slo
+  rules:
+  - alert: RequestLatencyP99MsBreached
+    expr: app_request_latency_p99_ms > 200.0
+    for: 1m
+    labels:
+      severity: warning
+      slo: request_latency_p99_ms
+    annotations:
+      summary: p99 request latency above SLO (200.0ms)
+  - alert: ErrorRatePctBreached
+    expr: 100 * app_request_errors_total / clamp_min(app_requests_total, 1) > 1.0
+    for: 1m
+    labels:
+      severity: warning
+      slo: error_rate_pct
+    annotations:
+      summary: 5xx error rate above SLO (1.0percent)
