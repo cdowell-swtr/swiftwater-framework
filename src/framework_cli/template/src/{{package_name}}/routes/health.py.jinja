@@ -1,11 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-router = APIRouter()
+from {{ package_name }}.observability.slo import build_health_report
 
-_METRICS_BODY = (
-    "# HELP app_up Application up indicator\n# TYPE app_up gauge\napp_up 1\n"
-)
+router = APIRouter()
 
 
 @router.get("/heartbeat", response_class=PlainTextResponse)
@@ -15,16 +13,17 @@ def heartbeat() -> PlainTextResponse:
 
 
 @router.get("/health")
-def health() -> JSONResponse:
-    """Readiness + SLO status. Walking skeleton: SLO evaluation arrives in a later plan."""
-    return JSONResponse({"status": "ok", "slos": {}}, status_code=200)
+def health(request: Request) -> JSONResponse:
+    """Readiness + SLO status. Returns 200 with the structured SLO report."""
+    report = build_health_report(request.app.state.metrics, request.app.state.settings)
+    return JSONResponse(report, status_code=200)
 
 
 @router.get("/metrics", response_class=PlainTextResponse)
-def metrics() -> PlainTextResponse:
-    """Prometheus exposition format. Walking skeleton: a single static gauge."""
+def metrics(request: Request) -> PlainTextResponse:
+    """Prometheus exposition format from the in-process registry."""
     return PlainTextResponse(
-        _METRICS_BODY,
+        request.app.state.metrics.render_prometheus(),
         status_code=200,
         media_type="text/plain; version=0.0.4",
     )

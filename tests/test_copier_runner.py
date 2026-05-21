@@ -20,7 +20,7 @@ def test_render_creates_expected_files(tmp_path: Path):
     assert (dest / ".copier-answers.yml").is_file()
     assert (dest / "src" / "demo" / "main.py").is_file()
     assert (dest / "src" / "demo" / "routes" / "health.py").is_file()
-    assert (dest / "tests" / "unit" / "test_health.py").is_file()
+    assert (dest / "tests" / "functional" / "test_health.py").is_file()
 
 
 def test_render_substitutes_package_name(tmp_path: Path):
@@ -99,3 +99,15 @@ def test_render_docs_mention_editor_hook(tmp_path: Path):
     render_project(dest, DATA)
     assert "editor hook" in (dest / "CLAUDE.md").read_text().lower()
     assert ".claude/settings.json" in (dest / "README.md").read_text()
+
+
+def test_render_includes_runtime_modules(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert (dest / "src" / "demo" / "config" / "settings.py").is_file()
+    assert (dest / "src" / "demo" / "observability" / "metrics.py").is_file()
+    assert (dest / "src" / "demo" / "observability" / "slo.py").is_file()
+    assert (dest / "src" / "demo" / "logging_config.py").is_file()
+    assert (dest / "src" / "demo" / "middleware" / "observability.py").is_file()
+    health = (dest / "src" / "demo" / "routes" / "health.py").read_text()
+    assert "build_health_report" in health

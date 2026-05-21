@@ -1,0 +1,15 @@
+from fastapi.testclient import TestClient
+
+from {{ package_name }}.main import create_app
+
+client = TestClient(create_app())
+
+
+def test_response_has_correlation_id_header():
+    r = client.get("/heartbeat")
+    assert r.headers.get("X-Correlation-ID")
+
+
+def test_inbound_correlation_id_is_echoed():
+    r = client.get("/heartbeat", headers={"X-Correlation-ID": "trace-42"})
+    assert r.headers["X-Correlation-ID"] == "trace-42"
