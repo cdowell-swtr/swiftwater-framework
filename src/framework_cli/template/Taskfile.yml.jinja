@@ -8,6 +8,8 @@ tasks:
         msg: "Docker is required for `task dev`. Install Docker, then retry."
       - sh: test -f infra/traefik/certs/localhost.pem
         msg: "No local certs. Run `task certs` first (installs mkcert CA + issues localhost certs)."
+      - sh: test -f uv.lock
+        msg: "Run `uv sync` first to create uv.lock (the image build uses --frozen)."
     cmds:
       - docker compose -f infra/compose/base.yml -f infra/compose/dev.yml --profile dev up --build
 
@@ -16,6 +18,8 @@ tasks:
     preconditions:
       - sh: command -v docker
         msg: "Docker is required for `task dev:lite`."
+      - sh: test -f uv.lock
+        msg: "Run `uv sync` first to create uv.lock (the image build uses --frozen)."
     cmds:
       - docker compose -f infra/compose/base.yml -f infra/compose/dev.yml --profile lite up --build
 
