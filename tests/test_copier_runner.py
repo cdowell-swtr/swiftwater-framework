@@ -234,3 +234,30 @@ def test_render_observability_config(tmp_path: Path):
 
     am = yaml.safe_load((obs / "alertmanager" / "alertmanager.yml").read_text())
     assert "route" in am and "receivers" in am
+
+
+def test_render_loki_promtail(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    obs = dest / "infra" / "observability"
+
+    loki = yaml.safe_load((obs / "loki" / "loki-config.yml").read_text())
+    assert loki["auth_enabled"] is False
+    assert loki["server"]["http_listen_port"] == 3100
+
+    pt = yaml.safe_load((obs / "promtail" / "promtail-config.yml").read_text())
+    assert pt["clients"][0]["url"] == "http://loki:3100/loki/api/v1/push"
+    sc = pt["scrape_configs"][0]
+    assert any("docker_sd_configs" == k for k in sc)
+    stages = sc["pipeline_stages"]
+    json_stage = next(s["json"] for s in stages if "json" in s)
+    assert "level" in json_stage["expressions"]
+    assert "correlation_id" in json_stage["expressions"]
+
+    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    for name in ("loki", "promtail"):
+        assert dev["services"][name]["profiles"] == ["dev"]
+    assert any("3100" in str(p) for p in dev["services"]["loki"]["ports"])
+    vols = " ".join(dev["services"]["promtail"]["volumes"])
+    assert "/var/run/docker.sock:/var/run/docker.sock:ro" in vols
+    assert "loki" in dev["services"]["promtail"]["depends_on"]
