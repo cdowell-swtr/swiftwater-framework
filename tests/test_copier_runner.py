@@ -186,3 +186,31 @@ def test_render_traefik_and_certs_gitignored(tmp_path: Path):
     assert (dest / "infra" / "traefik" / "certs" / ".gitkeep").is_file()
     gitignore = (dest / ".gitignore").read_text()
     assert "infra/traefik/certs/*.pem" in gitignore
+
+
+def test_render_observability_config(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    obs = dest / "infra" / "observability"
+
+    prom = yaml.safe_load((obs / "prometheus" / "prometheus.yml").read_text())
+    jobs = {s["job_name"] for s in prom["scrape_configs"]}
+    assert "app" in jobs
+    app_job = next(s for s in prom["scrape_configs"] if s["job_name"] == "app")
+    assert "app:8000" in app_job["static_configs"][0]["targets"]
+    assert "/etc/prometheus/alerts/*.yml" in prom["rule_files"]
+    assert "alertmanager:9093" in prom["alerting"]["alertmanagers"][0]["static_configs"][0]["targets"]
+
+    ds = yaml.safe_load(
+        (obs / "grafana" / "provisioning" / "datasources" / "prometheus.yml").read_text()
+    )
+    assert ds["datasources"][0]["uid"] == "prometheus"
+    assert ds["datasources"][0]["url"] == "http://prometheus:9090"
+
+    prov = yaml.safe_load(
+        (obs / "grafana" / "provisioning" / "dashboards" / "provider.yml").read_text()
+    )
+    assert prov["providers"][0]["options"]["path"] == "/var/lib/grafana/dashboards"
+
+    am = yaml.safe_load((obs / "alertmanager" / "alertmanager.yml").read_text())
+    assert "route" in am and "receivers" in am
