@@ -330,6 +330,25 @@ def test_render_settings_has_database_url(tmp_path: Path):
     assert "postgresql+psycopg://" in settings
 
 
+def test_render_includes_db_core(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    db = dest / "src" / "demo" / "db"
+    assert (db / "base.py").is_file()
+    engine = (db / "engine.py").read_text()
+    assert "def get_session" in engine
+    assert "build_engine" in engine
+
+
+def test_render_conftest_uses_real_postgres(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    conftest = (dest / "tests" / "conftest.py").read_text()
+    assert "PostgresContainer" in conftest
+    assert "db_session" in conftest
+    assert "pytest.fail" in conftest  # forcing function: DB tests fail (not skip) w/o Docker
+
+
 def test_render_tempo_otel_collector(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

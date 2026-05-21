@@ -1,0 +1,6 @@
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+
+def test_get_session_executes_against_postgres(db_session: Session):
+    assert db_session.execute(text("SELECT 1")).scalar() == 1
