@@ -40,7 +40,7 @@ repos:
         require_serial: true
       - id: coverage-threshold
         name: unit + functional coverage (>=70%)
-        entry: uv run pytest --cov --cov-fail-under=70 -q
+        entry: bash scripts/coverage.sh 70 unit functional
         language: system
         pass_filenames: false
         always_run: true

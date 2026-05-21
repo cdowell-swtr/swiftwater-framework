@@ -502,3 +502,20 @@ def test_render_database_docs(tmp_path: Path):
     assert "task db:migrate" in readme
     assert "PostgreSQL" in readme
     assert "/items" in readme
+
+
+def test_render_coverage_script_and_tasks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    script = dest / "scripts" / "coverage.sh"
+    assert script.is_file()
+    text = script.read_text()
+    assert "coverage run --context=" in text
+    assert "--fail-under=" in text
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "test:unit:" in taskfile
+
+    precommit = (dest / ".pre-commit-config.yaml").read_text()
+    assert "scripts/coverage.sh 70 unit functional" in precommit
