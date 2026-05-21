@@ -137,7 +137,7 @@ template/
   .framework/
     integrity.lock              # checksums of locked + hybrid files; two-tier (tracked / gitignored)
   CLAUDE.md                     # TDD contract, testing obligations, conventions (hybrid: managed section)
-  TASKFILE.yml                  # cross-platform task runner
+  Taskfile.yml                  # cross-platform task runner
   SERVICES.md                   # internal + external address of every service
   pyproject.toml
   uv.lock                       # locked dependencies (committed)
@@ -630,7 +630,7 @@ The framework never deploys to prod without: a passing staging validation, a hum
 `task dev:lite` runs app services + DB + Redis only — for resource-constrained machines.
 
 ### Cross-Platform Task Runner
-All tasks defined in `TASKFILE.yml` using [Taskfile](https://taskfile.dev/) — works natively on Windows, Mac, and Linux without WSL. No `make` dependency.
+All tasks defined in `Taskfile.yml` using [Taskfile](https://taskfile.dev/) — works natively on Windows, Mac, and Linux without WSL. No `make` dependency.
 
 ### Key Tasks
 
@@ -699,7 +699,7 @@ A self-check that verifies the framework's own scaffolding is intact — that th
 Every scaffolded file is declared in the Copier template as one of three classes:
 
 1. **Locked** — full-file checksum. Pure framework infrastructure the builder should never edit: CI workflows, review-agent definitions, observability config, Compose files, pre-commit config, resilience scaffolds. Modifying these breaks the upskill contract.
-2. **Hybrid (managed sections)** — files the builder is expected to extend, containing a framework-owned block delimited by `<!-- FRAMEWORK:BEGIN -->` … `<!-- FRAMEWORK:END -->` (comment syntax varies by file type). The delimited section is checksummed; everything outside it is the builder's to edit freely. Applies to `CLAUDE.md` (TDD contract and conventions locked; project-specific context free), `.env.example`, `pyproject.toml` (framework-managed dependency block), and `TASKFILE.yml` (framework tasks vs. builder tasks).
+2. **Hybrid (managed sections)** — files the builder is expected to extend, containing a framework-owned block delimited by `<!-- FRAMEWORK:BEGIN -->` … `<!-- FRAMEWORK:END -->` (comment syntax varies by file type). The delimited section is checksummed; everything outside it is the builder's to edit freely. Applies to `CLAUDE.md` (TDD contract and conventions locked; project-specific context free), `.env.example`, `pyproject.toml` (framework-managed dependency block), and `Taskfile.yml` (framework tasks vs. builder tasks).
 3. **Builder-owned** — not checked. Application code, tests, migrations.
 
 ### The Manifest
@@ -712,7 +712,7 @@ The manifest has **two tiers**:
 **Invariant:** checksummed files must be git-tracked. You cannot reliably checksum-verify a file that was never committed. The Copier template generation enforces this — if a file marked for checksumming matches a `.gitignore` pattern, that is flagged as a framework authoring error and not shipped.
 
 ### Execution
-`framework integrity` is wired into `TASKFILE.yml` as a precondition on every target — it runs before `task dev`, `task test`, `task ci`, and all others. Taskfile dedupes preconditions within a run, so a chained task triggers it once. Performance budget is sub-second (hashing ~30–50 files), so it never becomes friction.
+`framework integrity` is wired into `Taskfile.yml` as a precondition on every target — it runs before `task dev`, `task test`, `task ci`, and all others. Taskfile dedupes preconditions within a run, so a chained task triggers it once. Performance budget is sub-second (hashing ~30–50 files), so it never becomes friction.
 
 It is also **step 0 of the GitHub Actions CI pipeline**, so CI fails fast if scaffolding is compromised. In CI (detected via a known env var, and by reading `.gitignore`), only the tracked + checksummed tier is verified — gitignored existence checks are skipped, so a fresh checkout never fails spuriously.
 

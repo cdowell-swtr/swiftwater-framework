@@ -13,9 +13,9 @@
 **Prerequisites for the implementing engineer:**
 - `uv` installed and on PATH (`uv --version` works). Install: https://docs.astral.sh/uv/getting-started/installation/
 - `task` (Taskfile) installed for manual verification (Task 8 only). Install: https://taskfile.dev/installation/
-- The repo is already a git repository with the spec committed. Run all commands from the repo root: `C:\Users\chris\Claude Code\Projects\framework`.
+- The repo is already a git repository with the spec committed. Run all commands from the repo root (the `swiftwater-framework` checkout).
 
-**Note on a spec correction surfaced while planning:** the spec writes the task-runner file as `TASKFILE.yml`, but the `task` tool only auto-discovers `Taskfile.yml` / `Taskfile.yaml` (and lowercase variants) — not all-caps `TASKFILE.yml`. This plan uses `Taskfile.yml`. The spec should be corrected to match in a later pass.
+**Note on a spec correction surfaced while planning:** the spec writes the task-runner file as `TASKFILE.yml`, but the `task` tool only auto-discovers `Taskfile.yml` / `Taskfile.yaml` (and lowercase variants) — not all-caps `TASKFILE.yml`. This plan uses `Taskfile.yml`. (The spec was reconciled to use `Taskfile.yml` throughout on 2026-05-20.)
 
 ---
 
@@ -893,8 +893,8 @@ Expected: Typer help text showing the `new` command.
 Run:
 
 ```bash
-cd /tmp                       # or any scratch dir outside the framework repo (Windows: cd $env:TEMP)
-uv run --project "C:/Users/chris/Claude Code/Projects/framework" framework new "Hello Service"
+cd /tmp                       # or any scratch dir outside the framework repo
+uv run --project /path/to/swiftwater-framework framework new "Hello Service"
 ```
 
 Expected: output `Created 'hello-service' at .../hello-service`, and a `hello-service/` directory exists.
@@ -907,7 +907,7 @@ From the framework repo root, run a throwaway scaffold into a temp dir:
 uv run python -c "from pathlib import Path; from framework_cli.copier_runner import render_project; render_project(Path('a:/tmp/hello-service' if False else 'hello-service-demo'), {'project_name':'Hello Service','project_slug':'hello-service','package_name':'hello_service','python_version':'3.12'})"
 ```
 
-Then inspect `hello-service-demo/`. Delete it afterward (`rm -rf hello-service-demo` / `Remove-Item -Recurse -Force hello-service-demo`). Do not commit it.
+Then inspect `hello-service-demo/`. Delete it afterward (`rm -rf hello-service-demo`). Do not commit it.
 
 - [ ] **Step 3: Run the generated project's tasks**
 

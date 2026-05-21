@@ -479,10 +479,10 @@ Run: `uv run ruff check .` → no errors. Run: `uv run mypy src` → `Success`.
 
 - [ ] **Step 4: Manual end-to-end verification**
 
-In a scratch dir OUTSIDE the repo (e.g. `$env:TEMP\fw-q2`):
+In a scratch dir OUTSIDE the repo (e.g. `/tmp/fw-q2`):
 
 ```bash
-uv run --project "C:/Users/chris/Claude Code/Projects/framework" framework new "Quality Demo"
+uv run --project /path/to/swiftwater-framework framework new "Quality Demo"
 cd quality-demo
 uv sync
 task test:cov                                   # expect coverage >= 70%, all green
