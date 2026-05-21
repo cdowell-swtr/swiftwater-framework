@@ -1,0 +1,11 @@
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.repository import create_item, list_items
+
+
+def test_create_and_list_items(db_session: Session):
+    assert list_items(db_session) == []
+    created = create_item(db_session, "alpha")
+    assert created.id is not None
+    assert created.created_at is not None  # server_default applied by Postgres
+    assert [i.name for i in list_items(db_session)] == ["alpha"]

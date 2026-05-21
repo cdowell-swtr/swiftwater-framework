@@ -369,3 +369,14 @@ def test_render_tempo_otel_collector(tmp_path: Path):
     app_env = dev["services"]["app"]["environment"]
     assert app_env["APP_OTEL_ENABLED"] == "true"
     assert app_env["APP_OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4317"
+
+
+def test_render_includes_db_model_and_repository(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    models = (dest / "src" / "demo" / "db" / "models.py").read_text()
+    assert "class Item" in models
+    assert '__tablename__ = "items"' in models
+    repo = (dest / "src" / "demo" / "db" / "repository.py").read_text()
+    assert "def list_items" in repo
+    assert "def create_item" in repo
