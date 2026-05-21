@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import yaml
+
 from framework_cli.copier_runner import render_project
 
 DATA = {
@@ -125,3 +127,28 @@ def test_render_includes_dockerfile_multistage(tmp_path: Path):
     assert "uv sync" in text
     # a .dockerignore at the build-context root keeps the host .venv out of the image
     assert ".venv" in (dest / ".dockerignore").read_text()
+
+
+def test_render_compose_structure(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    base = yaml.safe_load((dest / "infra" / "compose" / "base.yml").read_text())
+    app = base["services"]["app"]
+    assert app["environment"]["TZ"] == "UTC"
+    assert "healthcheck" in app
+    assert "/heartbeat" in " ".join(app["healthcheck"]["test"])
+    labels = "\n".join(app["labels"])
+    assert "traefik.enable=true" in labels
+    assert "demo.localhost" in labels
+
+    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    assert "dev" in dev["services"]["app"]["profiles"]
+    assert any("8000" in str(p) for p in dev["services"]["app"]["ports"])
+    traefik = dev["services"]["traefik"]
+    assert traefik["depends_on"]["app"]["condition"] == "service_healthy"
+    assert any(p for p in traefik["ports"] if "443" in str(p))
+
+    test = yaml.safe_load((dest / "infra" / "compose" / "test.yml").read_text())
+    assert test["services"]["app"]["environment"]["APP_ENVIRONMENT"] == "test"
+    assert "test" in test["services"]["app"]["profiles"]

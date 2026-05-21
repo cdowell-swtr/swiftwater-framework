@@ -1,0 +1,22 @@
+# Base service definitions, shared by all profiles. Compose merges this with the
+# profile overlay: `docker compose -f infra/compose/base.yml -f infra/compose/dev.yml ...`.
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    environment:
+      TZ: UTC
+      APP_ENVIRONMENT: dev
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/heartbeat').status==200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(`{{ project_slug }}.localhost`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls=true"
+      - "traefik.http.services.app.loadbalancer.server.port=8000"
