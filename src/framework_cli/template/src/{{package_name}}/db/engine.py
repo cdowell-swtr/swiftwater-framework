@@ -23,3 +23,8 @@ def get_session() -> Iterator[Session]:
     """FastAPI dependency: a session per request, always closed."""
     with SessionLocal() as session:
         yield session
+
+
+def dispose_engine() -> None:
+    """Dispose the engine's connection pool — called on graceful shutdown."""
+    engine.dispose()

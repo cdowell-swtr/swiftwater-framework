@@ -1,0 +1,17 @@
+from fastapi.testclient import TestClient
+
+from {{ package_name }}.main import create_app
+
+
+def test_lifespan_disposes_engine_on_shutdown(monkeypatch):
+    calls: list[str] = []
+    # The lifespan imports dispose_engine at shutdown; patch the attribute it looks up.
+    monkeypatch.setattr(
+        "{{ package_name }}.db.engine.dispose_engine", lambda: calls.append("disposed")
+    )
+
+    # Using TestClient as a context manager runs startup on enter and shutdown on exit.
+    with TestClient(create_app()) as client:
+        assert client.get("/heartbeat").status_code == 200
+
+    assert calls == ["disposed"]
