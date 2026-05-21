@@ -1,6 +1,8 @@
 import json
 import shutil
 import subprocess
+import time
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -128,3 +130,45 @@ def test_lint_hook_ignores_non_python(tmp_path: Path):
 
     result = _run_hook(dest, note)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def _docker_available() -> bool:
+    if shutil.which("uv") is None or shutil.which("docker") is None:
+        return False
+    result = subprocess.run(
+        ["docker", "info"], capture_output=True, timeout=10
+    )
+    return result.returncode == 0
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv and docker are required for the live-stack test",
+)
+def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    base = "infra/compose/base.yml"
+    dev = "infra/compose/dev.yml"
+    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "up", "-d", "--build"]
+    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "down", "-v"]
+    assert subprocess.run(up, cwd=dest).returncode == 0
+    try:
+        # app is published on 8000 in the `lite` profile (no Traefik)
+        deadline = time.time() + 90
+        body = None
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen("http://localhost:8000/health", timeout=3) as resp:
+                    if resp.status == 200:
+                        body = json.loads(resp.read())
+                        break
+            except OSError:
+                time.sleep(2)
+        assert body is not None, "app did not serve /health within 90s"
+        assert body["status"] in {"ok", "degraded"}
+        assert "request_latency_p99_ms" in body["slos"]
+    finally:
+        subprocess.run(down, cwd=dest)
