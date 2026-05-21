@@ -1,0 +1,67 @@
+from {{ package_name }}.observability.recoverability import RecoverabilityMetrics
+
+
+def test_fresh_registry_reports_zeros():
+    m = RecoverabilityMetrics()
+    snap = m.snapshot()
+    assert snap == {
+        "unhandled": 0,
+        "retry_attempts": 0,
+        "retries_recovered": 0,
+        "retries_exhausted": 0,
+    }
+
+
+def test_counters_increment():
+    m = RecoverabilityMetrics()
+    m.record_unhandled_exception()
+    m.record_retry_attempt()
+    m.record_retry_attempt()
+    m.record_retry_recovered()
+    m.record_retry_exhausted()
+    snap = m.snapshot()
+    assert snap["unhandled"] == 1
+    assert snap["retry_attempts"] == 2
+    assert snap["retries_recovered"] == 1
+    assert snap["retries_exhausted"] == 1
+
+
+def test_circuit_state_defaults_to_closed_zero():
+    m = RecoverabilityMetrics()
+    assert m.circuit_state("svc") == 0  # unknown breaker -> closed
+
+
+def test_set_circuit_state_maps_names_to_numbers():
+    m = RecoverabilityMetrics()
+    m.set_circuit_state("svc", "open")
+    assert m.circuit_state("svc") == 1
+    m.set_circuit_state("svc", "half-open")
+    assert m.circuit_state("svc") == 2
+    m.set_circuit_state("svc", "closed")
+    assert m.circuit_state("svc") == 0
+
+
+def test_render_prometheus_emits_counters_and_breaker_gauge():
+    m = RecoverabilityMetrics()
+    m.record_unhandled_exception()
+    m.set_circuit_state("payments", "open")
+    text = m.render_prometheus()
+    assert "# TYPE app_unhandled_exceptions_total counter" in text
+    assert "app_unhandled_exceptions_total 1\n" in text
+    assert "app_retry_attempts_total 0\n" in text
+    assert "# TYPE app_circuit_breaker_state gauge" in text
+    assert 'app_circuit_breaker_state{name="payments"} 1\n' in text
+
+
+def test_render_prometheus_omits_gauge_when_no_breakers():
+    text = RecoverabilityMetrics().render_prometheus()
+    assert "app_circuit_breaker_state" not in text
+
+
+def test_reset_clears_everything():
+    m = RecoverabilityMetrics()
+    m.record_unhandled_exception()
+    m.set_circuit_state("svc", "open")
+    m.reset()
+    assert m.snapshot()["unhandled"] == 0
+    assert "app_circuit_breaker_state" not in m.render_prometheus()

@@ -9,6 +9,16 @@ from sqlalchemy.orm import Session
 from {{ package_name }}.db.engine import build_engine
 
 
+@pytest.fixture(autouse=True)
+def _reset_recoverability() -> Iterator[None]:
+    """Recoverability metrics live in a module-level singleton; reset around each test."""
+    from {{ package_name }}.observability.recoverability import recoverability
+
+    recoverability.reset()
+    yield
+    recoverability.reset()
+
+
 @pytest.fixture(scope="session")
 def pg_url() -> Iterator[str]:
     """A real Postgres started for the test session. Fails (not skips) without Docker."""
