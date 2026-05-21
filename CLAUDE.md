@@ -11,9 +11,9 @@ This repo is an opinionated Python scaffold framework: a `framework` CLI that re
 > Quick pointer, kept current so any environment starts with the real state. The detailed record of record is the meta-plan (`docs/superpowers/plans/2026-05-20-meta-plan.md`) — update its status table when a plan's status changes.
 
 - **Last updated:** 2026-05-20
-- **Where we are:** Plans 1, 2, 2b, 3a, 3b-1, and **3b-2 (observability logs) merged to `master`** — on top of the 3b-1 metrics stack, generated projects now get Loki + Promtail (Docker service discovery) shipping the app's structlog JSON to Loki, with a Grafana Loki datasource, so logs are queryable beside metrics (`{service="app"}`). See `docs/superpowers/plans/2026-05-20-observability-logs.md`. Framework gate green (`ruff`, `mypy`, 19 render tests + acceptance suite).
-- **Recent:** Plan 3b-2 executed subagent-driven (Sonnet implementer/spec, Opus quality/final). Opus caught a CRITICAL invalid Loki config key (`metric_aggregation_enabled`, not in Loki 3.2.1) that would have crash-looped Loki — fixed before merge. Three Docker-gated live tests now skip where Docker is absent.
-- **Next:** Plan 3b-3 (traces — Tempo + OpenTelemetry + the unified OTEL Collector pipeline; trace↔log correlation).
+- **Where we are:** Plans 1, 2, 2b, 3a, 3b-1, 3b-2, and **3b-3 (observability traces) merged to `master`** — this **completes the 3b observability stack**. Generated projects now have metrics (Prometheus/Grafana/Alertmanager), logs (Loki/Promtail), and traces (OpenTelemetry → OTEL Collector → Tempo, gated on in dev) with forward log→trace correlation (`trace_id` in logs → Loki derived field → Tempo). See `docs/superpowers/plans/2026-05-20-observability-traces.md`. Framework gate green (`ruff`, `mypy`, 22 render tests + acceptance suite; 4 Docker-gated live tests skip without Docker).
+- **Recent:** Plan 3b-3 executed subagent-driven (Sonnet implementer/spec, Opus quality/final). Opus caught two CRITICALs pre-merge: the structlog `JSONRenderer` space-after-colon vs the Loki derived-field regex (fixed with `\s*` + a real-line test), and a dead `tracesToLogsV2` trace→logs back-link (removed — the OTel `service.name` ≠ the Loki `service` label).
+- **Next:** Plan 3c (database lifecycle) or Plan 4 (error handling & recoverability) — the 3b observability stack is complete.
 
 ## Keeping state current (required before every commit)
 
