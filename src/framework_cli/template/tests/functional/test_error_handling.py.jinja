@@ -1,0 +1,60 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
+
+from {{ package_name }}.main import create_app
+from {{ package_name }}.observability.recoverability import recoverability
+
+
+def _app_with_failing_routes() -> FastAPI:
+    app = create_app()
+
+    @app.get("/boom")
+    def boom() -> None:
+        raise RuntimeError("kaboom-internal-detail")
+
+    @app.get("/teapot")
+    def teapot() -> None:
+        raise HTTPException(status_code=418, detail="I'm a teapot")
+
+    @app.get("/needs-int")
+    def needs_int(n: int) -> dict[str, int]:
+        return {"n": n}
+
+    return app
+
+
+def test_unhandled_exception_returns_problem_json():
+    client = TestClient(_app_with_failing_routes(), raise_server_exceptions=False)
+    r = client.get("/boom")
+    assert r.status_code == 500
+    assert r.headers["content-type"].startswith("application/problem+json")
+    body = r.json()
+    assert body["status"] == 500
+    assert body["title"] == "Internal Server Error"
+    assert body["instance"] == "/boom"
+    assert body["correlation_id"]  # populated from request.state by the middleware
+    assert "kaboom-internal-detail" not in r.text  # internal detail never leaked
+
+
+def test_http_exception_uses_problem_json():
+    client = TestClient(_app_with_failing_routes())
+    r = client.get("/teapot")
+    assert r.status_code == 418
+    assert r.headers["content-type"].startswith("application/problem+json")
+    assert r.json()["detail"] == "I'm a teapot"
+
+
+def test_validation_error_uses_problem_json():
+    client = TestClient(_app_with_failing_routes())
+    r = client.get("/needs-int", params={"n": "not-an-int"})
+    assert r.status_code == 422
+    assert r.headers["content-type"].startswith("application/problem+json")
+    assert "errors" in r.json()
+
+
+def test_unhandled_exception_increments_metric_and_is_on_metrics_endpoint():
+    client = TestClient(_app_with_failing_routes(), raise_server_exceptions=False)
+    client.get("/boom")
+    assert recoverability.snapshot()["unhandled"] == 1
+    metrics_body = client.get("/metrics").text
+    assert "app_unhandled_exceptions_total 1" in metrics_body

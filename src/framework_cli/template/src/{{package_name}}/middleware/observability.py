@@ -36,6 +36,7 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         cid = request.headers.get(_CORRELATION_HEADER) or uuid.uuid4().hex
         token = correlation_id_var.set(cid)
+        request.state.correlation_id = cid
         start = time.perf_counter()
         record = request.url.path not in _UNRECORDED_PATHS
         try:

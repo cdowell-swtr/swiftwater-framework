@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from {{ package_name }}.observability.recoverability import recoverability
 from {{ package_name }}.observability.slo import build_health_report
 
 router = APIRouter()
@@ -22,8 +23,9 @@ def health(request: Request) -> JSONResponse:
 @router.get("/metrics", response_class=PlainTextResponse)
 def metrics(request: Request) -> PlainTextResponse:
     """Prometheus exposition format from the in-process registry."""
+    body = request.app.state.metrics.render_prometheus() + recoverability.render_prometheus()
     return PlainTextResponse(
-        request.app.state.metrics.render_prometheus(),
+        body,
         status_code=200,
         media_type="text/plain; version=0.0.4",
     )
