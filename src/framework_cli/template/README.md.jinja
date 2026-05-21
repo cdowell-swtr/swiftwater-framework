@@ -23,7 +23,7 @@ task lint      # ruff + mypy
 ## CI/CD
 
 - `task ci` — local pre-flight: lint + the 85% coverage gate + pip-audit + OpenAPI export. Run before pushing.
-- `task push` — pushes and triggers `.github/workflows/ci.yml`, the authoritative pipeline: integrity (seam) → lint → tests (unit/functional/e2e + 85% gate) → build → OpenAPI contract diff → pip-audit + full-history gitleaks → review agents (seam).
+- `task push` — pushes and triggers `.github/workflows/ci.yml`, the authoritative pipeline (a DAG, not a strict chain): integrity (seam) → then in parallel **lint** and **security** (pip-audit + full-history gitleaks) → then in parallel **tests** (unit/functional/e2e + 85% gate), the **image build**, and the **OpenAPI contract diff** → **review agents** (seam).
 - `task openapi:export` — regenerate `openapi.json` after changing routes; commit it (CI fails on a stale or breaking spec). On a brand-new project, run this once and commit `openapi.json` before your first push, or the first `contract` CI job will fail by design.
 - `task audit` — scan dependencies for CVEs. `.github/dependabot.yml` opens weekly update PRs.
 

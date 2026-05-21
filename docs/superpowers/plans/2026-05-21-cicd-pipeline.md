@@ -846,11 +846,26 @@ git commit -m "feat(template): GitHub Actions CI pipeline (lint/test/build/contr
 ## Task 7: Docs, acceptance coverage, full verification + roadmap/state update
 
 **Files:**
+- Modify: `src/framework_cli/template/Taskfile.yml.jinja`
 - Modify: `src/framework_cli/template/CLAUDE.md.jinja`
 - Modify: `src/framework_cli/template/README.md.jinja`
 - Modify: `tests/acceptance/test_rendered_project.py`
+- Modify: `tests/test_copier_runner.py`
 - Modify: `docs/superpowers/plans/2026-05-20-meta-plan.md`
 - Modify: `CLAUDE.md` (Current State pointer)
+
+- [ ] **Step 0: Add `task push` (referenced by `ci.yml`, the `task ci` desc, CLAUDE.md/README, and spec §15 — must exist)**
+
+Task 6's `ci.yml` header and the `task ci` description both reference `task push`, and the docs below instruct users to run it, but it doesn't exist yet (code-quality review caught this). Add it to `src/framework_cli/template/Taskfile.yml.jinja` after the `ci` task:
+
+```yaml
+  push:
+    desc: Push the current branch — triggers the authoritative GitHub Actions CI pipeline.
+    cmds:
+      - git push
+```
+
+Add a render assertion in `tests/test_copier_runner.py` (extend the existing `test_render_includes_ci_pipeline`, or add a one-liner): `assert "push:" in taskfile`. Re-render and confirm `task push` is in the rendered Taskfile and the no-Docker `precommit_runs_clean` still passes.
 
 - [ ] **Step 1: Document the pipeline in CLAUDE.md (managed block)**
 
