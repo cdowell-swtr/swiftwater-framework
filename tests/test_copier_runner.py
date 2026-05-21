@@ -55,6 +55,8 @@ def test_render_includes_precommit_config(tmp_path: Path):
     assert "ruff" in text
     assert "mypy" in text
     assert "gitleaks" in text
+    # pins the hook id the no-Docker precommit acceptance test SKIPs (DB suite needs Docker)
+    assert "coverage-threshold" in text
 
     pyproject = (dest / "pyproject.toml").read_text()
     assert "pre-commit" in pyproject
