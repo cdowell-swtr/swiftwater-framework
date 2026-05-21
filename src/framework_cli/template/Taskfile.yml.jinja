@@ -104,3 +104,8 @@ tasks:
     desc: Load seed data (idempotent — skips if data already exists).
     cmds:
       - uv run python scripts/seed.py
+
+  openapi:export:
+    desc: Export the OpenAPI schema to openapi.json (commit it; CI diffs it).
+    cmds:
+      - bash scripts/export-openapi.sh

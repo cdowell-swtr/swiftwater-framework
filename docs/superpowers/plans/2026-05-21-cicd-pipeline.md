@@ -387,10 +387,14 @@ def test_rendered_project_exports_openapi(tmp_path: Path):
     assert result.returncode == 0, "export-openapi.sh failed"
 
     spec = json.loads((dest / "openapi.json").read_text())
-    assert spec["info"]["title"] == "Demo"
+    # The OpenAPI title is the service identifier (settings.service_name, which defaults to the
+    # package name) — the same identifier used for structlog/OTEL, so it is lowercase.
+    assert spec["info"]["title"] == DATA["package_name"]
     for path in ("/items", "/health", "/heartbeat", "/metrics"):
         assert path in spec["paths"], f"{path} missing from the exported OpenAPI spec"
 ```
+
+> **Correction (found in execution):** the app's `info.title` comes from `settings.service_name`, which defaults to `{{ package_name }}` (lowercase, e.g. `demo`) — the same identifier structlog and the OTEL `resource.service.name` use (the trace acceptance test asserts `resource.service.name="demo"`). Asserting the human-readable `"Demo"` was a plan error; the test asserts `DATA["package_name"]`. Do **not** repoint `service_name` at `project_name` — it would break the observability identity.
 
 - [ ] **Step 2: Run it to confirm it fails**
 

@@ -102,6 +102,25 @@ def test_rendered_project_precommit_runs_clean(tmp_path: Path):
     assert result.returncode == 0, "pre-commit hooks did not pass cleanly on a fresh project"
 
 
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
+def test_rendered_project_exports_openapi(tmp_path: Path):
+    # The export needs the app importable (uv sync) but NOT a database — create_app()
+    # introspects routes without connecting, so this runs without Docker.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+
+    result = subprocess.run(["bash", "scripts/export-openapi.sh"], cwd=dest)
+    assert result.returncode == 0, "export-openapi.sh failed"
+
+    spec = json.loads((dest / "openapi.json").read_text())
+    # The OpenAPI title is the service identifier (settings.service_name, which defaults to the
+    # package name) — the same identifier used for structlog/OTEL, so it is lowercase.
+    assert spec["info"]["title"] == DATA["package_name"]
+    for path in ("/items", "/health", "/heartbeat", "/metrics"):
+        assert path in spec["paths"], f"{path} missing from the exported OpenAPI spec"
+
+
 def _run_hook(dest: Path, file_path: Path) -> subprocess.CompletedProcess[str]:
     payload = json.dumps(
         {"tool_name": "Write", "tool_input": {"file_path": str(file_path)}}

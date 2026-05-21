@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Export the FastAPI OpenAPI schema to openapi.json. The spec is committed and CI checks it
+# is current (.github/workflows/ci.yml) and diffs it for breaking changes. Run after changing
+# any route or response model, then commit the result. Convenience: `task openapi:export`.
+set -euo pipefail
+
+uv run python - > openapi.json <<'PY'
+import json
+import sys
+
+from {{ package_name }}.main import create_app
+
+json.dump(create_app().openapi(), sys.stdout, indent=2, sort_keys=True)
+sys.stdout.write("\n")
+PY
