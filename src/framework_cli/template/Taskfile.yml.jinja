@@ -109,3 +109,8 @@ tasks:
     desc: Export the OpenAPI schema to openapi.json (commit it; CI diffs it).
     cmds:
       - bash scripts/export-openapi.sh
+
+  audit:
+    desc: Scan dependencies for known vulnerabilities (CVEs).
+    cmds:
+      - uv run pip-audit

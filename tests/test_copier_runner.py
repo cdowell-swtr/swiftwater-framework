@@ -519,3 +519,20 @@ def test_render_coverage_script_and_tasks(tmp_path: Path):
 
     precommit = (dest / ".pre-commit-config.yaml").read_text()
     assert "scripts/coverage.sh 70 unit functional" in precommit
+
+
+def test_render_dependency_security(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "pip-audit" in pyproject
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "audit:" in taskfile
+
+    dependabot = dest / ".github" / "dependabot.yml"
+    assert dependabot.is_file()
+    cfg = yaml.safe_load(dependabot.read_text())
+    ecosystems = {u["package-ecosystem"] for u in cfg["updates"]}
+    assert {"uv", "github-actions"} <= ecosystems
