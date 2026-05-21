@@ -11,6 +11,7 @@ import contextvars
 import logging
 
 import structlog
+from opentelemetry import trace
 
 correlation_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "correlation_id", default=None
@@ -24,12 +25,22 @@ def add_correlation_id(logger, method_name, event_dict):  # noqa: ANN001, ARG001
     return event_dict
 
 
+def add_trace_context(logger, method_name, event_dict):  # noqa: ANN001, ARG001
+    span = trace.get_current_span()
+    ctx = span.get_span_context()
+    if ctx.is_valid:
+        event_dict["trace_id"] = format(ctx.trace_id, "032x")
+        event_dict["span_id"] = format(ctx.span_id, "016x")
+    return event_dict
+
+
 def configure_logging(level: str) -> None:
     numeric = getattr(logging, level.upper(), logging.INFO)
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
             add_correlation_id,
+            add_trace_context,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.JSONRenderer(),

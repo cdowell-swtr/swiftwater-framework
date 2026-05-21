@@ -34,3 +34,23 @@ def test_configure_logging_sets_level():
 def test_get_logger_is_usable():
     configure_logging("DEBUG")
     get_logger().info("smoke", key="value")  # must not raise
+
+
+def test_add_trace_context_injects_trace_id_when_span_active():
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from {{ package_name }}.logging_config import add_trace_context
+
+    provider = TracerProvider()
+    tracer = provider.get_tracer("test")
+    with tracer.start_as_current_span("unit"):
+        event = add_trace_context(None, "info", {"event": "hi"})
+    assert len(event["trace_id"]) == 32
+    assert len(event["span_id"]) == 16
+
+
+def test_add_trace_context_omits_when_no_span():
+    from {{ package_name }}.logging_config import add_trace_context
+
+    event = add_trace_context(None, "info", {"event": "hi"})
+    assert "trace_id" not in event
