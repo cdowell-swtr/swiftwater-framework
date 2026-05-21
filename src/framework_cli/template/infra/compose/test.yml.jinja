@@ -1,6 +1,29 @@
-# test profile: app with test config, no Traefik. Seed for the E2E stack (Plan 5).
+# test profile: app with test config + an ephemeral Postgres (reset every run via
+# tmpfs). This `postgres-test` is the DB for the test-PROFILE app container
+# (full-stack / E2E, Plan 5) — distinct from the pytest testcontainers DB in
+# tests/conftest.py, which the in-process unit/functional tests use.
 services:
   app:
     profiles: ["test"]
     environment:
       APP_ENVIRONMENT: test
+      APP_DATABASE_URL: "postgresql+psycopg://app:app@postgres-test:5432/app"
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+
+  postgres-test:
+    image: postgres:17
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    tmpfs:
+      - /var/lib/postgresql/data

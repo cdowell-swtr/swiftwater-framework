@@ -440,3 +440,15 @@ def test_render_postgres_in_dev_and_lite(tmp_path: Path):
     assert app["depends_on"]["postgres"]["condition"] == "service_healthy"
     assert "postgres:5432" in app["environment"]["APP_DATABASE_URL"]
     assert "pgdata" in dev["volumes"]
+
+
+def test_render_postgres_test_profile(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    test = yaml.safe_load((dest / "infra" / "compose" / "test.yml").read_text())
+    pg = test["services"]["postgres-test"]
+    assert pg["profiles"] == ["test"]
+    assert "tmpfs" in pg  # ephemeral: reset between runs
+    app = test["services"]["app"]
+    assert "postgres-test:5432" in app["environment"]["APP_DATABASE_URL"]
+    assert app["depends_on"]["postgres-test"]["condition"] == "service_healthy"
