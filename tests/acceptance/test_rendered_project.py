@@ -17,7 +17,19 @@ DATA = {
 }
 
 
-@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
+def _docker_available() -> bool:
+    if shutil.which("uv") is None or shutil.which("docker") is None:
+        return False
+    result = subprocess.run(
+        ["docker", "info"], capture_output=True, timeout=10
+    )
+    return result.returncode == 0
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
 def test_rendered_project_passes_its_own_tests(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
@@ -29,7 +41,10 @@ def test_rendered_project_passes_its_own_tests(tmp_path: Path):
     assert result.returncode == 0, "the generated project's test suite did not pass"
 
 
-@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
 def test_rendered_project_coverage_gate_passes(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
@@ -130,15 +145,6 @@ def test_lint_hook_ignores_non_python(tmp_path: Path):
 
     result = _run_hook(dest, note)
     assert result.returncode == 0, result.stdout + result.stderr
-
-
-def _docker_available() -> bool:
-    if shutil.which("uv") is None or shutil.which("docker") is None:
-        return False
-    result = subprocess.run(
-        ["docker", "info"], capture_output=True, timeout=10
-    )
-    return result.returncode == 0
 
 
 @pytest.mark.skipif(
@@ -297,5 +303,36 @@ def test_rendered_project_traces_reach_tempo(tmp_path: Path):
                 pass
             time.sleep(4)
         assert found, "no app traces reached Tempo within the timeout"
+    finally:
+        subprocess.run(down, cwd=dest)
+
+
+@pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
+def test_rendered_project_dev_stack_serves_seeded_items(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    # `lite` profile = app + postgres only (no Traefik/observability) — app on 8000.
+    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "up", "-d", "--build"]
+    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "down", "-v"]
+    assert subprocess.run(up, cwd=dest).returncode == 0
+    try:
+        deadline = time.time() + 120
+        items = None
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen("http://localhost:8000/items", timeout=3) as resp:
+                    if resp.status == 200:
+                        payload = json.loads(resp.read())
+                        if payload:
+                            items = payload
+                            break
+            except OSError:
+                pass
+            time.sleep(3)
+        assert items, "no seeded items served by /items within 120s"
+        assert {row["name"] for row in items} >= {"alpha", "beta"}
     finally:
         subprocess.run(down, cwd=dest)
