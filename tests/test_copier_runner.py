@@ -282,6 +282,29 @@ def test_render_docs_mention_logs(tmp_path: Path):
     assert '{service="app"}' in (dest / "README.md").read_text()
 
 
+def test_render_tempo_datasource_and_loki_link(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    ds_dir = dest / "infra" / "observability" / "grafana" / "provisioning" / "datasources"
+
+    tempo = yaml.safe_load((ds_dir / "tempo.yml").read_text())["datasources"][0]
+    assert tempo["uid"] == "tempo"
+    assert tempo["type"] == "tempo"
+    assert tempo["url"] == "http://tempo:3200"
+
+    loki = yaml.safe_load((ds_dir / "loki.yml").read_text())["datasources"][0]
+    df = loki["jsonData"]["derivedFields"][0]
+    assert df["name"] == "trace_id"
+    assert df["datasourceUid"] == "tempo"
+    # the regex must match the ACTUAL structlog JSON line (JSONRenderer puts a space
+    # after the colon), not merely contain "trace_id" — guards the Loki->Tempo link.
+    import re
+
+    sample = json.dumps({"event": "request", "trace_id": "0af7651916cd43dd8448eb211c80319c"})
+    m = re.search(df["matcherRegex"], sample)
+    assert m and m.group(1) == "0af7651916cd43dd8448eb211c80319c"
+
+
 def test_render_tempo_otel_collector(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
