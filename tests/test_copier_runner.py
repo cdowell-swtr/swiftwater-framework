@@ -201,6 +201,13 @@ def test_render_observability_services_in_dev(tmp_path: Path):
     assert any("9090" in str(p) for p in svcs["prometheus"]["ports"])
 
 
+def test_render_docs_mention_observability(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert "grafana:3000" in (dest / "SERVICES.md").read_text()
+    assert "task observability:gen" in (dest / "README.md").read_text()
+
+
 def test_render_observability_config(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

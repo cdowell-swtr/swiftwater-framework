@@ -172,3 +172,35 @@ def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
         assert "request_latency_p99_ms" in body["slos"]
     finally:
         subprocess.run(down, cwd=dest)
+
+
+@pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
+def test_rendered_project_dev_stack_prometheus_scrapes_app(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "up", "-d", "--build"]
+    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "down", "-v"]
+    assert subprocess.run(up, cwd=dest).returncode == 0
+    try:
+        deadline = time.time() + 120
+        up_targets = None
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    "http://localhost:9090/api/v1/targets?state=active", timeout=3
+                ) as resp:
+                    data = json.loads(resp.read())
+                    actives = data.get("data", {}).get("activeTargets", [])
+                    app_targets = [t for t in actives if t.get("labels", {}).get("job") == "app"]
+                    if app_targets and app_targets[0].get("health") == "up":
+                        up_targets = app_targets
+                        break
+            except OSError:
+                pass
+            time.sleep(3)
+        assert up_targets, "prometheus did not report the app target healthy within 120s"
+    finally:
+        subprocess.run(down, cwd=dest)

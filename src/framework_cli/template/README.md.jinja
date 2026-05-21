@@ -30,6 +30,8 @@ task dev:lite  # app only at http://localhost:8000 (no Traefik)
 
 Service addresses are documented in `SERVICES.md`.
 
+With the full `task dev` stack, observability is at: Grafana `http://localhost:3000` (SLO dashboard), Prometheus `http://localhost:9090`, Alertmanager `http://localhost:9093`. Alert rules and the dashboard are generated from the SLO definitions — run `task observability:gen` after changing them.
+
 ## Endpoints
 
 - `GET /heartbeat` — liveness ping

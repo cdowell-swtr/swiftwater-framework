@@ -7,5 +7,8 @@ External address = host browser access (HTTPS via Traefik + mkcert).
 |---------|------------------|------------------|-------|
 | app     | `app:8000`       | `https://{{ project_slug }}.localhost` | FastAPI app; `/heartbeat`, `/health`, `/metrics` |
 | traefik | `traefik:80/443` | `https://{{ project_slug }}.localhost` | Reverse proxy, TLS termination (dev profile) |
+| prometheus | `prometheus:9090` | `http://localhost:9090` | Scrapes `app:8000/metrics`; loads SLO alert rules (dev profile) |
+| grafana | `grafana:3000` | `http://localhost:3000` | SLO dashboard (auto-provisioned); anonymous admin in dev (dev profile) |
+| alertmanager | `alertmanager:9093` | `http://localhost:9093` | Fires on SLO-breach alert rules; local null receiver (dev profile) |
 
 Run `task certs` once to generate the local mkcert certificate, then `task dev`.
