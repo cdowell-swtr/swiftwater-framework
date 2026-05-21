@@ -1,0 +1,36 @@
+import logging
+
+import structlog
+
+from {{ package_name }}.logging_config import (
+    add_correlation_id,
+    configure_logging,
+    correlation_id_var,
+    get_logger,
+)
+
+
+def test_add_correlation_id_injects_when_set():
+    token = correlation_id_var.set("abc-123")
+    try:
+        event = add_correlation_id(None, "info", {"event": "hi"})
+    finally:
+        correlation_id_var.reset(token)
+    assert event["correlation_id"] == "abc-123"
+
+
+def test_add_correlation_id_omits_when_unset():
+    event = add_correlation_id(None, "info", {"event": "hi"})
+    assert "correlation_id" not in event
+
+
+def test_configure_logging_sets_level():
+    configure_logging("WARNING")
+    assert structlog.get_config()[
+        "wrapper_class"
+    ] == structlog.make_filtering_bound_logger(logging.WARNING)
+
+
+def test_get_logger_is_usable():
+    configure_logging("DEBUG")
+    get_logger().info("smoke", key="value")  # must not raise
