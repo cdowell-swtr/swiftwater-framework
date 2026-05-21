@@ -9,5 +9,19 @@
       "PowerShell(Get-Command*)",
       "PowerShell(Test-Path*)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "grep -Eq '(^|[^[:alnum:]_])git[[:space:]]+([^[:space:]].*[[:space:]]+)?commit([^[:alnum:]_]|$)' || exit 0; root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; git -C \"$root\" diff --cached --name-only 2>/dev/null | grep -qx 'CLAUDE.md' && exit 0; echo 'Commit blocked: update the Current State pointer in CLAUDE.md and stage it (git add CLAUDE.md) before committing.' >&2; exit 2",
+            "statusMessage": "Checking CLAUDE.md is current before commit"
+          }
+        ]
+      }
+    ]
   }
 }

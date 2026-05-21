@@ -310,7 +310,7 @@ Run: `uv run ruff check .` → no errors. Run: `uv run mypy src` → `Success`.
 In a scratch dir outside the repo, scaffold a project and exercise the hook directly:
 
 ```bash
-uv run --project "C:/Users/chris/Claude Code/Projects/framework" framework new "Hook Demo"
+uv run --project /path/to/swiftwater-framework framework new "Hook Demo"
 cd hook-demo
 uv sync
 # Simulate a PostToolUse payload for a bad file:
