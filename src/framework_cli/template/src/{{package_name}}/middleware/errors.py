@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -78,7 +79,7 @@ async def handle_validation_error(request: Request, exc: Exception) -> JSONRespo
         title="Unprocessable Entity",
         detail="Request validation failed.",
         request=request,
-        errors=exc.errors(),
+        errors=jsonable_encoder(exc.errors()),
     )
 
 

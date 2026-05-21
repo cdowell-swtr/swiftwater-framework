@@ -1,8 +1,20 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, field_validator
 
 from {{ package_name }}.main import create_app
 from {{ package_name }}.observability.recoverability import recoverability
+
+
+class _Positive(BaseModel):
+    n: int
+
+    @field_validator("n")
+    @classmethod
+    def _must_be_positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("must be positive")
+        return value
 
 
 def _app_with_failing_routes() -> FastAPI:
@@ -19,6 +31,10 @@ def _app_with_failing_routes() -> FastAPI:
     @app.get("/needs-int")
     def needs_int(n: int) -> dict[str, int]:
         return {"n": n}
+
+    @app.post("/positive")
+    def positive(body: _Positive) -> dict[str, int]:
+        return {"n": body.n}
 
     return app
 
@@ -58,3 +74,13 @@ def test_unhandled_exception_increments_metric_and_is_on_metrics_endpoint():
     assert recoverability.snapshot()["unhandled"] == 1
     metrics_body = client.get("/metrics").text
     assert "app_unhandled_exceptions_total 1" in metrics_body
+
+
+def test_custom_validator_error_stays_422_and_does_not_increment_unhandled():
+    client = TestClient(_app_with_failing_routes())
+    r = client.post("/positive", json={"n": -5})
+    assert r.status_code == 422
+    assert r.headers["content-type"].startswith("application/problem+json")
+    assert "errors" in r.json()
+    # The crash bug turned this into a 500 + falsely incremented the counter.
+    assert recoverability.snapshot()["unhandled"] == 0
