@@ -404,3 +404,13 @@ def test_render_includes_alembic(tmp_path: Path):
     assert (dest / "migrations" / "script.py.mako").is_file()
     initial = (dest / "migrations" / "versions" / "0001_initial.py").read_text()
     assert "create_table" in initial and '"items"' in initial
+
+
+def test_render_wires_items_route(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    items = (dest / "src" / "demo" / "routes" / "items.py").read_text()
+    assert '@router.get("/items"' in items
+    main = (dest / "src" / "demo" / "main.py").read_text()
+    assert "items" in main
+    assert "include_router(items.router)" in main

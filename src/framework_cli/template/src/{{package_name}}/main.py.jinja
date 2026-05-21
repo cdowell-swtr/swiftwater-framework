@@ -5,7 +5,7 @@ from {{ package_name }}.logging_config import configure_logging
 from {{ package_name }}.middleware.observability import ObservabilityMiddleware
 from {{ package_name }}.observability.metrics import MetricsRegistry
 from {{ package_name }}.observability.tracing import configure_tracing
-from {{ package_name }}.routes import health
+from {{ package_name }}.routes import health, items
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -17,6 +17,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.metrics = MetricsRegistry()
     app.add_middleware(ObservabilityMiddleware, metrics=app.state.metrics)
     app.include_router(health.router)
+    app.include_router(items.router)
     configure_tracing(app, settings)
     return app
 

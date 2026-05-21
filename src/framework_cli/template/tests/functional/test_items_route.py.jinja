@@ -1,0 +1,25 @@
+from collections.abc import Iterator
+
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.engine import get_session
+from {{ package_name }}.db.repository import create_item
+from {{ package_name }}.main import create_app
+
+
+def test_items_endpoint_returns_rows(db_session: Session):
+    create_item(db_session, "alpha")
+
+    def override() -> Iterator[Session]:
+        yield db_session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override
+    client = TestClient(app)
+
+    resp = client.get("/items")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [row["name"] for row in body] == ["alpha"]
+    assert all(set(row) == {"id", "name"} for row in body)  # response matches ItemRead
