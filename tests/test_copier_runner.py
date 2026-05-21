@@ -414,3 +414,16 @@ def test_render_wires_items_route(tmp_path: Path):
     main = (dest / "src" / "demo" / "main.py").read_text()
     assert "items" in main
     assert "include_router(items.router)" in main
+
+
+def test_render_dockerfile_entrypoint(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    entry = (dest / "scripts" / "entrypoint.sh").read_text()
+    assert "alembic upgrade head" in entry
+    assert "scripts/seed.py" in entry
+    assert 'exec "$@"' in entry
+    dockerfile = (dest / "infra" / "docker" / "Dockerfile").read_text()
+    assert "entrypoint.sh" in dockerfile
+    assert "ENTRYPOINT" in dockerfile
+    assert "uvicorn" in dockerfile and "CMD" in dockerfile
