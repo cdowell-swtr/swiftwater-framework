@@ -152,3 +152,20 @@ def test_render_compose_structure(tmp_path: Path):
     test = yaml.safe_load((dest / "infra" / "compose" / "test.yml").read_text())
     assert test["services"]["app"]["environment"]["APP_ENVIRONMENT"] == "test"
     assert "test" in test["services"]["app"]["profiles"]
+
+
+def test_render_traefik_and_certs_gitignored(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    static = yaml.safe_load((dest / "infra" / "traefik" / "traefik.yml").read_text())
+    assert "websecure" in static["entryPoints"]
+    assert static["providers"]["docker"]["exposedByDefault"] is False
+
+    tls = yaml.safe_load((dest / "infra" / "traefik" / "dynamic" / "tls.yml").read_text())
+    certs = tls["tls"]["certificates"][0]
+    assert certs["certFile"].endswith(".pem")
+
+    assert (dest / "infra" / "traefik" / "certs" / ".gitkeep").is_file()
+    gitignore = (dest / ".gitignore").read_text()
+    assert "infra/traefik/certs/*.pem" in gitignore
