@@ -41,5 +41,7 @@ def test_database_url_default():
 
 
 def test_database_url_env_override(monkeypatch):
-    monkeypatch.setenv("APP_DATABASE_URL", "postgresql+psycopg://u:p@db.example:5432/app")
+    monkeypatch.setenv(
+        "APP_DATABASE_URL", "postgresql+psycopg://u:p@db.example:5432/app"
+    )
     assert Settings().database_url == "postgresql+psycopg://u:p@db.example:5432/app"

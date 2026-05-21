@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -80,8 +81,11 @@ def test_rendered_project_precommit_config_is_valid(tmp_path: Path):
     reason="uv and git are required for this test",
 )
 def test_rendered_project_precommit_runs_clean(tmp_path: Path):
-    # A freshly generated project must make a clean first commit: every hook the
-    # framework installs must pass on the scaffolded files (no hook rewrites them).
+    # A freshly generated project must make a clean first pass on the NO-DOCKER hooks:
+    # ruff-check / ruff-format / mypy / gitleaks / file-hygiene must pass on the
+    # scaffolded files (no hook rewrites them). The `coverage-threshold` hook runs the
+    # DB test suite against a real Postgres (testcontainers), so it's skipped here and
+    # exercised instead by the Docker-gated coverage test.
     dest = tmp_path / "demo"
     render_project(dest, DATA)
 
@@ -90,7 +94,11 @@ def test_rendered_project_precommit_runs_clean(tmp_path: Path):
     sync = subprocess.run(["uv", "sync"], cwd=dest)
     assert sync.returncode == 0, "uv sync failed in the generated project"
 
-    result = subprocess.run(["uv", "run", "pre-commit", "run", "--all-files"], cwd=dest)
+    result = subprocess.run(
+        ["uv", "run", "pre-commit", "run", "--all-files"],
+        cwd=dest,
+        env={**os.environ, "SKIP": "coverage-threshold"},
+    )
     assert result.returncode == 0, "pre-commit hooks did not pass cleanly on a fresh project"
 
 
