@@ -11,9 +11,9 @@ This repo is an opinionated Python scaffold framework: a `framework` CLI that re
 > Quick pointer, kept current so any environment starts with the real state. The detailed record of record is the meta-plan (`docs/superpowers/plans/2026-05-20-meta-plan.md`) — update its status table when a plan's status changes.
 
 - **Last updated:** 2026-05-20
-- **Where we are:** Plans 1, 2, 2b, and **3a (local runtime) merged to `master`** (see `docs/superpowers/plans/2026-05-20-local-runtime.md`) — generated projects now ship `pydantic-settings` config, `structlog` + correlation-id logging, an in-process metrics registry, a real SLO-evaluating `/health` + Prometheus `/metrics`, and a Docker Compose (`base`/`dev`/`lite`/`test`) + Traefik/mkcert HTTPS stack with a multi-stage Dockerfile, `.dockerignore`, `SERVICES.md`, `.env.example`, and stack Taskfile tasks. Framework gate green (`ruff`, `mypy`, 13 render tests + acceptance suite).
-- **Recent:** Plan 3a executed task-by-task (subagent-driven: implementer per task → spec + quality review → fixes). The Docker-gated live-stack test skips where Docker is absent.
-- **Next:** Plan 3b (observability stack — Prometheus/Grafana/Loki/Tempo/Alertmanager/OTEL — scraping the `/metrics` and SLO definitions Plan 3a established).
+- **Where we are:** Plans 1, 2, 2b, 3a, and **3b-1 (observability metrics) merged to `master`** — on top of 3a's runtime, generated projects now get Prometheus + Grafana + Alertmanager in the `dev` profile, with the Grafana SLO dashboard and Prometheus alert rules generated from the SLO definitions (`observability/provisioning.py` + `task observability:gen`, drift-guarded). See `docs/superpowers/plans/2026-05-20-observability-metrics.md`. Framework gate green (`ruff`, `mypy`, 16 render tests + acceptance suite).
+- **Recent:** Plan 3b-1 executed subagent-driven with the Sonnet-implementer / Sonnet-spec / **Opus-quality** + Opus-final review split; Opus caught the Grafana threshold line not rendering (fixed). The Docker-gated live Prometheus-scrape test skips where Docker is absent.
+- **Next:** Plan 3b-2 (logs — Loki + Promtail shipping the structlog JSON), then 3b-3 (traces — Tempo + OTEL).
 
 ## Keeping state current (required before every commit)
 
