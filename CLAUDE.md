@@ -11,9 +11,9 @@ This repo is an opinionated Python scaffold framework: a `framework` CLI that re
 > Quick pointer, kept current so any environment starts with the real state. The detailed record of record is the meta-plan (`docs/superpowers/plans/2026-05-20-meta-plan.md`) — update its status table when a plan's status changes.
 
 - **Last updated:** 2026-05-20
-- **Where we are:** Plans 1, 2, 2b merged to `master` — generated projects get the CLI scaffold, quality gates (coverage / pre-commit / `CLAUDE.md`), and the lint-on-edit Claude Code hook. The framework repo's own gate is green (`ruff`, `mypy`, 22 pytest).
-- **Recent:** Reconciled the spec to `Taskfile.yml` and stripped Windows-specific paths / winget assumptions from the docs; added the commit-state workflow (this pointer + a `.claude/settings.json` hook that blocks `git commit` until `CLAUDE.md` is staged).
-- **Next:** Plan 3 (local env + observability), to be sub-sliced 3a/3b/3c — see the meta-plan.
+- **Where we are:** Plans 1, 2, 2b merged to `master`. **Plan 3a (local runtime) complete** on `feat/plan-3a-local-runtime` (see `docs/superpowers/plans/2026-05-20-local-runtime.md`) — generated projects now ship `pydantic-settings` config, `structlog` + correlation-id logging, an in-process metrics registry, a real SLO-evaluating `/health` + Prometheus `/metrics`, and a Docker Compose (`base`/`dev`/`lite`/`test`) + Traefik/mkcert HTTPS stack with a multi-stage Dockerfile, `.dockerignore`, `SERVICES.md`, `.env.example`, and stack Taskfile tasks. Framework gate green (`ruff`, `mypy`, 13 render tests + acceptance suite).
+- **Recent:** Plan 3a executed task-by-task (subagent-driven: implementer per task → spec + quality review → fixes). The Docker-gated live-stack test skips where Docker is absent.
+- **Next:** Plan 3b (observability stack — Prometheus/Grafana/Loki/Tempo/Alertmanager/OTEL — scraping the `/metrics` and SLO definitions Plan 3a established).
 
 ## Keeping state current (required before every commit)
 
