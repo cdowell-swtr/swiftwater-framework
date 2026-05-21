@@ -47,6 +47,16 @@ tasks:
     cmds:
       - bash scripts/coverage.sh 70 unit functional
 
+  test:e2e:
+    desc: End-to-end tests only (full app + real Postgres; needs Docker).
+    cmds:
+      - uv run pytest tests/e2e -q
+
+  test:cov:ci:
+    desc: Combined coverage gate (unit + functional + e2e, >=85%) — the CI gate.
+    cmds:
+      - bash scripts/coverage.sh 85 unit functional e2e
+
   test:stack:
     desc: Bring up the test-profile stack (app with APP_ENVIRONMENT=test).
     preconditions:

@@ -1,12 +1,16 @@
 import os
 import subprocess
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 import pytest
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from {{ package_name }}.db.engine import build_engine
+
+if TYPE_CHECKING:
+    from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)
@@ -71,3 +75,38 @@ def db_session(engine: Engine) -> Iterator[Session]:
         session.close()
         transaction.rollback()
         connection.close()
+
+
+@pytest.fixture
+def e2e_client(engine: Engine) -> Iterator["TestClient"]:
+    """A TestClient over the full app, wired to the real (testcontainers) Postgres.
+
+    The app's default engine points at APP_DATABASE_URL (the compose host), so we override
+    get_session with committing sessions on the test engine — the app then reads/writes the
+    same DB the test seeds. Using `with` runs the lifespan (startup + shutdown disposal).
+
+    Teardown truncates the items table so committed rows don't bleed into the unit/functional
+    tier (those tests assert exact row counts on the shared session-scoped Postgres container).
+    """
+    from sqlalchemy import text
+
+    from fastapi.testclient import TestClient
+
+    from {{ package_name }}.db.engine import build_session_factory, get_session
+    from {{ package_name }}.main import create_app
+
+    factory = build_session_factory(engine)
+
+    def override() -> Iterator[Session]:
+        with factory() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override
+    with TestClient(app) as client:
+        yield client
+
+    # Truncate committed rows so unit/functional tests on the shared container stay clean.
+    with engine.connect() as conn:
+        conn.execute(text("TRUNCATE TABLE items RESTART IDENTITY CASCADE"))
+        conn.commit()
