@@ -12,5 +12,7 @@ External address = host browser access (HTTPS via Traefik + mkcert).
 | alertmanager | `alertmanager:9093` | `http://localhost:9093` | Fires on SLO-breach alert rules; local null receiver (dev profile) |
 | loki | `loki:3100` | `http://localhost:3100` | Log store; queried in Grafana (dev profile) |
 | promtail | `promtail:9080` | (no host port) | Ships container logs to Loki via the Docker socket (dev profile) |
+| tempo | `tempo:3200` (query), `tempo:4317` (OTLP) | `http://localhost:3200` | Distributed trace store; queried in Grafana (dev profile) |
+| otel-collector | `otel-collector:4317` (OTLP) | (no host port) | Receives app traces (OTLP), forwards to Tempo (dev profile) |
 
 Run `task certs` once to generate the local mkcert certificate, then `task dev`.

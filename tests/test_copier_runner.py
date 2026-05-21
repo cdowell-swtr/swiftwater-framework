@@ -305,6 +305,13 @@ def test_render_tempo_datasource_and_loki_link(tmp_path: Path):
     assert m and m.group(1) == "0af7651916cd43dd8448eb211c80319c"
 
 
+def test_render_docs_mention_traces(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert "tempo:3200" in (dest / "SERVICES.md").read_text()
+    assert "OpenTelemetry" in (dest / "README.md").read_text()
+
+
 def test_render_tempo_otel_collector(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

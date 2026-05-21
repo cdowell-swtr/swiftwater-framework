@@ -34,6 +34,8 @@ With the full `task dev` stack, observability is at: Grafana `http://localhost:3
 
 Application logs (structlog JSON) are shipped to Loki by Promtail and queryable in Grafana under the Loki datasource — e.g. `{service="app"}` (filter by `level`, find a request by its `correlation_id`).
 
+Requests are traced with OpenTelemetry (enabled in the `dev` stack) and stored in Tempo — view traces in Grafana, and jump from a log line to its trace via the `trace_id` derived field (Loki→Tempo). Tracing is off in `lite`/local runs.
+
 ## Endpoints
 
 - `GET /heartbeat` — liveness ping

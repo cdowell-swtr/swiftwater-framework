@@ -257,3 +257,45 @@ def test_rendered_project_app_logs_reach_loki(tmp_path: Path):
         assert found, "no app logs reached Loki within the timeout"
     finally:
         subprocess.run(down, cwd=dest)
+
+
+@pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
+def test_rendered_project_traces_reach_tempo(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "up", "-d", "--build"]
+    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "down", "-v"]
+    assert subprocess.run(up, cwd=dest).returncode == 0
+    try:
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            try:
+                urllib.request.urlopen("http://localhost:8000/heartbeat", timeout=3).read()
+                break
+            except OSError:
+                time.sleep(2)
+        for _ in range(5):
+            try:
+                urllib.request.urlopen("http://localhost:8000/heartbeat", timeout=3).read()
+            except OSError:
+                pass
+        deadline = time.time() + 120
+        found = False
+        while time.time() < deadline and not found:
+            try:
+                with urllib.request.urlopen(
+                    'http://localhost:3200/api/search?q=%7Bresource.service.name%3D%22demo%22%7D&limit=1',
+                    timeout=5,
+                ) as resp:
+                    data = json.loads(resp.read())
+                    if data.get("traces"):
+                        found = True
+                        break
+            except OSError:
+                pass
+            time.sleep(4)
+        assert found, "no app traces reached Tempo within the timeout"
+    finally:
+        subprocess.run(down, cwd=dest)
