@@ -312,6 +312,24 @@ def test_render_docs_mention_traces(tmp_path: Path):
     assert "OpenTelemetry" in (dest / "README.md").read_text()
 
 
+def test_render_pyproject_database_deps(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "sqlalchemy" in pyproject
+    assert "alembic" in pyproject
+    assert "psycopg" in pyproject
+    assert "testcontainers" in pyproject  # dev dep for real-PG tests
+
+
+def test_render_settings_has_database_url(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    settings = (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    assert "database_url" in settings
+    assert "postgresql+psycopg://" in settings
+
+
 def test_render_tempo_otel_collector(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

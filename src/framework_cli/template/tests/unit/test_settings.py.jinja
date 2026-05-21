@@ -34,3 +34,12 @@ def test_env_vars_override(monkeypatch):
 
 def test_get_settings_is_cached():
     assert get_settings() is get_settings()
+
+
+def test_database_url_default():
+    assert Settings().database_url.startswith("postgresql+psycopg://")
+
+
+def test_database_url_env_override(monkeypatch):
+    monkeypatch.setenv("APP_DATABASE_URL", "postgresql+psycopg://u:p@db.example:5432/app")
+    assert Settings().database_url == "postgresql+psycopg://u:p@db.example:5432/app"
