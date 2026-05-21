@@ -462,3 +462,16 @@ def test_render_db_tasks(tmp_path: Path):
     assert "db:seed:" in taskfile
     assert "alembic upgrade head" in taskfile
     assert "scripts/seed.py" in taskfile
+
+
+def test_render_database_docs(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    env = (dest / ".env.example").read_text()
+    assert "APP_DATABASE_URL=" in env
+    services = (dest / "SERVICES.md").read_text()
+    assert "postgres:5432" in services
+    readme = (dest / "README.md").read_text()
+    assert "task db:migrate" in readme
+    assert "PostgreSQL" in readme
+    assert "/items" in readme

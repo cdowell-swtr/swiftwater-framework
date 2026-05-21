@@ -6,6 +6,7 @@ External address = host browser access (HTTPS via Traefik + mkcert).
 | Service | Internal address | External address | Notes |
 |---------|------------------|------------------|-------|
 | app     | `app:8000`       | `https://{{ project_slug }}.localhost` | FastAPI app; `/heartbeat`, `/health`, `/metrics` |
+| postgres | `postgres:5432` | `localhost:5432` | PostgreSQL (dev/lite); the `test` profile uses an ephemeral `postgres-test` |
 | traefik | `traefik:80/443` | `https://{{ project_slug }}.localhost` | Reverse proxy, TLS termination (dev profile) |
 | prometheus | `prometheus:9090` | `http://localhost:9090` | Scrapes `app:8000/metrics`; loads SLO alert rules (dev profile) |
 | grafana | `grafana:3000` | `http://localhost:3000` | SLO dashboard (auto-provisioned); anonymous admin in dev (dev profile) |

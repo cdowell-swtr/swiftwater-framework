@@ -36,8 +36,26 @@ Application logs (structlog JSON) are shipped to Loki by Promtail and queryable 
 
 Requests are traced with OpenTelemetry (enabled in the `dev` stack) and stored in Tempo — view traces in Grafana, and jump from a log line to its trace via the `trace_id` derived field (Loki→Tempo). Tracing is off in `lite`/local runs.
 
+## Database
+
+PostgreSQL + SQLAlchemy + Alembic. The `dev`/`lite`/`test` stacks bring up Postgres
+automatically; on first `task dev` the app container runs pending migrations and loads
+seed data (`seeds/items.json`) before serving — idempotently, so later runs skip
+seeding. `task dev:reset` drops the volume and rebuilds from scratch.
+
+- `task db:migrate` — apply pending migrations (`alembic upgrade head`)
+- `task db:seed` — load seed data
+- Schema changes: edit the models, then
+  `uv run alembic revision --autogenerate -m "..."`. Never edit an applied migration —
+  add a new one.
+
+Tests run against a **real Postgres** (started automatically via testcontainers), so
+**Docker is required to run the test suite**. The `test` Compose profile provides a
+separate, ephemeral Postgres (`postgres-test`, reset every run) for the full E2E stack.
+
 ## Endpoints
 
 - `GET /heartbeat` — liveness ping
 - `GET /health` — readiness + SLO status
 - `GET /metrics` — Prometheus metrics
+- `GET /items` — example DB-backed listing (seeded data)
