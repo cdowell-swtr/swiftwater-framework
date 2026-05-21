@@ -1,0 +1,61 @@
+import pytest
+
+from {{ package_name }}.observability.recoverability import recoverability
+from {{ package_name }}.resilience.retry import with_retry
+
+# Tiny waits keep the test fast; backoff behaviour itself is tenacity's, not ours to re-test.
+_FAST = {"initial_wait": 0.001, "max_wait": 0.005}
+
+
+def test_recovers_after_transient_failures():
+    calls = {"n": 0}
+
+    @with_retry(max_attempts=3, **_FAST)
+    def flaky() -> str:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("transient")
+        return "ok"
+
+    assert flaky() == "ok"
+    assert calls["n"] == 3
+    snap = recoverability.snapshot()
+    assert snap["retry_attempts"] == 2  # two retries scheduled before success
+    assert snap["retries_recovered"] == 1
+    assert snap["retries_exhausted"] == 0
+
+
+def test_no_retry_metrics_when_first_call_succeeds():
+    @with_retry(max_attempts=3, **_FAST)
+    def fine() -> int:
+        return 42
+
+    assert fine() == 42
+    snap = recoverability.snapshot()
+    assert snap["retry_attempts"] == 0
+    assert snap["retries_recovered"] == 0
+
+
+def test_exhausts_and_reraises_original_exception():
+    @with_retry(max_attempts=2, **_FAST)
+    def always_fail() -> None:
+        raise ValueError("permanent")
+
+    with pytest.raises(ValueError, match="permanent"):
+        always_fail()
+    snap = recoverability.snapshot()
+    assert snap["retry_attempts"] == 1  # one retry between the two attempts
+    assert snap["retries_exhausted"] == 1
+    assert snap["retries_recovered"] == 0
+
+
+def test_only_retries_listed_exceptions():
+    @with_retry(max_attempts=3, exceptions=(KeyError,), **_FAST)
+    def wrong_error() -> None:
+        raise ValueError("not retried")
+
+    with pytest.raises(ValueError):
+        wrong_error()
+    # ValueError is not in `exceptions`, so it propagates immediately — no retry, no exhausted.
+    assert recoverability.snapshot()["retry_attempts"] == 0
+    assert recoverability.snapshot()["retries_exhausted"] == 0
