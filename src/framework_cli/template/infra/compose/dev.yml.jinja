@@ -26,3 +26,42 @@ services:
     depends_on:
       app:
         condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["dev"]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    volumes:
+      - "../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "../observability/prometheus/alerts:/etc/prometheus/alerts:ro"
+    depends_on:
+      app:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: ["dev"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - "../observability/grafana/provisioning:/etc/grafana/provisioning:ro"
+      - "../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro"
+    depends_on:
+      - prometheus
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    profiles: ["dev"]
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    ports:
+      - "9093:9093"
+    volumes:
+      - "../observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"

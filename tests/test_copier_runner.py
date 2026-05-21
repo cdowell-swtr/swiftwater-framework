@@ -188,6 +188,19 @@ def test_render_traefik_and_certs_gitignored(tmp_path: Path):
     assert "infra/traefik/certs/*.pem" in gitignore
 
 
+def test_render_observability_services_in_dev(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    svcs = dev["services"]
+    for name in ("prometheus", "grafana", "alertmanager"):
+        assert name in svcs
+        assert svcs[name]["profiles"] == ["dev"]  # not in `lite`
+    assert svcs["prometheus"]["depends_on"]["app"]["condition"] == "service_healthy"
+    assert any("3000" in str(p) for p in svcs["grafana"]["ports"])
+    assert any("9090" in str(p) for p in svcs["prometheus"]["ports"])
+
+
 def test_render_observability_config(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
