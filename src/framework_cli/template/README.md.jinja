@@ -32,6 +32,8 @@ Service addresses are documented in `SERVICES.md`.
 
 With the full `task dev` stack, observability is at: Grafana `http://localhost:3000` (SLO dashboard), Prometheus `http://localhost:9090`, Alertmanager `http://localhost:9093`. Alert rules and the dashboard are generated from the SLO definitions — run `task observability:gen` after changing them.
 
+Application logs (structlog JSON) are shipped to Loki by Promtail and queryable in Grafana under the Loki datasource — e.g. `{service="app"}` (filter by `level`, find a request by its `correlation_id`).
+
 ## Endpoints
 
 - `GET /heartbeat` — liveness ping

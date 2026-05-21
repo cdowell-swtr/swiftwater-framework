@@ -10,5 +10,7 @@ External address = host browser access (HTTPS via Traefik + mkcert).
 | prometheus | `prometheus:9090` | `http://localhost:9090` | Scrapes `app:8000/metrics`; loads SLO alert rules (dev profile) |
 | grafana | `grafana:3000` | `http://localhost:3000` | SLO dashboard (auto-provisioned); anonymous admin in dev (dev profile) |
 | alertmanager | `alertmanager:9093` | `http://localhost:9093` | Fires on SLO-breach alert rules; local null receiver (dev profile) |
+| loki | `loki:3100` | `http://localhost:3100` | Log store; queried in Grafana (dev profile) |
+| promtail | `promtail:9080` | (no host port) | Ships container logs to Loki via the Docker socket (dev profile) |
 
 Run `task certs` once to generate the local mkcert certificate, then `task dev`.

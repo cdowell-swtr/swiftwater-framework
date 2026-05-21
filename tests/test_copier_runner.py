@@ -273,3 +273,10 @@ def test_render_grafana_loki_datasource(tmp_path: Path):
     assert d["uid"] == "loki"
     assert d["type"] == "loki"
     assert d["url"] == "http://loki:3100"
+
+
+def test_render_docs_mention_logs(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert "loki:3100" in (dest / "SERVICES.md").read_text()
+    assert '{service="app"}' in (dest / "README.md").read_text()

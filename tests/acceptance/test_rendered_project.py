@@ -204,3 +204,56 @@ def test_rendered_project_dev_stack_prometheus_scrapes_app(tmp_path: Path):
         assert up_targets, "prometheus did not report the app target healthy within 120s"
     finally:
         subprocess.run(down, cwd=dest)
+
+
+@pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
+def test_rendered_project_app_logs_reach_loki(tmp_path: Path):
+    import urllib.parse
+
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "up", "-d", "--build"]
+    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "down", "-v"]
+    assert subprocess.run(up, cwd=dest).returncode == 0
+    try:
+        # wait for the app, then generate some log lines (each request is logged)
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            try:
+                urllib.request.urlopen("http://localhost:8000/heartbeat", timeout=3).read()
+                break
+            except OSError:
+                time.sleep(2)
+        for _ in range(5):
+            try:
+                urllib.request.urlopen("http://localhost:8000/heartbeat", timeout=3).read()
+            except OSError:
+                pass
+        # poll Loki for the app's logs (ship + ingest has a lag)
+        deadline = time.time() + 90
+        found = False
+        while time.time() < deadline and not found:
+            q = urllib.parse.urlencode(
+                {
+                    "query": '{service="app"}',
+                    "limit": "5",
+                    "start": str(int((time.time() - 600) * 1e9)),
+                }
+            )
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:3100/loki/api/v1/query_range?{q}", timeout=5
+                ) as resp:
+                    data = json.loads(resp.read())
+                    result = data.get("data", {}).get("result", [])
+                    if result and any(stream.get("values") for stream in result):
+                        found = True
+                        break
+            except OSError:
+                pass
+            time.sleep(3)
+        assert found, "no app logs reached Loki within the timeout"
+    finally:
+        subprocess.run(down, cwd=dest)
