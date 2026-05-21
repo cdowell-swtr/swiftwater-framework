@@ -154,6 +154,23 @@ def test_render_compose_structure(tmp_path: Path):
     assert "test" in test["services"]["app"]["profiles"]
 
 
+def test_render_env_services_and_tasks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    env = (dest / ".env.example").read_text()
+    assert "APP_ENVIRONMENT=" in env
+    assert "APP_SLO_REQUEST_LATENCY_P99_MS=" in env
+
+    services = (dest / "SERVICES.md").read_text()
+    assert "demo.localhost" in services      # external HTTPS host
+    assert "app:8000" in services             # internal docker address
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    for task in ("dev:", "dev:lite:", "dev:reset:", "certs:", "test:stack:"):
+        assert task in taskfile
+
+
 def test_render_traefik_and_certs_gitignored(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

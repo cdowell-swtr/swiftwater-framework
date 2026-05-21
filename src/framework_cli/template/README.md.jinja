@@ -20,6 +20,16 @@ task lint      # ruff + mypy
 - Pre-commit runs ruff, mypy, gitleaks, file hygiene, and the coverage gate on every commit (`task hooks` to install).
 - A Claude Code hook lints each Python file right after it is edited (`.claude/settings.json`).
 
+## Local stack (HTTPS)
+
+```bash
+task certs     # one-time: install mkcert CA + issue localhost certs
+task dev       # full stack at https://{{ project_slug }}.localhost (app + Traefik)
+task dev:lite  # app only at http://localhost:8000 (no Traefik)
+```
+
+Service addresses are documented in `SERVICES.md`.
+
 ## Endpoints
 
 - `GET /heartbeat` — liveness ping

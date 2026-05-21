@@ -1,0 +1,11 @@
+# Services
+
+Internal address = Docker network hostname (service-to-service calls).
+External address = host browser access (HTTPS via Traefik + mkcert).
+
+| Service | Internal address | External address | Notes |
+|---------|------------------|------------------|-------|
+| app     | `app:8000`       | `https://{{ project_slug }}.localhost` | FastAPI app; `/heartbeat`, `/health`, `/metrics` |
+| traefik | `traefik:80/443` | `https://{{ project_slug }}.localhost` | Reverse proxy, TLS termination (dev profile) |
+
+Run `task certs` once to generate the local mkcert certificate, then `task dev`.
