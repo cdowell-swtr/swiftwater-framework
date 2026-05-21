@@ -1,0 +1,7 @@
+from sqlalchemy import Engine, inspect
+
+
+def test_migrations_create_items_table(engine: Engine):
+    # The `engine` fixture applies migrations via `alembic upgrade head`; assert the
+    # schema landed on real Postgres.
+    assert "items" in inspect(engine).get_table_names()

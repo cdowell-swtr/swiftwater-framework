@@ -391,3 +391,16 @@ def test_render_includes_seed(tmp_path: Path):
     assert isinstance(data, list) and data and "name" in data[0]
     cli = (dest / "scripts" / "seed.py").read_text()
     assert "from demo.db.seed import seed" in cli
+
+
+def test_render_includes_alembic(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    ini = (dest / "alembic.ini").read_text()
+    assert "script_location = migrations" in ini
+    env = (dest / "migrations" / "env.py").read_text()
+    assert "from demo.db.base import Base" in env
+    assert "get_settings().database_url" in env
+    assert (dest / "migrations" / "script.py.mako").is_file()
+    initial = (dest / "migrations" / "versions" / "0001_initial.py").read_text()
+    assert "create_table" in initial and '"items"' in initial
