@@ -40,11 +40,28 @@ Every service ships error-handling and recovery scaffolds — extend them, do no
 - `build_breaker(...)` (`resilience/circuit_breaker.py`) wraps an unstable dependency with a `pybreaker` circuit breaker; its state is exposed on `/metrics`.
 - Recovery paths are part of outcome-space mapping: test the failure *and* the recovery, not just the happy path.
 
+## Tests & coverage
+
+Tests live in three tiers, each with its own coverage context:
+
+- `tests/unit/` — code units (red first, then green).
+- `tests/functional/` — behaviour/outcomes.
+- `tests/e2e/` — consumer-facing surfaces against the full app + real Postgres. **Every consumer-facing surface needs at least one unhappy E2E path** (not found, bad input, dependency failure).
+
+Coverage gates by stage (spec §6): **pre-commit** runs unit+functional at **>=70%** (E2E is too slow/heavy for the inner loop); **CI** runs all three at **>=85%**. A line covered only by E2E is integration-only coverage, not a failure.
+
+## CI/CD
+
+- `task ci` — full local pre-flight (lint, the 85% gate, pip-audit, OpenAPI export) against your working tree. Run it before pushing.
+- `task push` — pushes; GitHub Actions (`.github/workflows/ci.yml`) runs the authoritative pipeline (the canonical green badge). `task ci` makes that run more likely to pass first try; it does not replace it.
+- Updating a route or response model requires re-exporting the API contract: `task openapi:export`, then commit `openapi.json` — CI fails if it is stale or a change is breaking.
+- `task audit` — scan dependencies for known CVEs (also a CI gate).
+
 ## Quality commands
 
-- `task test` — fast test run
-- `task test:cov` — tests with coverage (must stay >= 70%)
-- `task lint` — ruff + mypy
+- `task test` — fast test run; `task test:unit` / `task test:e2e` — a single tier
+- `task test:cov` — fast coverage gate (unit+functional, >=70%); `task test:cov:ci` — combined gate (>=85%)
+- `task lint` — ruff + mypy + actionlint + shellcheck
 - `task hooks` — install pre-commit; `task hooks:run` — run all hooks
 - An editor hook runs ruff + mypy on each Python file as it is edited; fix what it reports before moving on.
 

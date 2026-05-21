@@ -124,3 +124,8 @@ tasks:
       - task: test:cov:ci
       - task: audit
       - task: openapi:export
+
+  push:
+    desc: Push the current branch — triggers the authoritative GitHub Actions CI pipeline.
+    cmds:
+      - git push

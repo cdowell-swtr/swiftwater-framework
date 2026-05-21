@@ -15,10 +15,17 @@ task lint      # ruff + mypy
 
 ## Quality gates
 
-- TDD is the workflow — see `CLAUDE.md`.
-- `task test:cov` enforces a 70% coverage floor.
-- Pre-commit runs ruff, mypy, gitleaks, file hygiene, and the coverage gate on every commit (`task hooks` to install).
+- TDD is the workflow — see `CLAUDE.md`. Tests are tiered: `tests/unit`, `tests/functional`, `tests/e2e`.
+- Coverage gates by stage: pre-commit runs unit+functional at >=70% (`task test:cov`); CI runs all three at >=85% (`task test:cov:ci`).
+- Pre-commit runs ruff, mypy, actionlint, shellcheck, gitleaks, file hygiene, and the coverage gate on every commit (`task hooks` to install).
 - A Claude Code hook lints each Python file right after it is edited (`.claude/settings.json`).
+
+## CI/CD
+
+- `task ci` — local pre-flight: lint + the 85% coverage gate + pip-audit + OpenAPI export. Run before pushing.
+- `task push` — pushes and triggers `.github/workflows/ci.yml`, the authoritative pipeline: integrity (seam) → lint → tests (unit/functional/e2e + 85% gate) → build → OpenAPI contract diff → pip-audit + full-history gitleaks → review agents (seam).
+- `task openapi:export` — regenerate `openapi.json` after changing routes; commit it (CI fails on a stale or breaking spec). On a brand-new project, run this once and commit `openapi.json` before your first push, or the first `contract` CI job will fail by design.
+- `task audit` — scan dependencies for CVEs. `.github/dependabot.yml` opens weekly update PRs.
 
 ## Local stack (HTTPS)
 

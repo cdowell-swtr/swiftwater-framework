@@ -574,3 +574,4 @@ def test_render_includes_ci_pipeline(tmp_path: Path):
 
     taskfile = (dest / "Taskfile.yml").read_text()
     assert "ci:" in taskfile
+    assert "push:" in taskfile

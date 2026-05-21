@@ -47,18 +47,33 @@ def test_rendered_project_passes_its_own_tests(tmp_path: Path):
     reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
 )
 def test_rendered_project_coverage_gate_passes(tmp_path: Path):
+    # The fast pre-commit-equivalent gate: unit + functional, >=70%, via scripts/coverage.sh.
     dest = tmp_path / "demo"
     render_project(dest, DATA)
 
     sync = subprocess.run(["uv", "sync"], cwd=dest)
     assert sync.returncode == 0, "uv sync failed in the generated project"
 
-    result = subprocess.run(["uv", "run", "task", "test:cov"], cwd=dest)
-    if result.returncode == 127 or shutil.which("task") is None:
-        result = subprocess.run(
-            ["uv", "run", "pytest", "--cov", "--cov-fail-under=70", "-q"], cwd=dest
-        )
-    assert result.returncode == 0, "coverage gate did not pass in the generated project"
+    result = subprocess.run(["bash", "scripts/coverage.sh", "70", "unit", "functional"], cwd=dest)
+    assert result.returncode == 0, "the 70% unit+functional coverage gate did not pass"
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: the e2e tier runs against real Postgres",
+)
+def test_rendered_project_combined_coverage_gate_passes(tmp_path: Path):
+    # The authoritative CI gate: unit + functional + e2e, >=85%, via scripts/coverage.sh.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "85", "unit", "functional", "e2e"], cwd=dest
+    )
+    assert result.returncode == 0, "the 85% combined coverage gate did not pass"
 
 
 @pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
