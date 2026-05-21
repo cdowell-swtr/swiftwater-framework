@@ -1,0 +1,25 @@
+from {{ package_name }}.config.settings import Settings
+from {{ package_name }}.observability.provisioning import (
+    SLO_PROMQL,
+    prometheus_alert_rules,
+)
+from {{ package_name }}.observability.slo import default_slos
+
+
+def test_every_default_slo_has_a_promql_mapping():
+    for slo in default_slos(Settings()):
+        assert slo.key in SLO_PROMQL
+
+
+def test_alert_rules_one_per_slo_with_threshold_expr():
+    slos = default_slos(Settings())
+    rules = prometheus_alert_rules(slos)["groups"][0]["rules"]
+    assert len(rules) == len(slos)
+    by_slo = {r["labels"]["slo"]: r for r in rules}
+    latency = by_slo["request_latency_p99_ms"]
+    assert latency["alert"] == "RequestLatencyP99MsBreached"
+    assert latency["expr"] == "app_request_latency_p99_ms > 200.0"
+    assert latency["for"] == "1m"
+    assert by_slo["error_rate_pct"]["expr"] == (
+        "100 * app_request_errors_total / clamp_min(app_requests_total, 1) > 1.0"
+    )
