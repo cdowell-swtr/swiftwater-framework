@@ -15,6 +15,7 @@ dev = [
     "mypy>=1.13",
     "fastapi>=0.115",
     "httpx>=0.28",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]

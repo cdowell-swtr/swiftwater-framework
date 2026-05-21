@@ -1,0 +1,13 @@
+# Keep the Docker build context lean and the host venv out of the image.
+.venv/
+.git/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+.env
+infra/traefik/certs/*.pem

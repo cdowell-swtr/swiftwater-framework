@@ -111,3 +111,17 @@ def test_render_includes_runtime_modules(tmp_path: Path):
     assert (dest / "src" / "demo" / "middleware" / "observability.py").is_file()
     health = (dest / "src" / "demo" / "routes" / "health.py").read_text()
     assert "build_health_report" in health
+
+
+def test_render_includes_dockerfile_multistage(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    dockerfile = dest / "infra" / "docker" / "Dockerfile"
+    assert dockerfile.is_file()
+    text = dockerfile.read_text()
+    # multi-stage: a builder stage and a runtime stage
+    assert text.count("FROM ") >= 2
+    assert " AS builder" in text
+    assert "uv sync" in text
+    # a .dockerignore at the build-context root keeps the host .venv out of the image
+    assert ".venv" in (dest / ".dockerignore").read_text()
