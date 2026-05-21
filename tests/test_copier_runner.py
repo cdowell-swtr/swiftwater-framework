@@ -261,3 +261,15 @@ def test_render_loki_promtail(tmp_path: Path):
     vols = " ".join(dev["services"]["promtail"]["volumes"])
     assert "/var/run/docker.sock:/var/run/docker.sock:ro" in vols
     assert "loki" in dev["services"]["promtail"]["depends_on"]
+
+
+def test_render_grafana_loki_datasource(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    ds = yaml.safe_load(
+        (dest / "infra" / "observability" / "grafana" / "provisioning" / "datasources" / "loki.yml").read_text()
+    )
+    d = ds["datasources"][0]
+    assert d["uid"] == "loki"
+    assert d["type"] == "loki"
+    assert d["url"] == "http://loki:3100"
