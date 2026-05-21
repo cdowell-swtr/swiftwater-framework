@@ -1,0 +1,47 @@
+from {{ package_name }}.config.settings import Settings
+from {{ package_name }}.observability.metrics import MetricsRegistry
+from {{ package_name }}.observability.slo import (
+    build_health_report,
+    default_slos,
+    evaluate,
+)
+
+
+def test_default_slos_from_settings():
+    slos = {s.key: s for s in default_slos(Settings())}
+    assert slos["request_latency_p99_ms"].threshold == 200.0
+    assert slos["error_rate_pct"].threshold == 1.0
+
+
+def test_evaluate_ok_warning_breached():
+    slos = default_slos(
+        Settings()
+    )  # latency thr 200 (warn >=180), error thr 1.0 (warn >=0.9)
+    report = evaluate(
+        slos,
+        {"request_latency_p99_ms": 50.0, "error_rate_pct": 0.95},
+    )
+    assert report["slos"]["request_latency_p99_ms"]["status"] == "ok"
+    assert report["slos"]["error_rate_pct"]["status"] == "warning"
+    assert report["status"] == "degraded"
+
+
+def test_evaluate_breached_sets_degraded():
+    slos = default_slos(Settings())
+    report = evaluate(slos, {"request_latency_p99_ms": 340.0, "error_rate_pct": 0.0})
+    assert report["slos"]["request_latency_p99_ms"]["status"] == "breached"
+    assert report["status"] == "degraded"
+
+
+def test_evaluate_all_ok():
+    slos = default_slos(Settings())
+    report = evaluate(slos, {"request_latency_p99_ms": 10.0, "error_rate_pct": 0.0})
+    assert report["status"] == "ok"
+
+
+def test_build_health_report_reads_metrics():
+    m = MetricsRegistry()
+    m.record_request(10.0, 200)
+    report = build_health_report(m, Settings())
+    assert report["status"] == "ok"
+    assert set(report["slos"]) == {"request_latency_p99_ms", "error_rate_pct"}
