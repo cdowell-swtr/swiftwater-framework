@@ -85,10 +85,12 @@ tasks:
       - uv run pre-commit run --all-files
 
   lint:
-    desc: Lint and type-check
+    desc: Lint and type-check (ruff, mypy, actionlint, shellcheck).
     cmds:
       - uv run ruff check .
       - uv run mypy src
+      - uv run pre-commit run actionlint --all-files
+      - uv run pre-commit run shellcheck --all-files
 
   observability:gen:
     desc: Regenerate Prometheus alert rules + Grafana dashboard from the SLO definitions.

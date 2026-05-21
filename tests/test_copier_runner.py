@@ -536,3 +536,16 @@ def test_render_dependency_security(tmp_path: Path):
     cfg = yaml.safe_load(dependabot.read_text())
     ecosystems = {u["package-ecosystem"] for u in cfg["updates"]}
     assert {"uv", "github-actions"} <= ecosystems
+
+
+def test_render_workflow_and_shell_linters(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    precommit = (dest / ".pre-commit-config.yaml").read_text()
+    assert "actionlint" in precommit
+    assert "shellcheck" in precommit
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "actionlint" in taskfile
+    assert "shellcheck" in taskfile
