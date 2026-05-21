@@ -1,0 +1,36 @@
+import pytest
+
+from {{ package_name }}.config.settings import Settings, get_settings
+
+
+def test_defaults():
+    s = Settings()
+    assert s.environment == "dev"
+    assert s.service_name == "{{ package_name }}"
+    assert s.slo_request_latency_p99_ms == 200.0
+    assert s.slo_error_rate_pct == 1.0
+
+
+def test_resolved_log_level_is_debug_in_dev():
+    assert Settings(environment="dev").resolved_log_level == "DEBUG"
+
+
+@pytest.mark.parametrize("env", ["staging", "prod", "ci"])
+def test_resolved_log_level_is_info_outside_dev(env):
+    assert Settings(environment=env).resolved_log_level == "INFO"
+
+
+def test_explicit_log_level_overrides_resolution():
+    assert Settings(environment="prod", log_level="DEBUG").resolved_log_level == "DEBUG"
+
+
+def test_env_vars_override(monkeypatch):
+    monkeypatch.setenv("APP_ENVIRONMENT", "prod")
+    monkeypatch.setenv("APP_SLO_ERROR_RATE_PCT", "2.5")
+    s = Settings()
+    assert s.environment == "prod"
+    assert s.slo_error_rate_pct == 2.5
+
+
+def test_get_settings_is_cached():
+    assert get_settings() is get_settings()

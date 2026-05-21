@@ -1,0 +1,31 @@
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """All configuration, sourced from environment / .env. Never hardcode config."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="APP_", env_file=".env", extra="ignore"
+    )
+
+    environment: str = "dev"
+    service_name: str = "{{ package_name }}"
+    # Explicit log-level override; if None, resolved_log_level derives it from environment.
+    log_level: str | None = None
+
+    # SLO thresholds (see observability/slo.py).
+    slo_request_latency_p99_ms: float = 200.0
+    slo_error_rate_pct: float = 1.0
+
+    @property
+    def resolved_log_level(self) -> str:
+        if self.log_level is not None:
+            return self.log_level.upper()
+        return "DEBUG" if self.environment == "dev" else "INFO"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
