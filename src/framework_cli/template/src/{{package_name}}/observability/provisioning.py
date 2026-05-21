@@ -42,3 +42,41 @@ def prometheus_alert_rules(slos: list[SLO]) -> dict:
         for slo in slos
     ]
     return {"groups": [{"name": "slo", "rules": rules}]}
+
+
+def grafana_dashboard(slos: list[SLO]) -> dict:
+    """A minimal Grafana dashboard dict: one timeseries panel per SLO, value vs threshold."""
+    panels = [
+        {
+            "id": i + 1,
+            "title": f"{slo.description} (SLO {slo.threshold}{slo.unit})",
+            "type": "timeseries",
+            "datasource": {"type": "prometheus", "uid": "prometheus"},
+            "gridPos": {"h": 8, "w": 12, "x": (i % 2) * 12, "y": (i // 2) * 8},
+            "targets": [{"refId": "A", "expr": SLO_PROMQL[slo.key]}],
+            "fieldConfig": {
+                "defaults": {
+                    "unit": slo.unit,
+                    "custom": {"thresholdsStyle": {"mode": "line"}},
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": None},
+                            {"color": "red", "value": slo.threshold},
+                        ],
+                    },
+                },
+                "overrides": [],
+            },
+        }
+        for i, slo in enumerate(slos)
+    ]
+    return {
+        "uid": "slo",
+        "title": "SLOs",
+        "tags": ["slo"],
+        "schemaVersion": 39,
+        "version": 1,
+        "time": {"from": "now-1h", "to": "now"},
+        "panels": panels,
+    }

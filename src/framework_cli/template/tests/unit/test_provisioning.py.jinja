@@ -23,3 +23,20 @@ def test_alert_rules_one_per_slo_with_threshold_expr():
     assert by_slo["error_rate_pct"]["expr"] == (
         "100 * app_request_errors_total / clamp_min(app_requests_total, 1) > 1.0"
     )
+
+
+def test_grafana_dashboard_one_panel_per_slo():
+    from {{ package_name }}.observability.provisioning import grafana_dashboard
+
+    slos = default_slos(Settings())
+    dash = grafana_dashboard(slos)
+    assert dash["uid"] == "slo"
+    assert dash["title"] == "SLOs"
+    assert len(dash["panels"]) == len(slos)
+    p0 = dash["panels"][0]
+    assert p0["datasource"]["uid"] == "prometheus"
+    assert p0["targets"][0]["expr"] == "app_request_latency_p99_ms"
+    defaults = p0["fieldConfig"]["defaults"]
+    assert defaults["custom"]["thresholdsStyle"]["mode"] == "line"
+    assert defaults["unit"] == "ms"
+    assert defaults["thresholds"]["steps"][-1]["value"] == 200.0
