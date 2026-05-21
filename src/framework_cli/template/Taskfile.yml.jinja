@@ -79,3 +79,13 @@ tasks:
     desc: Regenerate Prometheus alert rules + Grafana dashboard from the SLO definitions.
     cmds:
       - uv run python scripts/gen_observability.py
+
+  db:migrate:
+    desc: Apply pending Alembic migrations (target DB via APP_DATABASE_URL; see .env.example).
+    cmds:
+      - uv run alembic upgrade head
+
+  db:seed:
+    desc: Load seed data (idempotent — skips if data already exists).
+    cmds:
+      - uv run python scripts/seed.py

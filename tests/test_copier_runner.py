@@ -452,3 +452,13 @@ def test_render_postgres_test_profile(tmp_path: Path):
     app = test["services"]["app"]
     assert "postgres-test:5432" in app["environment"]["APP_DATABASE_URL"]
     assert app["depends_on"]["postgres-test"]["condition"] == "service_healthy"
+
+
+def test_render_db_tasks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "db:migrate:" in taskfile
+    assert "db:seed:" in taskfile
+    assert "alembic upgrade head" in taskfile
+    assert "scripts/seed.py" in taskfile
