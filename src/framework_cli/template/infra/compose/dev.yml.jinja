@@ -9,6 +9,8 @@ services:
       - ../../src:/app/src
     environment:
       WATCHFILES_FORCE_POLLING: "true"  # reliable reload on Windows/WSL bind mounts
+      APP_OTEL_ENABLED: "true"
+      APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
 
   traefik:
     image: traefik:v3.1
@@ -84,3 +86,21 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     depends_on:
       - loki
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    profiles: ["dev"]
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    ports:
+      - "3200:3200"
+    volumes:
+      - "../observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro"
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.111.0
+    profiles: ["dev"]
+    command: ["--config=/etc/otel/otel-collector.yml"]
+    volumes:
+      - "../observability/otel/otel-collector.yml:/etc/otel/otel-collector.yml:ro"
+    depends_on:
+      - tempo

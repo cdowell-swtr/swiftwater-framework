@@ -280,3 +280,25 @@ def test_render_docs_mention_logs(tmp_path: Path):
     render_project(dest, DATA)
     assert "loki:3100" in (dest / "SERVICES.md").read_text()
     assert '{service="app"}' in (dest / "README.md").read_text()
+
+
+def test_render_tempo_otel_collector(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    obs = dest / "infra" / "observability"
+
+    tempo = yaml.safe_load((obs / "tempo" / "tempo.yml").read_text())
+    assert "otlp" in tempo["distributor"]["receivers"]
+    assert tempo["storage"]["trace"]["backend"] == "local"
+
+    col = yaml.safe_load((obs / "otel" / "otel-collector.yml").read_text())
+    assert "otlp" in col["receivers"]
+    assert col["exporters"]["otlp/tempo"]["endpoint"] == "tempo:4317"
+    assert col["service"]["pipelines"]["traces"]["exporters"] == ["otlp/tempo"]
+
+    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    for name in ("tempo", "otel-collector"):
+        assert dev["services"][name]["profiles"] == ["dev"]
+    app_env = dev["services"]["app"]["environment"]
+    assert app_env["APP_OTEL_ENABLED"] == "true"
+    assert app_env["APP_OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4317"
