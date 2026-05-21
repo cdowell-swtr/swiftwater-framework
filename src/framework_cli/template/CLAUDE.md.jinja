@@ -31,6 +31,15 @@ Scaffold a non-functional test (with an explicit threshold) when code: operates 
 - Relational schema changes require a new migration; never edit an existing migration.
 - Updating an API endpoint requires updating its contract test.
 
+## Error handling & recoverability
+
+Every service ships error-handling and recovery scaffolds — extend them, do not recreate them:
+
+- A global exception handler returns RFC 7807 `application/problem+json` with the request correlation id (`middleware/errors.py`). Add new error cases there or raise `HTTPException` — both render consistently.
+- `with_retry(...)` (`resilience/retry.py`) wraps flaky calls with `tenacity` backoff + jitter and records retry metrics.
+- `build_breaker(...)` (`resilience/circuit_breaker.py`) wraps an unstable dependency with a `pybreaker` circuit breaker; its state is exposed on `/metrics`.
+- Recovery paths are part of outcome-space mapping: test the failure *and* the recovery, not just the happy path.
+
 ## Quality commands
 
 - `task test` — fast test run

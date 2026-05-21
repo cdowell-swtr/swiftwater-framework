@@ -418,6 +418,31 @@ def test_render_wires_items_route(tmp_path: Path):
     assert "include_router(items.router)" in main
 
 
+def test_render_includes_resilience_scaffold(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    src = dest / "src" / "demo"
+
+    assert (src / "middleware" / "errors.py").is_file()
+    assert (src / "resilience" / "retry.py").is_file()
+    assert (src / "resilience" / "circuit_breaker.py").is_file()
+    assert (src / "observability" / "recoverability.py").is_file()
+
+    errors = (src / "middleware" / "errors.py").read_text()
+    assert "application/problem+json" in errors
+
+    main = (src / "main.py").read_text()
+    assert "register_exception_handlers" in main
+    assert "lifespan" in main
+
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "tenacity" in pyproject
+    assert "pybreaker" in pyproject
+
+    claude = (dest / "CLAUDE.md").read_text()
+    assert "RFC 7807" in claude
+
+
 def test_render_dockerfile_entrypoint(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
