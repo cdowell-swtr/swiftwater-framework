@@ -427,3 +427,16 @@ def test_render_dockerfile_entrypoint(tmp_path: Path):
     assert "entrypoint.sh" in dockerfile
     assert "ENTRYPOINT" in dockerfile
     assert "uvicorn" in dockerfile and "CMD" in dockerfile
+
+
+def test_render_postgres_in_dev_and_lite(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    pg = dev["services"]["postgres"]
+    assert pg["profiles"] == ["dev", "lite"]   # present in dev AND lite, not test
+    assert "pg_isready" in " ".join(pg["healthcheck"]["test"])
+    app = dev["services"]["app"]
+    assert app["depends_on"]["postgres"]["condition"] == "service_healthy"
+    assert "postgres:5432" in app["environment"]["APP_DATABASE_URL"]
+    assert "pgdata" in dev["volumes"]

@@ -11,6 +11,29 @@ services:
       WATCHFILES_FORCE_POLLING: "true"  # reliable reload on Windows/WSL bind mounts
       APP_OTEL_ENABLED: "true"
       APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      APP_DATABASE_URL: "postgresql+psycopg://app:app@postgres:5432/app"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17
+    profiles: ["dev", "lite"]
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    ports:
+      # Published for host tooling (psql, `task db:migrate`). Remap if 5432 is taken locally.
+      - "5432:5432"
+    volumes:
+      - "pgdata:/var/lib/postgresql/data"
 
   traefik:
     image: traefik:v3.1
@@ -104,3 +127,6 @@ services:
       - "../observability/otel/otel-collector.yml:/etc/otel/otel-collector.yml:ro"
     depends_on:
       - tempo
+
+volumes:
+  pgdata: {}
