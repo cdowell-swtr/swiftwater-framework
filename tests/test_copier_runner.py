@@ -695,6 +695,21 @@ def test_render_deploy_prod_workflow(tmp_path: Path):
     assert "tests/e2e" not in steps
 
 
+def test_render_migration_guard(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    guard = (dest / "scripts" / "check_migrations.py")
+    assert guard.is_file()
+    assert "downgrade" in guard.read_text()
+
+    precommit = (dest / ".pre-commit-config.yaml").read_text()
+    assert "migrations-reversible" in precommit
+
+    ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
+    assert "check_migrations.py" in ci
+
+
 def test_render_deploy_staging_workflow(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

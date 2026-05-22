@@ -48,6 +48,12 @@ repos:
         pass_filenames: false
         types: [python]
         require_serial: true
+      - id: migrations-reversible
+        name: migrations are reversible (no irreversible downgrade)
+        entry: uv run python scripts/check_migrations.py
+        language: system
+        pass_filenames: false
+        files: ^migrations/versions/.*\.py$
       - id: coverage-threshold
         name: unit + functional coverage (>=70%)
         entry: bash scripts/coverage.sh 70 unit functional
