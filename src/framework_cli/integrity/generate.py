@@ -38,7 +38,7 @@ def build_manifest(project: Path, framework_version: str) -> Manifest:
             f = project / rule.path
             if not f.is_file():
                 raise AuthoringError(
-                    f"{rule.path} is declared locked but was not rendered."
+                    f"{rule.path} is declared a framework file but was not rendered."
                 )
             if rule.cls == "hybrid":
                 section_hash = section_sha256(f.read_text())
