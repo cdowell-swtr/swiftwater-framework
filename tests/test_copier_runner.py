@@ -612,6 +612,22 @@ def test_render_e2e_is_target_aware(tmp_path: Path):
     assert "api_client" in e2e
 
 
+def test_render_staging_prod_compose(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    for env in ("staging", "prod"):
+        path = dest / "infra" / "compose" / f"{env}.yml"
+        assert path.is_file(), f"{env}.yml missing"
+        compose = yaml.safe_load(path.read_text())
+        app = compose["services"]["app"]
+        assert "build" not in app, f"{env} must run the pushed image, not build"
+        assert "${APP_IMAGE" in app["image"]
+        assert app["environment"]["APP_ENVIRONMENT"] == env
+        assert app["restart"] == "unless-stopped"
+        assert compose["services"]["postgres"]["restart"] == "unless-stopped"
+
+
 def test_render_includes_ci_pipeline(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
