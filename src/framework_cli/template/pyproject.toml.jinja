@@ -39,7 +39,10 @@ packages = ["src/{{ package_name }}"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-testpaths = ["tests"]
+# Default collection = the in-process tiers only. The env-targeted suites (smoke/sniff/
+# non_functional) run explicitly via their own tasks / the deploy workflows against a
+# real target — collecting them under a bare `pytest` would fail (no target up).
+testpaths = ["tests/unit", "tests/functional", "tests/e2e"]
 
 [tool.coverage.run]
 source = ["src"]

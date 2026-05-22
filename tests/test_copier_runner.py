@@ -551,6 +551,22 @@ def test_render_workflow_and_shell_linters(tmp_path: Path):
     assert "shellcheck" in taskfile
 
 
+def test_render_smoke_suite(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    assert (dest / "tests" / "smoke" / "test_smoke.py").is_file()
+    smoke = (dest / "tests" / "smoke" / "test_smoke.py").read_text()
+    assert "SMOKE_TARGET" in smoke
+    assert "/heartbeat" in smoke and "/health" in smoke
+
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert '"tests/unit", "tests/functional", "tests/e2e"' in pyproject
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "test:smoke:" in taskfile
+
+
 def test_render_includes_ci_pipeline(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
