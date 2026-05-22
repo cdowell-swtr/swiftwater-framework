@@ -1,0 +1,58 @@
+# CD — production (spec §14). Manual approval (the `production` Environment gate) or a release
+# tag. Reuses the SAME image promoted from staging (no rebuild). Post-deploy: smoke + sniff
+# (read-only — no writes against prod). Any failure auto-rolls-back. Implement the deploy
+# strategy in infra/deploy/strategy.sh — see infra/deploy/README.md.
+name: Deploy — production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Fully-qualified image to promote (e.g. ghcr.io/owner/repo:<sha>). Defaults to the latest staging build for this SHA."
+        required: false
+        default: ""
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      APP_IMAGE: ${{ github.event.inputs.image }}
+      DEPLOY_ENV: prod
+      DEPLOY_BASE_URL: ${{ vars.PROD_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: resolve image to promote
+        run: |
+          image="${APP_IMAGE}"
+          if [ -z "$image" ]; then
+            repo="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+            image="ghcr.io/${repo}:${{ github.sha }}"
+          fi
+          echo "APP_IMAGE=$image" >> "$GITHUB_ENV"
+      - name: deploy (your configured strategy)
+        run: bash infra/deploy/strategy.sh deploy
+      - name: await healthy
+        run: bash infra/deploy/strategy.sh await-healthy 120
+      - name: resolve endpoint
+        id: ep
+        run: echo "url=$(bash infra/deploy/strategy.sh endpoints | head -n1)" >> "$GITHUB_OUTPUT"
+      - name: smoke (prod)
+        run: SMOKE_TARGET="${{ steps.ep.outputs.url }}" uv run pytest tests/smoke -q
+      - name: sniff (prod, read-only)
+        run: SNIFF_TARGET="${{ steps.ep.outputs.url }}" uv run pytest tests/sniff -q
+      - name: rollback on any failure
+        if: failure()
+        run: bash infra/deploy/strategy.sh rollback
+      - name: notify
+        if: always()
+        continue-on-error: true  # a notification failure must never fail a healthy deploy
+        run: bash infra/deploy/notify.sh "prod deploy ${{ job.status }} (${{ github.sha }})"

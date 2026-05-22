@@ -675,6 +675,26 @@ def test_render_includes_ci_pipeline(tmp_path: Path):
     assert "push:" in taskfile
 
 
+def test_render_deploy_prod_workflow(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    wf = dest / ".github" / "workflows" / "deploy-prod.yml"
+    assert wf.is_file()
+    ci = yaml.safe_load(wf.read_text())
+
+    # manual approval gate via a protected GitHub Environment, and a tag trigger
+    assert ci["jobs"]["deploy-prod"]["environment"] == "production"
+    triggers = ci[True] if True in ci else ci["on"]  # PyYAML parses `on:` as True
+    assert "workflow_dispatch" in triggers
+
+    steps = " ".join(str(s.get("run", "")) for s in ci["jobs"]["deploy-prod"]["steps"])
+    assert "strategy.sh deploy" in steps and "strategy.sh rollback" in steps
+    # prod sniff is read-only; no E2E/load writes against prod
+    assert "tests/smoke" in steps and "tests/sniff" in steps
+    assert "tests/e2e" not in steps
+
+
 def test_render_deploy_staging_workflow(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
