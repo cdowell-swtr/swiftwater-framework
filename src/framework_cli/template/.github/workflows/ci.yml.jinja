@@ -12,12 +12,20 @@ permissions:
   contents: read
 
 jobs:
-  # Step 0: framework integrity. The check engine ships in framework v6 (Plan 6a); activating
-  # it here requires installing the CLI from a versioned source, delivered in Plan 6b.
+  # Step 0: framework integrity — verify the framework scaffolding is intact before anything
+  # else. Installs the framework CLI pinned to the version this project was generated from
+  # (recorded in .copier-answers.yml `_commit`), then runs the check.
   integrity:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "framework integrity --ci is activated once the CLI install source ships (Plan 6b)."
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: install the framework CLI at the recorded version
+        run: |
+          ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
+          uv tool install "git+https://github.com/cdowell-swtr/swiftwater-framework@${ref}"
+      - name: framework integrity --ci
+        run: framework integrity --ci
 
   # Step 2: lint + type-check across file types.
   lint:
