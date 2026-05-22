@@ -12,8 +12,10 @@ Two structural guards, both run in pre-commit and CI over migrations/versions/*.
    `# deploy: contract` comment to the file to acknowledge that and exempt it from this guard.
 
 Structural, not semantic: these don't decide whether a drop is *actually* safe given current
-code — Plan 7's data-integrity review agent adds that judgement. See infra/deploy/README.md
-for the expand/contract-across-releases workflow.
+code — Plan 7's data-integrity review agent adds that judgement. Known blind spots deferred to
+that agent: a destructive change expressed as raw SQL (`op.execute("DROP ...")`) or a
+type-narrowing `alter_column(type_=...)` is NOT detected here — only the AST ops listed above
+are. See infra/deploy/README.md for the expand/contract-across-releases workflow.
 """
 
 from __future__ import annotations
