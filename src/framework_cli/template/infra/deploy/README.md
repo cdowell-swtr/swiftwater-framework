@@ -22,7 +22,7 @@ then, implement the hooks below for your target.
 | Hook | Must do |
 |---|---|
 | `__target_place_image` | Pull `$APP_IMAGE` and run it from `infra/compose/$DEPLOY_ENV.yml`; do not route traffic until healthy. |
-| `__target_migrate` | Run `alembic <args>` against the target's relational DB using THIS checkout's migrations (rollback's downgrade needs the new migration's down-path). When you add other DB paradigms (document/graph/…), reverse their migrations here too. |
+| `__target_migrate` | Run `alembic <args>` against the target's relational DB using THIS checkout's migrations (rollback's downgrade needs the new migration's down-path). When you add other DB paradigms (document/graph/…), reverse their migrations here too. Run `alembic` either from the CI runner against the target DB, or on the host with the new image — either way using the new release's migration scripts. |
 | `__target_record_release` / `__target_release_history` | Persist + read the `(image, revision)` history per env on the target (durable across runs). |
 | `__target_teardown` | Remove a failed/rolled-back release. |
 
@@ -31,7 +31,7 @@ then, implement the hooks below for your target.
 - **Release versioning** — each deploy records `(image, alembic-revision)`; `current-release`/`releases` read it.
 - **Migration-aware rollback** — `rollback` reverses migrations to the previous release's revision THEN redeploys its image (the image only ever upgrades, so the explicit downgrade is required).
 - **Health-gate** — `await-healthy` polls `/health` and refuses any `breached` SLO (the Phase-1 smoke rule).
-- **Guarantees:** versioned/addressable releases (a rollback target always exists), runtime secrets (never baked into images), the same image promoted staging → prod (no rebuild). No-downtime cutover is the target's job (blue-green via the bundled Traefik, or the platform's native rolling deploy) — see the turnkey follow-up.
+- **Guarantees:** versioned/addressable releases (a rollback target always exists), runtime secrets (never baked into images), the same image promoted staging → prod (no rebuild). No-downtime cutover is the target's job (blue-green via Traefik in the turnkey follow-up, or the platform's native rolling deploy) — see the turnkey follow-up.
 
 ## Config you set (GitHub Environment + the target)
 

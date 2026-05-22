@@ -47,7 +47,16 @@ __target_release_history() { _todo __target_release_history "print recorded 'ima
 __target_teardown() { _todo __target_teardown "remove a failed or rolled-back release on the target"; }
 
 # === PRESCRIBED LOGIC — the framework owns this; configure, don't weaken it ==========
-repo_head_revision() { uv run alembic heads 2>/dev/null | awk 'NR==1 {print $1}'; }
+repo_head_revision() {
+  local heads count
+  heads="$(uv run alembic heads | awk '{print $1}')"
+  count="$(printf '%s\n' "${heads}" | grep -c .)"
+  if [ "${count}" -gt 1 ]; then
+    echo "::error::multiple Alembic heads — merge them before deploying ('alembic merge heads')." >&2
+    return 1
+  fi
+  printf '%s\n' "${heads}" | head -n 1
+}
 
 endpoints() { require_var DEPLOY_BASE_URL; printf '%s\n' "${DEPLOY_BASE_URL}"; }
 
@@ -73,8 +82,10 @@ deploy() {
   require_var APP_IMAGE
   require_var DEPLOY_ENV
   # Record BEFORE placing so a rollback target is tracked even if this deploy fails midway.
-  __target_record_release "${APP_IMAGE}" "$(repo_head_revision)"
-  # shellcheck disable=SC2317  # __target_place_image is a stub hook; shellcheck can't trace it
+  local rev
+  rev="$(repo_head_revision)"
+  __target_record_release "${APP_IMAGE}" "${rev}"
+  # shellcheck disable=SC2317  # reached once __target_record_release is implemented (not the _todo stub)
   __target_place_image   # the image entrypoint runs `alembic upgrade head` on start
 }
 
@@ -84,17 +95,18 @@ rollback() {
   # redeploy ITS image. The downgrade is essential — the image only ever upgrades, so without it
   # the old code would run against the new schema. (Irreversible migrations cannot be restored;
   # the framework blocks them — see the migration guard + infra/deploy/README.md.)
-  local prev image rev
-  prev="$(__target_release_history | tail -n 2 | head -n 1)"
-  if [ -z "${prev}" ]; then
+  local history prev image rev
+  history="$(__target_release_history)"
+  # A rollback target must exist: need at least the current release + one prior.
+  if [ "$(printf '%s\n' "${history}" | grep -c .)" -lt 2 ]; then
     echo "::error::no previous release to roll back to (rollback target missing)." >&2
     exit 1
   fi
+  prev="$(printf '%s\n' "${history}" | tail -n 2 | head -n 1)"
   image="$(printf '%s' "${prev}" | cut -f1)"
   rev="$(printf '%s' "${prev}" | cut -f2)"
-  # shellcheck disable=SC2317  # __target_migrate is a stub hook; shellcheck can't trace it
   __target_migrate "downgrade ${rev}"
-  # shellcheck disable=SC2317  # __target_place_image is a stub hook; shellcheck can't trace it
+  # shellcheck disable=SC2317  # reached once __target_migrate is implemented (not the _todo stub)
   APP_IMAGE="${image}" __target_place_image
 }
 
