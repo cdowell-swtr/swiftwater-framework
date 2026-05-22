@@ -745,3 +745,13 @@ def test_render_deploy_staging_workflow(tmp_path: Path):
         assert op in deploy_steps, f"deploy-staging missing {op}"
     assert "tests/smoke" in deploy_steps and "tests/sniff" in deploy_steps
     assert "tests/e2e" in deploy_steps and "scripts/load.sh" in deploy_steps
+
+
+def test_render_entrypoint_gates_migrations(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    entry = (dest / "scripts" / "entrypoint.sh").read_text()
+    assert "APP_RUN_MIGRATIONS" in entry
+    assert "alembic upgrade head" in entry
+    assert 'exec "$@"' in entry
