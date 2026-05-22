@@ -3,6 +3,8 @@ from pathlib import Path
 import typer
 
 from framework_cli.copier_runner import render_project
+from framework_cli.integrity.generate import write_manifest
+from framework_cli.integrity.manifest import installed_framework_version
 from framework_cli.naming import derive_names
 
 app = typer.Typer(
@@ -38,4 +40,5 @@ def new(
             "python_version": python_version,
         },
     )
+    write_manifest(dest, installed_framework_version())
     typer.echo(f"Created '{names.project_slug}' at {dest}")
