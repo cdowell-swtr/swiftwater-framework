@@ -10,7 +10,7 @@ This repo is an opinionated Python scaffold framework: a `framework` CLI that re
 
 > Quick pointer, kept current so any environment starts with the real state. The detailed record of record is the meta-plan (`docs/superpowers/plans/2026-05-20-meta-plan.md`) — update its status table when a plan's status changes.
 
-- **Last updated:** 2026-05-22 17:00 PDT (Plan 6b Task 5: CI step-0 activation)
+- **Last updated:** 2026-05-22 17:15 PDT (Plan 6b Task 6: RELEASING.md)
 - **Where we are:** Plans 1, 2, 2b, 3a, 3b-1, 3b-2, 3b-3, 3c, 4, 5a, 5b, 5c-1, 6a all merged to `master`. **Plan 6b Tasks 1–5 in progress on branch `plan-6b-template-source`** — Task 1: repo-root `copier.yml` with `_subdirectory`. Task 2: `src/framework_cli/source.py` created with `REPO_GH`, `version_tag()`, `record_portable_source()`; `cli.py` `new` command now rewrites `.copier-answers.yml` with portable source. Task 3: `latest_release()` added to `source.py` (queries `git ls-remote --tags`, picks highest semver tag); `framework check` CLI command compares installed version to remote latest. Task 4: `src/framework_cli/upskill.py` with `upskill_project()` + `UpskillError`; `framework upskill <name>` CLI command (Copier `run_update` 3-way merge + `task test`). Task 5: `ci.yml.jinja` integrity job activated — installs framework CLI at recorded `_commit` via `uv tool install`, runs `framework integrity --ci`; echo placeholder replaced. 117 tests pass; `ruff` + `mypy` clean.
 - **Verification (6b T5):** `ruff` clean, **117 tests passed / 0 failed** (incl. `test_ci_activates_integrity_step`); YAML parse confirms integrity job has 4 steps; all downstream jobs retain `needs: integrity`.
 - **Next:** Plan 6b Task 6 (RELEASING docs).
