@@ -581,6 +581,24 @@ def test_render_sniff_suite(tmp_path: Path):
     assert "test:sniff:" in taskfile
 
 
+def test_render_load_test(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    load_js = (dest / "tests" / "non_functional" / "load.js")
+    assert load_js.is_file()
+    js = load_js.read_text()
+    assert "thresholds" in js
+    assert "http_req_duration" in js  # k6 maps this to the p99 SLO
+
+    script = (dest / "scripts" / "load.sh")
+    assert script.is_file()
+    assert "grafana/k6" in script.read_text()
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "test:load:" in taskfile
+
+
 def test_render_includes_ci_pipeline(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
