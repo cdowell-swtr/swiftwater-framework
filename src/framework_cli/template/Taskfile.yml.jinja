@@ -1,6 +1,8 @@
 version: '3'
 
 tasks:
+  # FRAMEWORK:BEGIN
+  # Managed by the framework. Add your own tasks below the closing marker; the framework will not overwrite them.
   integrity:
     desc: Verify framework scaffolding is intact (locked files unaltered). Needs the `framework` CLI.
     cmds:
@@ -157,3 +159,6 @@ tasks:
     desc: Push the current branch — triggers the authoritative GitHub Actions CI pipeline.
     cmds:
       - git push
+  # FRAMEWORK:END
+
+  # Add your project's tasks below.

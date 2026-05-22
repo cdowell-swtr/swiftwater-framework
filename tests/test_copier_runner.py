@@ -773,6 +773,24 @@ def test_render_migration_docs(tmp_path: Path):
     assert "APP_RUN_MIGRATIONS" in deploy_readme
 
 
+def test_hybrid_files_render_with_markers(tmp_path: Path):
+    from framework_cli.integrity.sections import section_content
+
+    dest = tmp_path / "proj"
+    render_project(
+        dest,
+        {
+            "project_name": "Demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+        },
+    )
+    for rel in ("CLAUDE.md", ".env.example", "Taskfile.yml"):
+        text = (dest / rel).read_text()
+        assert section_content(text) is not None, f"{rel} has no FRAMEWORK section"
+
+
 def test_taskfile_wires_integrity(tmp_path: Path):
     dest = tmp_path / "proj"
     render_project(
