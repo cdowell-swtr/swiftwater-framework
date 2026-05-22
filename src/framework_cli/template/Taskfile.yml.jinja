@@ -1,6 +1,11 @@
 version: '3'
 
 tasks:
+  integrity:
+    desc: Verify framework scaffolding is intact (locked files unaltered). Needs the `framework` CLI.
+    cmds:
+      - framework integrity
+
   dev:
     desc: Full local stack over HTTPS (app + Traefik). Requires Docker + mkcert.
     preconditions:
@@ -10,6 +15,8 @@ tasks:
         msg: "No local certs. Run `task certs` first (installs mkcert CA + issues localhost certs)."
       - sh: test -f uv.lock
         msg: "Run `uv sync` first to create uv.lock (the image build uses --frozen)."
+      - sh: 'if command -v framework >/dev/null 2>&1; then framework integrity; fi'
+        msg: "Framework integrity check failed. Run `framework integrity`, then `framework restore <file>`."
     cmds:
       - docker compose -f infra/compose/base.yml -f infra/compose/dev.yml --profile dev up --build
 
@@ -34,6 +41,9 @@ tasks:
 
   test:
     desc: Run the test suite
+    preconditions:
+      - sh: 'if command -v framework >/dev/null 2>&1; then framework integrity; fi'
+        msg: "Framework integrity check failed. Run `framework integrity`, then `framework restore <file>`."
     cmds:
       - uv run pytest -q
 
@@ -134,6 +144,9 @@ tasks:
 
   ci:
     desc: Full local CI pre-flight before `task push` (lint, 85% gate, audit, OpenAPI export).
+    preconditions:
+      - sh: 'if command -v framework >/dev/null 2>&1; then framework integrity; fi'
+        msg: "Framework integrity check failed. Run `framework integrity`, then `framework restore <file>`."
     cmds:
       - task: lint
       - task: test:cov:ci

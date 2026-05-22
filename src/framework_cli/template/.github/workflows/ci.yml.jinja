@@ -12,11 +12,12 @@ permissions:
   contents: read
 
 jobs:
-  # Step 0: framework integrity. Wired in framework v6 (Plan 6 — `framework integrity --ci`).
+  # Step 0: framework integrity. The check engine ships in framework v6 (Plan 6a); activating
+  # it here requires installing the CLI from a versioned source, delivered in Plan 6b.
   integrity:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "framework integrity --ci runs here once the integrity CLI ships (Plan 6)."
+      - run: echo "framework integrity --ci is activated once the CLI install source ships (Plan 6b)."
 
   # Step 2: lint + type-check across file types.
   lint:

@@ -771,3 +771,19 @@ def test_render_migration_docs(tmp_path: Path):
     deploy_readme = (dest / "infra" / "deploy" / "README.md").read_text()
     assert "deploy: contract" in deploy_readme
     assert "APP_RUN_MIGRATIONS" in deploy_readme
+
+
+def test_taskfile_wires_integrity(tmp_path: Path):
+    dest = tmp_path / "proj"
+    render_project(
+        dest,
+        {
+            "project_name": "Demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+        },
+    )
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "\n  integrity:\n" in taskfile
+    assert "command -v framework" in taskfile
