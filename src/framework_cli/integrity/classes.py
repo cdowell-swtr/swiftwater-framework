@@ -67,9 +67,16 @@ LOCKED_TRACKED: tuple[str, ...] = (
 # gitignored they cannot be checksummed — tracking them only produced misleading noise.)
 GITIGNORED_EXISTENCE: tuple[str, ...] = (".env",)
 
+# Hybrid + tracked: files the builder extends, carrying a framework-owned region delimited
+# by FRAMEWORK:BEGIN/END. The section between the markers is checksummed; content outside is
+# the builder's. (pyproject.toml is intentionally excluded — its dependency arrays must stay
+# builder-editable, and its breakage is loud, not silent.)
+HYBRID_TRACKED: tuple[str, ...] = ("CLAUDE.md", ".env.example", "Taskfile.yml")
+
 
 def rules() -> list[Rule]:
-    """The full classification: locked/tracked files plus gitignored/existence paths."""
+    """The full classification: locked + hybrid tracked files, plus gitignored/existence paths."""
     locked = [Rule(p, "locked", "tracked") for p in LOCKED_TRACKED]
+    hybrid = [Rule(p, "hybrid", "tracked") for p in HYBRID_TRACKED]
     gitignored = [Rule(p, "locked", "gitignored") for p in GITIGNORED_EXISTENCE]
-    return locked + gitignored
+    return locked + hybrid + gitignored

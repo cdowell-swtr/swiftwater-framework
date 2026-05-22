@@ -7,6 +7,7 @@ import pathspec
 from framework_cli.integrity.classes import rules
 from framework_cli.integrity.hashing import sha256_file
 from framework_cli.integrity.manifest import Entry, Manifest
+from framework_cli.integrity.sections import section_sha256
 
 
 class AuthoringError(Exception):
@@ -39,9 +40,17 @@ def build_manifest(project: Path, framework_version: str) -> Manifest:
                 raise AuthoringError(
                     f"{rule.path} is declared locked but was not rendered."
                 )
-            entries.append(
-                Entry(rule.path, rule.cls, rule.tier, sha256=sha256_file(f))
-            )
+            if rule.cls == "hybrid":
+                section_hash = section_sha256(f.read_text())
+                if section_hash is None:
+                    raise AuthoringError(
+                        f"{rule.path} is a hybrid file but has no FRAMEWORK:BEGIN/END markers."
+                    )
+                entries.append(Entry(rule.path, rule.cls, rule.tier, sha256=section_hash))
+            else:
+                entries.append(
+                    Entry(rule.path, rule.cls, rule.tier, sha256=sha256_file(f))
+                )
         else:  # gitignored existence tier — recorded, never checksummed
             entries.append(Entry(rule.path, rule.cls, rule.tier, sha256=None))
     return Manifest(framework_version=framework_version, entries=entries)

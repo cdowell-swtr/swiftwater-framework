@@ -1,8 +1,10 @@
 from pathlib import Path
 
 from framework_cli.integrity.checker import check, record_drift
-from framework_cli.integrity.classes import LOCKED_TRACKED
+from framework_cli.integrity.classes import HYBRID_TRACKED, LOCKED_TRACKED
 from framework_cli.integrity.generate import write_manifest
+
+_HYBRID_STUB = "# FRAMEWORK:BEGIN\nstub content\n# FRAMEWORK:END\n"
 
 
 def _project(tmp_path: Path) -> Path:
@@ -11,6 +13,10 @@ def _project(tmp_path: Path) -> Path:
         f = proj / rel
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(f"content of {rel}\n")
+    for rel in HYBRID_TRACKED:
+        f = proj / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(_HYBRID_STUB)
     (proj / ".gitignore").write_text(".env\ninfra/traefik/certs/*.pem\n")
     (proj / ".env").write_text("APP_ENVIRONMENT=dev\n")
     write_manifest(proj, "0.1.0")
