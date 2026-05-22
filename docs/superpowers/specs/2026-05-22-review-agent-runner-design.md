@@ -1,79 +1,84 @@
 # Layer-3 Review Agent Runner (Plan 7a) — Design Spec
 
 **Date:** 2026-05-22
-**Status:** Approved (brainstorm) — not yet planned/implemented
-**Builds on:** the generated-project CI pipeline (Plan 5a, the `review` job seam) and framework design spec §7 (the 15 AI review agents) + §20 (agent evals). This is the **first sub-project** of Plan 7; it establishes the execution mechanism the rest plug into.
+**Status:** Approved (brainstorm); revised at plan-writing time — the runner lives in the installed CLI (`framework review`), not template payload (see §2/§3).
+**Builds on:** the generated-project CI pipeline (Plan 5a, the `review` job seam), Plan 6a (`framework integrity` — the installed-CLI-owned check pattern), Plan 6b (the CLI is installed in CI via `uv tool install git+<repo>@<_commit>`), and framework design spec §7 (the 15 AI review agents) + §20 (agent evals). First sub-project of Plan 7; establishes the execution mechanism the rest plug into.
 
 ---
 
 ## 1. Purpose & scope
 
-Plan 7 (spec §7) is the Layer-3 "integration intelligence" layer: 15 AI review agents that run as GitHub Check Runs on PRs, with cross-agent interactions, an aggregator, and an eval harness. That is four subsystems sharing one execution mechanism. **Plan 7a builds only that mechanism, proven end-to-end with one agent** (`review-security`):
+Plan 7 (spec §7) is the Layer-3 layer: 15 AI review agents that run as GitHub Check Runs on PRs, with cross-agent interactions, an aggregator, and an eval harness — four subsystems sharing one execution mechanism. **Plan 7a builds only that mechanism, proven end-to-end with one agent** (`review-security`):
 
-- a template-shipped Python runner that fetches the PR diff, calls the Anthropic Messages API with an agent's prompt, parses **structured JSON findings**, and posts a GitHub **Check Run** + inline annotations;
+- a **`framework review <agent>` CLI subcommand** that fetches the PR diff, calls the Anthropic Messages API with an agent's prompt, parses **structured JSON findings**, and posts a GitHub **Check Run** + inline annotations;
 - one agent (`review-security`) defined against that contract;
-- the generated `ci.yml` `review` job wired to run it (opt-in by the `ANTHROPIC_API_KEY` secret).
+- the generated `ci.yml` `review` job wired to install the framework (the Plan 6b mechanism) and run `framework review security` (opt-in by the `ANTHROPIC_API_KEY` secret).
 
 **Deferred to later sub-projects:** 7b — the other 14 agents + the always/battery/file-trigger/advisory triggering matrix; 7c — cross-agent interactions + the single-PR-comment aggregator; 7d — the eval harness (golden fixtures + threshold-based real-quality assertions, §20).
 
-## 2. Decisions (settled in brainstorm)
+## 2. Decisions (settled in brainstorm + the plan-writing revision)
 
-- **Runner model:** a template-shipped Python runner calling the **Anthropic API directly** (not `claude-code-action`, not a third-party bot) — chosen for the structured-finding contract, unit-testable plumbing, per-agent model control, and prompt-caching the shared diff.
+- **Runner home — the installed CLI (`framework review`), not template payload.** Discovered at plan-writing time: template-payload Python isn't cleanly framework-testable, and per-project prompt files would need copier-merging on `upskill`. Putting the runner + prompts in the CLI (like `framework integrity`, §17) makes it normally testable, versions the prompts with the framework (so `upskill` updates them with no per-project merge), keeps it framework-owned (builders can't disable it), and reuses Plan 6b's CI install. The generated project ships only the thin `ci.yml` review-job change.
+- **LLM = Anthropic API directly** (not `claude-code-action`, not a third-party bot) — for the structured-finding contract, unit-testable plumbing, per-agent model control, and prompt-caching the shared diff.
+- **`anthropic` is a CLI dependency**, imported **lazily** (so the review modules import + unit-test without constructing a real client, and `framework`'s other commands don't load it).
 - **Findings are structured JSON**, parsed into a typed contract.
 - **Testability split:** deterministic plumbing (parse → conclusion → annotations) is unit-tested with a **mocked** client; the LLM's review *quality* is the eval harness's job (7d), not 7a's unit tests.
 - **Infra failure ≠ merge block:** API errors / malformed output / missing key → a `neutral` Check Run, never a CI hard-fail. Only findings at/above an agent's block-threshold produce `failure`.
-- **`anthropic` is a CI-only dependency**, imported lazily so the modules + tests work without it installed.
-- **Opt-in by secret:** the review job runs only when `ANTHROPIC_API_KEY` is present; absent → neutral skip.
+- **Opt-in by secret:** `framework review` posts a neutral "skipped" Check Run (exit 0) when `ANTHROPIC_API_KEY` is absent.
 - **Model default = Claude Sonnet**, per-agent overridable; the diff is a cached prompt prefix.
 
-## 3. What ships (template payload — runs in the builder's CI, reviews the builder's PRs)
+## 3. What gets built
 
-A `scripts/review/` package in the generated project:
+**Framework source — `src/framework_cli/review/`:**
+- **`findings.py`** — the contract. `Finding(path: str, line: int, severity: Severity, message: str, suggestion: str | None)`, `Severity = Literal["critical","high","medium","low","info"]`, and `parse_findings(text) -> list[Finding]` tolerant of the model wrapping the JSON array in prose/code-fences (raises a `FindingsParseError` on genuinely unparseable output). No `anthropic` import.
+- **`registry.py`** — `AgentSpec(name, prompt, block_threshold: Severity, active_when, model)` + a registry mapping agent name → spec (prompt text loaded from `agents/<name>.md`, packaged with the CLI). 7a registers only `review-security`. No `anthropic` import.
+- **`agents/security.md`** — the `review-security` system prompt: auth / injection / secrets / CVEs / OWASP Top 10; review **only the diff**, cite real file + line, return **JSON only** matching the `Finding` schema; `block_threshold = high`; `active_when = always`.
+- **`runner.py`** — `run_agent(diff: str, spec: AgentSpec, client) -> list[Finding]`: builds the request (diff as a **cached prefix**, agent prompt as the variable part), calls the API, returns parsed findings. The `client` is **injected** (tests pass a mock); a `default_client()` helper constructs the real Anthropic client with a **lazy** `import anthropic`.
+- **`checks.py`** — `to_check_run(spec, findings) -> CheckRunPayload`: `conclusion="failure"` if any finding's severity ≥ `spec.block_threshold`, else `"neutral"` (no findings) / `"success"`; findings → inline annotations (`path`, `start_line`, `annotation_level`, `message`, optional suggestion). Plus `post_check_run(payload, token, repo, sha)` via the GitHub Checks API. No `anthropic` import.
+- **`diff.py`** — `pr_diff()` computes the diff to review from the CI environment (`GITHUB_BASE_REF`/`GITHUB_SHA` → `git diff`), with a size cap. Pure git/subprocess; injectable for tests.
 
-- **`findings.py`** — the contract. `Finding(path: str, line: int, severity: Severity, message: str, suggestion: str | None)` where `Severity` is `Literal["critical","high","medium","low","info"]`. A `parse_findings(text) -> list[Finding]` tolerant of the model wrapping JSON in prose/code-fences (extracts the JSON array). No `anthropic` import.
-- **`registry.py`** — `AgentSpec(name, prompt, block_threshold: Severity, active_when, model)` and a registry mapping agent name → spec (prompt text loaded from `agents/<name>.md`). 7a registers only `review-security`. No `anthropic` import.
-- **`agents/security.md`** — the `review-security` system prompt: auth / injection / secrets / CVEs / OWASP Top 10; instructs the agent to review **only the diff**, cite real file + line, and return **JSON only** matching the `Finding` schema; `block_threshold = high`; `active_when = always`.
-- **`runner.py`** — `run_agent(diff: str, spec: AgentSpec, client) -> list[Finding]`: builds the request (diff as a **cached prefix**, the agent prompt as the variable part), calls the API, returns parsed findings. The `client` is **injected** (tests pass a mock). `anthropic` is imported **lazily** only inside the default-client constructor used by `run.py`.
-- **`github_checks.py`** — `to_check_run(spec, findings) -> CheckRun` mapping: `conclusion = "failure"` if any finding's severity ≥ `spec.block_threshold`, else `"neutral"` (no findings) / `"success"`; findings → inline annotations (`path`, `start_line`, `annotation_level`, `message`, optional suggestion). Posting uses the GitHub Checks API via `GITHUB_TOKEN`. No `anthropic` import.
-- **`run.py`** — the CLI entrypoint the workflow calls: `python scripts/review/run.py <agent>`. Resolves the spec, computes the PR diff, constructs the real Anthropic client (lazy import) **unless `ANTHROPIC_API_KEY` is absent** (→ post a neutral "review skipped" Check Run, exit 0), runs the agent, posts the Check Run. Any execution error → neutral Check Run + exit 0 (infra failure never blocks).
+**CLI — `src/framework_cli/cli.py`:** a `review(agent: str)` Typer command — resolve the spec; if `ANTHROPIC_API_KEY` is absent → post a neutral "skipped" Check Run + exit 0; else compute the diff, `run_agent`, `to_check_run`, `post_check_run`; any execution error → neutral Check Run + exit 0 (infra failure never blocks). Mirrors the `integrity` command's shape.
+
+**Dependencies — `pyproject.toml`:** add `anthropic` to `[project] dependencies` (imported lazily).
+
+**Template payload — `src/framework_cli/template/.github/workflows/ci.yml.jinja`:** the `review` job (today an echo placeholder, `needs: [test, contract]`) installs the framework at the recorded `_commit` (the Plan 6b pattern) and runs `framework review security`, with `checks: write`/`contents: read`/`pull-requests: read` permissions and `ANTHROPIC_API_KEY` + `GITHUB_TOKEN` env. Nothing else ships into the project.
 
 ## 4. The finding → Check Run contract
 
-- An agent emits a JSON array of findings; each has a `severity`. Severity ordering: `critical > high > medium > low > info`.
-- `block_threshold` (per agent) is the severity at/above which findings make the Check Run **fail**. `review-security` = `high` (blocks on high + critical; medium/low/info are advisory annotations on a neutral check).
-- The Check Run's `output` lists every finding as an inline annotation regardless of severity; only the *conclusion* is gated by the threshold.
-- **"Blocks merge" is enforced by the builder's branch protection**, not the framework — a failing Check Run only blocks if the repo requires it. The generated README/DEPLOY docs instruct the builder to require the `review-*` checks in branch protection.
+- An agent emits a JSON array of findings; each has a `severity` (`critical > high > medium > low > info`).
+- `block_threshold` (per agent) is the severity at/above which findings make the Check Run **fail**. `review-security` = `high`.
+- The Check Run `output` lists every finding as an inline annotation; only the *conclusion* is gated by the threshold.
+- **"Blocks merge" is the builder's branch protection**, not the framework — a failing Check Run only blocks if the repo requires it. The generated README/DEPLOY docs instruct the builder to require the `review-*` checks.
 
 ## 5. CI wiring
 
-The generated `ci.yml` `review` job (today an echo placeholder, `needs: [test, contract]`) becomes:
-- a matrix over the active agents (7a: just `security`);
-- permissions `checks: write`, `contents: read`, `pull-requests: read`;
-- a checkout with enough history to diff against the PR base;
-- a step `uv run --with anthropic python scripts/review/run.py ${{ matrix.agent }}` with env `ANTHROPIC_API_KEY` (secret) + `GITHUB_TOKEN`;
-- `anthropic` is installed ad-hoc via `--with` (never added to the app's runtime deps).
+The generated `ci.yml` `review` job becomes (mirroring the Plan 6b integrity job):
+- `needs: [test, contract]`; permissions `checks: write`, `contents: read`, `pull-requests: read`;
+- checkout with enough history to diff the PR base;
+- install the framework: `ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"; uv tool install "git+https://github.com/cdowell-swtr/swiftwater-framework@${ref}"`;
+- run `framework review security` with env `ANTHROPIC_API_KEY` (secret) + `GITHUB_TOKEN`.
 
-On a PR the diff is `base...head`; on a push to `main` the §7 always-on agents diff the pushed range (7a wires the PR path; the push-to-main subset is refined in 7b alongside the triggering matrix).
+7a wires the PR path; the §7 push-to-main subset is refined in 7b alongside the triggering matrix. (7a uses a single `security` step; the agent **matrix** lands in 7b with the full set.)
 
 ## 6. Testing
 
-- **Hermetic unit tests (no real API, no key):**
-  - `parse_findings` — well-formed JSON, JSON inside code-fences/prose, malformed → raises a parse error the runner turns into neutral.
-  - `to_check_run` — a `high` finding → `failure`; only `low`/`info` → `neutral`; no findings → `success`/`neutral`; every finding becomes an annotation.
+- **Hermetic framework unit tests (no real API, no key) — `tests/review/`:**
+  - `parse_findings` — well-formed JSON; JSON inside code-fences/prose; unparseable → `FindingsParseError`.
+  - `to_check_run` — a `high` finding → `failure`; only `low`/`info` → `neutral`; no findings → `success`/`neutral`; every finding → an annotation.
   - `run_agent` with a **mocked client** returning canned JSON → expected `Finding`s.
-  - `run.py` — `ANTHROPIC_API_KEY` absent → neutral "skipped" Check Run + exit 0; a mocked client error → neutral + exit 0 (never blocks).
+  - the `review` CLI command (via `CliRunner`) — `ANTHROPIC_API_KEY` absent → neutral "skipped" + exit 0; a mocked client/posting error → neutral + exit 0 (never blocks). Posting is stubbed (no real GitHub call).
   - `registry` — loads `review-security` with `block_threshold = high`, `active_when = always`, model set.
-- **Render assertions:** the generated project ships `scripts/review/{findings,registry,runner,github_checks,run}.py` + `agents/security.md`; the `ci.yml` `review` job has the agent matrix, the `checks: write` permission, and the `ANTHROPIC_API_KEY` env.
-- **Generated-project cleanliness:** the shipped `scripts/review/` must keep the freshly generated project's **first pre-commit pass green** (`test_rendered_project_precommit_runs_clean`). `mypy` is `src`-scoped so `scripts/` isn't type-checked; `ruff` checks `.` but doesn't resolve the lazy `anthropic` import. **Plan-time check (task 1):** confirm the generated project's pre-commit/mypy scope so the runner code is clean without `anthropic` installed; if any hook type-checks `scripts/`, keep the `anthropic` import lazy/guarded so it stays green.
-- **Manual smoke (documented, not automated):** run `review-security` against a real diff with a key — the one thing unit tests can't cover. Real review *quality* is 7d's eval harness.
+- **Render assertion (`tests/test_copier_runner.py`):** the generated `ci.yml` `review` job installs the framework and runs `framework review security` with `checks: write` + `ANTHROPIC_API_KEY`.
+- **Generated-project cleanliness:** the only project change is `ci.yml`, so the acceptance suite (`test_rendered_project_precommit_runs_clean`) stays green by construction — no `scripts/review/` payload to keep lint-clean, and the runner is never imported by the generated project.
+- **Manual smoke (documented, not automated):** `framework review security` against a real diff with a key — the one thing unit tests can't cover. Real review *quality* is 7d's eval harness.
 
 ## 7. Self-review
 
-- **Placeholders:** none — the runner modules, the finding/Check-Run contract, the one agent, the CI wiring, and the test set are all concrete. The one unknown (the generated project's pre-commit/mypy scope vs. `scripts/`) is an explicit plan-time check in §6, not a hand-wave.
-- **Internal consistency:** the testability split (mock client in units, real quality in 7d) is consistent with "infra failure → neutral"; opt-in-by-secret + lazy `anthropic` import keep both the generated project's CI and the framework's own acceptance suite green without a key.
-- **Scope:** one mechanism + one agent; the other 14 agents, interactions/aggregator, and evals are explicitly deferred to 7b/7c/7d.
-- **Ambiguity:** "blocks merge" is explicitly the builder's branch-protection responsibility, not framework-enforced.
+- **Placeholders:** none — the modules, the finding/Check-Run contract, the one agent, the CLI command, the CI wiring, and the test set are concrete. The earlier "pre-commit/mypy scope" unknown is **resolved** by moving the runner into the CLI (framework source, normally tested); the generated project gains only the `ci.yml` change.
+- **Internal consistency:** the testability split (mock client in units, real quality in 7d) is consistent with "infra failure → neutral"; opt-in-by-secret + lazy `anthropic` import keep both the generated project's CI and the framework's own tests green without a key.
+- **Scope:** one mechanism + one agent; the other 14 agents, interactions/aggregator, and evals are deferred to 7b/7c/7d. The CLI-subcommand home matches the framework's "logic lives in the installed CLI" principle (§17) and reuses Plan 6b's CI install.
+- **Ambiguity:** "blocks merge" is explicitly the builder's branch-protection responsibility.
 
 ---
 
-*End of design. Next step (when ready): `superpowers:writing-plans` for Plan 7a. Plan 7b/7c/7d get their own brainstorm → spec → plan cycles.*
+*End of design. Next step: `superpowers:writing-plans` for Plan 7a. 7b/7c/7d get their own brainstorm → spec → plan cycles.*
