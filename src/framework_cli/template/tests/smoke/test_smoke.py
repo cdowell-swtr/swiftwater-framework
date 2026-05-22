@@ -23,6 +23,9 @@ def test_health_reports_no_breached_slo(client: httpx.Client):
 
 def test_health_round_trip_within_2x_p99(client: httpx.Client):
     # Spec Phase 1: every service responds within 2x its defined p99 latency threshold.
+    # Warm up first so we measure steady-state p99 (the SLO), not one-off TLS/connection/
+    # cold-start cost — otherwise a healthy fresh deploy could false-fail and auto-rollback.
+    client.get("/health")
     start = time.perf_counter()
     resp = client.get("/health")
     elapsed_ms = (time.perf_counter() - start) * 1000.0
