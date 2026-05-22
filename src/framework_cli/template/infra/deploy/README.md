@@ -50,15 +50,23 @@ store) and as GitHub Environment secrets — the image carries none of them.
 
 Rollback can only restore a previous release if its migrations can be reversed, so:
 
-- **Write expand/contract migrations.** Add columns/tables (expand) and ship code that works
-  with and without them; only remove the old shape (contract) in a later release once nothing
-  uses it. A rollback's downgrade is then non-destructive.
-- **Irreversible migrations are blocked, not just discouraged.** The migration guard
-  (`scripts/check_migrations.py`, run in pre-commit + CI) fails any migration whose `downgrade`
-  is empty/`pass`/`raise` — you cannot ship a one-way migration by accident. **Never destroy
-  data that cannot be reconstructed**; if a destructive change is truly intended, make it a
-  separate, explicitly-reviewed migration and accept that releases across it cannot be rolled
-  back through it.
+- **Write expand/contract migrations.** A rolling deploy runs old and new code against ONE
+  shared schema, so each deploy's migration must be **backward-compatible (expand-only)**: add
+  columns/tables/indexes (additive) and ship code that works with and without them; a
+  destructive **contract** change (drop/rename) breaks the old code still running during the
+  roll. Migrations also run **once** before the roll — set `APP_RUN_MIGRATIONS=false` on the
+  app hosts (it is matched exactly as `true`/`false`; the default is `true`, so dev/single-host
+  self-migrate on start) so the per-container entrypoint does not race them. A rollback then
+  rolls the **code** back first, **then** downgrades.
+- **Unsafe migrations are blocked, not just discouraged.** The migration guard
+  (`scripts/check_migrations.py`, pre-commit + CI) fails any migration whose `downgrade()` is
+  empty/`pass`/`raise` (irreversible) **or** whose `upgrade()` does a destructive op
+  (`drop_*`, `rename_table`, column rename) — the latter unless the file is marked
+  `# deploy: contract`. **Contract changes are their own post-rollout release:** ship the
+  expand release, let it fully roll out, remove the old code, then a later `# deploy: contract`
+  migration removes the old shape. (Raw-SQL drops via `op.execute` and type-narrowing aren't
+  caught structurally — Plan 7's data-integrity agent adds that.) **Never destroy data that
+  cannot be reconstructed.**
 - **This applies to all database paradigms, not just relational.** PostgreSQL uses Alembic
   here; document/key-value/graph/time-series/vector stores (Plan 8) carry their own reversible
   migration tooling and the same discipline + guard. Reverse each active store in

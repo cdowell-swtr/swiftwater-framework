@@ -759,3 +759,15 @@ def test_render_entrypoint_gates_migrations(tmp_path: Path):
     assert "APP_RUN_MIGRATIONS" in entry
     assert "alembic upgrade head" in entry
     assert 'exec "$@"' in entry
+
+
+def test_render_migration_docs(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    claude = (dest / "CLAUDE.md").read_text()
+    assert "backward-compatible" in claude.lower()
+
+    deploy_readme = (dest / "infra" / "deploy" / "README.md").read_text()
+    assert "deploy: contract" in deploy_readme
+    assert "APP_RUN_MIGRATIONS" in deploy_readme

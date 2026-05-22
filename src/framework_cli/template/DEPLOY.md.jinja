@@ -36,11 +36,14 @@ migration discipline. In short:
 
 ## Migrations are reversible (enforced)
 
-Rollback reverses migrations to the previous release, so every migration must be reversible —
-the framework **blocks** irreversible ones (`scripts/check_migrations.py`, in pre-commit + CI):
-a `downgrade()` may not be empty/`pass`/`raise`. Write **expand/contract** migrations; never
-destroy unreconstructable data. The same discipline applies to every database paradigm you add
-(Plan 8), not just PostgreSQL.
+Rollback reverses migrations, and a rolling deploy runs old + new code against one schema, so
+every migration must be both **reversible** and **backward-compatible (expand-only)**. The
+framework **blocks** both failure modes (`scripts/check_migrations.py`, in pre-commit + CI): a
+`downgrade()` may not be empty/`pass`/`raise`, and an `upgrade()` may not make a destructive
+change (`drop_*`/`rename`) unless the file is marked `# deploy: contract` (a destructive change
+must be its own post-rollout release). Write **expand/contract** migrations; never destroy
+unreconstructable data. The same discipline applies to every database paradigm you add (Plan
+8), not just PostgreSQL.
 
 ## Run the validation tiers locally against any environment
 

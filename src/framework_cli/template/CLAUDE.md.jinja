@@ -28,7 +28,7 @@ Scaffold a non-functional test (with an explicit threshold) when code: operates 
 - Read all configuration through the settings object — never hardcode config or secrets.
 - Use the structured logger, not `print()`; include context with each log entry.
 - Never use a bare `except`; handle every identified error case explicitly.
-- Schema changes require a new migration; never edit an applied one. Every migration MUST be reversible — its `downgrade()` must really reverse the `upgrade()` (the migration guard blocks empty/`pass`/`raise` downgrades, in pre-commit and CI, so rollback can always step back). Prefer expand/contract; **never destroy data that cannot be reconstructed.** This applies to every database paradigm, not just the relational one.
+- Schema changes require a new migration; never edit an applied one. Every migration must be both **reversible** (a real `downgrade()`) **and backward-compatible** (expand-only / additive) — a rolling deploy runs old and new code against one schema, so a destructive change breaks the still-running old code. The migration guard (pre-commit + CI) blocks empty/`pass`/`raise` downgrades AND destructive `upgrade()` ops (`drop_*`, `rename_table`, column renames); a genuinely destructive change must be its **own** post-rollout release, marked `# deploy: contract`. Prefer expand/contract; **never destroy data that cannot be reconstructed.** Applies to every database paradigm.
 - Updating an API endpoint requires updating its contract test.
 
 ## Error handling & recoverability
