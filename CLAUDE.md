@@ -10,10 +10,10 @@ This repo is an opinionated Python scaffold framework: a `framework` CLI that re
 
 > Quick pointer, kept current so any environment starts with the real state. The detailed record of record is the meta-plan (`docs/superpowers/plans/2026-05-20-meta-plan.md`) — update its status table when a plan's status changes.
 
-- **Last updated:** 2026-05-22 16:00 PDT (Plan 6b Task 3: `framework check` command)
-- **Where we are:** Plans 1, 2, 2b, 3a, 3b-1, 3b-2, 3b-3, 3c, 4, 5a, 5b, 5c-1, 6a all merged to `master`. **Plan 6b Tasks 1–3 in progress on branch `plan-6b-template-source`** — Task 1: repo-root `copier.yml` with `_subdirectory`. Task 2: `src/framework_cli/source.py` created with `REPO_GH`, `version_tag()`, `record_portable_source()`; `cli.py` `new` command now rewrites `.copier-answers.yml` with portable source. Task 3: `latest_release()` added to `source.py` (queries `git ls-remote --tags`, picks highest semver tag); `framework check` CLI command compares installed version to remote latest. 112 tests pass; `ruff` + `mypy` clean.
-- **Verification (6b T3):** `ruff` clean, `mypy` clean, **112 tests passed / 0 failed** (incl. new `test_latest_release_picks_highest_semver`, `test_latest_release_none_when_no_tags`, `test_check_runs_and_reports`).
-- **Next:** Plan 6b Task 3 — `framework check-update` (latest release probe). Then Tasks 4–6 (upskill/CI/RELEASING).
+- **Last updated:** 2026-05-22 16:30 PDT (Plan 6b Task 4: `framework upskill` command)
+- **Where we are:** Plans 1, 2, 2b, 3a, 3b-1, 3b-2, 3b-3, 3c, 4, 5a, 5b, 5c-1, 6a all merged to `master`. **Plan 6b Tasks 1–4 in progress on branch `plan-6b-template-source`** — Task 1: repo-root `copier.yml` with `_subdirectory`. Task 2: `src/framework_cli/source.py` created with `REPO_GH`, `version_tag()`, `record_portable_source()`; `cli.py` `new` command now rewrites `.copier-answers.yml` with portable source. Task 3: `latest_release()` added to `source.py` (queries `git ls-remote --tags`, picks highest semver tag); `framework check` CLI command compares installed version to remote latest. Task 4: `src/framework_cli/upskill.py` with `upskill_project()` + `UpskillError`; `framework upskill <name>` CLI command (Copier `run_update` 3-way merge + `task test`). 116 tests pass; `ruff` + `mypy` clean.
+- **Verification (6b T4):** `ruff` clean, `mypy` clean, **13 targeted tests passed / 0 failed** (incl. `test_upskill_applies_framework_change_and_stays_green`, `test_upskill_reports_not_green_when_tests_fail`, `test_upskill_requires_git_tracked_project`, `test_upskill_command_rejects_non_directory`).
+- **Next:** Plan 6b Tasks 5–6 (CI workflow wiring + RELEASING docs).
 
 ## Keeping state current (required before every commit)
 

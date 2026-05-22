@@ -94,3 +94,10 @@ def test_check_runs_and_reports():
     result = runner.invoke(app, ["check"])
     assert result.exit_code == 0
     assert "framework check" in result.output
+
+
+def test_upskill_command_rejects_non_directory(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["upskill", "nope"])
+    assert result.exit_code == 1
+    assert "not a directory" in result.output

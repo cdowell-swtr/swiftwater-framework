@@ -3,6 +3,7 @@ from pathlib import Path
 import typer
 
 from framework_cli.copier_runner import render_project
+from framework_cli.upskill import UpskillError, upskill_project
 from framework_cli.integrity.checker import check as check_integrity, record_drift
 from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
@@ -92,6 +93,31 @@ def restore(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"Restored {file} to the canonical framework version.")
+
+
+@app.command()
+def upskill(
+    name: str = typer.Argument(..., help="Path to the project to upskill."),
+) -> None:
+    """Update a project to a newer framework version, then run its tests."""
+    project = Path(name)
+    if not project.is_dir():
+        typer.echo(f"Error: {name} is not a directory", err=True)
+        raise typer.Exit(1)
+    try:
+        green = upskill_project(project)
+    except UpskillError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    if green:
+        typer.echo(f"Upskilled {name}; tests pass.")
+    else:
+        typer.echo(
+            f"Upskilled {name}, but `task test` failed — resolve any Copier conflict markers "
+            "and fix failures before committing.",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 @app.command()
