@@ -673,3 +673,24 @@ def test_render_includes_ci_pipeline(tmp_path: Path):
     taskfile = (dest / "Taskfile.yml").read_text()
     assert "ci:" in taskfile
     assert "push:" in taskfile
+
+
+def test_render_deploy_staging_workflow(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    wf = dest / ".github" / "workflows" / "deploy-staging.yml"
+    assert wf.is_file()
+    text = wf.read_text()
+    # GitHub expressions are preserved verbatim (plain .yml, no Jinja) — NOT escaped/emptied.
+    assert "${{ github.repository }}" in text
+    assert "ghcr.io" in text and "docker push" in text
+
+    ci = yaml.safe_load(text)
+    jobs = ci["jobs"]
+    assert "build-push" in jobs and "deploy-staging" in jobs
+    deploy_steps = " ".join(str(s.get("run", "")) for s in jobs["deploy-staging"]["steps"])
+    for op in ("strategy.sh deploy", "strategy.sh rollback", "strategy.sh endpoints"):
+        assert op in deploy_steps, f"deploy-staging missing {op}"
+    assert "tests/smoke" in deploy_steps and "tests/sniff" in deploy_steps
+    assert "tests/e2e" in deploy_steps and "scripts/load.sh" in deploy_steps

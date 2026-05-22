@@ -1,0 +1,66 @@
+# CD — staging (spec §14). On merge to main: build+push the image, then the configured deploy
+# strategy (infra/deploy/strategy.sh) places it and the four validation phases run against it.
+# Any failure auto-rolls-back and blocks the prod gate. The strategy is YOURS to implement —
+# see infra/deploy/README.md; until then the `deploy` step fails loudly (by design).
+name: Deploy — staging
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: build + push image
+        id: build
+        run: |
+          repo="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          image="ghcr.io/${repo}:${{ github.sha }}"
+          docker build -f infra/docker/Dockerfile -t "$image" .
+          docker push "$image"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+  deploy-staging:
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      APP_IMAGE: ${{ needs.build-push.outputs.image }}
+      DEPLOY_ENV: staging
+      DEPLOY_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: deploy (your configured strategy)
+        run: bash infra/deploy/strategy.sh deploy
+      - name: await healthy
+        run: bash infra/deploy/strategy.sh await-healthy 120
+      - name: resolve endpoint
+        id: ep
+        run: echo "url=$(bash infra/deploy/strategy.sh endpoints | head -n1)" >> "$GITHUB_OUTPUT"
+      - name: Phase 1 — smoke
+        run: SMOKE_TARGET="${{ steps.ep.outputs.url }}" uv run pytest tests/smoke -q
+      - name: Phase 2 — sniff
+        run: SNIFF_TARGET="${{ steps.ep.outputs.url }}" uv run pytest tests/sniff -q
+      - name: Phase 3 — E2E against staging
+        run: E2E_TARGET="${{ steps.ep.outputs.url }}" uv run pytest tests/e2e -q
+      - name: Phase 4 — k6 load (SLO thresholds)
+        run: K6_TARGET="${{ steps.ep.outputs.url }}" bash scripts/load.sh
+      - name: rollback on any failure
+        if: failure()
+        run: bash infra/deploy/strategy.sh rollback
+      - name: notify
+        if: always()
+        run: bash infra/deploy/notify.sh "staging deploy ${{ job.status }} (${{ github.sha }})"
