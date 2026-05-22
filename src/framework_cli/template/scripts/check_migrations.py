@@ -21,7 +21,7 @@ VERSIONS = Path("migrations/versions")
 
 
 def _is_trivial(func: ast.FunctionDef) -> bool:
-    # Drop a leading docstring; what remains is the real body.
+    # Drop docstrings / bare literal statements (runtime no-ops); what remains is the real body.
     body = [
         node
         for node in func.body
@@ -36,10 +36,11 @@ def _is_trivial(func: ast.FunctionDef) -> bool:
 
 def _problem(path: Path) -> str | None:
     tree = ast.parse(path.read_text(), filename=str(path))
+    # Module top-level only — that is where Alembic resolves `downgrade` (a nested one is unusable).
     downgrade = next(
         (
             node
-            for node in ast.walk(tree)
+            for node in tree.body
             if isinstance(node, ast.FunctionDef) and node.name == "downgrade"
         ),
         None,
