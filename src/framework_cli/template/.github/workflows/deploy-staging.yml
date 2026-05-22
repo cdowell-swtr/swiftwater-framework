@@ -63,4 +63,5 @@ jobs:
         run: bash infra/deploy/strategy.sh rollback
       - name: notify
         if: always()
+        continue-on-error: true  # a notification failure must never fail a healthy deploy
         run: bash infra/deploy/notify.sh "staging deploy ${{ job.status }} (${{ github.sha }})"
