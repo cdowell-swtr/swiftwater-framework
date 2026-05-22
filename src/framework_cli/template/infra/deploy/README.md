@@ -56,8 +56,7 @@ Rollback can only restore a previous release if its migrations can be reversed, 
   destructive **contract** change (drop/rename) breaks the old code still running during the
   roll. Migrations also run **once** before the roll — set `APP_RUN_MIGRATIONS=false` on the
   app hosts (it is matched exactly as `true`/`false`; the default is `true`, so dev/single-host
-  self-migrate on start) so the per-container entrypoint does not race them. A rollback then
-  rolls the **code** back first, **then** downgrades.
+  self-migrate on start) so the per-container entrypoint does not race them.
 - **Unsafe migrations are blocked, not just discouraged.** The migration guard
   (`scripts/check_migrations.py`, pre-commit + CI) fails any migration whose `downgrade()` is
   empty/`pass`/`raise` (irreversible) **or** whose `upgrade()` does a destructive op
