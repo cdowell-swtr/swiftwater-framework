@@ -165,6 +165,8 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "copier" },
+    { name = "pathspec" },
+    { name = "pyyaml" },
     { name = "typer" },
 ]
 
@@ -181,6 +183,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "copier", specifier = ">=9.4" },
+    { name = "pathspec", specifier = ">=0.12" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "typer", specifier = ">=0.15" },
 ]
 
