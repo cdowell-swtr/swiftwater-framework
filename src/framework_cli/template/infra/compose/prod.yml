@@ -10,6 +10,14 @@ services:
       APP_DATABASE_URL: "postgresql+psycopg://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/app"
     ports:
       - "8000:8000"
+    # Liveness so `restart: unless-stopped` can recover a wedged app. start_period covers
+    # migrate+seed on first start (the image entrypoint runs them before uvicorn serves).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/heartbeat').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
