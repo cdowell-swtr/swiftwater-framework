@@ -75,3 +75,14 @@ def test_restore_command_fixes_a_tampered_file(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(project)
     assert runner.invoke(app, ["restore", "alembic.ini"]).exit_code == 0
     assert runner.invoke(app, ["integrity", "--ci"]).exit_code == 0
+
+
+def test_new_records_portable_source(tmp_path: Path, monkeypatch):
+    from framework_cli.source import REPO_GH
+
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["new", "My App"]).exit_code == 0
+    answers = (tmp_path / "my-app" / ".copier-answers.yml").read_text()
+    assert f"_src_path: {REPO_GH}" in answers
+    assert "_commit: v" in answers
+    assert "/src/framework_cli/template" not in answers

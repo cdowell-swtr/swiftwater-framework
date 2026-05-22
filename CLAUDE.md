@@ -10,10 +10,10 @@ This repo is an opinionated Python scaffold framework: a `framework` CLI that re
 
 > Quick pointer, kept current so any environment starts with the real state. The detailed record of record is the meta-plan (`docs/superpowers/plans/2026-05-20-meta-plan.md`) — update its status table when a plan's status changes.
 
-- **Last updated:** 2026-05-22 15:10 PDT (Plan 6b Task 1: repo-root copier.yml created; 60 framework tests pass)
-- **Where we are:** Plans 1, 2, 2b, 3a, 3b-1, 3b-2, 3b-3, 3c, 4, 5a, 5b, 5c-1, 6a all merged to `master`. **Plan 6b Task 1 in progress on branch `plan-6b-template-source`** — repo-root `copier.yml` created with `_subdirectory: src/framework_cli/template` and `_exclude` list (prevents subdir `copier.yml` from leaking into rendered projects). New test `test_root_copier_yml_renders_template_without_leaking_config` in `tests/test_copier_runner.py` passes. All 60 framework tests pass; `ruff` clean. Bundled local render path (`framework new`) is unchanged.
-- **Verification (6b T1):** `ruff` clean, **60 tests passed / 0 failed** (incl. `test_root_copier_yml_renders_template_without_leaking_config`).
-- **Next:** Plan 6b Task 2 — `framework new` records a portable `_src_path`+`_commit` via `source.py`. Then Tasks 3–6 (check/upskill/CI/RELEASING).
+- **Last updated:** 2026-05-22 15:30 PDT (Plan 6b Task 2: framework new records portable source)
+- **Where we are:** Plans 1, 2, 2b, 3a, 3b-1, 3b-2, 3b-3, 3c, 4, 5a, 5b, 5c-1, 6a all merged to `master`. **Plan 6b Tasks 1–2 in progress on branch `plan-6b-template-source`** — Task 1: repo-root `copier.yml` with `_subdirectory`. Task 2: `src/framework_cli/source.py` created with `REPO_GH`, `version_tag()`, `record_portable_source()`; `cli.py` `new` command now rewrites `.copier-answers.yml` with portable `_src_path: gh:cdowell-swtr/swiftwater-framework` and `_commit: vX.Y.Z` immediately after `write_manifest`. 109 tests pass; `ruff` + `mypy` clean.
+- **Verification (6b T2):** `ruff` clean, `mypy` clean, **109 tests passed / 0 failed** (incl. new `test_source.py` x2 + `test_new_records_portable_source`).
+- **Next:** Plan 6b Task 3 — `framework check-update` (latest release probe). Then Tasks 4–6 (upskill/CI/RELEASING).
 
 ## Keeping state current (required before every commit)
 

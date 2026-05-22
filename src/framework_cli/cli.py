@@ -8,6 +8,7 @@ from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
 from framework_cli.integrity.restore import restore_file
 from framework_cli.naming import derive_names
+from framework_cli.source import record_portable_source
 
 app = typer.Typer(
     help="Framework CLI — scaffold solid, observable, testable Python projects.",
@@ -43,6 +44,7 @@ def new(
         },
     )
     write_manifest(dest, installed_framework_version())
+    record_portable_source(dest, installed_framework_version())
     typer.echo(f"Created '{names.project_slug}' at {dest}")
 
 
