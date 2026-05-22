@@ -573,6 +573,8 @@ def api_client(request: pytest.FixtureRequest) -> Iterator["TestClient | httpx.C
             yield client
         return
 
+    from pathlib import Path
+
     from fastapi.testclient import TestClient
     from sqlalchemy import text
 
@@ -583,7 +585,8 @@ def api_client(request: pytest.FixtureRequest) -> Iterator["TestClient | httpx.C
     engine = request.getfixturevalue("engine")
     factory = build_session_factory(engine)
     with factory() as session:
-        seed(session)  # load the baseline (alpha, beta) so the happy path holds in-process
+        # load the baseline (alpha, beta) so the happy path holds in-process
+        seed(session, Path("seeds/items.json"))
         session.commit()
 
     def override() -> Iterator[Session]:
@@ -619,7 +622,7 @@ if TYPE_CHECKING:
     from fastapi.testclient import TestClient
 ```
 
-> **Why `seed(session)`:** `db/seed.py` exposes `seed(session)` which loads `seeds/items.json` (the `alpha`/`beta` baseline) idempotently — the same path the container entrypoint runs on first `task dev`. Using it in-process makes the happy assertion (`{"alpha","beta"} <= names`) hold without a bespoke row, and mirrors what a deployed (remote) environment looks like. (Verify the `seed` signature when you render — it's `def seed(session: Session) -> None` per `db/seed.py`; if it differs, adapt the call and report it.)
+> **Why `seed(...)`:** `db/seed.py` exposes `seed(session: Session, seeds_path: Path) -> int` which loads `seeds/items.json` (the `alpha`/`beta` baseline) idempotently — the same path the container entrypoint runs on first `task dev` (and the same `Path("seeds/items.json")` `scripts/seed.py` uses). Using it in-process makes the happy assertion (`{"alpha","beta"} <= names`) hold without a bespoke row, and mirrors what a deployed (remote) environment looks like. (Signature confirmed during execution — it takes the seeds path, not just the session; do not change `db/seed.py`.)
 
 - [ ] **Step 4: Confirm in-process e2e passes + the 85% gate still holds (Docker)**
 
