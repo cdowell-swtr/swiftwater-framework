@@ -49,7 +49,7 @@ repos:
         types: [python]
         require_serial: true
       - id: migrations-reversible
-        name: migrations are reversible (no irreversible downgrade)
+        name: migrations are reversible + backward-compatible (rolling-safe)
         entry: uv run python scripts/check_migrations.py
         language: system
         pass_filenames: false

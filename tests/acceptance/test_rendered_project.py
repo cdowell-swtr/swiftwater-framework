@@ -385,6 +385,42 @@ def test_rendered_project_smoke_and_sniff_against_lite(tmp_path: Path):
         subprocess.run(down, cwd=dest)
 
 
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
+def test_rendered_project_blocks_contract_migration(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+
+    # The scaffold's own migration is safe (reversible + expand-only) -> exit 0.
+    clean = subprocess.run(["uv", "run", "python", "scripts/check_migrations.py"], cwd=dest)
+    assert clean.returncode == 0, "the scaffold's 0001 migration should pass both guards"
+
+    versions = dest / "migrations" / "versions"
+
+    # A destructive (contract) upgrade with NO marker -> blocked (exit 1).
+    bad = versions / "9999_drop.py"
+    bad.write_text(
+        "def upgrade():\n    op.drop_column('items', 'name')\n\n"
+        "def downgrade():\n    op.add_column('items', sa.Column('name', sa.String()))\n"
+    )
+    blocked = subprocess.run(
+        ["uv", "run", "python", "scripts/check_migrations.py"], cwd=dest, capture_output=True, text=True
+    )
+    assert blocked.returncode == 1, "a contract migration without the marker must be blocked"
+    assert "contract" in (blocked.stdout + blocked.stderr).lower()
+
+    # Same migration WITH the acknowledgement marker -> allowed (exit 0).
+    bad.write_text(
+        "# deploy: contract\n"
+        "def upgrade():\n    op.drop_column('items', 'name')\n\n"
+        "def downgrade():\n    op.add_column('items', sa.Column('name', sa.String()))\n"
+    )
+    allowed = subprocess.run(["uv", "run", "python", "scripts/check_migrations.py"], cwd=dest)
+    assert allowed.returncode == 0, "the '# deploy: contract' marker must exempt the migration"
+
+    bad.unlink()
+
+
 @pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
 def test_rendered_project_dev_stack_serves_seeded_items(tmp_path: Path):
     dest = tmp_path / "demo"

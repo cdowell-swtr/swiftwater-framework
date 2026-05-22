@@ -709,6 +709,10 @@ def test_render_migration_guard(tmp_path: Path):
     ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
     assert "check_migrations.py" in ci
 
+    # the backward-compatibility (contract-direction) guard + the opt-in marker
+    assert "_contract_problem" in guard.read_text()
+    assert "deploy: contract" in guard.read_text()
+
 
 def test_render_deploy_docs(tmp_path: Path):
     dest = tmp_path / "demo"
