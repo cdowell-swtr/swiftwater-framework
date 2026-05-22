@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from framework_cli.copier_runner import render_project
+from framework_cli.integrity.checker import check
+from framework_cli.integrity.restore import restore_file
 
 DATA = {
     "project_name": "Demo",
@@ -419,6 +421,36 @@ def test_rendered_project_blocks_contract_migration(tmp_path: Path):
     assert allowed.returncode == 0, "the '# deploy: contract' marker must exempt the migration"
 
     bad.unlink()
+
+
+def test_rendered_project_integrity_verifies_tamper_and_restore(tmp_path: Path):
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "acc"
+    render_project(
+        dest,
+        {
+            "project_name": "Acc",
+            "project_slug": "acc",
+            "package_name": "acc",
+            "python_version": "3.12",
+        },
+    )
+    write_manifest(dest, installed_framework_version())
+
+    # Fresh project verifies clean.
+    assert check(dest, ci=True) == []
+
+    # Tampering with a locked file is caught as fatal.
+    locked = dest / ".pre-commit-config.yaml"
+    locked.write_text(locked.read_text() + "\n# sneaky edit\n")
+    findings = check(dest, ci=True)
+    assert any(f.path == ".pre-commit-config.yaml" and f.fatal for f in findings)
+
+    # Restore returns it to canonical and the project verifies clean again.
+    restore_file(dest, ".pre-commit-config.yaml")
+    assert check(dest, ci=True) == []
 
 
 @pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
