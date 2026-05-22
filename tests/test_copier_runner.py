@@ -599,6 +599,19 @@ def test_render_load_test(tmp_path: Path):
     assert "test:load:" in taskfile
 
 
+def test_render_e2e_is_target_aware(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    conftest = (dest / "tests" / "conftest.py").read_text()
+    assert "api_client" in conftest
+    assert "E2E_TARGET" in conftest
+    assert "e2e_client" not in conftest  # the in-process-only fixture is gone
+
+    e2e = (dest / "tests" / "e2e" / "test_items_e2e.py").read_text()
+    assert "api_client" in e2e
+
+
 def test_render_includes_ci_pipeline(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
