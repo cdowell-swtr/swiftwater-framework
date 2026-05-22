@@ -3,13 +3,13 @@ from pathlib import Path
 import typer
 
 from framework_cli.copier_runner import render_project
-from framework_cli.upskill import UpskillError, upskill_project
 from framework_cli.integrity.checker import check as check_integrity, record_drift
 from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
 from framework_cli.integrity.restore import restore_file
 from framework_cli.naming import derive_names
-from framework_cli.source import REPO_URL, latest_release, record_portable_source
+from framework_cli.source import REPO_URL, latest_release, record_portable_source, version_tag
+from framework_cli.upskill import UpskillError, upskill_project
 
 app = typer.Typer(
     help="Framework CLI — scaffold solid, observable, testable Python projects.",
@@ -123,7 +123,7 @@ def upskill(
 @app.command()
 def check() -> None:
     """Report whether a newer framework release is available."""
-    current_tag = f"v{installed_framework_version()}"
+    current_tag = version_tag(installed_framework_version())
     latest = latest_release()
     if latest is None:
         typer.echo("framework check: no releases found (or the remote is unreachable).")
