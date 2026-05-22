@@ -60,13 +60,12 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "scripts/seed.py",
 )
 
-# Gitignored + existence-only: framework-managed files legitimately absent from a fresh
-# clone (.env derived from .env.example; mkcert certs). Verified locally only, never in CI.
-GITIGNORED_EXISTENCE: tuple[str, ...] = (
-    ".env",
-    "infra/traefik/certs/localhost.pem",
-    "infra/traefik/certs/localhost-key.pem",
-)
+# Gitignored + existence-only: a framework-managed file legitimately absent from a fresh
+# clone, where a local nudge to create it is useful. Verified locally only, never in CI.
+# (mkcert certs under infra/traefik/certs/ are intentionally NOT tracked here: they are an
+# opt-in local-TLS artifact already gated by the `task dev` precondition, and being
+# gitignored they cannot be checksummed — tracking them only produced misleading noise.)
+GITIGNORED_EXISTENCE: tuple[str, ...] = (".env",)
 
 
 def rules() -> list[Rule]:

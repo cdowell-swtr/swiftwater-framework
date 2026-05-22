@@ -22,7 +22,8 @@ def _load(project: Path) -> tuple[Manifest, str] | None:
     lock = project / _LOCK_REL
     if not lock.is_file():
         return None
-    return Manifest.loads(lock.read_text()), lock.read_text()
+    text = lock.read_text()
+    return Manifest.loads(text), text
 
 
 def check(project: Path, ci: bool = False) -> list[Finding]:
@@ -56,7 +57,7 @@ def check(project: Path, ci: bool = False) -> list[Finding]:
             continue
         f = project / e.path
         if e.tier == "gitignored":
-            if not ci and not f.exists() and f.parent.is_dir():
+            if not ci and not f.exists():
                 findings.append(
                     Finding(
                         e.path,
