@@ -567,6 +567,20 @@ def test_render_smoke_suite(tmp_path: Path):
     assert "test:smoke:" in taskfile
 
 
+def test_render_sniff_suite(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    sniff = (dest / "tests" / "sniff" / "test_sniff.py")
+    assert sniff.is_file()
+    text = sniff.read_text()
+    assert "SNIFF_TARGET" in text
+    assert "/items" in text
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "test:sniff:" in taskfile
+
+
 def test_render_includes_ci_pipeline(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

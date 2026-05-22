@@ -57,6 +57,11 @@ tasks:
     cmds:
       - uv run pytest tests/smoke -q
 
+  test:sniff:
+    desc: Phase-2 sniff probes against a target (SNIFF_TARGET=url; default localhost:8000).
+    cmds:
+      - uv run pytest tests/sniff -q
+
   test:cov:ci:
     desc: Combined coverage gate (unit + functional + e2e, >=85%) — the CI gate.
     cmds:
