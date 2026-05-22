@@ -612,6 +612,27 @@ def test_render_e2e_is_target_aware(tmp_path: Path):
     assert "api_client" in e2e
 
 
+def test_render_deploy_strategy_seam(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    strategy = (dest / "infra" / "deploy" / "strategy.sh")
+    assert strategy.is_file()
+    text = strategy.read_text()
+    for op in ("deploy", "endpoints", "await-healthy", "rollback", "releases", "teardown"):
+        assert op in text, f"strategy.sh missing operation {op}"
+    # opinionated skeleton: config validated; target hooks fail loudly; rollback reverses migrations
+    assert "require_var" in text
+    assert "_todo" in text
+    assert "downgrade" in text and "__target_migrate" in text  # migration-aware rollback
+
+    assert (dest / "infra" / "deploy" / "notify.sh").is_file()
+    readme = (dest / "infra" / "deploy" / "README.md").read_text()
+    assert "deploy strategy" in readme.lower()
+    assert "rollback" in readme
+    assert "expand/contract" in readme  # prescribed migration discipline
+
+
 def test_render_staging_prod_compose(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
