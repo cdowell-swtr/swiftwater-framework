@@ -805,3 +805,43 @@ def test_taskfile_wires_integrity(tmp_path: Path):
     taskfile = (dest / "Taskfile.yml").read_text()
     assert "\n  integrity:\n" in taskfile
     assert "command -v framework" in taskfile
+
+
+def _repo_root() -> Path:
+    p = Path(__file__).resolve()
+    for parent in p.parents:
+        if (parent / "pyproject.toml").is_file() and (parent / "src" / "framework_cli").is_dir():
+            return parent
+    raise RuntimeError("repo root not found")
+
+
+def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
+    import shutil
+    import yaml
+    from copier import run_copy
+
+    root = _repo_root()
+    cfg = yaml.safe_load((root / "copier.yml").read_text())
+    assert cfg["_subdirectory"] == "src/framework_cli/template"
+
+    # Render from a NON-git copy of {root copier.yml + the template subdir} so Copier uses the
+    # working-tree files (not a committed git ref). The output must NOT contain copier.yml.
+    src = tmp_path / "src"
+    (src / "src" / "framework_cli").mkdir(parents=True)
+    shutil.copy(root / "copier.yml", src / "copier.yml")
+    shutil.copytree(
+        root / "src" / "framework_cli" / "template",
+        src / "src" / "framework_cli" / "template",
+    )
+    dest = tmp_path / "out"
+    run_copy(
+        str(src),
+        str(dest),
+        data={"project_name": "Demo", "project_slug": "demo", "package_name": "demo", "python_version": "3.12"},
+        defaults=True,
+        overwrite=True,
+        quiet=True,
+    )
+    assert not (dest / "copier.yml").exists(), "subdir copier.yml leaked into the rendered project"
+    assert (dest / "pyproject.toml").is_file()
+    assert (dest / ".copier-answers.yml").is_file()

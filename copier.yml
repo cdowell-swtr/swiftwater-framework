@@ -1,0 +1,15 @@
+# Repo-root Copier config: makes git+<this repo>@<tag> a valid template source for
+# `copier update` / `framework upskill`. The template files live in _subdirectory; the
+# questions/settings are read from that subdir's own copier.yml. _exclude REPLACES Copier's
+# defaults, so the subdir copier.yml is dropped from rendered projects (it would otherwise
+# leak) — the rest of the list re-states Copier's defaults.
+_subdirectory: src/framework_cli/template
+_exclude:
+  - "copier.yml"
+  - "copier.yaml"
+  - "~*"
+  - "*.py[co]"
+  - "__pycache__"
+  - ".git"
+  - ".DS_Store"
+  - ".svn"
