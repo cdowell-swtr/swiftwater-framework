@@ -22,7 +22,7 @@ def _gitignore_spec(project: Path) -> pathspec.PathSpec:
 def build_manifest(project: Path, framework_version: str) -> Manifest:
     """Build the integrity manifest for a rendered project.
 
-    Enforces spec §712: a checksummed (tracked) file must exist and must not be
+    Enforces spec §17: a checksummed (tracked) file must exist and must not be
     excluded by the project's own .gitignore.
     """
     spec = _gitignore_spec(project)

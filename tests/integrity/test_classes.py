@@ -29,7 +29,7 @@ def test_every_locked_path_exists_in_a_rendered_project(tmp_path: Path):
 def test_no_locked_path_is_gitignored(tmp_path: Path):
     dest = _render(tmp_path)
     spec = pathspec.PathSpec.from_lines(
-        "gitwildmatch", (dest / ".gitignore").read_text().splitlines()
+        "gitignore", (dest / ".gitignore").read_text().splitlines()
     )
     leaked = [p for p in LOCKED_TRACKED if spec.match_file(p)]
     assert leaked == [], f"locked files excluded by .gitignore (cannot be tracked): {leaked}"

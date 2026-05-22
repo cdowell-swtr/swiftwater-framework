@@ -36,7 +36,7 @@ def test_build_manifest_includes_gitignored_existence_tier(tmp_path: Path):
 
 
 def test_authoring_error_when_a_locked_file_is_gitignored(tmp_path: Path):
-    # Mark a locked path as ignored — a framework authoring bug per spec §712.
+    # Mark a locked path as ignored — a framework authoring bug per spec §17.
     proj = _fake_project(tmp_path, gitignore="*.yml\n")
     with pytest.raises(AuthoringError, match="matches .gitignore"):
         build_manifest(proj, "0.1.0")
