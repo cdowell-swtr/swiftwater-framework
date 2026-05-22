@@ -65,3 +65,13 @@ def test_integrity_allow_drift_then_passes(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(project)
     assert runner.invoke(app, ["integrity", "--allow-drift", "alembic.ini"]).exit_code == 0
     assert runner.invoke(app, ["integrity", "--ci"]).exit_code == 0
+
+
+def test_restore_command_fixes_a_tampered_file(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner.invoke(app, ["new", "My App"])
+    project = tmp_path / "my-app"
+    (project / "alembic.ini").write_text("tampered\n")
+    monkeypatch.chdir(project)
+    assert runner.invoke(app, ["restore", "alembic.ini"]).exit_code == 0
+    assert runner.invoke(app, ["integrity", "--ci"]).exit_code == 0

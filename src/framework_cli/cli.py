@@ -6,6 +6,7 @@ from framework_cli.copier_runner import render_project
 from framework_cli.integrity.checker import check, record_drift
 from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
+from framework_cli.integrity.restore import restore_file
 from framework_cli.naming import derive_names
 
 app = typer.Typer(
@@ -74,3 +75,18 @@ def integrity(
         typer.echo(f"\nframework integrity: {fatal} problem(s) found.", err=True)
         raise typer.Exit(1)
     typer.echo("framework integrity: OK")
+
+
+@app.command()
+def restore(
+    file: str = typer.Argument(
+        ..., help="Path (relative to the project root) of the framework file to restore."
+    ),
+) -> None:
+    """Re-fetch a canonical framework file, discarding local edits to it."""
+    try:
+        restore_file(Path.cwd(), file)
+    except (ValueError, FileNotFoundError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"Restored {file} to the canonical framework version.")
