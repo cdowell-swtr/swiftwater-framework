@@ -38,4 +38,4 @@ def test_no_locked_path_is_gitignored(tmp_path: Path):
 def test_rules_cover_both_tiers():
     by_tier = {r.tier for r in rules()}
     assert by_tier == {"tracked", "gitignored"}
-    assert set(GITIGNORED_EXISTENCE) == {r.glob for r in rules() if r.tier == "gitignored"}
+    assert set(GITIGNORED_EXISTENCE) == {r.path for r in rules() if r.tier == "gitignored"}

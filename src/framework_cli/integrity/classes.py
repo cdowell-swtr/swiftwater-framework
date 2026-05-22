@@ -5,10 +5,17 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Rule:
-    glob: str  # rendered path, relative to the project root
+    path: str  # rendered path, relative to the project root
     cls: str  # "locked" | "hybrid"
     tier: str  # "tracked" | "gitignored"
 
+
+# Coverage is one-directional: tests assert every registered path exists in a render
+# (no stale entries), but NOT that every framework-infra file is registered. A newly
+# added framework file therefore escapes integrity coverage until it is listed here.
+# The reverse check ("every infra/scripts file must be classified") is deferred to a
+# later pass — it needs an explicit allowlist of intentionally-unlocked files
+# (app source, .gitkeep, .env.example, the 6a-2 hybrid files) to avoid false positives.
 
 # Locked + tracked: pure framework infrastructure a builder must never edit (spec §17).
 # These are full-file checksummed and must be git-tracked.
