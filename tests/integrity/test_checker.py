@@ -59,3 +59,50 @@ def test_drift_recorded_file_is_skipped(tmp_path: Path):
     (proj / "alembic.ini").write_text("builder's intentional change\n")
     record_drift(proj, ["alembic.ini"])
     assert all(f.path != "alembic.ini" for f in check(proj))
+
+
+def _hybrid_project(tmp_path: Path) -> Path:
+    from framework_cli.integrity.manifest import Entry, Manifest
+    from framework_cli.integrity.sections import section_sha256
+
+    proj = tmp_path / "hyb"
+    (proj / ".framework").mkdir(parents=True)
+    claude = proj / "CLAUDE.md"
+    claude.write_text(
+        "# Title\n<!-- FRAMEWORK:BEGIN -->\nmanaged line\n<!-- FRAMEWORK:END -->\n"
+        "## Notes\nbuilder text\n"
+    )
+    manifest = Manifest(
+        framework_version="0.1.0",
+        entries=[
+            Entry("CLAUDE.md", "hybrid", "tracked", sha256=section_sha256(claude.read_text()))
+        ],
+    )
+    (proj / ".framework" / "integrity.lock").write_text(manifest.dumps())
+    return proj
+
+
+def test_hybrid_clean_has_no_findings(tmp_path: Path):
+    assert check(_hybrid_project(tmp_path)) == []
+
+
+def test_hybrid_edit_outside_the_block_is_clean(tmp_path: Path):
+    proj = _hybrid_project(tmp_path)
+    claude = proj / "CLAUDE.md"
+    claude.write_text(claude.read_text() + "\nmore builder notes\n")
+    assert check(proj) == []
+
+
+def test_hybrid_edit_inside_the_block_is_fatal(tmp_path: Path):
+    proj = _hybrid_project(tmp_path)
+    claude = proj / "CLAUDE.md"
+    claude.write_text(claude.read_text().replace("managed line", "managed LINE"))
+    findings = check(proj)
+    assert any(f.path == "CLAUDE.md" and f.fatal for f in findings)
+
+
+def test_hybrid_damaged_markers_are_fatal(tmp_path: Path):
+    proj = _hybrid_project(tmp_path)
+    (proj / "CLAUDE.md").write_text("markers deleted\n")
+    findings = check(proj)
+    assert any(f.path == "CLAUDE.md" and f.fatal and "markers" in f.problem for f in findings)

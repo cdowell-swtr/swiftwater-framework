@@ -6,6 +6,7 @@ from pathlib import Path
 
 from framework_cli.integrity.hashing import sha256_file
 from framework_cli.integrity.manifest import Manifest
+from framework_cli.integrity.sections import section_sha256
 
 _LOCK_REL = ".framework/integrity.lock"
 
@@ -67,13 +68,34 @@ def check(project: Path, ci: bool = False) -> list[Finding]:
                     )
                 )
             continue
-        # tracked tier
+        # tracked tier (locked = full file; hybrid = the FRAMEWORK:BEGIN/END section)
         if not f.is_file():
             findings.append(
-                Finding(e.path, "locked file is missing", f"framework restore {e.path}", True)
+                Finding(e.path, "framework file is missing", f"framework restore {e.path}", True)
             )
             continue
-        if e.cls == "locked" and sha256_file(f) != e.sha256:
+        if e.cls == "hybrid":
+            section_hash = section_sha256(f.read_text())
+            if section_hash is None:
+                findings.append(
+                    Finding(
+                        e.path,
+                        "managed-section markers are missing or damaged",
+                        f"framework restore {e.path}",
+                        True,
+                    )
+                )
+            elif section_hash != e.sha256:
+                findings.append(
+                    Finding(
+                        e.path,
+                        "framework-managed section has been altered",
+                        f"framework restore {e.path}  (or `framework integrity "
+                        f"--allow-drift {e.path}` to keep your change)",
+                        True,
+                    )
+                )
+        elif sha256_file(f) != e.sha256:  # cls == "locked"
             findings.append(
                 Finding(
                     e.path,
@@ -83,7 +105,6 @@ def check(project: Path, ci: bool = False) -> list[Finding]:
                     True,
                 )
             )
-        # hybrid section verification arrives in Plan 6a-2.
     return findings
 
 
