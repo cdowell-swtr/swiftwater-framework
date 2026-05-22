@@ -350,6 +350,42 @@ def test_rendered_project_traces_reach_tempo(tmp_path: Path):
 
 
 @pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
+def test_rendered_project_smoke_and_sniff_against_lite(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "up", "-d", "--build"]
+    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "down", "-v"]
+    assert subprocess.run(up, cwd=dest).returncode == 0
+    try:
+        # wait for /health (seeded lite app)
+        deadline = time.time() + 120
+        ready = False
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen("http://localhost:8000/health", timeout=3) as r:
+                    if r.status == 200:
+                        ready = True
+                        break
+            except OSError:
+                time.sleep(2)
+        assert ready, "lite app did not serve /health within 120s"
+        env = {**os.environ, "SMOKE_TARGET": "http://localhost:8000", "SNIFF_TARGET": "http://localhost:8000"}
+        smoke = subprocess.run(["uv", "run", "pytest", "tests/smoke", "-q"], cwd=dest, env=env)
+        assert smoke.returncode == 0, "smoke suite failed against the live lite stack"
+        sniff = subprocess.run(["uv", "run", "pytest", "tests/sniff", "-q"], cwd=dest, env=env)
+        assert sniff.returncode == 0, "sniff suite failed against the live lite stack"
+        e2e = subprocess.run(
+            ["uv", "run", "pytest", "tests/e2e", "-q"],
+            cwd=dest, env={**os.environ, "E2E_TARGET": "http://localhost:8000"},
+        )
+        assert e2e.returncode == 0, "remote-mode e2e failed against the live lite stack"
+    finally:
+        subprocess.run(down, cwd=dest)
+
+
+@pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
 def test_rendered_project_dev_stack_serves_seeded_items(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

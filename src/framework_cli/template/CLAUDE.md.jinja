@@ -28,7 +28,7 @@ Scaffold a non-functional test (with an explicit threshold) when code: operates 
 - Read all configuration through the settings object — never hardcode config or secrets.
 - Use the structured logger, not `print()`; include context with each log entry.
 - Never use a bare `except`; handle every identified error case explicitly.
-- Relational schema changes require a new migration; never edit an existing migration.
+- Schema changes require a new migration; never edit an applied one. Every migration MUST be reversible — its `downgrade()` must really reverse the `upgrade()` (the migration guard blocks empty/`pass`/`raise` downgrades, in pre-commit and CI, so rollback can always step back). Prefer expand/contract; **never destroy data that cannot be reconstructed.** This applies to every database paradigm, not just the relational one.
 - Updating an API endpoint requires updating its contract test.
 
 ## Error handling & recoverability
@@ -56,6 +56,7 @@ Coverage gates by stage (spec §6): **pre-commit** runs unit+functional at **>=7
 - `task push` — pushes; GitHub Actions (`.github/workflows/ci.yml`) runs the authoritative pipeline (the canonical green badge). `task ci` makes that run more likely to pass first try; it does not replace it.
 - Updating a route or response model requires re-exporting the API contract: `task openapi:export`, then commit `openapi.json` — CI fails if it is stale or a change is breaking.
 - `task audit` — scan dependencies for known CVEs (also a CI gate).
+- Deploy is a contract: the CD workflows orchestrate build→push→deploy→smoke→sniff→E2E→load→rollback; you implement the deploy *mechanism* in `infra/deploy/strategy.sh` for your target (see `DEPLOY.md`). Validation tiers: `tests/smoke/` (Phase 1), `tests/sniff/` (Phase 2), `tests/e2e/` with `E2E_TARGET` (Phase 3), `tests/non_functional/load.js` (Phase 4). Add a sniff probe per critical path; never run E2E/load writes against prod.
 
 ## Quality commands
 

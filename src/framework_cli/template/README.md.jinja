@@ -27,6 +27,15 @@ task lint      # ruff + mypy
 - `task openapi:export` — regenerate `openapi.json` after changing routes; commit it (CI fails on a stale or breaking spec). On a brand-new project, run this once and commit `openapi.json` before your first push, or the first `contract` CI job will fail by design.
 - `task audit` — scan dependencies for CVEs. `.github/dependabot.yml` opens weekly update PRs.
 
+## Deploy
+
+`deploy-staging.yml` (on merge to `main`) builds+pushes the image, deploys via your strategy,
+and runs four validation phases (smoke → sniff → E2E → k6 load) with automatic rollback;
+`deploy-prod.yml` promotes the same image behind a manual approval gate. **You implement the
+deploy strategy for your target** — see `DEPLOY.md` and `infra/deploy/README.md`. Run any tier
+locally against a target: `SMOKE_TARGET=… task test:smoke` (and `test:sniff` / `test:load`,
+or `E2E_TARGET=… uv run pytest tests/e2e`).
+
 ## Local stack (HTTPS)
 
 ```bash

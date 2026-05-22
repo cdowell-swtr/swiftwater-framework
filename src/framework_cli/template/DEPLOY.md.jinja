@@ -1,0 +1,55 @@
+# Deploying {{ project_name }}
+
+The framework ships the full deploy **orchestration**; you implement the deploy **strategy**
+for your chosen target. Nothing else is required from the framework.
+
+## The flow (spec §14)
+
+`merge to main` → `deploy-staging.yml`:
+1. Build + push the image to GHCR (`ghcr.io/<owner>/<repo>:<sha>`).
+2. Your strategy (`infra/deploy/strategy.sh`) deploys it and exposes endpoints.
+3. Four validation phases run against the deployment, each gating the next:
+   - **Phase 1 — smoke** (`tests/smoke/`): liveness/readiness + no breached SLO.
+   - **Phase 2 — sniff** (`tests/sniff/`): critical-path probes.
+   - **Phase 3 — E2E** (`tests/e2e/` with `E2E_TARGET`): the full suite against staging.
+   - **Phase 4 — load** (`scripts/load.sh` + `tests/non_functional/load.js`): k6 at the SLO thresholds.
+4. Any failure → automatic `rollback` + notify; success opens the prod gate.
+
+`deploy-prod.yml` (manual approval via the `production` Environment, or a `v*` tag) promotes
+the **same** image and runs smoke + read-only sniff. **Tag discipline:** only tag commits that
+have already passed staging — a `v*` tag deploys `ghcr.io/<repo>:<tagged-sha>`, which must be a
+staging-built image; otherwise dispatch `deploy-prod` manually and supply the staging-validated
+`image` input.
+
+## What you implement (configuration, not architecture)
+
+The framework already decided release versioning, migration-aware rollback, and health-gating
+(`infra/deploy/strategy.sh`). You implement only the `__target_*` hooks for your target and set
+config — **see `infra/deploy/README.md`** for the hook list, the required env vars, and the
+migration discipline. In short:
+
+- Set `DEPLOY_BASE_URL` (Environment variable) and `POSTGRES_PASSWORD` + every var in
+  `.env.example` **in the target's environment** (and as GitHub Environment secrets) — config
+  and secrets are injected at runtime, never baked into the image.
+- A turnkey **compose-over-SSH + Traefik/ACME** reference strategy (no-downtime, blue-green)
+  ships as a follow-up; until then, implement `__target_place_image` for your target.
+
+## Migrations are reversible (enforced)
+
+Rollback reverses migrations to the previous release, so every migration must be reversible —
+the framework **blocks** irreversible ones (`scripts/check_migrations.py`, in pre-commit + CI):
+a `downgrade()` may not be empty/`pass`/`raise`. Write **expand/contract** migrations; never
+destroy unreconstructable data. The same discipline applies to every database paradigm you add
+(Plan 8), not just PostgreSQL.
+
+## Run the validation tiers locally against any environment
+
+```bash
+SMOKE_TARGET=https://staging.example.com task test:smoke
+SNIFF_TARGET=https://staging.example.com task test:sniff
+E2E_TARGET=https://staging.example.com  uv run pytest tests/e2e -q
+K6_TARGET=https://staging.example.com   task test:load
+```
+
+> Phase-4 results are gated on the SLO thresholds and emitted to the workflow log; wiring k6
+> Prometheus remote-write into the running Grafana stack is a later enhancement.

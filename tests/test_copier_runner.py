@@ -710,6 +710,22 @@ def test_render_migration_guard(tmp_path: Path):
     assert "check_migrations.py" in ci
 
 
+def test_render_deploy_docs(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    deploy_md = (dest / "DEPLOY.md")
+    assert deploy_md.is_file()
+    text = deploy_md.read_text()
+    assert "Demo" in text  # {{ project_name }} interpolated
+    assert "infra/deploy/strategy.sh" in text
+
+    assert "## Deploy" in (dest / "README.md").read_text()
+    claude = (dest / "CLAUDE.md").read_text()
+    assert "deploy" in claude.lower()
+    assert "reversible" in claude.lower()  # the strengthened migration convention
+
+
 def test_render_deploy_staging_workflow(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
