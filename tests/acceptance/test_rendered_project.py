@@ -423,6 +423,40 @@ def test_rendered_project_blocks_contract_migration(tmp_path: Path):
     bad.unlink()
 
 
+def test_rendered_project_hybrid_section_integrity(tmp_path):
+    from framework_cli.copier_runner import render_project
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+    from framework_cli.integrity.sections import section_span
+
+    dest = tmp_path / "hyb"
+    render_project(
+        dest,
+        {
+            "project_name": "Hyb",
+            "project_slug": "hyb",
+            "package_name": "hyb",
+            "python_version": "3.12",
+        },
+    )
+    write_manifest(dest, installed_framework_version())
+    assert check(dest, ci=True) == []
+
+    claude = dest / "CLAUDE.md"
+    # Editing OUTSIDE the markers (the builder's area) stays clean — defines "hybrid".
+    claude.write_text(claude.read_text() + "\n## My project notes\nsome builder content\n")
+    assert check(dest, ci=True) == []
+
+    # Editing INSIDE the markers is fatal.
+    text = claude.read_text()
+    begin, _ = section_span(text)
+    lines = text.splitlines()
+    lines[begin + 1] = lines[begin + 1] + "  SNEAKY"
+    claude.write_text("\n".join(lines) + "\n")
+    findings = check(dest, ci=True)
+    assert any(f.path == "CLAUDE.md" and f.fatal for f in findings)
+
+
 def test_rendered_project_integrity_verifies_tamper_and_restore(tmp_path: Path):
     from framework_cli.integrity.generate import write_manifest
     from framework_cli.integrity.manifest import installed_framework_version
