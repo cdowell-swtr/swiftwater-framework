@@ -15,7 +15,12 @@ _ANSWERS_REL = ".copier-answers.yml"
 
 
 def _answers(project: Path) -> dict[str, str]:
-    data = yaml.safe_load((project / _ANSWERS_REL).read_text())
+    answers = project / _ANSWERS_REL
+    if not answers.is_file():
+        raise ValueError(
+            f"{_ANSWERS_REL} is missing — cannot determine which template version to restore from"
+        )
+    data = yaml.safe_load(answers.read_text())
     return {k: str(v) for k, v in data.items() if not k.startswith("_")}
 
 
@@ -25,6 +30,10 @@ def restore_file(project: Path, rel: str) -> None:
     6a restores locked (full-file) entries to the installed framework version.
     """
     lock = project / _LOCK_REL
+    if not lock.is_file():
+        raise ValueError(
+            "not a framework project (no .framework/integrity.lock) — run from a project root"
+        )
     manifest = Manifest.loads(lock.read_text())
     entry = next((e for e in manifest.entries if e.path == rel), None)
     if entry is None or entry.tier != "tracked":

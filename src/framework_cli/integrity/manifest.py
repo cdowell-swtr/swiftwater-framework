@@ -62,6 +62,9 @@ class Manifest:
         }
 
     def self_sha256(self) -> str:
+        # Detects corruption and naive single-field edits of the lock — not a determined
+        # attacker (the hash algorithm is public). The real protection is that the
+        # verification logic lives in the installed CLI, not in editable project files.
         canonical = json.dumps(self._body(), sort_keys=True, separators=(",", ":"))
         return sha256_bytes(canonical.encode())
 

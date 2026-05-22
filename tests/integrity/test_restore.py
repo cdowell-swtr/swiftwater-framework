@@ -43,3 +43,13 @@ def test_restore_rejects_unmanaged_file(tmp_path: Path):
         assert "not a restorable" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected ValueError for an unmanaged path")
+
+
+def test_restore_outside_a_framework_project_is_a_clear_error(tmp_path: Path):
+    # No manifest, no answers file — a bare directory.
+    try:
+        restore_file(tmp_path, "alembic.ini")
+    except ValueError as exc:
+        assert "not a framework project" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected ValueError outside a framework project")
