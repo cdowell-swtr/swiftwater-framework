@@ -6,6 +6,8 @@ git source + version tag so `copier update` / `framework upskill` work from any 
 
 from __future__ import annotations
 
+import re
+import subprocess
 from pathlib import Path
 
 # Copier source form (recorded in .copier-answers.yml _src_path).
@@ -19,6 +21,31 @@ _ANSWERS_REL = ".copier-answers.yml"
 def version_tag(version: str) -> str:
     """Map a package version to its git release tag."""
     return f"v{version}"
+
+
+_TAG_RE = re.compile(r"refs/tags/(v\d+\.\d+\.\d+)$")
+
+
+def latest_release(url: str = REPO_URL) -> str | None:
+    """Highest vX.Y.Z tag in the remote, or None. `url` may be a local path (for tests)."""
+    result = subprocess.run(
+        ["git", "ls-remote", "--tags", url],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    tags: dict[tuple[int, int, int], str] = {}
+    for line in result.stdout.splitlines():
+        m = _TAG_RE.search(line)
+        if m:
+            tag = m.group(1)
+            major, minor, patch = (int(n) for n in tag[1:].split("."))
+            tags[(major, minor, patch)] = tag
+    if not tags:
+        return None
+    return tags[max(tags)]
 
 
 def record_portable_source(project: Path, version: str) -> None:

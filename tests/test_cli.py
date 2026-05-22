@@ -86,3 +86,11 @@ def test_new_records_portable_source(tmp_path: Path, monkeypatch):
     assert f"_src_path: {REPO_GH}" in answers
     assert "_commit: v" in answers
     assert "/src/framework_cli/template" not in answers
+
+
+def test_check_runs_and_reports():
+    # In the test env the default remote is unreachable, so latest_release returns None;
+    # the command must still exit 0 with a message (no crash).
+    result = runner.invoke(app, ["check"])
+    assert result.exit_code == 0
+    assert "framework check" in result.output

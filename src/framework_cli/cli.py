@@ -3,12 +3,12 @@ from pathlib import Path
 import typer
 
 from framework_cli.copier_runner import render_project
-from framework_cli.integrity.checker import check, record_drift
+from framework_cli.integrity.checker import check as check_integrity, record_drift
 from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
 from framework_cli.integrity.restore import restore_file
 from framework_cli.naming import derive_names
-from framework_cli.source import record_portable_source
+from framework_cli.source import REPO_URL, latest_release, record_portable_source
 
 app = typer.Typer(
     help="Framework CLI — scaffold solid, observable, testable Python projects.",
@@ -68,7 +68,7 @@ def integrity(
         typer.echo(f"Recorded intentional drift: {', '.join(allow_drift)}")
         raise typer.Exit(0)
 
-    findings = check(project, ci=ci)
+    findings = check_integrity(project, ci=ci)
     for f in findings:
         label = "ERROR" if f.fatal else "warning"
         typer.echo(f"{label}: {f.path}: {f.problem} — {f.fix}", err=f.fatal)
@@ -92,3 +92,21 @@ def restore(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"Restored {file} to the canonical framework version.")
+
+
+@app.command()
+def check() -> None:
+    """Report whether a newer framework release is available."""
+    current_tag = f"v{installed_framework_version()}"
+    latest = latest_release()
+    if latest is None:
+        typer.echo("framework check: no releases found (or the remote is unreachable).")
+        raise typer.Exit(0)
+    if latest == current_tag:
+        typer.echo(f"framework check: up to date ({current_tag}).")
+    else:
+        typer.echo(
+            f"framework check: installed {current_tag}, latest {latest}. "
+            f"Upgrade the CLI with `uv tool install git+{REPO_URL}@{latest}`, "
+            f"then run `framework upskill <project>`."
+        )
