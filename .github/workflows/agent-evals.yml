@@ -31,4 +31,4 @@ jobs:
       - name: run agent evals
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: uv run framework eval tests/eval/fixtures --require-key
+        run: uv run framework eval --fixtures tests/eval/fixtures --require-key
