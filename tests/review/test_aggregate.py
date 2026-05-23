@@ -24,3 +24,89 @@ def test_write_findings_empty_list(tmp_path):
     out = tmp_path / "review-y.json"
     write_findings(out, "review-y", "neutral", [])
     assert json.loads(out.read_text()) == {"agent": "review-y", "conclusion": "neutral", "findings": []}
+
+
+def _result(agent, conclusion, findings):
+    return {"agent": agent, "conclusion": conclusion, "findings": findings}
+
+
+def _f(path, line, sev, msg):
+    return {"path": path, "line": line, "severity": sev, "message": msg}
+
+
+def test_overall_fails_if_any_agent_failed():
+    from framework_cli.review.aggregate import aggregate
+
+    r = aggregate(
+        [
+            _result("review-security", "failure", [_f("a.py", 1, "high", "x")]),
+            _result("review-test-quality", "success", []),
+        ]
+    )
+    assert r.overall == "fail"
+
+
+def test_overall_passes_when_no_failure():
+    from framework_cli.review.aggregate import aggregate
+
+    r = aggregate([_result("review-security", "neutral", [_f("a.py", 1, "low", "x")])])
+    assert r.overall == "pass"
+
+
+def test_severity_counts_across_agents():
+    from framework_cli.review.aggregate import aggregate
+
+    r = aggregate(
+        [
+            _result("review-a", "neutral", [_f("a.py", 1, "low", "x"), _f("b.py", 2, "high", "y")]),
+            _result("review-b", "neutral", [_f("c.py", 3, "low", "z")]),
+        ]
+    )
+    assert r.severity_counts == {"low": 2, "high": 1}
+
+
+def test_same_file_flagged_by_two_agents_is_a_relationship():
+    from framework_cli.review.aggregate import aggregate
+
+    r = aggregate(
+        [
+            _result("review-security", "neutral", [_f("a.py", 1, "low", "x")]),
+            _result("review-architecture", "neutral", [_f("a.py", 9, "low", "y")]),
+        ]
+    )
+    assert any("Multiple agents flagged `a.py`" in s for s in r.relationships)
+
+
+def test_related_domain_pair_is_a_relationship():
+    from framework_cli.review.aggregate import aggregate
+
+    r = aggregate(
+        [
+            _result("review-data-lineage", "neutral", [_f("p.py", 1, "low", "x")]),
+            _result("review-privacy", "neutral", [_f("p.py", 2, "low", "y")]),
+        ]
+    )
+    assert any("related concern" in s for s in r.relationships)
+
+
+def test_no_relationships_when_files_disjoint():
+    from framework_cli.review.aggregate import aggregate
+
+    r = aggregate(
+        [
+            _result("review-security", "neutral", [_f("a.py", 1, "low", "x")]),
+            _result("review-privacy", "neutral", [_f("b.py", 2, "low", "y")]),
+        ]
+    )
+    assert r.relationships == []
+
+
+def test_markdown_has_header_groups_relationships_files_and_marker():
+    from framework_cli.review.aggregate import SUMMARY_MARKER, aggregate
+
+    md = aggregate([_result("review-security", "failure", [_f("a.py", 1, "high", "danger")])]).markdown
+    assert SUMMARY_MARKER in md
+    assert "Review summary" in md and "FAIL" in md
+    assert "high" in md and "danger" in md and "review-security" in md
+    assert "Cross-agent relationships" in md
+    assert "Affected files" in md and "a.py" in md
