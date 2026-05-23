@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "CLI scaffold framework for solid, observable, testable Python projects"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=0.40",
     "typer>=0.15",
     "copier>=9.4",
     "pathspec>=0.12",
