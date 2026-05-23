@@ -27,8 +27,11 @@ def test_load_fixtures_skips_bad_without_valid_sidecar(tmp_path):
     _write(tmp_path / "security" / "bad" / "no-sidecar.diff", "+++ b/app.py\n")  # no .expect.json
     _write(tmp_path / "security" / "bad" / "bad-json.diff", "+++ b/app.py\n")
     _write(tmp_path / "security" / "bad" / "bad-json.expect.json", "{ not json")
+    _write(tmp_path / "security" / "good" / "ok.diff", "+++ b/app.py\n")  # must survive
 
-    assert load_fixtures(tmp_path) == []  # both bad fixtures skipped, no good fixtures
+    fx = load_fixtures(tmp_path)
+    # both bad fixtures skipped, but the good one still loads (skip-one-keep-the-rest)
+    assert [(f.kind, f.name) for f in fx] == [("good", "ok")]
 
 
 def test_load_fixtures_ignores_non_dir_entries(tmp_path):

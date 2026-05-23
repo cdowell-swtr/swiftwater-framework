@@ -17,7 +17,8 @@ class Fixture:
 
 def load_fixtures(root: Path) -> list[Fixture]:
     """Discover `<root>/<agent>/{bad,good}/*.diff`. A bad fixture without a valid
-    `<slug>.expect.json` (naming the seeded `file`) is skipped — it can't be scored."""
+    `<slug>.expect.json` (naming the seeded `file`) is skipped here; the well-formedness
+    gate test fails loudly on a malformed fixture rather than relying on a runtime warning."""
     fixtures: list[Fixture] = []
     for agent_dir in sorted(p for p in root.glob("*") if p.is_dir()):
         agent = agent_dir.name
