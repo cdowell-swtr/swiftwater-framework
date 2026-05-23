@@ -1,7 +1,26 @@
 from __future__ import annotations
 
+import fnmatch
 import os
+import re
 import subprocess
+
+
+_NEW_PATH_RE = re.compile(r"^\+\+\+ b/(.+)$", re.MULTILINE)
+
+
+def changed_files(diff: str) -> list[str]:
+    """The new-side paths of files changed in a unified diff (deletions → /dev/null are skipped)."""
+    return _NEW_PATH_RE.findall(diff)
+
+
+def matches_globs(paths: list[str], globs: tuple[str, ...]) -> bool:
+    """True if any path matches any glob, by full path or basename."""
+    return any(
+        fnmatch.fnmatch(p, g) or fnmatch.fnmatch(os.path.basename(p), g)
+        for p in paths
+        for g in globs
+    )
 
 
 def pr_diff() -> str:
