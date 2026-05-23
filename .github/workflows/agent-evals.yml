@@ -1,7 +1,8 @@
 # Review-agent evals (framework design spec §20). Runs the golden fixtures through the real
-# review agents and scores recall/precision per agent. Opt-in via the ANTHROPIC_API_KEY secret;
-# --require-key makes a missing secret fail loudly rather than silently skip. Triggers: a weekly
-# schedule, and any change to an agent prompt or the review logic.
+# review agents and scores recall/precision per agent. Opt-in via the ANTHROPIC_FRAMEWORK_CI_EVAL
+# repo secret (mapped into the ANTHROPIC_API_KEY env var the CLI reads); --require-key makes a
+# missing secret fail loudly rather than silently skip. Triggers: a weekly schedule, and any
+# change to an agent prompt or the review logic.
 name: agent-evals
 
 on:
@@ -30,5 +31,5 @@ jobs:
       - run: uv sync
       - name: run agent evals
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_FRAMEWORK_CI_EVAL }}
         run: uv run framework eval --fixtures tests/eval/fixtures --require-key
