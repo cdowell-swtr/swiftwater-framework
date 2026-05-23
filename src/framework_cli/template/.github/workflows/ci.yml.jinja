@@ -116,9 +116,28 @@ jobs:
           revision: openapi.json
           fail-on: ERR
 
-  # Steps 9-10: AI review agents + aggregator. Wired in framework v7 (Plan 7).
+  # Steps 9-10: Layer-3 AI review agents (spec §7). Opt-in: set the ANTHROPIC_API_KEY secret to
+  # enable. Each agent posts a `review-*` GitHub Check Run; require those checks in branch
+  # protection to gate merges on findings. A missing key or API error → a neutral check (never a
+  # spurious CI failure). The full agent set + aggregator arrive in later framework versions.
   review:
     needs: [test, contract]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: read
     steps:
-      - run: echo "Layer-3 AI review agents + aggregator run here (Plan 7)."
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: install the framework CLI at the recorded version
+        run: |
+          ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
+          uv tool install "git+https://github.com/cdowell-swtr/swiftwater-framework@${ref}"
+      - name: review-security
+        env:
+          ANTHROPIC_API_KEY: {% raw %}${{ secrets.ANTHROPIC_API_KEY }}{% endraw %}
+          GITHUB_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: framework review security

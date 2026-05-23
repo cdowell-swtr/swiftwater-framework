@@ -826,6 +826,18 @@ def test_ci_activates_integrity_step(tmp_path: Path):
     assert "uv tool install" in ci and "_commit" in ci
 
 
+def test_ci_review_job_runs_framework_review(tmp_path: Path):
+    dest = tmp_path / "proj"
+    render_project(
+        dest,
+        {"project_name": "Demo", "project_slug": "demo", "package_name": "demo", "python_version": "3.12"},
+    )
+    ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
+    assert "framework review security" in ci
+    assert "uv tool install" in ci and "_commit" in ci
+    assert "ANTHROPIC_API_KEY" in ci
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml
