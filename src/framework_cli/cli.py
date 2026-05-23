@@ -191,7 +191,7 @@ def review(
     if not os.environ.get("ANTHROPIC_API_KEY"):
         payload = neutral_payload(spec.name, "review skipped — set ANTHROPIC_API_KEY to enable.")
         post_or_skip(payload, token=token, repo=repo, sha=sha)
-        _emit("neutral", [])
+        _emit(payload.conclusion, [])
         typer.echo(f"{spec.name}: skipped (no ANTHROPIC_API_KEY)")
         raise typer.Exit(0)
 
@@ -202,7 +202,7 @@ def review(
                 spec.name, f"not triggered (no {', '.join(spec.trigger_globs)} change)"
             )
             post_or_skip(payload, token=token, repo=repo, sha=sha)
-            _emit("neutral", [])
+            _emit(payload.conclusion, [])
             typer.echo(f"{spec.name}: skipped (not triggered)")
             raise typer.Exit(0)
         findings = _review_run(diff, spec)
@@ -212,7 +212,7 @@ def review(
     except Exception as exc:  # noqa: BLE001 - infra failure must not block CI
         payload = neutral_payload(spec.name, f"review could not run: {exc}")
         post_or_skip(payload, token=token, repo=repo, sha=sha)
-        _emit("neutral", [])
+        _emit(payload.conclusion, [])
         typer.echo(f"{spec.name}: neutral (could not run: {exc})", err=True)
         raise typer.Exit(0) from exc
 

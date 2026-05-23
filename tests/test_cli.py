@@ -216,6 +216,24 @@ def test_review_findings_out_writes_on_normal_path(tmp_path, monkeypatch):
     ]
 
 
+def test_review_findings_out_on_infra_error(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    def _boom():
+        raise RuntimeError("API down")
+
+    monkeypatch.setattr(cli_mod, "_review_diff", _boom)
+    out = tmp_path / "findings" / "security.json"
+    result = runner.invoke(app, ["review", "security", "--findings-out", str(out)])
+    assert result.exit_code == 0, result.output
+    data = _json.loads(out.read_text())
+    assert data["agent"] == "review-security"
+    assert data["conclusion"] == "neutral" and data["findings"] == []
+
+
 def test_review_findings_out_on_skip_path(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
