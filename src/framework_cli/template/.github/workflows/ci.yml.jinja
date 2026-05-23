@@ -117,16 +117,37 @@ jobs:
           fail-on: ERR
 
   # Steps 9-10: Layer-3 AI review agents (spec §7). Opt-in: set the ANTHROPIC_API_KEY secret to
-  # enable. Each agent posts a `review-*` GitHub Check Run; require those checks in branch
-  # protection to gate merges on findings. A missing key or API error → a neutral check (never a
-  # spurious CI failure). The full agent set + aggregator arrive in later framework versions.
-  review:
+  # enable. `review-plan` lists the agents active for this event (all on a PR; the security/
+  # data-integrity/data-lineage/observability subset on a push to main); `review` runs them in
+  # parallel, each posting a `review-*` GitHub Check Run. Require those checks in branch
+  # protection to gate merges. A missing key / API error / untriggered agent → a neutral check
+  # (never a spurious CI failure).
+  review-plan:
     needs: [test, contract]
+    runs-on: ubuntu-latest
+    outputs:
+      agents: {% raw %}${{ steps.list.outputs.agents }}{% endraw %}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: install the framework CLI at the recorded version
+        run: |
+          ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
+          uv tool install "git+https://github.com/cdowell-swtr/swiftwater-framework@${ref}"
+      - id: list
+        run: echo "agents=$(framework review-agents --event {% raw %}${{ github.event_name }}{% endraw %})" >> "$GITHUB_OUTPUT"
+
+  review:
+    needs: [test, contract, review-plan]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       checks: write
       pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: {% raw %}${{ fromJSON(needs.review-plan.outputs.agents) }}{% endraw %}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -136,8 +157,8 @@ jobs:
         run: |
           ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
           uv tool install "git+https://github.com/cdowell-swtr/swiftwater-framework@${ref}"
-      - name: review-security
+      - name: review {% raw %}${{ matrix.agent }}{% endraw %}
         env:
           ANTHROPIC_API_KEY: {% raw %}${{ secrets.ANTHROPIC_API_KEY }}{% endraw %}
           GITHUB_TOKEN: {% raw %}${{ github.token }}{% endraw %}
-        run: framework review security
+        run: framework review {% raw %}${{ matrix.agent }}{% endraw %}

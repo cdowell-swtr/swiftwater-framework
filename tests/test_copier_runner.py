@@ -664,7 +664,7 @@ def test_render_includes_ci_pipeline(tmp_path: Path):
     for job in ("integrity", "lint", "test", "build", "contract", "security", "review"):
         assert job in jobs, f"ci.yml missing the {job} job"
     assert jobs["lint"]["needs"] == "integrity"
-    assert jobs["review"]["needs"] == ["test", "contract"]
+    assert jobs["review"]["needs"] == ["test", "contract", "review-plan"]
 
     # the test job runs the combined 85% gate via the shared script
     test_run = " ".join(str(s.get("run", "")) for s in jobs["test"]["steps"])
@@ -833,9 +833,25 @@ def test_ci_review_job_runs_framework_review(tmp_path: Path):
         {"project_name": "Demo", "project_slug": "demo", "package_name": "demo", "python_version": "3.12"},
     )
     ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
-    assert "framework review security" in ci
+    assert "framework review " in ci
     assert "uv tool install" in ci and "_commit" in ci
     assert "ANTHROPIC_API_KEY" in ci
+
+
+def test_ci_review_matrix(tmp_path: Path):
+    import yaml
+
+    dest = tmp_path / "proj"
+    render_project(
+        dest,
+        {"project_name": "Demo", "project_slug": "demo", "package_name": "demo", "python_version": "3.12"},
+    )
+    text = (dest / ".github" / "workflows" / "ci.yml").read_text()
+    assert "framework review-agents" in text
+    assert "fromJSON(needs.review-plan.outputs.agents)" in text
+    doc = yaml.safe_load(text)
+    assert "review-plan" in doc["jobs"] and "review" in doc["jobs"]
+    assert doc["jobs"]["review"]["needs"] == ["test", "contract", "review-plan"]
 
 
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
