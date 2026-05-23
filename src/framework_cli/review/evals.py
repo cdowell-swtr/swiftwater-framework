@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from framework_cli.review.findings import Finding, severity_rank
+from framework_cli.review.registry import AgentSpec
+
 
 @dataclass(frozen=True)
 class Fixture:
@@ -13,6 +16,21 @@ class Fixture:
     name: str
     diff: str
     seeded_file: str | None  # the path the detection rule matches; set for bad fixtures
+
+
+def flags(findings: list[Finding], spec: AgentSpec, *, file: str | None = None) -> bool:
+    """True if the agent raised a blocking concern, optionally restricted to `file`.
+
+    Blocking agent (`block_threshold` set): a finding at/above the threshold. Advisory agent
+    (`block_threshold is None` — never blocks in production): any finding counts as 'surfaced',
+    so its evals score detection on surfacing rather than blocking.
+    """
+    for f in findings:
+        if file is not None and f.path != file:
+            continue
+        if spec.block_threshold is None or severity_rank(f.severity) >= severity_rank(spec.block_threshold):
+            return True
+    return False
 
 
 def load_fixtures(root: Path) -> list[Fixture]:
