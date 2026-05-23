@@ -50,10 +50,15 @@ def load_thresholds(path: Path) -> dict[str, Thresholds]:
     import yaml
 
     data = yaml.safe_load(path.read_text()) or {}
-    return {
-        agent: Thresholds(float(v["recall_min"]), float(v["fp_max"]))
-        for agent, v in data.items()
-    }
+    result: dict[str, Thresholds] = {}
+    for agent, v in data.items():
+        try:
+            result[agent] = Thresholds(float(v["recall_min"]), float(v["fp_max"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"thresholds.yaml: agent {agent!r} needs numeric recall_min and fp_max"
+            ) from exc
+    return result
 
 
 @dataclass(frozen=True)
@@ -77,6 +82,7 @@ def score_agent(
     recall = mean(bad_detect_rates) if bad_detect_rates else 1.0
     fp_rate = mean(good_block_rates) if good_block_rates else 0.0
     reasons: list[str] = []
+    # Compare at the 2dp the scorecard prints, so e.g. 2/3=0.667 clears a 0.67 gate.
     if round(recall, 2) < thr.recall_min:
         reasons.append(f"recall {recall:.2f} < {thr.recall_min:.2f}")
     if round(fp_rate, 2) > thr.fp_max:

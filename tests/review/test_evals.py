@@ -129,3 +129,13 @@ def test_score_agent_vacuous_when_no_fixtures():
 
     s = score_agent("x", [], [], DEFAULT_THRESHOLDS)
     assert s.recall == 1.0 and s.fp_rate == 0.0 and s.passed
+
+
+def test_load_thresholds_rejects_malformed_entry(tmp_path):
+    import pytest
+
+    from framework_cli.review.evals import load_thresholds
+
+    (tmp_path / "thresholds.yaml").write_text("security: {recall_min: 0.5}\n")  # missing fp_max
+    with pytest.raises(ValueError, match="security"):
+        load_thresholds(tmp_path / "thresholds.yaml")
