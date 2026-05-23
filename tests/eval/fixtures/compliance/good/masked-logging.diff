@@ -1,0 +1,32 @@
+--- a/src/app/checkout.py
++++ b/src/app/checkout.py
+@@ -1,6 +1,27 @@
+ import logging
++from app.audit import audit_log
+
+ logger = logging.getLogger(__name__)
+
+
++def _mask_card(card_number: str) -> str:
++    return f"****{card_number[-4:]}"
++
++
++def process_payment(card_number: str, amount: float, currency: str, actor_id: int) -> dict:
++    masked = _mask_card(card_number)
++    logger.info(
++        "Processing payment: card=%s amount=%.2f currency=%s",
++        masked,
++        amount,
++        currency,
++    )
++    result = _charge(card_number, amount, currency)
++    audit_log.record(
++        actor_id=actor_id,
++        action="payment.processed",
++        detail={"card_suffix": card_number[-4:], "amount": amount, "txn_id": result["transaction_id"]},
++    )
++    return result
++
++
+ def _charge(card_number: str, amount: float, currency: str) -> dict:
+     return {"transaction_id": "txn_001", "status": "ok"}

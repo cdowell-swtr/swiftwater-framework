@@ -143,6 +143,20 @@ def test_load_thresholds_rejects_malformed_entry(tmp_path):
         load_thresholds(tmp_path / "thresholds.yaml")
 
 
+def test_every_registered_agent_has_fixtures():
+    from framework_cli.review.evals import load_fixtures
+    from framework_cli.review.registry import agent_names
+
+    counts: dict[tuple[str, str], int] = {}
+    for fx in load_fixtures(_FIXTURES_ROOT):
+        counts[(fx.agent, fx.kind)] = counts.get((fx.agent, fx.kind), 0) + 1
+    for a in agent_names():
+        bad = counts.get((a, "bad"), 0)
+        good = counts.get((a, "good"), 0)
+        assert bad >= 2, f"{a}: needs >= 2 bad fixtures, has {bad}"
+        assert good >= 1, f"{a}: needs >= 1 good fixture, has {good}"
+
+
 def test_fixtures_are_wellformed():
     from framework_cli.review.diff import changed_files
     from framework_cli.review.evals import load_fixtures

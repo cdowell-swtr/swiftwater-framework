@@ -1,0 +1,24 @@
+--- a/src/app/api/users.py
++++ b/src/app/api/users.py
+@@ -1,6 +1,18 @@
+ from app.db import session
+ from app.models import User
+
+
++def serialize_user_public(user: User) -> dict:
++    return {
++        "id": user.id,
++        "display_name": user.display_name,
++        "member_since": user.created_at.isoformat(),
++    }
++
++
++def get_user(user_id: int) -> dict:
++    user = session.query(User).filter_by(id=user_id).one()
++    return serialize_user_public(user)
++
++
+ def list_users() -> list[dict]:
+     users = session.query(User).all()
+-    return [{"id": u.id} for u in users]
++    return [serialize_user_public(u) for u in users]

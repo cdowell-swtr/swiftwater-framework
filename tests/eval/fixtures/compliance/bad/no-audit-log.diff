@@ -1,0 +1,28 @@
+--- a/src/app/admin.py
++++ b/src/app/admin.py
+@@ -1,6 +1,22 @@
+ from app.db import session
+ from app.models import User, Role
+
+
++def grant_admin_role(target_user_id: int, granting_user_id: int) -> None:
++    user = session.query(User).filter_by(id=target_user_id).one()
++    user.roles.append(Role.ADMIN)
++    session.commit()
++
++
++def delete_account(user_id: int) -> None:
++    user = session.query(User).filter_by(id=user_id).one()
++    session.delete(user)
++    session.commit()
++
++
++def suspend_account(user_id: int, reason: str) -> None:
++    user = session.query(User).filter_by(id=user_id).one()
++    user.suspended = True
++    user.suspension_reason = reason
++    session.commit()
++
++
+ def list_users() -> list:
+     return session.query(User).all()

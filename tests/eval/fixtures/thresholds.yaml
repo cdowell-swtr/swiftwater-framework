@@ -1,0 +1,6 @@
+# Per-agent overrides for the eval pass thresholds. Agents omitted here use the defaults
+# (recall_min 0.67, fp_max 0.34). Add an entry only when a real eval run shows an agent's
+# healthy behavior doesn't fit the defaults. Example:
+# documentation:
+#   recall_min: 0.5
+#   fp_max: 0.5

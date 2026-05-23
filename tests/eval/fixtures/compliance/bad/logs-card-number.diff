@@ -1,0 +1,26 @@
+--- a/src/app/checkout.py
++++ b/src/app/checkout.py
+@@ -1,6 +1,20 @@
+ import logging
+
+ logger = logging.getLogger(__name__)
+
+
++def process_payment(card_number: str, amount: float, currency: str) -> dict:
++    logger.info(
++        "Processing payment: card=%s amount=%.2f currency=%s",
++        card_number,
++        amount,
++        currency,
++    )
++    result = _charge(card_number, amount, currency)
++    logger.info(
++        "Payment complete: card=%s txn_id=%s",
++        card_number,
++        result["transaction_id"],
++    )
++    return result
++
++
+ def _charge(card_number: str, amount: float, currency: str) -> dict:
+     return {"transaction_id": "txn_001", "status": "ok"}

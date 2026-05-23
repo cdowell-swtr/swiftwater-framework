@@ -1,0 +1,31 @@
+--- a/src/app/tracking.py
++++ b/src/app/tracking.py
+@@ -1,5 +1,23 @@
+ from app.analytics import event_sink
+ from app.db import session
+ from app.models import User
+
+
++def track_user_behavior(user_id: int, event: str, metadata: dict) -> None:
++    user = session.query(User).filter_by(id=user_id).one()
++    event_sink.record(
++        event=event,
++        user_id=user.id,
++        email=user.email,
++        name=user.full_name,
++        ip_address=metadata.get("ip"),
++        metadata=metadata,
++    )
++
++
++def build_user_profile(user_id: int) -> dict:
++    user = session.query(User).filter_by(id=user_id).one()
++    return {
++        "id": user.id,
++        "email": user.email,
++        "behavioral_data": event_sink.query(user_id=user.id),
++    }
++
++
+ def flush() -> None:
+     event_sink.flush()
