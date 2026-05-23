@@ -29,8 +29,12 @@ class CheckRunPayload:
 
 
 def to_check_run(spec: AgentSpec, findings: list[Finding]) -> CheckRunPayload:
-    threshold = severity_rank(spec.block_threshold)
-    blocking = [f for f in findings if severity_rank(f.severity) >= threshold]
+    if spec.block_threshold is None:
+        # Advisory agent — findings are surfaced but never block.
+        blocking: list[Finding] = []
+    else:
+        threshold = severity_rank(spec.block_threshold)
+        blocking = [f for f in findings if severity_rank(f.severity) >= threshold]
     conclusion = "success" if not findings else ("failure" if blocking else "neutral")
     annotations = [
         {
