@@ -78,6 +78,19 @@ def aggregate(results: list[dict]) -> AggregateResult:
     return AggregateResult(overall, severity_counts, relationships, markdown)
 
 
+def load_results(directory: Path) -> list[dict]:
+    """Read every `*.json` in `directory`, tolerating a missing/malformed file (skip it)."""
+    results: list[dict] = []
+    for p in sorted(directory.glob("*.json")):
+        try:
+            data = json.loads(p.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict):
+            results.append(data)
+    return results
+
+
 def _render_markdown(
     overall: str,
     severity_counts: dict[str, int],

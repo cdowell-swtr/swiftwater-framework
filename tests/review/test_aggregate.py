@@ -138,3 +138,16 @@ def test_markdown_with_zero_findings_renders_sensibly():
     md = aggregate([_result("review-security", "success", [])]).markdown
     assert "0 finding(s)" in md
     assert "- none" in md  # both the relationships and affected-files sections fall back
+
+
+def test_load_results_reads_json_and_skips_malformed(tmp_path):
+    from framework_cli.review.aggregate import load_results
+
+    (tmp_path / "review-a.json").write_text(
+        '{"agent": "review-a", "conclusion": "success", "findings": []}'
+    )
+    (tmp_path / "review-b.json").write_text("{ not valid json")
+    (tmp_path / "ignore.txt").write_text("not json at all")
+
+    results = load_results(tmp_path)
+    assert len(results) == 1 and results[0]["agent"] == "review-a"

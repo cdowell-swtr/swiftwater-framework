@@ -243,3 +243,34 @@ def test_review_findings_out_on_skip_path(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     data = _json.loads(out.read_text())
     assert data["conclusion"] == "neutral" and data["findings"] == []
+
+
+def test_review_aggregate_prints_when_no_pr(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_PR_NUMBER", raising=False)
+    (tmp_path / "review-security.json").write_text(
+        '{"agent": "review-security", "conclusion": "failure", '
+        '"findings": [{"path": "a.py", "line": 1, "severity": "high", "message": "danger"}]}'
+    )
+    result = runner.invoke(app, ["review-aggregate", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "Review summary" in result.output and "FAIL" in result.output
+
+
+def test_review_aggregate_posts_when_pr_present(tmp_path, monkeypatch):
+    import framework_cli.review.comment as comment_mod
+
+    posted = {}
+    monkeypatch.setattr(
+        comment_mod,
+        "post_sticky_comment",
+        lambda md, *, repo, pr, token: posted.update(pr=pr, repo=repo, token=token),
+    )
+    monkeypatch.setenv("GITHUB_PR_NUMBER", "12")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    (tmp_path / "review-a.json").write_text(
+        '{"agent": "review-a", "conclusion": "success", "findings": []}'
+    )
+    result = runner.invoke(app, ["review-aggregate", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert posted == {"pr": "12", "repo": "o/r", "token": "t"}

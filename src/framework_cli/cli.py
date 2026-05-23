@@ -153,6 +153,26 @@ def _review_run(diff: str, spec: object) -> list:
     return run_agent(diff, spec, default_client())  # type: ignore[arg-type]
 
 
+@app.command(name="review-aggregate")
+def review_aggregate(
+    directory: str = typer.Argument(..., help="Directory of per-agent findings JSON files."),
+    pr: str = typer.Option("", "--pr", help="PR number (default: $GITHUB_PR_NUMBER)."),
+) -> None:
+    """Aggregate per-agent review findings into one sticky PR comment (prints on a push)."""
+    from framework_cli.review import comment
+    from framework_cli.review.aggregate import aggregate, load_results
+
+    result = aggregate(load_results(Path(directory)))
+    pr_number = pr or os.environ.get("GITHUB_PR_NUMBER", "")
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if pr_number and repo and token:
+        comment.post_sticky_comment(result.markdown, repo=repo, pr=pr_number, token=token)
+        typer.echo(f"review-aggregate: posted summary to PR #{pr_number} ({result.overall})")
+    else:
+        typer.echo(result.markdown)
+
+
 @app.command(name="review-agents")
 def review_agents(
     event: str = typer.Option("", "--event", help="GitHub event name (default: $GITHUB_EVENT_NAME)."),
