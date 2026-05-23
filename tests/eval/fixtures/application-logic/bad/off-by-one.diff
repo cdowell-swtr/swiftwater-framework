@@ -7,13 +7,9 @@
 
 
 +def paginate(items: list[T], page: int, page_size: int) -> list[T]:
-+    """Return items for the requested page (1-indexed).
-+
-+    Bug: slice drops the last item on every page because of the off-by-one
-+    `page_size - 1` upper bound instead of `page_size`.
-+    """
++    """Return the items for the requested page (1-indexed)."""
 +    start = (page - 1) * page_size
-+    end = start + page_size - 1   # should be `start + page_size`
++    end = start + page_size - 1
 +    return items[start:end]
 +
 +

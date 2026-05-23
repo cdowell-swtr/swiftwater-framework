@@ -1,8 +1,10 @@
 --- a/src/app/orders.py
 +++ b/src/app/orders.py
-@@ -1,7 +1,22 @@
+@@ -1,7 +1,29 @@
  from app.db import session
- from app.models import Order, OrderItem, InventoryReservation
+-from app.models import Order, OrderItem, InventoryReservation
++from app.exceptions import InsufficientStockError
++from app.models import Inventory, InventoryReservation, Order, OrderItem
 
 
 +def place_order(user_id: int, cart: list[dict]) -> Order:
@@ -12,6 +14,18 @@
 +        session.add(order)
 +
 +        for item in cart:
++            stock = (
++                session.query(Inventory)
++                .filter_by(product_id=item["product_id"])
++                .with_for_update()
++                .one()
++            )
++            if item["quantity"] > stock.available:
++                raise InsufficientStockError(
++                    product_id=item["product_id"],
++                    requested=item["quantity"],
++                    available=stock.available,
++                )
 +            line = OrderItem(
 +                order=order,
 +                product_id=item["product_id"],

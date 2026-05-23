@@ -6,11 +6,7 @@
 
 
 +def check_and_grant_access(user: User, resource: str) -> None:
-+    """Grant access to the resource if the user is active.
-+
-+    Bug: condition is inverted — inactive users are granted access,
-+    active users raise PermissionDenied.
-+    """
++    """Grant access to active users only, raising PermissionDenied otherwise."""
 +    if not user.is_active:
 +        grant_access(user, resource)
 +    else:
