@@ -1,0 +1,24 @@
+--- a/src/app/analytics.py
++++ b/src/app/analytics.py
+@@ -1,6 +1,22 @@
+ from app.db import session
+ from app.models import User
+
+
++def record_signup_event(user: User) -> None:
++    """Write signup analytics to the events table."""
++    from app.models import AnalyticsEvent
++
++    event = AnalyticsEvent(
++        event_type="signup",
++        user_email=user.email,
++        user_name=user.name,
++        timestamp=user.created_at,
++    )
++    session.add(event)
++    session.commit()
++
++
+ def record_page_view(path: str, session_id: str) -> None:
+     from app.models import PageView
+     session.add(PageView(path=path, session_id=session_id))

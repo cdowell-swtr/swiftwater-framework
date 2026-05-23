@@ -1,0 +1,19 @@
+--- a/src/app/billing.py
++++ b/src/app/billing.py
+@@ -1,8 +1,20 @@
+ from decimal import Decimal
+
+
++def calculate_total(price: Decimal, tax_rate: Decimal) -> Decimal:
++    """Compute the total price including tax.
++
++    Bug: uses addition instead of multiplication to apply the tax rate.
++    E.g. price=100, tax_rate=0.08 gives 100.08 instead of 108.00.
++    Should be: price * (1 + tax_rate)
++    """
++    return price + tax_rate   # wrong: adds rate as flat amount, not percentage
++
++
+ def apply_discount(price: Decimal, discount_pct: Decimal) -> Decimal:
+     """Reduce price by the given percentage (0–100)."""
+     return price * (1 - discount_pct / 100)

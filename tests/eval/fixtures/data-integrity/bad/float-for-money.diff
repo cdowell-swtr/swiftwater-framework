@@ -1,0 +1,21 @@
+--- a/src/app/models/invoice.py
++++ b/src/app/models/invoice.py
+@@ -1,8 +1,18 @@
+ from sqlalchemy import Column, Integer, String
+ from sqlalchemy.orm import DeclarativeBase
+
+
+ class Base(DeclarativeBase):
+     pass
+
+
++class Invoice(Base):
++    __tablename__ = "invoices"
++
++    id = Column(Integer, primary_key=True)
++    customer_id = Column(Integer, nullable=False)
++    description = Column(String, nullable=False)
++    amount = Column(Float)          # subtotal before tax
++    tax = Column(Float)             # tax portion
++    total = Column(Float)           # amount + tax
++    currency = Column(String(3), nullable=False, default="USD")

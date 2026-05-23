@@ -1,0 +1,30 @@
+--- a/src/app/orders.py
++++ b/src/app/orders.py
+@@ -1,7 +1,22 @@
+ from app.db import session
+ from app.models import Order, OrderItem, InventoryReservation
+
+
++def place_order(user_id: int, cart: list[dict]) -> Order:
++    """Create order and reserve inventory items."""
++    order = Order(user_id=user_id, status="pending")
++    session.add(order)
++
++    for item in cart:
++        line = OrderItem(
++            order=order,
++            product_id=item["product_id"],
++            quantity=item["quantity"],
++            unit_price=item["price"],
++        )
++        session.add(line)
++        reservation = InventoryReservation(product_id=item["product_id"], qty=item["quantity"])
++        session.add(reservation)
++
++    session.commit()
++    return order
++
++
+ def cancel_order(order_id: int) -> None:
+     order = session.get(Order, order_id)
+     order.status = "cancelled"

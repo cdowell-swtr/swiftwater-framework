@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+_FIXTURES_ROOT = Path(__file__).parent.parent / "eval" / "fixtures"
+
 
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -139,3 +141,20 @@ def test_load_thresholds_rejects_malformed_entry(tmp_path):
     (tmp_path / "thresholds.yaml").write_text("security: {recall_min: 0.5}\n")  # missing fp_max
     with pytest.raises(ValueError, match="security"):
         load_thresholds(tmp_path / "thresholds.yaml")
+
+
+def test_fixtures_are_wellformed():
+    from framework_cli.review.diff import changed_files
+    from framework_cli.review.evals import load_fixtures
+
+    fixtures = load_fixtures(_FIXTURES_ROOT)
+    assert fixtures, "no fixtures discovered"
+    for fx in fixtures:
+        label = f"{fx.agent}/{fx.kind}/{fx.name}"
+        assert fx.diff.strip(), f"{label}: empty diff"
+        changed = changed_files(fx.diff)
+        assert changed, f"{label}: diff has no '+++ b/' paths"
+        if fx.kind == "bad":
+            assert fx.seeded_file in changed, (
+                f"{label}: seeded_file {fx.seeded_file!r} not among changed files {changed}"
+            )

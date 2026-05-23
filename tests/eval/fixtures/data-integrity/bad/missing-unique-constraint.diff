@@ -1,0 +1,25 @@
+--- a/src/app/accounts.py
++++ b/src/app/accounts.py
+@@ -1,6 +1,22 @@
+ from app.db import session
+ from app.models import Account
+
+
++def get_or_create_account(email: str) -> Account:
++    """Return the existing account for this email, creating one if absent.
++
++    Note: no unique constraint on accounts.email — concurrent requests can
++    create duplicate rows between the SELECT and INSERT.
++    """
++    existing = session.query(Account).filter_by(email=email).first()
++    if existing:
++        return existing
++    account = Account(email=email, status="active")
++    session.add(account)
++    session.commit()
++    return account
++
++
+ def deactivate_account(account_id: int) -> None:
+     account = session.get(Account, account_id)
+     account.status = "inactive"
