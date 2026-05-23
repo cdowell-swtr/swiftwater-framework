@@ -72,7 +72,7 @@ The "blocks merge = builder branch protection" guidance (7a) extends to all `rev
 
 ## 6. Testing (all hermetic — mocked client, no API key, no network)
 
-- **`registry`:** `active_agents("pull_request")` = the 11 expected names (sorted, no battery); `active_agents("push")` = the 4 subset; a parametrized test over `agent_names()` asserting each agent's prompt loads, is non-empty, and instructs JSON output; the per-agent `block_threshold`/`on_push`/`trigger_globs` values match this spec.
+- **`registry`:** `active_agents("pull_request")` = the 12 expected names (the 11 new + `security`, sorted, no battery); `active_agents("push")` = the 4 subset; a parametrized test over `agent_names()` asserting each agent's prompt loads, is non-empty, and instructs JSON output; the per-agent `block_threshold`/`on_push`/`trigger_globs` values match this spec.
 - **`review-agents` command:** `--event pull_request` → JSON of 11; `--event push` → JSON of 4.
 - **`diff.changed_files`:** parses `+++ b/<path>` lines (incl. renames/additions) into paths.
 - **file-trigger:** `framework review dependency` with a diff touching no dependency file → neutral "not triggered", **no client call** (monkeypatched seam asserts the runner wasn't invoked); with `pyproject.toml` in the diff → proceeds (mocked client).
