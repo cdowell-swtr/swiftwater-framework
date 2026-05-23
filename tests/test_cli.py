@@ -194,3 +194,34 @@ def test_review_dependency_runs_when_dep_file_changed(monkeypatch):
     result = runner.invoke(app, ["review", "dependency"])
     assert result.exit_code == 0  # advisory → neutral, never blocks
     assert "neutral" in result.output
+
+
+def test_review_findings_out_writes_on_normal_path(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.findings import Finding
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    monkeypatch.setattr(cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 3, "low", "m")])
+
+    out = tmp_path / "findings" / "security.json"
+    result = runner.invoke(app, ["review", "security", "--findings-out", str(out)])
+    assert result.exit_code == 0, result.output
+    data = _json.loads(out.read_text())
+    assert data["agent"] == "review-security"
+    assert data["conclusion"] == "neutral"  # low finding → below "high" threshold → neutral
+    assert data["findings"] == [
+        {"path": "a.py", "line": 3, "severity": "low", "message": "m", "suggestion": None}
+    ]
+
+
+def test_review_findings_out_on_skip_path(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    out = tmp_path / "findings" / "security.json"
+    result = runner.invoke(app, ["review", "security", "--findings-out", str(out)])
+    assert result.exit_code == 0, result.output
+    data = _json.loads(out.read_text())
+    assert data["conclusion"] == "neutral" and data["findings"] == []

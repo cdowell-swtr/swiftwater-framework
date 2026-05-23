@@ -9,6 +9,7 @@ from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
 from framework_cli.integrity.restore import restore_file
 from framework_cli.naming import derive_names
+from framework_cli.review.aggregate import write_findings
 from framework_cli.review.checks import neutral_payload, post_or_skip, to_check_run
 from framework_cli.review.diff import changed_files, matches_globs, pr_diff
 from framework_cli.review.registry import active_agents, get_agent
@@ -164,7 +165,14 @@ def review_agents(
 
 
 @app.command()
-def review(agent: str = typer.Argument(..., help="Review agent name, e.g. 'security'.")) -> None:
+def review(
+    agent: str = typer.Argument(..., help="Review agent name, e.g. 'security'."),
+    findings_out: str = typer.Option(
+        "",
+        "--findings-out",
+        help="Write this agent's findings JSON to this path (for aggregation).",
+    ),
+) -> None:
     """Run a Layer-3 review agent over the PR diff and post a GitHub Check Run."""
     try:
         spec = get_agent(agent)
@@ -176,9 +184,14 @@ def review(agent: str = typer.Argument(..., help="Review agent name, e.g. 'secur
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     sha = os.environ.get("GITHUB_SHA", "")
 
+    def _emit(conclusion: str, found: list) -> None:
+        if findings_out:
+            write_findings(Path(findings_out), spec.name, conclusion, found)
+
     if not os.environ.get("ANTHROPIC_API_KEY"):
         payload = neutral_payload(spec.name, "review skipped — set ANTHROPIC_API_KEY to enable.")
         post_or_skip(payload, token=token, repo=repo, sha=sha)
+        _emit("neutral", [])
         typer.echo(f"{spec.name}: skipped (no ANTHROPIC_API_KEY)")
         raise typer.Exit(0)
 
@@ -189,6 +202,7 @@ def review(agent: str = typer.Argument(..., help="Review agent name, e.g. 'secur
                 spec.name, f"not triggered (no {', '.join(spec.trigger_globs)} change)"
             )
             post_or_skip(payload, token=token, repo=repo, sha=sha)
+            _emit("neutral", [])
             typer.echo(f"{spec.name}: skipped (not triggered)")
             raise typer.Exit(0)
         findings = _review_run(diff, spec)
@@ -198,9 +212,11 @@ def review(agent: str = typer.Argument(..., help="Review agent name, e.g. 'secur
     except Exception as exc:  # noqa: BLE001 - infra failure must not block CI
         payload = neutral_payload(spec.name, f"review could not run: {exc}")
         post_or_skip(payload, token=token, repo=repo, sha=sha)
+        _emit("neutral", [])
         typer.echo(f"{spec.name}: neutral (could not run: {exc})", err=True)
         raise typer.Exit(0) from exc
 
     post_or_skip(payload, token=token, repo=repo, sha=sha)
+    _emit(payload.conclusion, findings)
     typer.echo(f"{spec.name}: {payload.conclusion} ({len(payload.annotations)} finding(s))")
     raise typer.Exit(1 if payload.conclusion == "failure" else 0)
