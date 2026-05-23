@@ -343,3 +343,39 @@ def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
     r = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path), "--require-fixtures"])
     assert r.exit_code == 1
     assert "no fixtures" in r.output
+
+
+def test_eval_repeat_zero_is_rejected(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    result = runner.invoke(app, ["eval", "security", "--repeat", "0"])
+    assert result.exit_code == 2
+    assert "--repeat must be >= 1" in result.output
+
+
+def test_eval_unknown_agent_errors(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    result = runner.invoke(app, ["eval", "nonsense-agent"])
+    assert result.exit_code == 1
+    assert "unknown review agent" in result.output
+
+
+def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.findings import Finding
+
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+
+    calls = {"n": 0}
+
+    def flaky(diff, spec):
+        if "clean" in diff:
+            return []
+        calls["n"] += 1
+        # catch on the first run, miss on the second → recall 0.5 over 2 repeats
+        return [Finding("a.py", 1, "high", "danger")] if calls["n"] == 1 else []
+
+    monkeypatch.setattr(cli_mod, "_eval_run", flaky)
+    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path), "--repeat", "2"])
+    assert "recall 0.50" in result.output  # 1 hit / 2 repeats on the single bad fixture

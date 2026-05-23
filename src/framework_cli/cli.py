@@ -216,6 +216,10 @@ def eval_agents(
         typer.echo("eval: skipped (no ANTHROPIC_API_KEY)")
         raise typer.Exit(0)
 
+    if repeat < 1:
+        typer.echo("eval: --repeat must be >= 1", err=True)
+        raise typer.Exit(2)
+
     root = Path(fixtures)
     thresholds = load_thresholds(root / "thresholds.yaml")
     by_agent: dict[str, list] = {}
@@ -231,7 +235,11 @@ def eval_agents(
     failing = 0
     missing: list[str] = []
     for a in targets:
-        spec = get_agent(a)
+        try:
+            spec = get_agent(a)
+        except KeyError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(1) from exc
         fx_list = by_agent.get(a, [])
         if not fx_list:
             missing.append(a)
