@@ -36,6 +36,20 @@ _SPECS: dict[str, AgentSpec] = {
         model=DEFAULT_MODEL,
         on_push=True,
     ),
+    "data-integrity": AgentSpec("review-data-integrity", _prompt("data-integrity"), "info", "always", DEFAULT_MODEL, on_push=True),
+    "data-lineage": AgentSpec("review-data-lineage", _prompt("data-lineage"), "high", "always", DEFAULT_MODEL, on_push=True),
+    "application-logic": AgentSpec("review-application-logic", _prompt("application-logic"), "info", "always", DEFAULT_MODEL),
+    "observability": AgentSpec("review-observability", _prompt("observability"), "high", "always", DEFAULT_MODEL, on_push=True),
+    "test-quality": AgentSpec("review-test-quality", _prompt("test-quality"), "high", "always", DEFAULT_MODEL),
+    "architecture": AgentSpec("review-architecture", _prompt("architecture"), "high", "always", DEFAULT_MODEL),
+    "performance": AgentSpec("review-performance", _prompt("performance"), "high", "always", DEFAULT_MODEL),
+    "compliance": AgentSpec("review-compliance", _prompt("compliance"), "high", "always", DEFAULT_MODEL),
+    "privacy": AgentSpec("review-privacy", _prompt("privacy"), "high", "always", DEFAULT_MODEL),
+    "documentation": AgentSpec("review-documentation", _prompt("documentation"), None, "always", DEFAULT_MODEL),
+    "dependency": AgentSpec(
+        "review-dependency", _prompt("dependency"), None, "file-trigger", DEFAULT_MODEL,
+        trigger_globs=("pyproject.toml", "uv.lock", "package.json", "package-lock.json"),
+    ),
 }
 
 
