@@ -151,3 +151,9 @@ def test_load_results_reads_json_and_skips_malformed(tmp_path):
 
     results = load_results(tmp_path)
     assert len(results) == 1 and results[0]["agent"] == "review-a"
+
+
+def test_load_results_missing_directory_is_empty(tmp_path):
+    from framework_cli.review.aggregate import load_results
+
+    assert load_results(tmp_path / "does-not-exist") == []

@@ -25,6 +25,8 @@ def test_post_sticky_updates_existing(monkeypatch):
     monkeypatch.setattr(comment, "_gh_api", fake_gh)
     comment.post_sticky_comment("md", repo="o/r", pr="3", token="t")
     assert any("--method" in a and "PATCH" in a and "comments/7" in a[0] for a in calls)
+    list_call = next(a for a in calls if "--method" not in a)
+    assert "--paginate" in list_call
 
 
 def test_post_sticky_creates_when_absent(monkeypatch):
@@ -39,6 +41,23 @@ def test_post_sticky_creates_when_absent(monkeypatch):
     monkeypatch.setattr(comment, "_gh_api", fake_gh)
     comment.post_sticky_comment("md", repo="o/r", pr="3", token="t")
     assert any("--method" in a and "POST" in a and a[0] == "repos/o/r/issues/3/comments" for a in calls)
+    list_call = next(a for a in calls if "--method" not in a)
+    assert "--paginate" in list_call
+
+
+def test_post_sticky_handles_empty_list_response(monkeypatch):
+    calls = []
+
+    def fake_gh(args, *, token, stdin=None):
+        calls.append(args)
+        if "--method" not in args:
+            return ""  # gh returned nothing for the list call
+        return ""
+
+    monkeypatch.setattr(comment, "_gh_api", fake_gh)
+    comment.post_sticky_comment("md", repo="o/r", pr="3", token="t")
+    # empty list → no existing sticky → a POST (create) is issued
+    assert any("--method" in a and "POST" in a for a in calls)
 
 
 def test_post_sticky_never_raises(monkeypatch):
