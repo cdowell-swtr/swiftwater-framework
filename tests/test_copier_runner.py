@@ -876,6 +876,9 @@ def test_render_ci_review_aggregation(tmp_path: Path):
     assert " ".join(str(s.get("run", "")) for s in agg["steps"]).find("framework review-aggregate") != -1
     download = next(s for s in agg["steps"] if "download-artifact" in str(s.get("uses", "")))
     assert download["with"]["pattern"] == "review-findings-*"
+    assert download["with"]["merge-multiple"] is True
+    assert download["with"]["path"] == "all-findings"
+    assert "all-findings" in " ".join(str(s.get("run", "")) for s in agg["steps"])
 
 
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):

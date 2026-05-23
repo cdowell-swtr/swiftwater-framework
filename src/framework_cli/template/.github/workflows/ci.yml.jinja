@@ -1,6 +1,6 @@
 # Authoritative CI pipeline (spec §14). `task push` triggers this; the local `task ci` is a
-# fast pre-flight against the same checks. Steps 0 (integrity) and 9-10 (AI review agents)
-# are seam jobs until framework v6/v7 (Plans 6/7) wire them in.
+# fast pre-flight against the same checks. Step 0 (integrity, Plan 6) and steps 9-10 (the AI
+# review-agent matrix + aggregator, Plan 7) are now fully wired.
 name: CI
 
 on:
