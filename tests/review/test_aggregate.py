@@ -110,3 +110,31 @@ def test_markdown_has_header_groups_relationships_files_and_marker():
     assert "high" in md and "danger" in md and "review-security" in md
     assert "Cross-agent relationships" in md
     assert "Affected files" in md and "a.py" in md
+
+
+def test_two_related_pairs_on_same_path_are_ordered_and_additive():
+    from framework_cli.review.aggregate import aggregate
+
+    # lineage+privacy AND lineage+compliance both match p.py; same-file rule also fires.
+    r = aggregate(
+        [
+            _result("review-data-lineage", "neutral", [_f("p.py", 1, "low", "x")]),
+            _result("review-privacy", "neutral", [_f("p.py", 2, "low", "y")]),
+            _result("review-compliance", "neutral", [_f("p.py", 3, "low", "z")]),
+        ]
+    )
+    related = [s for s in r.relationships if "related concern" in s]
+    assert related == [
+        "`review-compliance` + `review-data-lineage` both flagged `p.py` — related concern.",
+        "`review-data-lineage` + `review-privacy` both flagged `p.py` — related concern.",
+    ]
+    # additive: the same-file rule also produced an entry for the 3 agents on p.py
+    assert any("Multiple agents flagged `p.py`" in s for s in r.relationships)
+
+
+def test_markdown_with_zero_findings_renders_sensibly():
+    from framework_cli.review.aggregate import aggregate
+
+    md = aggregate([_result("review-security", "success", [])]).markdown
+    assert "0 finding(s)" in md
+    assert "- none" in md  # both the relationships and affected-files sections fall back

@@ -59,21 +59,22 @@ def aggregate(results: list[dict]) -> AggregateResult:
             by_path.setdefault(f["path"], set()).add(agent)
             all_findings.append((agent, f))
 
+    paths = sorted(by_path)
+    sorted_pairs = sorted(tuple(sorted(p)) for p in _RELATED_PAIRS)
     relationships: list[str] = []
-    for path in sorted(by_path):  # (a) same file flagged by >= 2 distinct agents
+    for path in paths:  # (a) same file flagged by >= 2 distinct agents
         agents = by_path[path]
         if len(agents) >= 2:
             relationships.append(
                 f"Multiple agents flagged `{path}`: {', '.join(sorted(agents))}"
             )
-    for path in sorted(by_path):  # (b) known related-domain pairs co-occurring on a file
+    for path in paths:  # (b) known related-domain pairs co-occurring on a file (deterministic order)
         agents = by_path[path]
-        for pair in _RELATED_PAIRS:
-            if pair <= agents:
-                a, b = sorted(pair)
+        for a, b in sorted_pairs:
+            if {a, b} <= agents:
                 relationships.append(f"`{a}` + `{b}` both flagged `{path}` — related concern.")
 
-    markdown = _render_markdown(overall, severity_counts, relationships, all_findings, sorted(by_path))
+    markdown = _render_markdown(overall, severity_counts, relationships, all_findings, paths)
     return AggregateResult(overall, severity_counts, relationships, markdown)
 
 
