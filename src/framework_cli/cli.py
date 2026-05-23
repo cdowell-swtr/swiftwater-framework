@@ -10,8 +10,8 @@ from framework_cli.integrity.manifest import installed_framework_version
 from framework_cli.integrity.restore import restore_file
 from framework_cli.naming import derive_names
 from framework_cli.review.checks import neutral_payload, post_or_skip, to_check_run
-from framework_cli.review.diff import pr_diff
-from framework_cli.review.registry import get_agent
+from framework_cli.review.diff import changed_files, matches_globs, pr_diff
+from framework_cli.review.registry import active_agents, get_agent
 from framework_cli.review.runner import default_client, run_agent
 from framework_cli.source import REPO_URL, latest_release, record_portable_source, version_tag
 from framework_cli.upskill import UpskillError, upskill_project
@@ -152,6 +152,17 @@ def _review_run(diff: str, spec: object) -> list:
     return run_agent(diff, spec, default_client())  # type: ignore[arg-type]
 
 
+@app.command(name="review-agents")
+def review_agents(
+    event: str = typer.Option("", "--event", help="GitHub event name (default: $GITHUB_EVENT_NAME)."),
+) -> None:
+    """Print the JSON array of review agents active for the event (drives the CI matrix)."""
+    import json
+
+    resolved = event or os.environ.get("GITHUB_EVENT_NAME", "pull_request")
+    typer.echo(json.dumps(active_agents(resolved)))
+
+
 @app.command()
 def review(agent: str = typer.Argument(..., help="Review agent name, e.g. 'security'.")) -> None:
     """Run a Layer-3 review agent over the PR diff and post a GitHub Check Run."""
@@ -172,8 +183,18 @@ def review(agent: str = typer.Argument(..., help="Review agent name, e.g. 'secur
         raise typer.Exit(0)
 
     try:
-        findings = _review_run(_review_diff(), spec)
+        diff = _review_diff()
+        if spec.trigger_globs and not matches_globs(changed_files(diff), spec.trigger_globs):
+            payload = neutral_payload(
+                spec.name, f"not triggered (no {', '.join(spec.trigger_globs)} change)"
+            )
+            post_or_skip(payload, token=token, repo=repo, sha=sha)
+            typer.echo(f"{spec.name}: skipped (not triggered)")
+            raise typer.Exit(0)
+        findings = _review_run(diff, spec)
         payload = to_check_run(spec, findings)
+    except typer.Exit:
+        raise  # the not-triggered skip (and any Exit) must propagate, not become neutral
     except Exception as exc:  # noqa: BLE001 - infra failure must not block CI
         payload = neutral_payload(spec.name, f"review could not run: {exc}")
         post_or_skip(payload, token=token, repo=repo, sha=sha)

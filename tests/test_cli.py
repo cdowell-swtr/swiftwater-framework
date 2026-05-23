@@ -1,3 +1,4 @@
+import json as _json
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -156,3 +157,40 @@ def test_review_infra_error_is_neutral_exit_0(monkeypatch):
     result = runner.invoke(app, ["review", "security"])
     assert result.exit_code == 0
     assert "neutral" in result.output or "could not run" in result.output
+
+
+def test_review_agents_lists_pr_and_push(monkeypatch):
+    monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
+    pr = _json.loads(runner.invoke(app, ["review-agents", "--event", "pull_request"]).output)
+    push = _json.loads(runner.invoke(app, ["review-agents", "--event", "push"]).output)
+    assert "security" in pr and "documentation" in pr
+    assert set(push) == {"security", "data-integrity", "data-lineage", "observability"}
+
+
+def test_review_dependency_skips_when_no_dep_files(monkeypatch):
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "+++ b/src/app/main.py\n")
+
+    def _should_not_run(diff, spec):
+        raise AssertionError("LLM must not run when not triggered")
+
+    monkeypatch.setattr(cli_mod, "_review_run", _should_not_run)
+    result = runner.invoke(app, ["review", "dependency"])
+    assert result.exit_code == 0
+    assert "not triggered" in result.output
+
+
+def test_review_dependency_runs_when_dep_file_changed(monkeypatch):
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.findings import Finding
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "+++ b/pyproject.toml\n")
+    monkeypatch.setattr(cli_mod, "_review_run", lambda diff, spec: [Finding("pyproject.toml", 1, "low", "m")])
+    result = runner.invoke(app, ["review", "dependency"])
+    assert result.exit_code == 0  # advisory → neutral, never blocks
+    assert "neutral" in result.output
