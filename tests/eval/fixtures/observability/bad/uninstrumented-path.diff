@@ -1,0 +1,35 @@
+--- a/src/app/payments.py
++++ b/src/app/payments.py
+@@ -1,8 +1,30 @@
++import httpx
+ from decimal import Decimal
+
++from app.models import Payment, PaymentResult
++
++
++_GATEWAY_URL = "https://payments.example.com/v2/charge"
++
++
++def charge_card(user_id: int, amount: Decimal, token: str) -> PaymentResult:
++    """Submit a card charge to the payment gateway and persist the result."""
++    payload = {
++        "amount": str(amount),
++        "currency": "USD",
++        "token": token,
++        "idempotency_key": f"user-{user_id}-{amount}",
++    }
++    response = httpx.post(_GATEWAY_URL, json=payload, timeout=10.0)
++    response.raise_for_status()
++    data = response.json()
++    result = PaymentResult(
++        user_id=user_id,
++        charge_id=data["charge_id"],
++        amount=amount,
++        status=data["status"],
++    )
++    return result
++
+
+ def refund_charge(charge_id: str, amount: Decimal) -> bool:
+     """Reverse a previous charge by the given amount."""
+     return True

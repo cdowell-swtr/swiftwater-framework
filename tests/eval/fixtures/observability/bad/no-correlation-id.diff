@@ -1,0 +1,31 @@
+--- a/src/app/handlers.py
++++ b/src/app/handlers.py
+@@ -1,5 +1,26 @@
++import logging
+ from fastapi import APIRouter, Request
++
++from app.models import Subscription
++from app.db import session
++
++logger = logging.getLogger(__name__)
+
+ router = APIRouter()
+
+
++@router.post("/subscriptions")
++async def create_subscription(request: Request) -> dict:
++    """Create a new subscription for the authenticated user."""
++    body = await request.json()
++    user_id = body["user_id"]
++    plan = body["plan"]
++    logger.info("Creating subscription for user %s on plan %s", user_id, plan)
++    sub = Subscription(user_id=user_id, plan=plan, status="active")
++    session.add(sub)
++    session.commit()
++    logger.info("Subscription created: id=%s", sub.id)
++    return {"subscription_id": sub.id, "status": "active"}
++
+
+ @router.get("/health")
+ async def health() -> dict:
+     return {"status": "ok"}

@@ -1,0 +1,32 @@
+--- a/src/app/reports.py
++++ b/src/app/reports.py
+@@ -1,5 +1,27 @@
++from dataclasses import dataclass
+ from decimal import Decimal
+
++from app.db import session
++from app.models import Order, User
++
++
++@dataclass
++class UserSummary:
++    user_id: int
++    email: str
++    order_count: int
++    total_spent: Decimal
++
++
++def build_user_spending_report(user_ids: list[int]) -> list[UserSummary]:
++    """Return a spending summary for each supplied user."""
++    users = session.query(User).filter(User.id.in_(user_ids)).all()
++    summaries = []
++    for user in users:
++        orders = session.query(Order).filter_by(user_id=user.id).all()
++        total = sum((o.total for o in orders), Decimal("0"))
++        summaries.append(UserSummary(user.id, user.email, len(orders), total))
++    return summaries
++
+
+ def format_currency(value: Decimal) -> str:
+     """Format a Decimal value as a USD string."""
+     return f"${value:,.2f}"

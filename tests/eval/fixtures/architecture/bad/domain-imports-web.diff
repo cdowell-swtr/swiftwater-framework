@@ -1,0 +1,36 @@
+--- a/src/app/domain/order.py
++++ b/src/app/domain/order.py
+@@ -1,6 +1,31 @@
++from decimal import Decimal
++
++from fastapi import Request
++
++from app.models import Order, OrderItem
++from app.db import session
++
++
++def create_order_from_request(request: Request) -> Order:
++    """Build and persist an Order from an incoming HTTP request."""
++    user_id = request.state.user_id
++    body = request.state.body
++    order = Order(user_id=user_id, status="pending")
++    session.add(order)
++    for item in body.get("items", []):
++        line = OrderItem(
++            order=order,
++            product_id=item["product_id"],
++            quantity=item["quantity"],
++            unit_price=Decimal(item["price"]),
++        )
++        session.add(line)
++    session.commit()
++    return order
++
++
+ def calculate_order_total(order: Order) -> Decimal:
+-    return sum(i.unit_price * i.quantity for i in order.items)
++    """Sum all line item totals for the given order."""
++    return sum(
++        (i.unit_price * i.quantity for i in order.items),
++        Decimal("0"),
++    )

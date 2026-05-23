@@ -1,0 +1,25 @@
+--- a/tests/test_math.py
++++ b/tests/test_math.py
+@@ -1,5 +1,23 @@
++from app.math_utils import add, multiply
++
+
+ def test_add_integers():
+-    pass
++    """Verify integer addition."""
++    assert add(2, 2) == 2 + 2
++
++
++def test_add_floats():
++    """Verify floating-point addition."""
++    assert add(1.5, 2.5) == 1.5 + 2.5
++
++
++def test_multiply_integers():
++    """Verify integer multiplication."""
++    assert multiply(3, 4) == 3 * 4
++
++
++def test_multiply_by_zero():
++    """Verify multiplication by zero."""
++    assert multiply(99, 0) == 99 * 0

@@ -1,0 +1,79 @@
+--- a/src/app/everything.py
++++ b/src/app/everything.py
+@@ -0,0 +1,72 @@
++from decimal import Decimal
++
++import sqlalchemy as sa
++from fastapi import APIRouter, Depends, HTTPException
++from sqlalchemy.orm import Session
++
++from app.db import get_db
++from app.models import Order, OrderItem, Product, User
++
++router = APIRouter()
++
++
++@router.post("/orders")
++def create_order(payload: dict, db: Session = Depends(get_db)):
++    """Accept a new order through the HTTP API."""
++    user = db.query(User).filter_by(id=payload["user_id"]).first()
++    if not user:
++        raise HTTPException(status_code=404, detail="user not found")
++
++    total = Decimal("0")
++    items = []
++    for line in payload["items"]:
++        row = db.execute(
++            sa.text("SELECT price FROM products WHERE id = :pid"),
++            {"pid": line["product_id"]},
++        ).fetchone()
++        if row is None:
++            raise HTTPException(status_code=400, detail=f"unknown product {line['product_id']}")
++        unit_price = Decimal(str(row.price))
++        subtotal = unit_price * line["quantity"]
++        if payload.get("member_discount"):
++            subtotal = subtotal * Decimal("0.9")
++        total += subtotal
++        items.append(
++            OrderItem(
++                product_id=line["product_id"],
++                quantity=line["quantity"],
++                unit_price=unit_price,
++            )
++        )
++
++    order = Order(user_id=payload["user_id"], total=total, status="pending")
++    db.add(order)
++    for item in items:
++        item.order = order
++        db.add(item)
++    db.commit()
++    db.refresh(order)
++    return {"order_id": order.id, "total": str(total)}
++
++
++@router.get("/orders/{order_id}/summary")
++def order_summary(order_id: int, db: Session = Depends(get_db)):
++    """Return a human-readable summary of an existing order."""
++    order = db.query(Order).filter_by(id=order_id).first()
++    if not order:
++        raise HTTPException(status_code=404, detail="order not found")
++    lines = []
++    for item in order.items:
++        product = db.execute(
++            sa.text("SELECT name FROM products WHERE id = :pid"),
++            {"pid": item.product_id},
++        ).fetchone()
++        lines.append(
++            {
++                "product": product.name if product else "unknown",
++                "quantity": item.quantity,
++                "unit_price": str(item.unit_price),
++            }
++        )
++    return {
++        "order_id": order_id,
++        "status": order.status,
++        "total": str(order.total),
++        "items": lines,
++    }

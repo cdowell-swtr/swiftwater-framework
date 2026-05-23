@@ -1,0 +1,41 @@
+--- a/src/app/enrich.py
++++ b/src/app/enrich.py
+@@ -1,5 +1,27 @@
++from dataclasses import dataclass
++
++import requests
++
++from app.models import Company
++from app.db import session
++
++
++_ENRICHMENT_URL = "https://api.clearbit.com/v2/companies/find"
++
++
++@dataclass
++class EnrichedCompany:
++    company_id: int
++    name: str
++    industry: str | None
++    employee_count: int | None
++
++
++def enrich_companies(company_ids: list[int]) -> list[EnrichedCompany]:
++    """Fetch third-party enrichment data for a set of companies."""
++    companies = session.query(Company).filter(Company.id.in_(company_ids)).all()
++    results = []
++    for company in companies:
++        resp = requests.get(_ENRICHMENT_URL, params={"domain": company.domain}, timeout=5)
++        data = resp.json() if resp.ok else {}
++        results.append(EnrichedCompany(
++            company_id=company.id,
++            name=company.name,
++            industry=data.get("category", {}).get("industry"),
++            employee_count=data.get("metrics", {}).get("employees"),
++        ))
++    return results
++
+
+ def lookup_company(domain: str) -> dict:
+     """Return cached metadata for the given company domain."""
+     return {}

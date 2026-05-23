@@ -1,0 +1,32 @@
+--- a/src/app/stats.py
++++ b/src/app/stats.py
+@@ -1,5 +1,26 @@
++from dataclasses import dataclass
+ from decimal import Decimal
+
++from app.db import session
++from app.models import Product
++
++
++@dataclass
++class CategoryStats:
++    category: str
++    product_count: int
++    avg_price: Decimal
++
++
++def category_price_stats() -> list[CategoryStats]:
++    """Compute average price per category across all products."""
++    products = session.query(Product).all()
++    by_category: dict[str, list[Decimal]] = {}
++    for p in products:
++        by_category.setdefault(p.category, []).append(p.price)
++    return [
++        CategoryStats(cat, len(prices), sum(prices) / len(prices))
++        for cat, prices in by_category.items()
++    ]
++
+
+ def total_catalog_value() -> Decimal:
+     """Return the sum of all product prices."""
+     return Decimal("0")
