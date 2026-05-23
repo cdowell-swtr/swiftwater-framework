@@ -101,3 +101,58 @@ def test_upskill_command_rejects_non_directory(tmp_path: Path, monkeypatch):
     result = runner.invoke(app, ["upskill", "nope"])
     assert result.exit_code == 1
     assert "not a directory" in result.output
+
+
+def test_review_skips_without_api_key(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    result = runner.invoke(app, ["review", "security"])
+    assert result.exit_code == 0
+    assert "skipped" in result.output
+
+
+def test_review_unknown_agent_errors(monkeypatch):
+    result = runner.invoke(app, ["review", "nope"])
+    assert result.exit_code == 1
+    assert "unknown review agent" in result.output
+
+
+def test_review_blocking_finding_exits_1(monkeypatch):
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.findings import Finding
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    monkeypatch.setattr(cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 1, "high", "bad")])
+    result = runner.invoke(app, ["review", "security"])
+    assert result.exit_code == 1
+    assert "failure" in result.output
+
+
+def test_review_low_finding_exits_0(monkeypatch):
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.findings import Finding
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    monkeypatch.setattr(cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 1, "low", "m")])
+    result = runner.invoke(app, ["review", "security"])
+    assert result.exit_code == 0
+    assert "neutral" in result.output
+
+
+def test_review_infra_error_is_neutral_exit_0(monkeypatch):
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    def _boom():
+        raise RuntimeError("API down")
+
+    monkeypatch.setattr(cli_mod, "_review_diff", _boom)
+    result = runner.invoke(app, ["review", "security"])
+    assert result.exit_code == 0
+    assert "neutral" in result.output or "could not run" in result.output
