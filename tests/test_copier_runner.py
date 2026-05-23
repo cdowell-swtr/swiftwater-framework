@@ -854,6 +854,30 @@ def test_ci_review_matrix(tmp_path: Path):
     assert doc["jobs"]["review"]["needs"] == ["test", "contract", "review-plan"]
 
 
+def test_render_ci_review_aggregation(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    ci = yaml.safe_load((dest / ".github" / "workflows" / "ci.yml").read_text())
+    jobs = ci["jobs"]
+
+    # the review matrix job writes per-agent findings and uploads them even on a blocking failure
+    review_steps = jobs["review"]["steps"]
+    runs = " ".join(str(s.get("run", "")) for s in review_steps)
+    assert "--findings-out" in runs
+    upload = next(s for s in review_steps if "upload-artifact" in str(s.get("uses", "")))
+    assert upload["if"] == "always()"
+    assert "review-findings-" in upload["with"]["name"]
+
+    # a review-aggregate job consolidates them into the single PR comment
+    assert "review-aggregate" in jobs
+    agg = jobs["review-aggregate"]
+    assert agg["needs"] == "review"
+    assert agg["if"] == "always()"
+    assert " ".join(str(s.get("run", "")) for s in agg["steps"]).find("framework review-aggregate") != -1
+    download = next(s for s in agg["steps"] if "download-artifact" in str(s.get("uses", "")))
+    assert download["with"]["pattern"] == "review-findings-*"
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml

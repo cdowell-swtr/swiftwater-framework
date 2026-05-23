@@ -161,4 +161,40 @@ jobs:
         env:
           ANTHROPIC_API_KEY: {% raw %}${{ secrets.ANTHROPIC_API_KEY }}{% endraw %}
           GITHUB_TOKEN: {% raw %}${{ github.token }}{% endraw %}
-        run: framework review {% raw %}${{ matrix.agent }}{% endraw %}
+        run: framework review {% raw %}${{ matrix.agent }}{% endraw %} --findings-out findings/{% raw %}${{ matrix.agent }}{% endraw %}.json
+      - name: upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-findings-{% raw %}${{ matrix.agent }}{% endraw %}
+          path: findings/
+          if-no-files-found: ignore
+
+  # Aggregator (spec §7): consolidate every agent's findings into one sticky PR comment, surfacing
+  # cross-agent relationships. Runs even when an agent blocked (`if: always()`), downloading the
+  # per-agent findings artifacts. On a push (no PR) the summary is printed to the job log instead.
+  review-aggregate:
+    needs: review
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: install the framework CLI at the recorded version
+        run: |
+          ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
+          uv tool install "git+https://github.com/cdowell-swtr/swiftwater-framework@${ref}"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: review-findings-*
+          merge-multiple: true
+          path: all-findings
+      - name: aggregate review findings
+        env:
+          GITHUB_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          GITHUB_REPOSITORY: {% raw %}${{ github.repository }}{% endraw %}
+          GITHUB_PR_NUMBER: {% raw %}${{ github.event.pull_request.number }}{% endraw %}
+        run: framework review-aggregate all-findings
