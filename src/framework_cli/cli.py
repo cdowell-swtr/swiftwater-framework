@@ -12,7 +12,7 @@ from framework_cli.naming import derive_names
 from framework_cli.review.aggregate import write_findings
 from framework_cli.review.checks import neutral_payload, post_or_skip, to_check_run
 from framework_cli.review.diff import changed_files, matches_globs, pr_diff
-from framework_cli.review.registry import active_agents, get_agent
+from framework_cli.review.registry import active_agents, agent_names, get_agent
 from framework_cli.review.runner import default_client, run_agent
 from framework_cli.source import REPO_URL, latest_release, record_portable_source, version_tag
 from framework_cli.upskill import UpskillError, upskill_project
@@ -153,6 +153,10 @@ def _review_run(diff: str, spec: object) -> list:
     return run_agent(diff, spec, default_client())  # type: ignore[arg-type]
 
 
+def _eval_run(diff: str, spec: object) -> list:
+    return run_agent(diff, spec, default_client())  # type: ignore[arg-type]
+
+
 @app.command(name="review-aggregate")
 def review_aggregate(
     directory: str = typer.Argument(..., help="Directory of per-agent findings JSON files."),
@@ -182,6 +186,81 @@ def review_agents(
 
     resolved = event or os.environ.get("GITHUB_EVENT_NAME", "pull_request")
     typer.echo(json.dumps(active_agents(resolved)))
+
+
+@app.command(name="eval")
+def eval_agents(
+    agent: str = typer.Argument("", help="Evaluate only this agent (default: all registered)."),
+    fixtures: str = typer.Option("tests/eval/fixtures", "--fixtures", help="Fixtures root directory."),
+    repeat: int = typer.Option(1, "--repeat", help="Runs per fixture; rates are averaged."),
+    require_fixtures: bool = typer.Option(
+        False, "--require-fixtures", help="Fail if an evaluated agent has no fixtures."
+    ),
+    require_key: bool = typer.Option(
+        False, "--require-key", help="Fail (not skip) if ANTHROPIC_API_KEY is unset."
+    ),
+) -> None:
+    """Run golden fixtures through the review agents and score recall/precision (spec §20)."""
+    from framework_cli.review.evals import (
+        DEFAULT_THRESHOLDS,
+        flags,
+        load_fixtures,
+        load_thresholds,
+        score_agent,
+    )
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        if require_key:
+            typer.echo("eval: ANTHROPIC_API_KEY is required but unset", err=True)
+            raise typer.Exit(1)
+        typer.echo("eval: skipped (no ANTHROPIC_API_KEY)")
+        raise typer.Exit(0)
+
+    root = Path(fixtures)
+    thresholds = load_thresholds(root / "thresholds.yaml")
+    by_agent: dict[str, list] = {}
+    for fx in load_fixtures(root):
+        by_agent.setdefault(fx.agent, []).append(fx)
+
+    known = set(agent_names())
+    for a in sorted(by_agent):
+        if a not in known:
+            typer.echo(f"warning: fixtures for unknown agent '{a}' (not in registry)", err=True)
+
+    targets = [agent] if agent else agent_names()
+    failing = 0
+    missing: list[str] = []
+    for a in targets:
+        spec = get_agent(a)
+        fx_list = by_agent.get(a, [])
+        if not fx_list:
+            missing.append(a)
+            typer.echo(f"{spec.name}    no fixtures (skipped)")
+            continue
+        bad_rates: list[float] = []
+        good_rates: list[float] = []
+        for fx in fx_list:
+            hits = 0
+            for _ in range(repeat):
+                try:
+                    found = _eval_run(fx.diff, spec)
+                except Exception:  # noqa: BLE001 - a failed run counts as a non-detection
+                    found = []
+                blocked = flags(found, spec, file=fx.seeded_file) if fx.kind == "bad" else flags(found, spec)
+                hits += 1 if blocked else 0
+            (bad_rates if fx.kind == "bad" else good_rates).append(hits / repeat)
+        score = score_agent(a, bad_rates, good_rates, thresholds.get(a, DEFAULT_THRESHOLDS))
+        status = "PASS" if score.passed else f"FAIL ({score.reason})"
+        typer.echo(f"{spec.name}    recall {score.recall:.2f}  fp {score.fp_rate:.2f}    {status}")
+        if not score.passed:
+            failing += 1
+
+    summary = f"{len(targets)} agent(s) · {failing} failing"
+    if missing:
+        summary += f" · {len(missing)} without fixtures"
+    typer.echo(summary)
+    coverage_fail = bool(missing) and require_fixtures
+    raise typer.Exit(1 if failing or coverage_fail else 0)
 
 
 @app.command()

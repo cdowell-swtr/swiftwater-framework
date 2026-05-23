@@ -274,3 +274,72 @@ def test_review_aggregate_posts_when_pr_present(tmp_path, monkeypatch):
     result = runner.invoke(app, ["review-aggregate", str(tmp_path)])
     assert result.exit_code == 0, result.output
     assert posted == {"pr": "12", "repo": "o/r", "token": "t"}
+
+
+# ---------------------------------------------------------------------------
+# eval command
+# ---------------------------------------------------------------------------
+
+
+def _make_fixture(tmp_path, agent, kind, slug, diff, seeded_file=None):
+    d = tmp_path / agent / kind
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{slug}.diff").write_text(diff)
+    if seeded_file is not None:
+        (d / f"{slug}.expect.json").write_text(_json.dumps({"file": seeded_file}))
+
+
+def test_eval_skips_without_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    result = runner.invoke(app, ["eval", "security"])
+    assert result.exit_code == 0
+    assert "skipped" in result.output
+
+
+def test_eval_require_key_fails_without_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    result = runner.invoke(app, ["eval", "security", "--require-key"])
+    assert result.exit_code == 1
+    assert "required" in result.output
+
+
+def test_eval_passes_when_agent_catches_bad_and_clean_on_good(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.findings import Finding
+
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "bad", "b2", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    # catch the bad diffs (a high finding on a.py); stay clean on the good diff (marked "# clean")
+    monkeypatch.setattr(
+        cli_mod,
+        "_eval_run",
+        lambda diff, spec: [] if "clean" in diff else [Finding("a.py", 1, "high", "danger")],
+    )
+    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "PASS" in result.output
+
+
+def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "bad", "b2", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "_eval_run", lambda diff, spec: [])  # never catches anything
+    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "FAIL" in result.output
+
+
+def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    assert runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)]).exit_code == 0
+    r = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path), "--require-fixtures"])
+    assert r.exit_code == 1
+    assert "no fixtures" in r.output
