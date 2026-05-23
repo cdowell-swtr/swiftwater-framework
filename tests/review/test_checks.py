@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from framework_cli.review.checks import neutral_payload, to_check_run
 from framework_cli.review.findings import Finding
 from framework_cli.review.registry import get_agent
@@ -34,3 +36,9 @@ def test_annotation_includes_suggestion_and_level():
 def test_neutral_payload():
     payload = neutral_payload("review-security", "skipped")
     assert payload.conclusion == "neutral" and payload.annotations == []
+
+
+def test_advisory_agent_never_fails():
+    advisory = replace(_SPEC, block_threshold=None)
+    assert to_check_run(advisory, [Finding("a.py", 1, "critical", "x")]).conclusion == "neutral"
+    assert to_check_run(advisory, []).conclusion == "success"
