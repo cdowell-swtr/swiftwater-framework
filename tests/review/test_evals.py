@@ -86,3 +86,46 @@ def test_flags_no_file_restriction_scans_all():
 
     spec = _spec("high")
     assert flags([Finding("z.py", 9, "critical", "x")], spec) is True  # good-fixture block check
+
+
+def test_default_thresholds():
+    from framework_cli.review.evals import DEFAULT_THRESHOLDS
+
+    assert DEFAULT_THRESHOLDS.recall_min == 0.67 and DEFAULT_THRESHOLDS.fp_max == 0.34
+
+
+def test_load_thresholds_overrides_and_missing(tmp_path):
+    from framework_cli.review.evals import Thresholds, load_thresholds
+
+    assert load_thresholds(tmp_path / "nope.yaml") == {}
+    (tmp_path / "thresholds.yaml").write_text("security: {recall_min: 0.5, fp_max: 0.5}\n")
+    got = load_thresholds(tmp_path / "thresholds.yaml")
+    assert got == {"security": Thresholds(0.5, 0.5)}
+
+
+def test_score_agent_passes_when_recall_high_and_fp_low():
+    from framework_cli.review.evals import DEFAULT_THRESHOLDS, score_agent
+
+    s = score_agent("security", [1.0, 1.0, 0.0], [0.0], DEFAULT_THRESHOLDS)
+    assert s.recall == 2 / 3 and s.fp_rate == 0.0 and s.passed and s.reason == ""
+
+
+def test_score_agent_fails_on_low_recall():
+    from framework_cli.review.evals import DEFAULT_THRESHOLDS, score_agent
+
+    s = score_agent("x", [1.0, 0.0, 0.0], [0.0], DEFAULT_THRESHOLDS)
+    assert not s.passed and "recall" in s.reason
+
+
+def test_score_agent_fails_on_high_fp():
+    from framework_cli.review.evals import DEFAULT_THRESHOLDS, score_agent
+
+    s = score_agent("x", [1.0, 1.0], [1.0], DEFAULT_THRESHOLDS)
+    assert not s.passed and "fp" in s.reason
+
+
+def test_score_agent_vacuous_when_no_fixtures():
+    from framework_cli.review.evals import DEFAULT_THRESHOLDS, score_agent
+
+    s = score_agent("x", [], [], DEFAULT_THRESHOLDS)
+    assert s.recall == 1.0 and s.fp_rate == 0.0 and s.passed

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from statistics import mean
 from typing import Literal
 
 from framework_cli.review.findings import Finding, severity_rank
@@ -31,6 +32,64 @@ def flags(findings: list[Finding], spec: AgentSpec, *, file: str | None = None) 
         if spec.block_threshold is None or severity_rank(f.severity) >= severity_rank(spec.block_threshold):
             return True
     return False
+
+
+@dataclass(frozen=True)
+class Thresholds:
+    recall_min: float
+    fp_max: float
+
+
+DEFAULT_THRESHOLDS = Thresholds(recall_min=0.67, fp_max=0.34)
+
+
+def load_thresholds(path: Path) -> dict[str, Thresholds]:
+    """Parse the optional per-agent threshold override file; missing file → {}."""
+    if not path.is_file():
+        return {}
+    import yaml
+
+    data = yaml.safe_load(path.read_text()) or {}
+    return {
+        agent: Thresholds(float(v["recall_min"]), float(v["fp_max"]))
+        for agent, v in data.items()
+    }
+
+
+@dataclass(frozen=True)
+class AgentScore:
+    agent: str
+    recall: float
+    fp_rate: float
+    bad_total: int
+    good_total: int
+    passed: bool
+    reason: str  # empty when passed
+
+
+def score_agent(
+    agent: str,
+    bad_detect_rates: list[float],
+    good_block_rates: list[float],
+    thr: Thresholds,
+) -> AgentScore:
+    """Set-level recall/precision. Each rate is a per-fixture hit fraction (hits/repeat)."""
+    recall = mean(bad_detect_rates) if bad_detect_rates else 1.0
+    fp_rate = mean(good_block_rates) if good_block_rates else 0.0
+    reasons: list[str] = []
+    if round(recall, 2) < thr.recall_min:
+        reasons.append(f"recall {recall:.2f} < {thr.recall_min:.2f}")
+    if round(fp_rate, 2) > thr.fp_max:
+        reasons.append(f"fp {fp_rate:.2f} > {thr.fp_max:.2f}")
+    return AgentScore(
+        agent,
+        recall,
+        fp_rate,
+        len(bad_detect_rates),
+        len(good_block_rates),
+        not reasons,
+        "; ".join(reasons),
+    )
 
 
 def load_fixtures(root: Path) -> list[Fixture]:
