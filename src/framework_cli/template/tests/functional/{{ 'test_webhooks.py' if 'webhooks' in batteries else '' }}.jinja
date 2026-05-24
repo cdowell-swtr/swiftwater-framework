@@ -53,3 +53,9 @@ def test_duplicate_delivery_is_deduped(client: TestClient):
     headers = {"X-Webhook-Signature": _sign(body)}
     assert client.post("/webhooks", content=body, headers=headers).status_code == 200
     assert client.post("/webhooks", content=body, headers=headers).status_code == 200
+
+
+def test_malformed_body_with_valid_signature_is_400(client: TestClient):
+    body = b"not json{"
+    r = client.post("/webhooks", content=body, headers={"X-Webhook-Signature": _sign(body)})
+    assert r.status_code == 400

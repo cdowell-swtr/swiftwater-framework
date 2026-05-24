@@ -20,17 +20,21 @@ _SIGNATURE_HEADER = "X-Webhook-Signature"
 async def receive_webhook(request: Request, session: SessionDep) -> Response:
     """Verify the HMAC signature, dedup via the inbox, dispatch inline, return fast.
 
-    A redelivered event (same body) is a no-op 200. Heavy processing belongs behind the
-    workers battery — see webhooks/handler.py.
+    A redelivered event (same body) is a no-op 200; a malformed body is a 400 (and is not
+    recorded). Heavy processing belongs behind the workers battery — see webhooks/handler.py.
     """
     raw = await request.body()
     secret = request.app.state.settings.webhook_signing_secret
     if not verify(raw, request.headers.get(_SIGNATURE_HEADER, ""), secret):
         return Response(status_code=401)
+    try:
+        event = await request.json()
+    except ValueError:  # json.JSONDecodeError subclasses ValueError
+        return Response(status_code=400)
     key = hashlib.sha256(raw).hexdigest()
     try:
         record(session, key)
-        handle_event(await request.json())
+        handle_event(event)
         session.commit()
     except IntegrityError:
         session.rollback()
