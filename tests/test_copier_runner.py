@@ -904,7 +904,7 @@ def test_render_with_websockets_battery(tmp_path: Path):
     render_project(dest, {**DATA, "batteries": ["websockets"]})
     assert (dest / "src" / "demo" / "routes" / "websockets.py").is_file()
     assert (dest / "src" / "demo" / "websockets" / "connection_manager.py").is_file()
-    assert (dest / "tests" / "test_websockets.py").is_file()
+    assert (dest / "tests" / "functional" / "test_websockets.py").is_file()
     assert "router" in (dest / "src" / "demo" / "routes" / "websockets.py").read_text()
 
 
