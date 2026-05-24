@@ -1,0 +1,20 @@
+"""Workers battery — functional tests (real Postgres via the project's test fixtures)."""
+
+import json
+
+from {{ package_name }}.tasks import dead_letter
+
+
+def test_record_failure_and_count(db_session):
+    assert dead_letter.count(db_session) == 0
+    dead_letter.record_failure(
+        db_session, task_name="t", task_id="abc", args_json=json.dumps([1, 2]), traceback="boom"
+    )
+    assert dead_letter.count(db_session) == 1
+    assert dead_letter.list_recent(db_session)[0].task_name == "t"
+
+
+def test_render_dlq_metrics_reports_depth(db_session):
+    out = dead_letter.render_dlq_metrics(db_session)
+    assert "app_dead_letter_tasks" in out
+    assert out.strip().endswith("0")
