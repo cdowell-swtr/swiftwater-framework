@@ -4,7 +4,7 @@ from framework_cli.copier_runner import render_project
 from framework_cli.integrity.checker import check
 from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
-from framework_cli.integrity.restore import restore_file
+from framework_cli.integrity.restore import _answers, restore_file
 from framework_cli.integrity.sections import section_content, section_span
 
 
@@ -84,3 +84,19 @@ def test_restore_hybrid_errors_when_markers_destroyed(tmp_path: Path):
         assert "markers" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected ValueError when markers are destroyed")
+
+
+def test_answers_preserves_battery_list(tmp_path: Path):
+    proj = tmp_path / "p"
+    render_project(
+        proj,
+        {
+            "project_name": "P",
+            "project_slug": "p",
+            "package_name": "p",
+            "python_version": "3.12",
+            "batteries": ["webhooks"],
+        },
+    )
+    # the batteries answer must come back as a real list, not the string "['webhooks']"
+    assert _answers(proj)["batteries"] == ["webhooks"]
