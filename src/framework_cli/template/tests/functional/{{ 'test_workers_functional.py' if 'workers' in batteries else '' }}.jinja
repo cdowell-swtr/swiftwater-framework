@@ -57,8 +57,12 @@ def test_failing_task_lands_in_dead_letter_queue(db_session, monkeypatch):
     from {{ package_name }}.tasks.app import app as celery_app
     from {{ package_name }}.tasks.base import BaseTask
 
-    celery_app.conf.task_always_eager = True
-    celery_app.conf.task_eager_propagates = False  # let on_failure fire instead of raising
+    # Mutate the shared app config via monkeypatch so it is restored after the test
+    # (a bare assignment would leak eager mode into the rest of the suite).
+    monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
+    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", False)  # let on_failure fire
+
+    assert dl.count(db_session) == 0  # guard: prove the row below comes from on_failure
 
     @celery_app.task(base=BaseTask, bind=True, max_retries=0, name="always_fails")
     def always_fails(self):
