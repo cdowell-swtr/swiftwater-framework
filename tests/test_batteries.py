@@ -38,3 +38,12 @@ def test_resolve_includes_dependency_closure():
         assert batteries.resolve(["_child"]) == ["_child", "websockets"]
     finally:
         del batteries._BATTERIES["_child"]
+
+
+def test_workers_battery_is_registered():
+    from framework_cli.batteries import get_battery, resolve
+
+    spec = get_battery("workers")
+    assert spec.name == "workers"
+    assert spec.requires == ()          # standalone — depends on nothing
+    assert resolve(["workers"]) == ["workers"]

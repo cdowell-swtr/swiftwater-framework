@@ -19,6 +19,10 @@ _BATTERIES: dict[str, BatterySpec] = {
     "websockets": BatterySpec(
         "websockets", "FastAPI WebSocket routes + a connection manager"
     ),
+    "workers": BatterySpec(
+        "workers",
+        "Celery + Redis async task workers with a DB-backed dead-letter queue and beat scheduler",
+    ),
 }
 
 

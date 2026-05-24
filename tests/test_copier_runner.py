@@ -945,6 +945,18 @@ def test_render_no_webhooks_secret_without_battery(tmp_path: Path):
     assert not (dest / "migrations" / "versions" / "0002_webhook_events.py").exists()
 
 
+def test_render_with_workers_battery_adds_celery_dep(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    assert "celery[redis]" in (dest / "pyproject.toml").read_text()
+
+
+def test_render_without_workers_battery_has_no_celery_dep(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert "celery[redis]" not in (dest / "pyproject.toml").read_text()
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml
