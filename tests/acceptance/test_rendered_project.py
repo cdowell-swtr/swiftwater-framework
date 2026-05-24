@@ -113,6 +113,59 @@ def test_rendered_project_with_websockets_battery_passes(tmp_path: Path):
 
 @pytest.mark.skipif(
     not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
+def test_rendered_project_with_webhooks_battery_passes(tmp_path: Path):
+    # Renders a project with the webhooks battery active, asserts the battery files
+    # were emitted, then runs unit+functional (70% gate) to confirm the webhook tests
+    # (tests/functional/test_webhooks.py) are collected and pass — exercising the
+    # 0002_webhook_events migration, HMAC signature verification, and dedup logic.
+    data_with_webhooks = {**DATA, "batteries": ["webhooks"]}
+    dest = tmp_path / "demo"
+    render_project(dest, data_with_webhooks)
+
+    # Battery files must exist in the rendered project.
+    assert (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), \
+        "routes/webhooks.py was not rendered by the webhooks battery"
+    assert (dest / "tests" / "functional" / "test_webhooks.py").exists(), \
+        "tests/functional/test_webhooks.py was not rendered by the webhooks battery"
+    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").exists(), \
+        "migrations/versions/0002_webhook_events.py was not rendered by the webhooks battery"
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    # Run unit + functional tiers (70% gate) — this collects test_webhooks.py and runs
+    # it against a real testcontainers Postgres (the 0002 migration provisions webhook_events).
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional coverage gate did not pass for the webhooks battery project:\n"
+        + result.stdout + result.stderr
+    )
+    # Prove the webhook functional tests actually ran: the route handler reaches full coverage
+    # only when test_webhooks.py exercises the valid-sig 200 / bad-sig 401 / duplicate-dedup
+    # paths (router autodiscovery imports routes/webhooks.py on every create_app() call,
+    # yielding ~40% import-only — so the filename appearing is NOT sufficient proof).
+    # 100% only occurs when all three test cases run against the real DB.
+    combined_output = result.stdout + result.stderr
+    wh_cov_line = next(
+        (ln for ln in combined_output.splitlines() if "routes/webhooks.py" in ln), ""
+    )
+    assert "100%" in wh_cov_line, (
+        f"Webhook route not fully exercised; coverage line: {wh_cov_line!r}\n"
+        "Expected 100% coverage of routes/webhooks.py — was "
+        "tests/functional/test_webhooks.py collected and did it pass?\n"
+        + combined_output
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
     reason="uv + docker required: the e2e tier runs against real Postgres",
 )
 def test_rendered_project_combined_coverage_gate_passes(tmp_path: Path):
