@@ -9,7 +9,7 @@ from {{ package_name }}.middleware.errors import register_exception_handlers
 from {{ package_name }}.middleware.observability import ObservabilityMiddleware
 from {{ package_name }}.observability.metrics import MetricsRegistry
 from {{ package_name }}.observability.tracing import configure_tracing
-from {{ package_name }}.routes import health, items
+from {{ package_name }}.routes import include_routers
 
 
 @asynccontextmanager
@@ -37,8 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.metrics = MetricsRegistry()
     app.add_middleware(ObservabilityMiddleware, metrics=app.state.metrics)
     register_exception_handlers(app)
-    app.include_router(health.router)
-    app.include_router(items.router)
+    include_routers(app)
     configure_tracing(app, settings)
     return app
 

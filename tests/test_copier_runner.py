@@ -30,7 +30,7 @@ def test_render_substitutes_package_name(tmp_path: Path):
     render_project(dest, DATA)
 
     main_py = (dest / "src" / "demo" / "main.py").read_text()
-    assert "from demo.routes import health" in main_py
+    assert "from demo.routes import include_routers" in main_py
 
 
 def test_render_includes_coverage_config(tmp_path: Path):
@@ -414,8 +414,8 @@ def test_render_wires_items_route(tmp_path: Path):
     items = (dest / "src" / "demo" / "routes" / "items.py").read_text()
     assert '@router.get("/items"' in items
     main = (dest / "src" / "demo" / "main.py").read_text()
-    assert "items" in main
-    assert "include_router(items.router)" in main
+    # items router is now wired via autodiscovery, not explicit include_router
+    assert "include_routers(app)" in main
 
 
 def test_render_includes_resilience_scaffold(tmp_path: Path):
@@ -879,6 +879,17 @@ def test_render_ci_review_aggregation(tmp_path: Path):
     assert download["with"]["merge-multiple"] is True
     assert download["with"]["path"] == "all-findings"
     assert "all-findings" in " ".join(str(s.get("run", "")) for s in agg["steps"])
+
+
+def test_render_routes_use_autodiscovery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    init = (dest / "src" / "demo" / "routes" / "__init__.py").read_text()
+    assert "include_routers" in init and "iter_modules" in init
+    main = (dest / "src" / "demo" / "main.py").read_text()
+    assert "include_routers(app)" in main
+    assert "include_router(health.router)" not in main
+    assert "include_router(items.router)" not in main
 
 
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
