@@ -120,3 +120,18 @@ def test_remove_battery_usage_refusal(tmp_path, monkeypatch):
         remove_battery(project, "webhooks", force=False)
     remove_battery(project, "webhooks", force=True)  # --force proceeds
     assert not (project / "src" / "my_app" / "routes" / "webhooks.py").exists()
+
+
+def test_downskill_project_runs_remove_then_task_test(tmp_path, monkeypatch):
+    import framework_cli.downskill as ds
+
+    calls = {}
+    monkeypatch.setattr(ds, "_is_git_tracked", lambda p: True)
+    monkeypatch.setattr(
+        ds, "remove_battery",
+        lambda project, battery, *, force=False: calls.setdefault("removed", (battery, force)) or ds.RemovalReport(),
+    )
+    monkeypatch.setattr(ds.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0})())
+
+    ok = ds.downskill_project(tmp_path, "webhooks", force=True)
+    assert ok is True and calls["removed"] == ("webhooks", True)

@@ -462,3 +462,32 @@ def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
     monkeypatch.setattr(cli_mod, "_eval_run", flaky)
     result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path), "--repeat", "2"])
     assert "recall 0.50" in result.output  # 1 hit / 2 repeats on the single bad fixture
+
+
+def test_downskill_command_removes_battery(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+
+    (tmp_path / "proj").mkdir()
+    captured = {}
+    monkeypatch.setattr(
+        cli_mod, "downskill_project",
+        lambda project, battery, *, force=False: captured.update(b=battery, f=force) or True,
+    )
+    result = runner.invoke(app, ["downskill", str(tmp_path / "proj"), "webhooks"])
+    assert result.exit_code == 0, result.output
+    assert captured == {"b": "webhooks", "f": False}
+
+
+def test_downskill_command_refusal_exits_1(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+    from framework_cli.downskill import DownskillError
+
+    (tmp_path / "proj").mkdir()
+
+    def boom(project, battery, *, force=False):
+        raise DownskillError("battery 'webhooks' appears in use by: src/x.py. Re-run with --force...")
+
+    monkeypatch.setattr(cli_mod, "downskill_project", boom)
+    result = runner.invoke(app, ["downskill", str(tmp_path / "proj"), "webhooks"])
+    assert result.exit_code == 1
+    assert "in use" in result.output

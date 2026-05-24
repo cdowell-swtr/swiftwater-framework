@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -12,6 +13,7 @@ from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
 from framework_cli.integrity.restore import _answers, _restore_section
 from framework_cli.source import read_batteries, record_batteries
+from framework_cli.upskill import UpskillError, _is_git_tracked
 
 
 class DownskillError(Exception):
@@ -140,3 +142,19 @@ def remove_battery(project: Path, battery: str, *, force: bool = False) -> Remov
             + " — write a contract down-migration to drop the table(s) if desired."
         )
     return report
+
+
+def downskill_project(project: Path, battery: str, *, force: bool = False) -> bool:
+    """Remove `battery`, then run `task test`. Returns whether the project is green afterward."""
+    if not _is_git_tracked(project):
+        raise DownskillError(
+            "downskill requires a git-tracked project (commit first, so you can review/revert)"
+        )
+    remove_battery(project, battery, force=force)
+    try:
+        test = subprocess.run(["task", "test"], cwd=project, check=False)
+    except FileNotFoundError as exc:
+        raise UpskillError(
+            "`task` (go-task) not found on PATH — install it to run the project's tests"
+        ) from exc
+    return test.returncode == 0

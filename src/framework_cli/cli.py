@@ -16,6 +16,7 @@ from framework_cli.review.diff import changed_files, matches_globs, pr_diff
 from framework_cli.review.registry import active_agents, agent_names, get_agent
 from framework_cli.review.runner import default_client, run_agent
 from framework_cli.source import REPO_URL, latest_release, record_portable_source, version_tag
+from framework_cli.downskill import DownskillError, downskill_project
 from framework_cli.upskill import UpskillError, upskill_project
 
 app = typer.Typer(
@@ -149,6 +150,33 @@ def upskill(
         typer.echo(
             f"Upskilled {name}, but `task test` failed — resolve any Copier conflict markers "
             "and fix failures before committing.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+
+@app.command()
+def downskill(
+    name: str = typer.Argument(..., help="Path to the project."),
+    battery: str = typer.Argument(..., help="Battery to remove, e.g. 'webhooks'."),
+    force: bool = typer.Option(False, "--force", help="Remove even if the battery appears in use."),
+) -> None:
+    """Remove a battery from a project (deletes its files; preserves migrations), then run its tests."""
+    project = Path(name)
+    if not project.is_dir():
+        typer.echo(f"Error: {name} is not a directory", err=True)
+        raise typer.Exit(1)
+    try:
+        green = downskill_project(project, battery, force=force)
+    except (DownskillError, KeyError, UpskillError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    if green:
+        typer.echo(f"Removed '{battery}' from {name}; tests pass.")
+    else:
+        typer.echo(
+            f"Removed '{battery}' from {name}, but `task test` failed — review the removal diff "
+            "and fix references before committing.",
             err=True,
         )
         raise typer.Exit(1)
