@@ -359,6 +359,26 @@ def test_eval_unknown_agent_errors(monkeypatch):
     assert "unknown review agent" in result.output
 
 
+def test_new_with_websockets_battery(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["new", "My App", "--with", "websockets"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "my-app" / "src" / "my_app" / "routes" / "websockets.py").is_file()
+
+
+def test_new_without_battery_has_no_websockets(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["new", "My App"]).exit_code == 0
+    assert not (tmp_path / "my-app" / "src" / "my_app" / "routes" / "websockets.py").exists()
+
+
+def test_new_rejects_unknown_battery(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["new", "My App", "--with", "bogus"])
+    assert result.exit_code == 1
+    assert "unknown battery" in result.output
+
+
 def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
     import framework_cli.cli as cli_mod
     from framework_cli.review.findings import Finding

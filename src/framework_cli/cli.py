@@ -8,6 +8,7 @@ from framework_cli.integrity.checker import check as check_integrity, record_dri
 from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
 from framework_cli.integrity.restore import restore_file
+from framework_cli.batteries import resolve as resolve_batteries
 from framework_cli.naming import derive_names
 from framework_cli.review.aggregate import write_findings
 from framework_cli.review.checks import neutral_payload, post_or_skip, to_check_run
@@ -32,6 +33,9 @@ def _main() -> None:
 def new(
     name: str = typer.Argument(..., help="Human-readable project name"),
     python_version: str = typer.Option("3.12", help="Python version to target"),
+    with_: list[str] = typer.Option(
+        [], "--with", help="Activate a battery (repeatable), e.g. --with websockets."
+    ),
 ) -> None:
     """Scaffold a new project from the framework template."""
     names = derive_names(name)
@@ -41,6 +45,12 @@ def new(
         typer.echo(f"Error: {dest} already exists", err=True)
         raise typer.Exit(code=1)
 
+    try:
+        batteries = resolve_batteries(with_)
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
     render_project(
         dest,
         {
@@ -48,11 +58,15 @@ def new(
             "project_slug": names.project_slug,
             "package_name": names.package_name,
             "python_version": python_version,
+            "batteries": batteries,
         },
     )
     write_manifest(dest, installed_framework_version())
     record_portable_source(dest, installed_framework_version())
-    typer.echo(f"Created '{names.project_slug}' at {dest}")
+    msg = f"Created '{names.project_slug}' at {dest}"
+    if batteries:
+        msg += f" (batteries: {', '.join(batteries)})"
+    typer.echo(msg)
 
 
 @app.command()
