@@ -18,3 +18,8 @@ python_version:
   type: str
   help: Python version to target
   default: "3.12"
+
+batteries:
+  type: yaml
+  help: Active batteries (set via `framework new --with`); not prompted.
+  default: []

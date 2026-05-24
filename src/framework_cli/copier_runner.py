@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from importlib.resources import files
 from pathlib import Path
 
@@ -9,12 +10,12 @@ def template_path() -> Path:
     return Path(str(files("framework_cli"))) / "template"
 
 
-def render_project(dest: Path, data: dict[str, str]) -> None:
+def render_project(dest: Path, data: Mapping[str, object]) -> None:
     """Render the bundled template into `dest` using the provided answers."""
     run_copy(
         str(template_path()),
         str(dest),
-        data=data,
+        data=dict(data),
         defaults=True,
         overwrite=True,
         quiet=True,

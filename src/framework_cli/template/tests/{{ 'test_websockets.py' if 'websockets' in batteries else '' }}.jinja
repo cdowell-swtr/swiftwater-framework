@@ -1,0 +1,10 @@
+from fastapi.testclient import TestClient
+
+from {{ package_name }}.main import create_app
+
+
+def test_websocket_echo_broadcast() -> None:
+    client = TestClient(create_app())
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text("hello")
+        assert ws.receive_text() == "hello"

@@ -892,6 +892,22 @@ def test_render_routes_use_autodiscovery(tmp_path: Path):
     assert "include_router(items.router)" not in main
 
 
+def test_render_without_battery_has_no_websockets(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # DATA has no "batteries" -> defaults to []
+    assert not (dest / "src" / "demo" / "routes" / "websockets.py").exists()
+    assert not (dest / "src" / "demo" / "websockets").exists()
+
+
+def test_render_with_websockets_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["websockets"]})
+    assert (dest / "src" / "demo" / "routes" / "websockets.py").is_file()
+    assert (dest / "src" / "demo" / "websockets" / "connection_manager.py").is_file()
+    assert (dest / "tests" / "test_websockets.py").is_file()
+    assert "router" in (dest / "src" / "demo" / "routes" / "websockets.py").read_text()
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml
