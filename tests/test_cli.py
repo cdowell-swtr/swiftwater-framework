@@ -379,6 +379,48 @@ def test_new_rejects_unknown_battery(tmp_path, monkeypatch):
     assert "unknown battery" in result.output
 
 
+def test_new_records_batteries_in_answers(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["new", "My App", "--with", "websockets"]).exit_code == 0
+    from framework_cli.source import read_batteries
+
+    assert read_batteries(tmp_path / "my-app") == ["websockets"]
+
+
+def test_read_batteries_empty_when_absent(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["new", "My App"]).exit_code == 0
+    from framework_cli.source import read_batteries
+
+    assert read_batteries(tmp_path / "my-app") == []
+
+
+def test_upskill_with_unions_batteries(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["new", "My App", "--with", "websockets"]).exit_code == 0
+    project = tmp_path / "my-app"
+
+    captured = {}
+
+    def fake_upskill(proj, vcs_ref=None, with_batteries=None):
+        captured["with_batteries"] = with_batteries
+        return True
+
+    monkeypatch.setattr(cli_mod, "upskill_project", fake_upskill)
+
+    from framework_cli import batteries as bat
+
+    bat._BATTERIES["_x"] = bat.BatterySpec("_x", "x")
+    try:
+        result = runner.invoke(app, ["upskill", str(project), "--with", "_x"])
+    finally:
+        del bat._BATTERIES["_x"]
+    assert result.exit_code == 0, result.output
+    assert captured["with_batteries"] == ["_x", "websockets"]  # union, sorted
+
+
 def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
     import framework_cli.cli as cli_mod
     from framework_cli.review.findings import Finding

@@ -31,22 +31,27 @@ def _is_git_tracked(project: Path) -> bool:
     return result.returncode == 0 and result.stdout.strip() == "true"
 
 
-def upskill_project(project: Path, vcs_ref: str | None = None) -> bool:
+def upskill_project(
+    project: Path, vcs_ref: str | None = None, with_batteries: list[str] | None = None
+) -> bool:
     """Update `project` to `vcs_ref` (default: latest tag) and run `task test`.
 
-    Returns True if the project is green afterward. Raises UpskillError if the project is
-    not git-tracked (Copier's update requires it).
+    When `with_batteries` is given, that battery set is passed as the update's `batteries`
+    answer (used by `upskill --with`); otherwise the recorded answers — including the existing
+    `batteries` — are reused as-is.
     """
     if not _is_git_tracked(project):
         raise UpskillError(
             "upskill requires a git-tracked project (run `git init` and commit first)"
         )
+    data = {"batteries": with_batteries} if with_batteries is not None else None
     run_update(
         str(project),
         defaults=True,
         overwrite=True,
         quiet=True,
         vcs_ref=vcs_ref,
+        data=data,
     )
     try:
         test = subprocess.run(["task", "test"], cwd=project, check=False)

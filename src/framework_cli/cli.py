@@ -118,14 +118,28 @@ def restore(
 @app.command()
 def upskill(
     name: str = typer.Argument(..., help="Path to the project to upskill."),
+    with_: list[str] = typer.Option(
+        [], "--with", help="Add a battery to the project (repeatable)."
+    ),
 ) -> None:
     """Update a project to a newer framework version, then run its tests."""
+    from framework_cli.source import read_batteries
+
     project = Path(name)
     if not project.is_dir():
         typer.echo(f"Error: {name} is not a directory", err=True)
         raise typer.Exit(1)
+
+    with_batteries = None
+    if with_:
+        try:
+            with_batteries = resolve_batteries([*read_batteries(project), *with_])
+        except ValueError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(1) from exc
+
     try:
-        green = upskill_project(project)
+        green = upskill_project(project, with_batteries=with_batteries)
     except UpskillError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

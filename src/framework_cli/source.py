@@ -48,6 +48,16 @@ def latest_release(url: str = REPO_URL) -> str | None:
     return tags[max(tags)]
 
 
+def read_batteries(project: Path) -> list[str]:
+    """The battery set recorded in the project's .copier-answers.yml ([] if none)."""
+    import yaml
+
+    answers = project / _ANSWERS_REL
+    data = yaml.safe_load(answers.read_text()) or {}
+    value = data.get("batteries", [])
+    return [str(b) for b in value] if isinstance(value, list) else []
+
+
 def record_portable_source(project: Path, version: str) -> None:
     """Rewrite the project's .copier-answers.yml to a portable git source + version tag.
 
