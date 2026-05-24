@@ -1026,6 +1026,21 @@ def test_render_workers_creates_base_task(tmp_path: Path):
     assert (dest / "src" / DATA["package_name"] / "tasks" / "base.py").exists()
 
 
+def test_render_workers_creates_task_modules(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    base = dest / "src" / DATA["package_name"] / "tasks"
+    for name in ("liveness.py", "tasks.py", "schedule.py"):
+        assert (base / name).exists(), f"expected {name} in tasks/"
+    # Rendered files contain package_name (not raw Jinja tags)
+    liveness_text = (base / "liveness.py").read_text()
+    assert "{{ " not in liveness_text, "liveness.py still has unrendered Jinja"
+    assert "demo:worker:heartbeat" in liveness_text
+    schedule_text = (base / "schedule.py").read_text()
+    assert "{{ " not in schedule_text, "schedule.py still has unrendered Jinja"
+    assert "demo.tasks.tasks.heartbeat" in schedule_text
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml

@@ -1,0 +1,30 @@
+"""Worker liveness via a heartbeat marker in Redis. Pure helpers so /health and the beat task
+share one definition of 'alive' and unit tests need no broker.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Protocol
+
+HEARTBEAT_KEY = "{{ package_name }}:worker:heartbeat"
+MAX_AGE_SECONDS = 90  # stale if no beat tick within this window (beat runs every 30s)
+
+
+class _KV(Protocol):
+    def get(self, key: str) -> bytes | str | None: ...
+    def set(self, key: str, value: str) -> object: ...
+
+
+def write_heartbeat(client: _KV, *, now: datetime | None = None) -> None:
+    client.set(HEARTBEAT_KEY, (now or datetime.now(timezone.utc)).isoformat())
+
+
+def is_alive(client: _KV, *, now: datetime | None = None, max_age: int = MAX_AGE_SECONDS) -> bool:
+    raw = client.get(HEARTBEAT_KEY)
+    if raw is None:
+        return False
+    stamp = raw.decode() if isinstance(raw, bytes) else raw
+    last = datetime.fromisoformat(stamp)
+    reference = now or datetime.now(timezone.utc)
+    return (reference - last).total_seconds() <= max_age

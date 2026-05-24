@@ -1,0 +1,38 @@
+"""Workers battery — unit tests (hermetic; no broker/DB)."""
+
+from datetime import datetime, timedelta, timezone
+
+from {{ package_name }}.tasks import liveness
+
+
+class _FakeKV:
+    def __init__(self):
+        self._d = {}
+    def get(self, key):
+        return self._d.get(key)
+    def set(self, key, value):
+        self._d[key] = value
+
+
+def test_heartbeat_roundtrip_is_alive():
+    kv = _FakeKV()
+    now = datetime(2026, 5, 24, tzinfo=timezone.utc)
+    liveness.write_heartbeat(kv, now=now)
+    assert liveness.is_alive(kv, now=now + timedelta(seconds=10)) is True
+
+
+def test_stale_heartbeat_is_not_alive():
+    kv = _FakeKV()
+    now = datetime(2026, 5, 24, tzinfo=timezone.utc)
+    liveness.write_heartbeat(kv, now=now)
+    assert liveness.is_alive(kv, now=now + timedelta(seconds=600)) is False
+
+
+def test_missing_heartbeat_is_not_alive():
+    assert liveness.is_alive(_FakeKV()) is False
+
+
+def test_celery_app_config_is_safe():
+    from {{ package_name }}.tasks.app import app
+    assert app.conf.task_acks_late is True
+    assert app.conf.task_serializer == "json"

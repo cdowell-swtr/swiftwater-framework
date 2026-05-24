@@ -1,0 +1,14 @@
+"""Beat schedule. Add periodic tasks here. The heartbeat is wired by default."""
+
+from __future__ import annotations
+
+from celery import Celery
+
+
+def register_schedule(app: Celery) -> None:
+    app.conf.beat_schedule = {
+        "worker-heartbeat": {
+            "task": "{{ package_name }}.tasks.tasks.heartbeat",
+            "schedule": 30.0,  # seconds
+        },
+    }
