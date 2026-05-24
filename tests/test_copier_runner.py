@@ -1020,6 +1020,12 @@ def test_render_no_workers_functional_test_without_battery(tmp_path: Path):
     assert not (dest / "tests" / "functional" / "test_workers_functional.py").exists()
 
 
+def test_render_workers_creates_base_task(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    assert (dest / "src" / DATA["package_name"] / "tasks" / "base.py").exists()
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml

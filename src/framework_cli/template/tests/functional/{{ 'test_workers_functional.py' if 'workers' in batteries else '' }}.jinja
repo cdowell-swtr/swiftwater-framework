@@ -23,3 +23,50 @@ def test_render_dlq_metrics_reflects_depth(db_session):
         db_session, task_name="t", task_id="abc", args_json=json.dumps([1]), traceback="boom"
     )
     assert dead_letter.render_dlq_metrics(db_session).strip().endswith("1")
+
+
+def test_failing_task_lands_in_dead_letter_queue(db_session, monkeypatch):
+    """Prove that on_failure writes a DLQ row for the task name + traceback content.
+
+    Session-isolation design:
+        BaseTask.on_failure opens its OWN SessionLocal() session and calls session.commit().
+        The test's db_session fixture wraps everything in a connection-level transaction that
+        rolls back at teardown (join_transaction_mode="create_savepoint").  A separate
+        SessionLocal() session uses a different connection, so its real commit would:
+          (a) NOT be visible to db_session queries (different connection / isolation), and
+          (b) persist beyond test teardown, leaking rows across tests.
+
+        Fix: monkeypatch base.SessionLocal to a factory that returns a context manager
+        yielding db_session itself.  When on_failure calls `with SessionLocal() as session:`,
+        it gets db_session.  The `record_failure` call's `session.commit()` becomes a
+        savepoint commit (create_savepoint mode) — visible in the same session, rolled back
+        by the fixture's outer transaction at teardown.  No real commit, no leaked rows.
+    """
+    from contextlib import contextmanager
+
+    from {{ package_name }}.tasks import base as base_mod
+    from {{ package_name }}.tasks import dead_letter as dl
+
+    @contextmanager
+    def _session_factory():
+        # Yield the test's db_session; do NOT close it on exit (teardown owns it).
+        yield db_session
+
+    monkeypatch.setattr(base_mod, "SessionLocal", _session_factory)
+
+    from {{ package_name }}.tasks.app import app as celery_app
+    from {{ package_name }}.tasks.base import BaseTask
+
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = False  # let on_failure fire instead of raising
+
+    @celery_app.task(base=BaseTask, bind=True, max_retries=0, name="always_fails")
+    def always_fails(self):
+        raise ValueError("boom")
+
+    always_fails.delay()
+
+    rows = dl.list_recent(db_session)
+    assert any(r.task_name == "always_fails" for r in rows)
+    failed = next(r for r in rows if r.task_name == "always_fails")
+    assert "boom" in failed.traceback
