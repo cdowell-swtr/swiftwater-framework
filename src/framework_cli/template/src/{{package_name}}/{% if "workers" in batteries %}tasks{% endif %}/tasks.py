@@ -12,8 +12,15 @@ from .app import app
 from .base import BaseTask
 
 
+_redis: redis.Redis | None = None
+
+
 def _redis_client() -> redis.Redis:
-    return redis.Redis.from_url(get_settings().redis_url)
+    # Cached lazily (one connection pool per worker process, not per task call).
+    global _redis
+    if _redis is None:
+        _redis = redis.Redis.from_url(get_settings().redis_url)
+    return _redis
 
 
 @app.task(base=BaseTask, bind=True)
@@ -23,6 +30,8 @@ def process_async(self, payload: dict) -> None:
     return None
 
 
+# Deliberately NOT on BaseTask: a missed heartbeat is a liveness signal, not work to
+# dead-letter — let it fail quietly and recover on the next 30s tick.
 @app.task(bind=True)
 def heartbeat(self) -> None:
     """Periodic liveness tick (registered in schedule.py). Writes the marker /health checks."""
