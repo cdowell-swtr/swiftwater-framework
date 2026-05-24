@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from framework_cli.copier_runner import render_project
+from framework_cli.downskill import remove_battery
 from framework_cli.integrity.checker import check
 from framework_cli.integrity.restore import restore_file
 
@@ -161,6 +162,55 @@ def test_rendered_project_with_webhooks_battery_passes(tmp_path: Path):
         "Expected 100% coverage of routes/webhooks.py — was "
         "tests/functional/test_webhooks.py collected and did it pass?\n"
         + combined_output
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
+def test_rendered_project_downskill_webhooks_is_green(tmp_path: Path):
+    # Renders a project WITH the webhooks battery, removes it via remove_battery, and
+    # verifies that the remaining project is still green (no dangling imports break
+    # alembic upgrade / pytest collection, and the 70% coverage gate still passes).
+    data_with_webhooks = {**DATA, "batteries": ["webhooks"]}
+    dest = tmp_path / "demo"
+    render_project(dest, data_with_webhooks)
+
+    # Sanity: battery files must exist before removal.
+    assert (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), \
+        "routes/webhooks.py was not rendered — webhooks battery did not activate"
+
+    # Remove the battery (no force needed — no builder code references it).
+    remove_battery(dest, "webhooks")
+
+    # Battery-owned route file must be gone.
+    assert not (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), \
+        "routes/webhooks.py was not deleted by remove_battery"
+
+    # Migration must be PRESERVED (remove_battery keeps migrations/).
+    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").exists(), \
+        "0002_webhook_events.py was unexpectedly deleted — migrations should be preserved"
+
+    # migrations/env.py must no longer reference webhooks (hybrid section stripped).
+    env_py = (dest / "migrations" / "env.py").read_text()
+    assert "webhooks" not in env_py, \
+        "migrations/env.py still contains 'webhooks' after remove_battery"
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the post-downskill project"
+
+    # Run unit + functional tiers (70% gate) — alembic upgrade head applies both
+    # migrations (0001 + 0002); the webhook_events table goes unused but causes no errors.
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional coverage gate failed after downskilling webhooks:\n"
+        + result.stdout + result.stderr
     )
 
 
