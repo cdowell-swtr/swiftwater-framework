@@ -94,14 +94,20 @@ def test_rendered_project_with_websockets_battery_passes(tmp_path: Path):
         "the 70% unit+functional coverage gate did not pass for the websockets battery project:\n"
         + result.stdout + result.stderr
     )
-    # Confirm the WS route was covered — coverage.sh runs in -q mode which only names
-    # tests on failure; on a clean run the coverage table shows the covered source files.
-    # routes/websockets.py appearing in the table (and being exercised) proves the WS
-    # echo test was collected and ran.
+    # Prove the WS functional test actually ran: the route handler reaches full coverage
+    # only when test_websocket_echo_broadcast exercises it (router autodiscovery alone
+    # imports routes/websockets.py on every create_app() call, yielding ~46% — so the
+    # filename appearing in the coverage table is NOT sufficient proof). 100% only occurs
+    # when the connect→send→broadcast→receive→disconnect path runs.
     combined_output = result.stdout + result.stderr
-    assert "websockets" in combined_output, (
-        "websockets source files do not appear in the coverage output — "
-        "was tests/functional/test_websockets.py collected?\n" + combined_output
+    ws_cov_line = next(
+        (ln for ln in combined_output.splitlines() if "routes/websockets.py" in ln), ""
+    )
+    assert "100%" in ws_cov_line, (
+        f"WS route not fully exercised; coverage line: {ws_cov_line!r}\n"
+        "Expected 100% coverage of routes/websockets.py — was "
+        "tests/functional/test_websockets.py collected and did it pass?\n"
+        + combined_output
     )
 
 
