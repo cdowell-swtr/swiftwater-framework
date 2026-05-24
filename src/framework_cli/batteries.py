@@ -13,6 +13,9 @@ class BatterySpec:
 
 
 _BATTERIES: dict[str, BatterySpec] = {
+    "webhooks": BatterySpec(
+        "webhooks", "Signed inbound webhook ingress (HMAC) with an idempotent inbox"
+    ),
     "websockets": BatterySpec(
         "websockets", "FastAPI WebSocket routes + a connection manager"
     ),

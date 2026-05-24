@@ -22,6 +22,13 @@ def test_resolve_returns_sorted_unique():
     assert resolve(["websockets", "websockets"]) == ["websockets"]
 
 
+def test_webhooks_is_registered():
+    from framework_cli.batteries import get_battery
+
+    spec = get_battery("webhooks")
+    assert spec.name == "webhooks" and spec.requires == () and spec.gates_agent is None
+
+
 def test_resolve_includes_dependency_closure():
     # Use a synthetic spec to prove the closure walks `requires` (no real multi-battery yet).
     from framework_cli import batteries
