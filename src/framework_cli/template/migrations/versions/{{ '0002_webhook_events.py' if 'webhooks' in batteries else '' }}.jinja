@@ -1,0 +1,32 @@
+"""webhook idempotency inbox
+
+Revision ID: 0002
+Revises: 0001
+
+"""
+
+import sqlalchemy as sa
+
+from alembic import op
+
+revision = "0002"
+down_revision = "0001"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "webhook_events",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("idempotency_key", sa.String(length=64), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column(
+            "received_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.UniqueConstraint("idempotency_key", name="uq_webhook_events_idempotency_key"),
+    )
+
+
+def downgrade() -> None:
+    op.drop_table("webhook_events")

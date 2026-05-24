@@ -926,6 +926,25 @@ def test_render_with_webhooks_battery(tmp_path: Path):
     assert "router" in (dest / "src" / "demo" / "routes" / "webhooks.py").read_text()
 
 
+def test_render_webhooks_secret_in_env_managed_section(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["webhooks"]})
+    env = (dest / ".env.example").read_text()
+    begin, end = env.index("# FRAMEWORK:BEGIN"), env.index("# FRAMEWORK:END")
+    assert "APP_WEBHOOK_SIGNING_SECRET=" in env[begin:end]  # inside the managed section
+    settings = (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    assert "webhook_signing_secret" in settings
+    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").is_file()
+
+
+def test_render_no_webhooks_secret_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert "WEBHOOK_SIGNING_SECRET" not in (dest / ".env.example").read_text()
+    assert "webhook_signing_secret" not in (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    assert not (dest / "migrations" / "versions" / "0002_webhook_events.py").exists()
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml
