@@ -15,14 +15,14 @@ _LOCK_REL = ".framework/integrity.lock"
 _ANSWERS_REL = ".copier-answers.yml"
 
 
-def _answers(project: Path) -> dict[str, str]:
+def _answers(project: Path) -> dict[str, object]:
     answers = project / _ANSWERS_REL
     if not answers.is_file():
         raise ValueError(
             f"{_ANSWERS_REL} is missing — cannot determine which template version to restore from"
         )
     data = yaml.safe_load(answers.read_text())
-    return {k: str(v) for k, v in data.items() if not k.startswith("_")}
+    return {k: v for k, v in data.items() if not k.startswith("_")}
 
 
 def _restore_section(target: Path, canonical: Path) -> None:

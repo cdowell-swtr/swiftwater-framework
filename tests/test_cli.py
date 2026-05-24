@@ -421,6 +421,19 @@ def test_upskill_with_unions_batteries(tmp_path, monkeypatch):
     assert captured["with_batteries"] == ["_x", "websockets"]  # union, sorted
 
 
+def test_restore_env_example_preserves_webhooks_secret(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["new", "My App", "--with", "webhooks"]).exit_code == 0
+    project = tmp_path / "my-app"
+    env = project / ".env.example"
+    env.write_text(env.read_text().replace("APP_WEBHOOK_SIGNING_SECRET=", "APP_WEBHOOK_SIGNING_SECRET=tampered"))
+    monkeypatch.chdir(project)
+    assert runner.invoke(app, ["restore", ".env.example"]).exit_code == 0, "restore failed"
+    # restore re-renders WITH the recorded batteries -> the secret line is back, integrity green
+    assert "APP_WEBHOOK_SIGNING_SECRET=" in (project / ".env.example").read_text()
+    assert runner.invoke(app, ["integrity", "--ci"]).exit_code == 0
+
+
 def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
     import framework_cli.cli as cli_mod
     from framework_cli.review.findings import Finding
