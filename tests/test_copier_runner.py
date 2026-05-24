@@ -1001,6 +1001,13 @@ def test_render_env_py_no_workers_import_without_battery(tmp_path: Path):
     assert "tasks import dead_letter" not in (dest / "migrations" / "env.py").read_text()
 
 
+def test_render_env_py_imports_dead_letter_with_workers(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    env_py = (dest / "migrations" / "env.py").read_text()
+    assert f"from {DATA['package_name']}.tasks import dead_letter" in env_py
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml
