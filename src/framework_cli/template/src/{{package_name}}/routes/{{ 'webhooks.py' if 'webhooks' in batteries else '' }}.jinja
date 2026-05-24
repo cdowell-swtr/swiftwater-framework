@@ -1,0 +1,38 @@
+import hashlib
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Request, Response
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from ..db.engine import get_session
+from ..webhooks.handler import handle_event
+from ..webhooks.inbox import record
+from ..webhooks.signature import verify
+
+router = APIRouter()
+
+SessionDep = Annotated[Session, Depends(get_session)]
+_SIGNATURE_HEADER = "X-Webhook-Signature"
+
+
+@router.post("/webhooks")
+async def receive_webhook(request: Request, session: SessionDep) -> Response:
+    """Verify the HMAC signature, dedup via the inbox, dispatch inline, return fast.
+
+    A redelivered event (same body) is a no-op 200. Heavy processing belongs behind the
+    workers battery — see webhooks/handler.py.
+    """
+    raw = await request.body()
+    secret = request.app.state.settings.webhook_signing_secret
+    if not verify(raw, request.headers.get(_SIGNATURE_HEADER, ""), secret):
+        return Response(status_code=401)
+    key = hashlib.sha256(raw).hexdigest()
+    try:
+        record(session, key)
+        handle_event(await request.json())
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        return Response(status_code=200)  # duplicate delivery — already processed
+    return Response(status_code=200)

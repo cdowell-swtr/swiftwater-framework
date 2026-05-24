@@ -908,6 +908,24 @@ def test_render_with_websockets_battery(tmp_path: Path):
     assert "router" in (dest / "src" / "demo" / "routes" / "websockets.py").read_text()
 
 
+def test_render_without_webhooks_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / "src" / "demo" / "routes" / "webhooks.py").exists()
+    assert not (dest / "src" / "demo" / "webhooks").exists()
+
+
+def test_render_with_webhooks_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["webhooks"]})
+    pkg = dest / "src" / "demo" / "webhooks"
+    assert (dest / "src" / "demo" / "routes" / "webhooks.py").is_file()
+    assert (pkg / "signature.py").is_file() and (pkg / "inbox.py").is_file()
+    assert (pkg / "models.py").is_file() and (pkg / "handler.py").is_file()
+    assert (dest / "tests" / "functional" / "test_webhooks.py").is_file()
+    assert "router" in (dest / "src" / "demo" / "routes" / "webhooks.py").read_text()
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml

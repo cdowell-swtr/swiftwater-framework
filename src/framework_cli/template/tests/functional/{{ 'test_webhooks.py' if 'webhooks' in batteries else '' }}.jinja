@@ -1,0 +1,55 @@
+import hashlib
+import hmac
+import json
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine
+
+from {{ package_name }}.config.settings import Settings
+from {{ package_name }}.db.engine import build_session_factory, get_session
+from {{ package_name }}.main import create_app
+
+_SECRET = "test-signing-secret"
+
+
+def _sign(body: bytes) -> str:
+    return hmac.new(_SECRET.encode(), body, hashlib.sha256).hexdigest()
+
+
+@pytest.fixture
+def client(engine: Engine):
+    factory = build_session_factory(engine)
+
+    def _override_session():
+        with factory() as session:
+            yield session
+
+    app = create_app(Settings(webhook_signing_secret=_SECRET, database_url=str(engine.url)))
+    app.dependency_overrides[get_session] = _override_session
+    with TestClient(app) as c:
+        yield c
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        conn.execute(text("TRUNCATE TABLE webhook_events RESTART IDENTITY CASCADE"))
+        conn.commit()
+
+
+def test_valid_signature_is_accepted(client: TestClient):
+    body = json.dumps({"type": "ping"}).encode()
+    r = client.post("/webhooks", content=body, headers={"X-Webhook-Signature": _sign(body)})
+    assert r.status_code == 200
+
+
+def test_bad_signature_is_rejected(client: TestClient):
+    body = json.dumps({"type": "ping"}).encode()
+    r = client.post("/webhooks", content=body, headers={"X-Webhook-Signature": "bad"})
+    assert r.status_code == 401
+
+
+def test_duplicate_delivery_is_deduped(client: TestClient):
+    body = json.dumps({"type": "ping", "id": "evt_1"}).encode()
+    headers = {"X-Webhook-Signature": _sign(body)}
+    assert client.post("/webhooks", content=body, headers=headers).status_code == 200
+    assert client.post("/webhooks", content=body, headers=headers).status_code == 200
