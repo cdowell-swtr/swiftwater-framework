@@ -15,7 +15,7 @@ from ..config.settings import get_settings
 _settings = get_settings()
 
 app = Celery(
-    "{{ package_name }}",
+    __name__,
     broker=_settings.celery_broker_url,
     backend=_settings.celery_result_backend,
     include=["{{ package_name }}.tasks.tasks"],
