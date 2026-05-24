@@ -62,6 +62,51 @@ def test_rendered_project_coverage_gate_passes(tmp_path: Path):
 
 @pytest.mark.skipif(
     not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
+def test_rendered_project_with_websockets_battery_passes(tmp_path: Path):
+    # Renders a project with the websockets battery active, asserts the battery files
+    # were emitted, then runs unit+functional (70% gate) to confirm the WS echo test
+    # (tests/functional/test_websockets.py) is collected and passes.
+    data_with_ws = {**DATA, "batteries": ["websockets"]}
+    dest = tmp_path / "demo"
+    render_project(dest, data_with_ws)
+
+    # Battery files must exist in the rendered project.
+    assert (dest / "src" / "demo" / "routes" / "websockets.py").exists(), \
+        "routes/websockets.py was not rendered by the websockets battery"
+    assert (dest / "tests" / "functional" / "test_websockets.py").exists(), \
+        "tests/functional/test_websockets.py was not rendered by the websockets battery"
+    assert (dest / "src" / "demo" / "websockets" / "connection_manager.py").exists(), \
+        "websockets/connection_manager.py was not rendered by the websockets battery"
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    # Run unit + functional tiers (70% gate) — this collects test_websockets.py.
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional coverage gate did not pass for the websockets battery project:\n"
+        + result.stdout + result.stderr
+    )
+    # Confirm the WS route was covered — coverage.sh runs in -q mode which only names
+    # tests on failure; on a clean run the coverage table shows the covered source files.
+    # routes/websockets.py appearing in the table (and being exercised) proves the WS
+    # echo test was collected and ran.
+    combined_output = result.stdout + result.stderr
+    assert "websockets" in combined_output, (
+        "websockets source files do not appear in the coverage output — "
+        "was tests/functional/test_websockets.py collected?\n" + combined_output
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
     reason="uv + docker required: the e2e tier runs against real Postgres",
 )
 def test_rendered_project_combined_coverage_gate_passes(tmp_path: Path):
