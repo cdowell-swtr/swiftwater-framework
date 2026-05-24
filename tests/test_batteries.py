@@ -1,0 +1,33 @@
+import pytest
+
+
+def test_websockets_is_registered():
+    from framework_cli.batteries import battery_names, get_battery
+
+    assert "websockets" in battery_names()
+    spec = get_battery("websockets")
+    assert spec.name == "websockets" and spec.requires == () and spec.gates_agent is None
+
+
+def test_resolve_unknown_battery_errors():
+    from framework_cli.batteries import resolve
+
+    with pytest.raises(ValueError, match="bogus"):
+        resolve(["bogus"])
+
+
+def test_resolve_returns_sorted_unique():
+    from framework_cli.batteries import resolve
+
+    assert resolve(["websockets", "websockets"]) == ["websockets"]
+
+
+def test_resolve_includes_dependency_closure():
+    # Use a synthetic spec to prove the closure walks `requires` (no real multi-battery yet).
+    from framework_cli import batteries
+
+    batteries._BATTERIES["_child"] = batteries.BatterySpec("_child", "x", requires=("websockets",))
+    try:
+        assert batteries.resolve(["_child"]) == ["_child", "websockets"]
+    finally:
+        del batteries._BATTERIES["_child"]
