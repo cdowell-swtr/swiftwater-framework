@@ -49,10 +49,12 @@ def latest_release(url: str = REPO_URL) -> str | None:
 
 
 def read_batteries(project: Path) -> list[str]:
-    """The battery set recorded in the project's .copier-answers.yml ([] if none)."""
+    """The battery set recorded in the project's .copier-answers.yml ([] if none/absent)."""
     import yaml
 
     answers = project / _ANSWERS_REL
+    if not answers.is_file():
+        return []
     data = yaml.safe_load(answers.read_text()) or {}
     value = data.get("batteries", [])
     return [str(b) for b in value] if isinstance(value, list) else []

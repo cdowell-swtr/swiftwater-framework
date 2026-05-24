@@ -40,6 +40,12 @@ def test_version_tag():
     assert version_tag("0.3.0") == "v0.3.0"
 
 
+def test_read_batteries_missing_answers_file_returns_empty(tmp_path):
+    from framework_cli.source import read_batteries
+
+    assert read_batteries(tmp_path) == []  # no .copier-answers.yml present
+
+
 def test_record_portable_source_rewrites_answers(tmp_path: Path):
     project = tmp_path / "proj"
     project.mkdir()
