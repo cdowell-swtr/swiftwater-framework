@@ -1,3 +1,31 @@
+_ANSWERS = {
+    "project_name": "Demo",
+    "project_slug": "demo",
+    "package_name": "demo",
+    "python_version": "3.12",
+    "batteries": ["webhooks"],
+}
+
+
+def test_owned_files_for_webhooks():
+    from framework_cli.downskill import owned_files
+
+    owned = owned_files(_ANSWERS, "webhooks")
+    assert "src/demo/routes/webhooks.py" in owned
+    assert "src/demo/webhooks/signature.py" in owned
+    assert "tests/functional/test_webhooks.py" in owned
+    assert "migrations/versions/0002_webhook_events.py" in owned  # owned, preserved at delete time
+    # shared files the battery only *edited* (not created) are NOT owned:
+    assert ".env.example" not in owned
+    assert "src/demo/config/settings.py" not in owned
+
+
+def test_owned_files_empty_for_absent_battery():
+    from framework_cli.downskill import owned_files
+
+    assert owned_files({**_ANSWERS, "batteries": []}, "webhooks") == set()
+
+
 def test_blocking_dependents_flags_a_requirer():
     from framework_cli import batteries as bat
     from framework_cli.downskill import blocking_dependents

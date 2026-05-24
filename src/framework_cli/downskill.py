@@ -1,12 +1,30 @@
 from __future__ import annotations
 
+import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 
 from framework_cli.batteries import resolve
+from framework_cli.copier_runner import render_project
 
 
 class DownskillError(Exception):
     """Battery removal cannot proceed (refusal or invalid request)."""
+
+
+def _render_paths(answers: Mapping[str, object], batteries: list[str], dest: Path) -> set[str]:
+    render_project(dest, {**answers, "batteries": batteries})
+    return {str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file()}
+
+
+def owned_files(answers: Mapping[str, object], battery: str) -> set[str]:
+    """Files a battery owns = those present WITH it but absent at the reduced set (two renders)."""
+    current = [str(b) for b in answers.get("batteries", [])]  # type: ignore[attr-defined]
+    reduced = [b for b in current if b != battery]
+    with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+        with_paths = _render_paths(answers, current, Path(a) / "r")
+        without_paths = _render_paths(answers, reduced, Path(b) / "r")
+    return with_paths - without_paths
 
 
 def blocking_dependents(active: list[str], battery: str) -> list[str]:
