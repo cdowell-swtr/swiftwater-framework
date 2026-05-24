@@ -36,23 +36,27 @@ def upskill_project(
 ) -> bool:
     """Update `project` to `vcs_ref` (default: latest tag) and run `task test`.
 
-    When `with_batteries` is given, that battery set is passed as the update's `batteries`
-    answer (used by `upskill --with`); otherwise the recorded answers — including the existing
-    `batteries` — are reused as-is.
+    The effective battery set (`with_batteries` if given, else the project's recorded set) is
+    passed to the update AND re-recorded afterward — the framework owns the battery record,
+    since Copier does not preserve the subdir-declared `batteries` answer through the portable
+    source on update.
     """
+    from framework_cli.source import read_batteries, record_batteries
+
     if not _is_git_tracked(project):
         raise UpskillError(
             "upskill requires a git-tracked project (run `git init` and commit first)"
         )
-    data = {"batteries": with_batteries} if with_batteries is not None else None
+    effective = with_batteries if with_batteries is not None else read_batteries(project)
     run_update(
         str(project),
         defaults=True,
         overwrite=True,
         quiet=True,
         vcs_ref=vcs_ref,
-        data=data,
+        data={"batteries": effective},
     )
+    record_batteries(project, effective)
     try:
         test = subprocess.run(["task", "test"], cwd=project, check=False)
     except FileNotFoundError as exc:

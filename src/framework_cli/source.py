@@ -60,6 +60,32 @@ def read_batteries(project: Path) -> list[str]:
     return [str(b) for b in value] if isinstance(value, list) else []
 
 
+def record_batteries(project: Path, batteries: list[str]) -> None:
+    """Write the battery set into the project's .copier-answers.yml (framework-owned).
+
+    Copier does not reliably re-emit the subdir-declared `batteries` answer through the portable
+    `_subdirectory` source on update, so the framework owns this record: drop any existing
+    `batteries:` block and append the current set.
+    """
+    answers = project / _ANSWERS_REL
+    out: list[str] = []
+    skipping = False
+    for line in answers.read_text().splitlines():
+        if line.startswith("batteries:"):
+            skipping = True
+            continue
+        if skipping and line.startswith("- "):
+            continue
+        skipping = False
+        out.append(line)
+    if batteries:
+        out.append("batteries:")
+        out.extend(f"- {b}" for b in batteries)
+    else:
+        out.append("batteries: []")
+    answers.write_text("\n".join(out) + "\n")
+
+
 def record_portable_source(project: Path, version: str) -> None:
     """Rewrite the project's .copier-answers.yml to a portable git source + version tag.
 
