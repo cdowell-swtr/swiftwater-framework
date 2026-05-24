@@ -1,0 +1,38 @@
+"""The Celery application. Broker + result backend come from settings (Redis).
+
+Workers run in their own process (see the `worker`/`beat` compose services). Task-level
+metrics are exposed by the `celery-exporter` sidecar — a separate Prometheus scrape target —
+not through the FastAPI app. The only worker metric on the app's /metrics is DLQ depth
+(a DB count), because the dead-letter table is the shared source of truth.
+"""
+
+from __future__ import annotations
+
+from celery import Celery
+
+from ..config.settings import get_settings
+
+_settings = get_settings()
+
+app = Celery(
+    "{{ package_name }}",
+    broker=_settings.celery_broker_url,
+    backend=_settings.celery_result_backend,
+    include=["{{ package_name }}.tasks.tasks"],
+)
+
+app.conf.update(
+    task_acks_late=True,                # a task re-runs if a worker dies mid-flight
+    task_reject_on_worker_lost=True,
+    task_serializer="json",
+    result_serializer="json",
+    accept_content=["json"],
+    timezone="UTC",
+    enable_utc=True,
+    task_default_queue="{{ package_name }}",
+)
+
+# Register the beat schedule (periodic tasks).
+from .schedule import register_schedule  # noqa: E402  (avoid a circular import at module top)
+
+register_schedule(app)

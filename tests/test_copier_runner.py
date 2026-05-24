@@ -957,6 +957,23 @@ def test_render_without_workers_battery_has_no_celery_dep(tmp_path: Path):
     assert "celery[redis]" not in (dest / "pyproject.toml").read_text()
 
 
+def test_render_workers_creates_tasks_package(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    pkg = dest / "src" / DATA["package_name"]
+    assert (pkg / "tasks" / "app.py").exists()
+    assert (pkg / "tasks" / "__init__.py").exists()
+    text = (pkg / "tasks" / "app.py").read_text()
+    assert "{{" not in text  # template fully rendered
+    assert DATA["package_name"] in text
+
+
+def test_render_no_tasks_package_without_workers(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / "src" / DATA["package_name"] / "tasks").exists()
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml
