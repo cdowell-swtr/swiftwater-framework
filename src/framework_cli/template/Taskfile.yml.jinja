@@ -133,7 +133,17 @@ tasks:
     desc: Load seed data (idempotent — skips if data already exists).
     cmds:
       - uv run python scripts/seed.py
+{% if "workers" in batteries %}
+  worker:
+    desc: Run a Celery worker locally (the dev compose runs one already in `task dev`).
+    cmds:
+      - uv run celery -A {{ package_name }}.tasks.app worker --loglevel=info
 
+  beat:
+    desc: Run the Celery beat scheduler locally.
+    cmds:
+      - uv run celery -A {{ package_name }}.tasks.app beat --loglevel=info
+{% endif %}
   openapi:export:
     desc: Export the OpenAPI schema to openapi.json (commit it; CI diffs it).
     cmds:

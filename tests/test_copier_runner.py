@@ -1041,6 +1041,61 @@ def test_render_workers_creates_task_modules(tmp_path: Path):
     assert "demo.tasks.tasks.heartbeat" in schedule_text
 
 
+def test_render_workers_settings_fields(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    s = (dest / "src" / DATA["package_name"] / "config" / "settings.py").read_text()
+    assert "celery_broker_url" in s and "redis_url" in s
+
+
+def test_render_workers_env_lines_in_managed_section(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    env = (dest / ".env.example").read_text()
+    begin = env.index("FRAMEWORK:BEGIN")
+    end = env.index("FRAMEWORK:END")
+    assert "APP_CELERY_BROKER_URL" in env[begin:end]
+
+
+def test_render_no_celery_env_without_workers(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert "APP_CELERY_BROKER_URL" not in (dest / ".env.example").read_text()
+
+
+def test_render_workers_taskfile_has_worker_task(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    tf = (dest / "Taskfile.yml").read_text()
+    begin = tf.index("FRAMEWORK:BEGIN")
+    end = tf.index("FRAMEWORK:END")
+    assert "worker:" in tf[begin:end]
+
+
+def test_render_taskfile_unchanged_without_workers(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert "worker:" not in (dest / "Taskfile.yml").read_text()
+
+
+def test_render_workers_taskfile_valid_yaml(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    tf_text = (dest / "Taskfile.yml").read_text()
+    parsed = yaml.safe_load(tf_text)
+    assert parsed is not None
+    assert "worker" in parsed["tasks"]
+    assert "beat" in parsed["tasks"]
+
+
+def test_render_workers_settings_valid_python(tmp_path: Path):
+    import ast
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    settings_text = (dest / "src" / DATA["package_name"] / "config" / "settings.py").read_text()
+    ast.parse(settings_text)  # raises SyntaxError if invalid
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml
