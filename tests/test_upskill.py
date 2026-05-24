@@ -174,3 +174,22 @@ def test_upskill_with_adds_battery_and_records_it(tmp_path: Path):
 
     assert (proj / "ws.txt").is_file(), "battery file not added by upskill --with"
     assert read_batteries(proj) == ["websockets"]
+
+
+def test_upskill_regenerates_the_manifest(tmp_path, monkeypatch):
+    import framework_cli.upskill as up
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / ".copier-answers.yml").write_text("project_name: demo\nbatteries: []\n")
+    (proj / ".framework").mkdir()
+    (proj / ".framework" / "integrity.lock").write_text("{}")
+
+    monkeypatch.setattr(up, "_is_git_tracked", lambda p: True)
+    monkeypatch.setattr(up, "run_update", lambda *a, **k: None)
+    monkeypatch.setattr(up.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0})())
+    captured = {}
+    monkeypatch.setattr(up, "write_manifest", lambda project, version: captured.update(project=project))
+
+    assert up.upskill_project(proj) is True
+    assert captured["project"] == proj  # manifest regenerated after the update

@@ -12,6 +12,9 @@ from pathlib import Path
 
 from copier import run_update
 
+from framework_cli.integrity.generate import write_manifest
+from framework_cli.integrity.manifest import installed_framework_version
+
 
 class UpskillError(Exception):
     """Upskill cannot proceed (e.g., the project is not git-tracked)."""
@@ -57,6 +60,13 @@ def upskill_project(
         data={"batteries": effective},
     )
     record_batteries(project, effective)
+    # The update may have changed managed sections / locked files (incl. battery-conditional
+    # lines like the webhooks secret in .env.example). Re-record the integrity manifest so
+    # `framework integrity` reflects the upgraded state.
+    # Guard: only regenerate when a manifest already exists — minimal-template upskill tests
+    # (no .framework/integrity.lock) must not raise AuthoringError.
+    if (project / ".framework" / "integrity.lock").is_file():
+        write_manifest(project, installed_framework_version())
     try:
         test = subprocess.run(["task", "test"], cwd=project, check=False)
     except FileNotFoundError as exc:

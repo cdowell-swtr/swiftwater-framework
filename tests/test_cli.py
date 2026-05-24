@@ -359,6 +359,14 @@ def test_eval_unknown_agent_errors(monkeypatch):
     assert "unknown review agent" in result.output
 
 
+def test_new_with_webhooks_passes_integrity(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["new", "My App", "--with", "webhooks"]).exit_code == 0
+    monkeypatch.chdir(tmp_path / "my-app")
+    result = runner.invoke(app, ["integrity", "--ci"])
+    assert result.exit_code == 0, result.output  # battery-active .env.example checksum matches
+
+
 def test_new_with_websockets_battery(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["new", "My App", "--with", "websockets"])
