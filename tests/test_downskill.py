@@ -59,3 +59,63 @@ def test_usage_references_ignores_owned_files(tmp_path):
         tmp_path, "webhooks", package_name="demo", owned={"src/demo/webhooks/handler.py"}
     )
     assert refs == []
+
+
+def test_remove_battery_webhooks_end_to_end(tmp_path, monkeypatch):
+    import subprocess
+
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+    from framework_cli.downskill import remove_battery
+    from framework_cli.source import read_batteries
+
+    monkeypatch.chdir(tmp_path)
+    assert CliRunner().invoke(app, ["new", "My App", "--with", "webhooks"]).exit_code == 0
+    project = tmp_path / "my-app"
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(project), "-c", "commit.gpgsign=false", "-c", "user.email=b@b",
+         "-c", "user.name=b", "commit", "-qm", "scaffold"], check=True,
+    )
+
+    report = remove_battery(project, "webhooks", force=False)
+
+    assert not (project / "src" / "my_app" / "routes" / "webhooks.py").exists()
+    assert not (project / "src" / "my_app" / "webhooks").exists()
+    assert not (project / "tests" / "functional" / "test_webhooks.py").exists()
+    assert (project / "migrations" / "versions" / "0002_webhook_events.py").is_file()  # preserved
+    assert any("0002_webhook_events" in p for p in report.preserved)
+    assert "WEBHOOK_SIGNING_SECRET" not in (project / ".env.example").read_text()
+    assert "webhook_signing_secret" not in (project / "src" / "my_app" / "config" / "settings.py").read_text()
+    # the migrations/env.py battery import must be stripped (else alembic breaks)
+    assert "webhooks" not in (project / "migrations" / "env.py").read_text()
+    assert read_batteries(project) == []
+    monkeypatch.chdir(project)
+    assert CliRunner().invoke(app, ["integrity", "--ci"]).exit_code == 0
+
+
+def test_remove_battery_usage_refusal(tmp_path, monkeypatch):
+    import subprocess
+
+    import pytest
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+    from framework_cli.downskill import DownskillError, remove_battery
+
+    monkeypatch.chdir(tmp_path)
+    assert CliRunner().invoke(app, ["new", "My App", "--with", "webhooks"]).exit_code == 0
+    project = tmp_path / "my-app"
+    (project / "src" / "my_app" / "uses_it.py").write_text("from my_app.webhooks.handler import handle_event\n")
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(project), "-c", "commit.gpgsign=false", "-c", "user.email=b@b",
+         "-c", "user.name=b", "commit", "-qm", "s"], check=True,
+    )
+    with pytest.raises(DownskillError, match="in use"):
+        remove_battery(project, "webhooks", force=False)
+    remove_battery(project, "webhooks", force=True)  # --force proceeds
+    assert not (project / "src" / "my_app" / "routes" / "webhooks.py").exists()
