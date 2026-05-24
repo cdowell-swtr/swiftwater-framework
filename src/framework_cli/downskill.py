@@ -116,6 +116,8 @@ def remove_battery(project: Path, battery: str, *, force: bool = False) -> Remov
         with_paths = _render_paths(answers, current, with_root)
         without_paths = _render_paths(answers, reduced, without_root)
         for rel in sorted(with_paths & without_paths):
+            if rel == ".copier-answers.yml":
+                continue  # step 3 (record_batteries) owns this file
             wf, wo = with_root / rel, without_root / rel
             if wf.read_bytes() == wo.read_bytes():
                 continue  # battery didn't touch this file

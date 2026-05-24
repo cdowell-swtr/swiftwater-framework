@@ -91,6 +91,7 @@ def test_remove_battery_webhooks_end_to_end(tmp_path, monkeypatch):
     assert "webhook_signing_secret" not in (project / "src" / "my_app" / "config" / "settings.py").read_text()
     # the migrations/env.py battery import must be stripped (else alembic breaks)
     assert "webhooks" not in (project / "migrations" / "env.py").read_text()
+    assert ".copier-answers.yml" not in report.warnings  # step 3 owns it; not a builder-modified warning
     assert read_batteries(project) == []
     monkeypatch.chdir(project)
     assert CliRunner().invoke(app, ["integrity", "--ci"]).exit_code == 0
