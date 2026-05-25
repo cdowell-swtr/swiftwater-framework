@@ -103,7 +103,8 @@ def test_metrics_endpoint_exposes_dlq_gauge(http_client: TestClient):
     assert "app_dead_letter_tasks" in body
 
 
-def test_health_reports_workers_block(http_client: TestClient):
+def test_health_reports_workers_block_degrades_without_broker(http_client: TestClient):
+    # No Redis broker in the test env, so the route's try/except degrades to alive=False.
+    # is_alive itself is covered hermetically in the unit suite.
     report = http_client.get("/health").json()
-    assert "workers" in report
-    assert "alive" in report["workers"]
+    assert report["workers"] == {"alive": False}

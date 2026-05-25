@@ -32,6 +32,8 @@ def health(request: Request) -> JSONResponse:
         report["workers"] = {"alive": _liveness.is_alive(_client)}
     except Exception:  # broker unreachable — report degraded, never 500 the probe
         report["workers"] = {"alive": False}
+    finally:
+        _client.close()  # probe fires continuously — don't leak the connection pool
 {% endif %}
     return JSONResponse(report, status_code=200)
 
