@@ -1,0 +1,19 @@
+--- a/src/app/webhooks/handler.py
++++ b/src/app/webhooks/handler.py
+@@ -1,3 +1,18 @@
++import time
++
++import httpx
++
++from app.db.engine import SessionLocal
++from app.db.repository import bulk_insert
++
++
++def handle_event(event: dict) -> None:
++    """Process a verified webhook event."""
++    # call three external services synchronously, in the request path
++    for url in event["callbacks"]:
++        httpx.post(url, json=event, timeout=30)
++    with SessionLocal() as session:
++        bulk_insert(session, event["rows"])  # large write
++    time.sleep(5)  # wait for downstream to settle
