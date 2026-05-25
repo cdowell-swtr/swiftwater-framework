@@ -1,0 +1,33 @@
+"""Webhooks battery — unit tests for the in-process metrics counter (hermetic)."""
+
+from {{ package_name }}.webhooks.metrics import OUTCOMES, WebhookMetrics
+
+
+def test_record_increments_outcome():
+    m = WebhookMetrics()
+    m.record("accepted")
+    m.record("accepted")
+    m.record("duplicate")
+    out = m.render_prometheus()
+    assert 'app_webhooks_received_total{outcome="accepted"} 2' in out
+    assert 'app_webhooks_received_total{outcome="duplicate"} 1' in out
+
+
+def test_all_outcomes_present_at_zero():
+    out = WebhookMetrics().render_prometheus()
+    for o in OUTCOMES:
+        assert f'outcome="{o}"' in out
+    assert "# TYPE app_webhooks_received_total counter" in out
+
+
+def test_unknown_outcome_is_ignored():
+    m = WebhookMetrics()
+    m.record("nonsense")  # must not raise, must not add a series
+    assert "nonsense" not in m.render_prometheus()
+
+
+def test_reset_clears_counts():
+    m = WebhookMetrics()
+    m.record("accepted")
+    m.reset()
+    assert 'app_webhooks_received_total{outcome="accepted"} 0' in m.render_prometheus()

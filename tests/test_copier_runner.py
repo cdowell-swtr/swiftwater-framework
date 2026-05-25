@@ -1266,3 +1266,16 @@ def test_render_webhooks_workers_battery_is_ruff_format_clean(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["webhooks", "workers"]})
     _assert_ruff_format_clean(dest)
+
+
+def test_render_webhooks_metrics_module(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["webhooks"]})
+    assert (dest / "src" / DATA["package_name"] / "webhooks" / "metrics.py").exists()
+    assert (dest / "tests" / "unit" / "test_webhooks_unit.py").exists()
+
+
+def test_render_no_webhooks_metrics_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert not (dest / "src" / DATA["package_name"] / "webhooks" / "metrics.py").exists()
