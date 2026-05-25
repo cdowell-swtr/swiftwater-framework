@@ -169,6 +169,59 @@ def test_remove_battery_webhooks_end_to_end(tmp_path, monkeypatch):
     assert CliRunner().invoke(app, ["integrity", "--ci"]).exit_code == 0
 
 
+def test_remove_battery_graphql_end_to_end(tmp_path, monkeypatch):
+    import subprocess
+
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+    from framework_cli.downskill import remove_battery
+    from framework_cli.source import read_batteries
+
+    monkeypatch.chdir(tmp_path)
+    assert (
+        CliRunner().invoke(app, ["new", "My App", "--with", "graphql"]).exit_code == 0
+    )
+    project = tmp_path / "my-app"
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "add", "-A"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(project),
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "user.email=b@b",
+            "-c",
+            "user.name=b",
+            "commit",
+            "-qm",
+            "scaffold",
+        ],
+        check=True,
+    )
+
+    remove_battery(project, "graphql", force=False)  # no --force needed
+
+    assert not (project / "src" / "my_app" / "graphql").exists()
+    assert not (project / "src" / "my_app" / "routes" / "graphql.py").exists()
+    assert not (project / "scripts" / "export-graphql-schema.sh").exists()
+    assert (
+        "graphql_ide_enabled"
+        not in (project / "src" / "my_app" / "config" / "settings.py").read_text()
+    )
+    assert "strawberry-graphql" not in (project / "pyproject.toml").read_text()
+    assert (
+        "gql_metrics"
+        not in (project / "src" / "my_app" / "routes" / "health.py").read_text()
+    )
+    assert read_batteries(project) == []
+    monkeypatch.chdir(project)
+    assert CliRunner().invoke(app, ["integrity", "--ci"]).exit_code == 0
+
+
 def test_remove_battery_usage_refusal(tmp_path, monkeypatch):
     import subprocess
 
