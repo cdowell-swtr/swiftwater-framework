@@ -16,7 +16,7 @@ def test_record_increments_outcome():
 def test_all_outcomes_present_at_zero():
     out = WebhookMetrics().render_prometheus()
     for o in OUTCOMES:
-        assert f'outcome="{o}"' in out
+        assert 'app_webhooks_received_total{outcome="' + o + '"} 0' in out
     assert "# TYPE app_webhooks_received_total counter" in out
 
 
