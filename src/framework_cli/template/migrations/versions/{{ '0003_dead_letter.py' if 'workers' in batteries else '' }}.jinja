@@ -21,10 +21,15 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("task_name", sa.String(length=255), nullable=False),
         sa.Column("task_id", sa.String(length=255), nullable=False),
-        sa.Column("args_json", sa.Text(), nullable=False, server_default=sa.text("'[]'")),
+        sa.Column(
+            "args_json", sa.Text(), nullable=False, server_default=sa.text("'[]'")
+        ),
         sa.Column("traceback", sa.Text(), nullable=False, server_default=sa.text("''")),
         sa.Column(
-            "failed_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "failed_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
     )
 

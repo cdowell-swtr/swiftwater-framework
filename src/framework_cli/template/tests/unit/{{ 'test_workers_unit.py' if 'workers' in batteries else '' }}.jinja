@@ -8,8 +8,10 @@ from {{ package_name }}.tasks import liveness
 class _FakeKV:
     def __init__(self):
         self._d = {}
+
     def get(self, key):
         return self._d.get(key)
+
     def set(self, key, value):
         self._d[key] = value
 
@@ -34,5 +36,6 @@ def test_missing_heartbeat_is_not_alive():
 
 def test_celery_app_config_is_safe():
     from {{ package_name }}.tasks.app import app
+
     assert app.conf.task_acks_late is True
     assert app.conf.task_serializer == "json"

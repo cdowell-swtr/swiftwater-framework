@@ -22,9 +22,14 @@ def upgrade() -> None:
         sa.Column("idempotency_key", sa.String(length=64), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column(
-            "received_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "received_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
-        sa.UniqueConstraint("idempotency_key", name="uq_webhook_events_idempotency_key"),
+        sa.UniqueConstraint(
+            "idempotency_key", name="uq_webhook_events_idempotency_key"
+        ),
     )
 
 

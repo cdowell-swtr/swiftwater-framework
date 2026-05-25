@@ -27,16 +27,19 @@ class Settings(BaseSettings):
     # via APP_DATABASE_URL; host tooling (alembic) uses the localhost form; tests use a
     # testcontainers Postgres (overridden per session).
     database_url: str = "postgresql+psycopg://app:app@postgres:5432/app"
-{% if "webhooks" in batteries %}
+{%- if "webhooks" in batteries %}
+
     # Webhook ingress: HMAC-SHA256 signing secret (read from APP_WEBHOOK_SIGNING_SECRET).
     webhook_signing_secret: str = ""
-{% endif %}
-{% if "workers" in batteries %}
+{%- endif %}
+{%- if "workers" in batteries %}
+
     # Celery workers (Redis broker + result backend).
     redis_url: str = "redis://redis:6379/0"
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/1"
-{% endif %}
+{%- endif %}
+
     @property
     def resolved_log_level(self) -> str:
         if self.log_level is not None:

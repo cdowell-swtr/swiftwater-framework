@@ -22,7 +22,7 @@ app = Celery(
 )
 
 app.conf.update(
-    task_acks_late=True,                # a task re-runs if a worker dies mid-flight
+    task_acks_late=True,  # a task re-runs if a worker dies mid-flight
     task_reject_on_worker_lost=True,
     task_serializer="json",
     result_serializer="json",

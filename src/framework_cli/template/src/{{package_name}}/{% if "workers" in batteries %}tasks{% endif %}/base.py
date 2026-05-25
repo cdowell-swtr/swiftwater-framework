@@ -26,7 +26,12 @@ class BaseTask(celery.Task):
     retry_jitter = True
 
     def on_failure(
-        self, exc: Exception, task_id: str, args: tuple[Any, ...], kwargs: dict[str, Any], einfo: Any
+        self,
+        exc: Exception,
+        task_id: str,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        einfo: Any,
     ) -> None:
         """Called once retries are exhausted — drain to the dead-letter queue.
 

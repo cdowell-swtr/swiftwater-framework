@@ -13,7 +13,9 @@ from {{ package_name }}.tasks import dead_letter
 
 
 @pytest.fixture
-def http_client(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+def http_client(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[TestClient]:
     """TestClient with the app wired to the test Postgres.
 
     The /metrics workers block imports SessionLocal directly from db.engine (not via FastAPI
@@ -30,7 +32,11 @@ def http_client(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[Tes
 def test_record_failure_and_count(db_session):
     assert dead_letter.count(db_session) == 0
     dead_letter.record_failure(
-        db_session, task_name="t", task_id="abc", args_json=json.dumps([1, 2]), traceback="boom"
+        db_session,
+        task_name="t",
+        task_id="abc",
+        args_json=json.dumps([1, 2]),
+        traceback="boom",
     )
     assert dead_letter.count(db_session) == 1
     assert dead_letter.list_recent(db_session)[0].task_name == "t"
@@ -42,7 +48,11 @@ def test_render_dlq_metrics_reflects_depth(db_session):
     assert empty.strip().endswith("0")
 
     dead_letter.record_failure(
-        db_session, task_name="t", task_id="abc", args_json=json.dumps([1]), traceback="boom"
+        db_session,
+        task_name="t",
+        task_id="abc",
+        args_json=json.dumps([1]),
+        traceback="boom",
     )
     assert dead_letter.render_dlq_metrics(db_session).strip().endswith("1")
 
@@ -82,7 +92,9 @@ def test_failing_task_lands_in_dead_letter_queue(db_session, monkeypatch):
     # Mutate the shared app config via monkeypatch so it is restored after the test
     # (a bare assignment would leak eager mode into the rest of the suite).
     monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
-    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", False)  # let on_failure fire
+    monkeypatch.setattr(
+        celery_app.conf, "task_eager_propagates", False
+    )  # let on_failure fire
 
     assert dl.count(db_session) == 0  # guard: prove the row below comes from on_failure
 

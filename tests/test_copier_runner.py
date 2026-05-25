@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -1229,3 +1230,39 @@ def test_render_webhooks_plus_workers_handler_enqueues(tmp_path: Path):
     h = (dest / "src" / DATA["package_name"] / "webhooks" / "handler.py").read_text()
     assert "process_async.delay" in h
     assert "get_logger" not in h
+
+
+def _assert_ruff_format_clean(dest: Path) -> None:
+    """Assert that `uv run ruff format --check` passes on a rendered project directory.
+
+    Uses the framework's own ruff (a deterministic proxy for the project's ruff; both
+    resolve ruff>=0.8 from the same lockfile version). If the framework ruff ever diverges
+    from the project ruff, the Docker precommit test (`test_rendered_project_precommit_runs_clean`)
+    is the authoritative gate. This check is a fast hermetic guard that catches gated-block
+    whitespace regressions without Docker.
+    """
+    src_dir = dest / "src"
+    tests_dir = dest / "tests"
+    migrations_dir = dest / "migrations"
+    result = subprocess.run(
+        ["uv", "run", "ruff", "format", "--check", str(src_dir), str(tests_dir), str(migrations_dir)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"ruff format --check found files to reformat in {dest}:\n{result.stdout}{result.stderr}"
+    )
+
+
+def test_render_workers_battery_is_ruff_format_clean(tmp_path: Path):
+    """Hermetic guard: workers-only render must be ruff-format-clean without Docker."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    _assert_ruff_format_clean(dest)
+
+
+def test_render_webhooks_workers_battery_is_ruff_format_clean(tmp_path: Path):
+    """Hermetic guard: webhooks+workers render must be ruff-format-clean without Docker."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["webhooks", "workers"]})
+    _assert_ruff_format_clean(dest)

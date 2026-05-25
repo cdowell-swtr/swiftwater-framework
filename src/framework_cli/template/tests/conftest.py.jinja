@@ -118,8 +118,8 @@ def api_client(request: pytest.FixtureRequest) -> Iterator["TestClient | httpx.C
     with engine.connect() as conn:
         conn.execute(text("TRUNCATE TABLE items RESTART IDENTITY CASCADE"))
         conn.commit()
+{%- if "workers" in batteries %}
 
-{% if "workers" in batteries %}
 
 @pytest.fixture(scope="session", autouse=True)
 def _celery_eager() -> None:
@@ -133,4 +133,4 @@ def _celery_eager() -> None:
 
     _celery_app.conf.task_always_eager = True
     _celery_app.conf.task_eager_propagates = True
-{% endif %}
+{%- endif %}

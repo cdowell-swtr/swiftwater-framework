@@ -19,8 +19,12 @@ class DeadLetterTask(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     task_name: Mapped[str] = mapped_column(String(255), nullable=False)
     task_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    args_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
-    traceback: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    args_json: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'[]'")
+    )
+    traceback: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("''")
+    )
     failed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -32,7 +36,10 @@ def record_failure(
     """Persist a terminally-failed task. Commits its own transaction (called from on_failure)."""
     session.add(
         DeadLetterTask(
-            task_name=task_name, task_id=task_id, args_json=args_json, traceback=traceback
+            task_name=task_name,
+            task_id=task_id,
+            args_json=args_json,
+            traceback=traceback,
         )
     )
     session.commit()
@@ -44,7 +51,9 @@ def count(session: Session) -> int:
 
 def list_recent(session: Session, limit: int = 50) -> list[DeadLetterTask]:
     return list(
-        session.scalars(select(DeadLetterTask).order_by(DeadLetterTask.id.desc()).limit(limit))
+        session.scalars(
+            select(DeadLetterTask).order_by(DeadLetterTask.id.desc()).limit(limit)
+        )
     )
 
 

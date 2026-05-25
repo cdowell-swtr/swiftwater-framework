@@ -29,7 +29,7 @@ def health(request: Request) -> JSONResponse:
 
     _client = _redis.Redis.from_url(request.app.state.settings.redis_url)
     try:
-        report["workers"] = {"alive": _liveness.is_alive(_client)}
+        report["workers"] = {"alive": _liveness.is_alive(_client)}  # type: ignore[arg-type]
     except Exception:  # broker unreachable — report degraded, never 500 the probe
         report["workers"] = {"alive": False}
     finally:
@@ -52,7 +52,9 @@ def metrics(request: Request) -> PlainTextResponse:
     try:
         with SessionLocal() as _session:
             body += _dead_letter.render_dlq_metrics(_session)
-    except Exception as _exc:  # DB unreachable — omit the DLQ gauge rather than 500 the endpoint
+    except (
+        Exception
+    ) as _exc:  # DB unreachable — omit the DLQ gauge rather than 500 the endpoint
         from {{ package_name }}.logging_config import get_logger
 
         get_logger().warning("dlq_metrics_unavailable", error=str(_exc))

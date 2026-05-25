@@ -35,4 +35,4 @@ def process_async(self, payload: dict) -> None:
 @app.task(bind=True)
 def heartbeat(self) -> None:
     """Periodic liveness tick (registered in schedule.py). Writes the marker /health checks."""
-    liveness.write_heartbeat(_redis_client())
+    liveness.write_heartbeat(_redis_client())  # type: ignore[arg-type]
