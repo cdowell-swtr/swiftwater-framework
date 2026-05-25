@@ -1584,3 +1584,24 @@ def test_render_graphql_battery_is_ruff_format_clean(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["graphql"]})
     _assert_ruff_format_clean(dest)
+
+
+def test_render_graphql_metrics_module(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["graphql"]})
+    assert (dest / "src" / "demo" / "graphql" / "metrics.py").exists()
+    assert (dest / "src" / "demo" / "graphql" / "extension.py").exists()
+    assert (dest / "tests" / "unit" / "test_graphql_metrics.py").exists()
+    schema = (dest / "src" / "demo" / "graphql" / "schema.py").read_text()
+    assert "MetricsExtension" in schema
+    health = (dest / "src" / "demo" / "routes" / "health.py").read_text()
+    assert "gql_metrics.render_prometheus" in health
+
+
+def test_render_health_clean_without_graphql(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert (
+        "gql_metrics"
+        not in (dest / "src" / "demo" / "routes" / "health.py").read_text()
+    )

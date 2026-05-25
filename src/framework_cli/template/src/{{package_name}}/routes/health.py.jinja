@@ -57,6 +57,12 @@ def metrics(request: Request) -> PlainTextResponse:
 
     body += ws_metrics.render_prometheus()
 {%- endif %}
+{%- if "graphql" in batteries %}
+
+    from {{ package_name }}.graphql.metrics import gql_metrics
+
+    body += gql_metrics.render_prometheus()
+{%- endif %}
 {% if "workers" in batteries %}
     from {{ package_name }}.db.engine import SessionLocal
     from {{ package_name }}.tasks import dead_letter as _dead_letter

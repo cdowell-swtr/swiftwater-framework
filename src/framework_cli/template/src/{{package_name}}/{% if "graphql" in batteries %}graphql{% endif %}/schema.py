@@ -9,6 +9,7 @@ from strawberry.extensions import AddValidationRules, SchemaExtension
 
 from ..db import repository
 from ..db.models import Item as ItemModel
+from .extension import MetricsExtension
 
 
 @strawberry.type
@@ -41,7 +42,9 @@ class Mutation:
 def build_schema(*, disable_introspection: bool) -> strawberry.Schema:
     """Build the schema. Introspection is disabled in production via a validation rule;
     Task 4 will prepend the metrics extension."""
-    extensions: list[type[SchemaExtension] | Callable[[], SchemaExtension]] = []
+    extensions: list[type[SchemaExtension] | Callable[[], SchemaExtension]] = [
+        MetricsExtension
+    ]
     if disable_introspection:
         # A factory (not an instance): Schema wants type|Callable[[], SchemaExtension], and a
         # fresh instance per request also avoids Strawberry's pass-an-instance deprecation.

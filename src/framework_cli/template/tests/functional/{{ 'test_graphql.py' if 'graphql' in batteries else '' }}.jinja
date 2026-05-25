@@ -44,3 +44,25 @@ def test_introspection_disabled_when_off():
         "{ __schema { queryType { name } } }"
     )
     assert result.errors  # introspection is blocked in production
+
+
+def test_metrics_count_graphql_operations(db_session: Session):
+    from {{ package_name }}.graphql.metrics import gql_metrics
+
+    gql_metrics.reset()
+    client = _client(db_session)
+    _gql(client, "{ items { id } }")  # query success
+    _gql(client, 'mutation { createItem(name: "x") { id } }')  # mutation success
+    _gql(client, "{ nope }")  # query error (unknown field)
+    body = client.get("/metrics").text
+    assert (
+        'app_graphql_operations_total{operation_type="query",outcome="success"} 1'
+        in body
+    )
+    assert (
+        'app_graphql_operations_total{operation_type="mutation",outcome="success"} 1'
+        in body
+    )
+    assert (
+        'app_graphql_operations_total{operation_type="query",outcome="error"} 1' in body
+    )

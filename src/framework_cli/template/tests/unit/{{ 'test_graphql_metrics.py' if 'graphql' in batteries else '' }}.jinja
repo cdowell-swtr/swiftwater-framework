@@ -1,0 +1,51 @@
+"""GraphQL battery — unit tests for the in-process metrics counter (hermetic)."""
+
+from {{ package_name }}.graphql.metrics import OUTCOMES, GraphQLMetrics
+
+
+def test_operation_increments_bucket():
+    m = GraphQLMetrics()
+    m.operation("query", "success")
+    m.operation("query", "success")
+    m.operation("mutation", "error")
+    out = m.render_prometheus()
+    assert (
+        'app_graphql_operations_total{operation_type="query",outcome="success"} 2'
+        in out
+    )
+    assert (
+        'app_graphql_operations_total{operation_type="mutation",outcome="error"} 1'
+        in out
+    )
+
+
+def test_base_series_present_at_zero():
+    out = GraphQLMetrics().render_prometheus()
+    for t in ("query", "mutation"):
+        for o in OUTCOMES:
+            assert (
+                'app_graphql_operations_total{operation_type="'
+                + t
+                + '",outcome="'
+                + o
+                + '"} 0'
+            ) in out
+    assert "# TYPE app_graphql_operations_total counter" in out
+
+
+def test_unknown_type_or_outcome_ignored():
+    m = GraphQLMetrics()
+    m.operation("query", "weird")  # unknown outcome
+    m.operation("nonsense", "success")  # unknown type
+    out = m.render_prometheus()
+    assert "weird" not in out and "nonsense" not in out
+
+
+def test_reset_clears():
+    m = GraphQLMetrics()
+    m.operation("query", "success")
+    m.reset()
+    assert (
+        'app_graphql_operations_total{operation_type="query",outcome="success"} 0'
+        in m.render_prometheus()
+    )
