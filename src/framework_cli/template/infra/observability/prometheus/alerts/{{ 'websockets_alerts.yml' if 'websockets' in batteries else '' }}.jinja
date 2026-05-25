@@ -2,12 +2,14 @@ groups:
 - name: websockets
   rules:
   - alert: HighWebSocketConnectionChurn
-    expr: rate(app_websocket_connections_opened_total[5m]) / clamp_min(app_websocket_connections_active, 1) > 0.5
+    # `and active > 5` suppresses noise at low connection counts (where a single reconnect
+    # spikes the ratio); the ratio is only meaningful once there's a real connection pool.
+    expr: rate(app_websocket_connections_opened_total[5m]) / clamp_min(app_websocket_connections_active, 1) > 0.5 and app_websocket_connections_active > 5
     for: 10m
     labels:
       severity: warning
     annotations:
-      summary: High WebSocket connection churn (clients reconnecting/flapping) — app-specific default, tune or remove
+      summary: High WebSocket connection churn (clients reconnecting/flapping) — app-specific default; tune the threshold/floor or remove
   - alert: WebSocketConnectionsIdle
     expr: app_websocket_connections_active > 0 and rate(app_websocket_messages_received_total[10m]) == 0
     for: 20m
