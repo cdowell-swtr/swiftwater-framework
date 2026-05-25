@@ -988,3 +988,62 @@ def test_rendered_project_dev_stack_serves_seeded_items(tmp_path: Path):
         assert {row["name"] for row in items} >= {"alpha", "beta"}
     finally:
         subprocess.run(down, cwd=dest)
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
+def test_rendered_project_with_graphql_battery_passes(tmp_path: Path):
+    # Renders a project with the graphql battery active, asserts the battery files
+    # were emitted, then runs unit+functional (70% gate) to confirm the GraphQL tests
+    # (tests/functional/test_graphql.py) are collected and pass — exercising a query,
+    # a createItem mutation, and the introspection-off check against real Postgres.
+    data = {**DATA, "batteries": ["graphql"]}
+    dest = tmp_path / "demo"
+    render_project(dest, data)
+
+    # Battery files must exist in the rendered project.
+    assert (dest / "src" / "demo" / "graphql" / "schema.py").exists(), (
+        "graphql/schema.py was not rendered by the graphql battery"
+    )
+    assert (dest / "src" / "demo" / "routes" / "graphql.py").exists(), (
+        "routes/graphql.py was not rendered by the graphql battery"
+    )
+    assert (dest / "tests" / "functional" / "test_graphql.py").exists(), (
+        "tests/functional/test_graphql.py was not rendered by the graphql battery"
+    )
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    # Run unit + functional tiers (70% gate) — this collects test_graphql.py and runs
+    # it against a real testcontainers Postgres (alembic upgrade head applies the 0001
+    # migration). Strawberry runs in the app process; no broker required.
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional gate did not pass for the graphql battery project:\n"
+        + result.stdout
+        + result.stderr
+    )
+    # Prove the GraphQL functional tests actually ran: the route handler reaches full
+    # coverage only when test_graphql.py's query + createItem mutation exercise both
+    # the POST handler and the schema resolver paths (router autodiscovery alone imports
+    # routes/graphql.py on every create_app() call, yielding partial coverage — so the
+    # filename appearing in the coverage table is NOT sufficient proof). 100% only occurs
+    # when the query and mutation both run.
+    combined_output = result.stdout + result.stderr
+    cov_line = next(
+        (ln for ln in combined_output.splitlines() if "routes/graphql.py" in ln), ""
+    )
+    assert "100%" in cov_line, (
+        f"GraphQL route not fully exercised; coverage line: {cov_line!r}\n"
+        "Expected 100% coverage of routes/graphql.py — was "
+        "tests/functional/test_graphql.py collected and did it pass?\n"
+        + combined_output
+    )
