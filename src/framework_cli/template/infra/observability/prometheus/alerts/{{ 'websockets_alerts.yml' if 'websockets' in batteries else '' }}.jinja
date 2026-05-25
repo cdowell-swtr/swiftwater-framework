@@ -1,0 +1,17 @@
+groups:
+- name: websockets
+  rules:
+  - alert: HighWebSocketConnectionChurn
+    expr: rate(app_websocket_connections_opened_total[5m]) / clamp_min(app_websocket_connections_active, 1) > 0.5
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: High WebSocket connection churn (clients reconnecting/flapping) — app-specific default, tune or remove
+  - alert: WebSocketConnectionsIdle
+    expr: app_websocket_connections_active > 0 and rate(app_websocket_messages_received_total[10m]) == 0
+    for: 20m
+    labels:
+      severity: warning
+    annotations:
+      summary: WebSocket connections open but no inbound messages for 20m (possible stuck/half-open) — expected for server-push-only apps; widen the window or remove this rule
