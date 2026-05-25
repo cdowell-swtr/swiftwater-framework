@@ -65,3 +65,31 @@ def test_malformed_body_with_valid_signature_is_400(client: TestClient):
         "/webhooks", content=body, headers={"X-Webhook-Signature": _sign(body)}
     )
     assert r.status_code == 400
+
+
+def test_metrics_count_outcomes(client: TestClient):
+    from {{ package_name }}.webhooks.metrics import webhook_metrics
+
+    webhook_metrics.reset()
+
+    good = json.dumps({"type": "ping"}).encode()
+    client.post(
+        "/webhooks", content=good, headers={"X-Webhook-Signature": _sign(good)}
+    )  # accepted
+    client.post(
+        "/webhooks", content=good, headers={"X-Webhook-Signature": "bad"}
+    )  # rejected_signature
+    bad = b"not json{"
+    client.post(
+        "/webhooks", content=bad, headers={"X-Webhook-Signature": _sign(bad)}
+    )  # malformed
+    dup = json.dumps({"type": "ping", "id": "evt_dup"}).encode()
+    h = {"X-Webhook-Signature": _sign(dup)}
+    client.post("/webhooks", content=dup, headers=h)  # accepted
+    client.post("/webhooks", content=dup, headers=h)  # duplicate
+
+    body = client.get("/metrics").text
+    assert 'app_webhooks_received_total{outcome="accepted"} 2' in body
+    assert 'app_webhooks_received_total{outcome="rejected_signature"} 1' in body
+    assert 'app_webhooks_received_total{outcome="malformed"} 1' in body
+    assert 'app_webhooks_received_total{outcome="duplicate"} 1' in body

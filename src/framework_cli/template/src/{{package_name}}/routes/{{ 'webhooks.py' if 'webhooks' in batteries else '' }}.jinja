@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..db.engine import get_session
 from ..webhooks.handler import handle_event
 from ..webhooks.inbox import record
+from ..webhooks.metrics import webhook_metrics
 from ..webhooks.signature import verify
 
 router = APIRouter()
@@ -26,10 +27,12 @@ async def receive_webhook(request: Request, session: SessionDep) -> Response:
     raw = await request.body()
     secret = request.app.state.settings.webhook_signing_secret
     if not verify(raw, request.headers.get(_SIGNATURE_HEADER, ""), secret):
+        webhook_metrics.record("rejected_signature")
         return Response(status_code=401)
     try:
         event = await request.json()
     except ValueError:  # json.JSONDecodeError subclasses ValueError
+        webhook_metrics.record("malformed")
         return Response(status_code=400)
     key = hashlib.sha256(raw).hexdigest()
     try:
@@ -38,5 +41,7 @@ async def receive_webhook(request: Request, session: SessionDep) -> Response:
         session.commit()
     except IntegrityError:
         session.rollback()
+        webhook_metrics.record("duplicate")
         return Response(status_code=200)  # duplicate delivery — already processed
+    webhook_metrics.record("accepted")
     return Response(status_code=200)

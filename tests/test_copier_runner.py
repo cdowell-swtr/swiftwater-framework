@@ -1279,3 +1279,19 @@ def test_render_no_webhooks_metrics_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
     assert not (dest / "src" / DATA["package_name"] / "webhooks" / "metrics.py").exists()
+
+
+def test_render_webhooks_route_records_metrics(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["webhooks"]})
+    route = (dest / "src" / DATA["package_name"] / "routes" / "webhooks.py").read_text()
+    assert "webhook_metrics.record" in route
+    health = (dest / "src" / DATA["package_name"] / "routes" / "health.py").read_text()
+    assert "webhook_metrics.render_prometheus" in health
+
+
+def test_render_health_clean_without_webhooks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    health = (dest / "src" / DATA["package_name"] / "routes" / "health.py").read_text()
+    assert "webhook_metrics" not in health

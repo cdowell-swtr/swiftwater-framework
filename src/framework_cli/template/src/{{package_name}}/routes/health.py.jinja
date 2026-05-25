@@ -45,6 +45,12 @@ def metrics(request: Request) -> PlainTextResponse:
         request.app.state.metrics.render_prometheus()
         + recoverability.render_prometheus()
     )
+{%- if "webhooks" in batteries %}
+
+    from {{ package_name }}.webhooks.metrics import webhook_metrics
+
+    body += webhook_metrics.render_prometheus()
+{%- endif %}
 {% if "workers" in batteries %}
     from {{ package_name }}.db.engine import SessionLocal
     from {{ package_name }}.tasks import dead_letter as _dead_letter
