@@ -25,7 +25,9 @@ class WebSocketMetrics:
 
     def connection_closed(self) -> None:
         with self._lock:
-            self._active = max(0, self._active - 1)  # floored — never negative on a double-close
+            self._active = max(
+                0, self._active - 1
+            )  # floored — never negative on a double-close
 
     def message_received(self) -> None:
         with self._lock:
@@ -37,7 +39,12 @@ class WebSocketMetrics:
 
     def render_prometheus(self) -> str:
         with self._lock:
-            active, opened, received, sent = self._active, self._opened, self._received, self._sent
+            active, opened, received, sent = (
+                self._active,
+                self._opened,
+                self._received,
+                self._sent,
+            )
         return (
             "# HELP app_websocket_connections_active Currently open WebSocket connections\n"
             "# TYPE app_websocket_connections_active gauge\n"
