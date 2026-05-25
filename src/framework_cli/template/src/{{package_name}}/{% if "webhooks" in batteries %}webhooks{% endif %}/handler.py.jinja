@@ -12,7 +12,13 @@ from ..tasks.tasks import process_async
 
 
 def handle_event(event: dict) -> None:
-    """Hand the verified, de-duplicated event to a background worker (fast return)."""
+    """Hand the verified, de-duplicated event to a background worker (fast return).
+
+    NOTE: this enqueues inside the route's inbox transaction, before commit — a dual-write.
+    If the commit fails after enqueue, the task ran but no dedup row exists, so a redelivery
+    could process twice. Fine for most workloads; for exactly-once, adopt a transactional
+    outbox (enqueue a row in the same tx, relay it to the broker after commit).
+    """
     process_async.delay(event)
 {%- else -%}
 """The builder seam: replace `handle_event` with your webhook logic.
