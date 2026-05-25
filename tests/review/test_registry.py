@@ -95,16 +95,28 @@ def test_active_agents_adds_gated_agent_when_battery_present(monkeypatch):
     from framework_cli.review import registry
 
     bat._BATTERIES["_demo"] = bat.BatterySpec("_demo", "x", gates_agent="_demo-agent")
+    bat._BATTERIES["_demo2"] = bat.BatterySpec(
+        "_demo2", "x", gates_agent="_demo-push-agent"
+    )
     registry._SPECS["_demo-agent"] = registry.AgentSpec(
         "review-demo", "p", "high", "battery", registry.DEFAULT_MODEL
     )
+    registry._SPECS["_demo-push-agent"] = registry.AgentSpec(
+        "review-demo-push", "p", "high", "battery", registry.DEFAULT_MODEL, on_push=True
+    )
     try:
+        # PR: a present battery activates its gated agent; an absent battery does not.
         assert "_demo-agent" in registry.active_agents("pull_request", ["_demo"])
         assert "_demo-agent" not in registry.active_agents("pull_request", [])
-        # push event: a battery agent without on_push is still gated in only when present.
-        assert "_demo-agent" not in registry.active_agents("push", [])
+        # Push: a battery agent WITHOUT on_push must NOT appear, even when its battery is present
+        # (the push set stays the curated always-on-main subset).
+        assert "_demo-agent" not in registry.active_agents("push", ["_demo"])
+        # Push: a battery agent WITH on_push appears only when its battery is present.
+        assert "_demo-push-agent" in registry.active_agents("push", ["_demo2"])
+        assert "_demo-push-agent" not in registry.active_agents("push", [])
     finally:
-        del bat._BATTERIES["_demo"], registry._SPECS["_demo-agent"]
+        del bat._BATTERIES["_demo"], bat._BATTERIES["_demo2"]
+        del registry._SPECS["_demo-agent"], registry._SPECS["_demo-push-agent"]
 
 
 def test_active_agents_ignores_none_gates_agent():

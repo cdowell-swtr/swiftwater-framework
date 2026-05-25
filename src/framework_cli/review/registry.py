@@ -114,14 +114,24 @@ def agent_names() -> list[str]:
 
 
 def active_agents(event: str, batteries: Sequence[str] = ()) -> list[str]:
-    """Agent names active for a CI event. On push, the always-on-main subset; otherwise all
-    non-battery agents. A battery in `batteries` additionally activates its `gates_agent`."""
+    """Agent names active for a CI event. On push, the always-on-main subset; on a PR, all
+    non-battery agents. A battery in `batteries` additionally activates its `gates_agent` —
+    on push only if that agent is itself `on_push` (so the push set stays the curated subset)."""
     gated = {get_battery(b).gates_agent for b in batteries} - {None}
     if event == "push":
-        base = {k for k, s in _SPECS.items() if s.on_push}
+        base = {
+            k for k, s in _SPECS.items() if s.on_push and s.active_when != "battery"
+        }
+        battery_extra = {
+            k
+            for k, s in _SPECS.items()
+            if s.active_when == "battery" and s.on_push and k in gated
+        }
     else:
         base = {
             k for k, s in _SPECS.items() if s.active_when in ("always", "file-trigger")
         }
-    base |= {k for k, s in _SPECS.items() if s.active_when == "battery" and k in gated}
-    return sorted(base)
+        battery_extra = {
+            k for k, s in _SPECS.items() if s.active_when == "battery" and k in gated
+        }
+    return sorted(base | battery_extra)
