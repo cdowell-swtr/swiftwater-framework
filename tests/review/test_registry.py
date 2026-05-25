@@ -1,12 +1,26 @@
 import pytest
 
-from framework_cli.review.registry import AgentSpec, active_agents, agent_names, get_agent
+from framework_cli.review.registry import (
+    AgentSpec,
+    active_agents,
+    agent_names,
+    get_agent,
+)
 
 _EXPECTED_PR = sorted(
     [
-        "security", "data-integrity", "data-lineage", "application-logic", "observability",
-        "test-quality", "architecture", "performance", "compliance", "privacy",
-        "documentation", "dependency",
+        "security",
+        "data-integrity",
+        "data-lineage",
+        "application-logic",
+        "observability",
+        "test-quality",
+        "architecture",
+        "performance",
+        "compliance",
+        "privacy",
+        "documentation",
+        "dependency",
     ]
 )
 _EXPECTED_PUSH = sorted(["security", "data-integrity", "data-lineage", "observability"])
@@ -67,3 +81,36 @@ def test_advisory_and_filetrigger_config():
     assert dep.block_threshold is None and dep.active_when == "file-trigger"
     assert dep.trigger_globs and "pyproject.toml" in dep.trigger_globs
     assert get_agent("data-integrity").block_threshold == "info"
+
+
+def test_active_agents_excludes_battery_agents_by_default():
+    from framework_cli.review.registry import active_agents
+
+    # No batteries → no battery-gated agent appears (and the call still works with the new arg).
+    assert active_agents("pull_request") == active_agents("pull_request", [])
+
+
+def test_active_agents_adds_gated_agent_when_battery_present(monkeypatch):
+    from framework_cli import batteries as bat
+    from framework_cli.review import registry
+
+    bat._BATTERIES["_demo"] = bat.BatterySpec("_demo", "x", gates_agent="_demo-agent")
+    registry._SPECS["_demo-agent"] = registry.AgentSpec(
+        "review-demo", "p", "high", "battery", registry.DEFAULT_MODEL
+    )
+    try:
+        assert "_demo-agent" in registry.active_agents("pull_request", ["_demo"])
+        assert "_demo-agent" not in registry.active_agents("pull_request", [])
+        # push event: a battery agent without on_push is still gated in only when present.
+        assert "_demo-agent" not in registry.active_agents("push", [])
+    finally:
+        del bat._BATTERIES["_demo"], registry._SPECS["_demo-agent"]
+
+
+def test_active_agents_ignores_none_gates_agent():
+    from framework_cli.review.registry import active_agents
+
+    # webhooks/websockets/workers have gates_agent=None → adding them changes nothing.
+    assert active_agents("pull_request", ["webhooks", "workers"]) == active_agents(
+        "pull_request"
+    )

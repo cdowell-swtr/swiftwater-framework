@@ -15,7 +15,12 @@ from framework_cli.review.checks import neutral_payload, post_or_skip, to_check_
 from framework_cli.review.diff import changed_files, matches_globs, pr_diff
 from framework_cli.review.registry import active_agents, agent_names, get_agent
 from framework_cli.review.runner import default_client, run_agent
-from framework_cli.source import REPO_URL, latest_release, record_portable_source, version_tag
+from framework_cli.source import (
+    REPO_URL,
+    latest_release,
+    record_portable_source,
+    version_tag,
+)
 from framework_cli.downskill import DownskillError, downskill_project
 from framework_cli.upskill import UpskillError, upskill_project
 
@@ -73,7 +78,9 @@ def new(
 @app.command()
 def integrity(
     ci: bool = typer.Option(
-        False, "--ci", help="CI mode: skip gitignored existence checks (fresh checkouts)."
+        False,
+        "--ci",
+        help="CI mode: skip gitignored existence checks (fresh checkouts).",
     ),
     allow_drift: list[str] = typer.Option(
         [], "--allow-drift", help="Record a managed file as intentionally diverged."
@@ -104,7 +111,8 @@ def integrity(
 @app.command()
 def restore(
     file: str = typer.Argument(
-        ..., help="Path (relative to the project root) of the framework file to restore."
+        ...,
+        help="Path (relative to the project root) of the framework file to restore.",
     ),
 ) -> None:
     """Re-fetch a canonical framework file, discarding local edits to it."""
@@ -159,7 +167,9 @@ def upskill(
 def downskill(
     name: str = typer.Argument(..., help="Path to the project."),
     battery: str = typer.Argument(..., help="Battery to remove, e.g. 'webhooks'."),
-    force: bool = typer.Option(False, "--force", help="Remove even if the battery appears in use."),
+    force: bool = typer.Option(
+        False, "--force", help="Remove even if the battery appears in use."
+    ),
 ) -> None:
     """Remove a battery from a project (deletes its files; preserves migrations), then run its tests."""
     project = Path(name)
@@ -215,7 +225,9 @@ def _eval_run(diff: str, spec: object) -> list:
 
 @app.command(name="review-aggregate")
 def review_aggregate(
-    directory: str = typer.Argument(..., help="Directory of per-agent findings JSON files."),
+    directory: str = typer.Argument(
+        ..., help="Directory of per-agent findings JSON files."
+    ),
     pr: str = typer.Option("", "--pr", help="PR number (default: $GITHUB_PR_NUMBER)."),
 ) -> None:
     """Aggregate per-agent review findings into one sticky PR comment (prints on a push)."""
@@ -227,28 +239,45 @@ def review_aggregate(
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     token = os.environ.get("GITHUB_TOKEN", "")
     if pr_number and repo and token:
-        comment.post_sticky_comment(result.markdown, repo=repo, pr=pr_number, token=token)
-        typer.echo(f"review-aggregate: posted summary to PR #{pr_number} ({result.overall})")
+        comment.post_sticky_comment(
+            result.markdown, repo=repo, pr=pr_number, token=token
+        )
+        typer.echo(
+            f"review-aggregate: posted summary to PR #{pr_number} ({result.overall})"
+        )
     else:
         typer.echo(result.markdown)
 
 
 @app.command(name="review-agents")
 def review_agents(
-    event: str = typer.Option("", "--event", help="GitHub event name (default: $GITHUB_EVENT_NAME)."),
+    event: str = typer.Option(
+        "", "--event", help="GitHub event name (default: $GITHUB_EVENT_NAME)."
+    ),
 ) -> None:
     """Print the JSON array of review agents active for the event (drives the CI matrix)."""
     import json
 
+    from framework_cli.source import read_batteries
+
     resolved = event or os.environ.get("GITHUB_EVENT_NAME", "pull_request")
-    typer.echo(json.dumps(active_agents(resolved)))
+    batteries = read_batteries(
+        Path(".")
+    )  # the generated project's recorded battery set
+    typer.echo(json.dumps(active_agents(resolved, batteries)))
 
 
 @app.command(name="eval")
 def eval_agents(
-    agent: str = typer.Argument("", help="Evaluate only this agent (default: all registered)."),
-    fixtures: str = typer.Option("tests/eval/fixtures", "--fixtures", help="Fixtures root directory."),
-    repeat: int = typer.Option(1, "--repeat", help="Runs per fixture; rates are averaged."),
+    agent: str = typer.Argument(
+        "", help="Evaluate only this agent (default: all registered)."
+    ),
+    fixtures: str = typer.Option(
+        "tests/eval/fixtures", "--fixtures", help="Fixtures root directory."
+    ),
+    repeat: int = typer.Option(
+        1, "--repeat", help="Runs per fixture; rates are averaged."
+    ),
     require_fixtures: bool = typer.Option(
         False, "--require-fixtures", help="Fail if an evaluated agent has no fixtures."
     ),
@@ -285,7 +314,9 @@ def eval_agents(
     known = set(agent_names())
     for a in sorted(by_agent):
         if a not in known:
-            typer.echo(f"warning: fixtures for unknown agent '{a}' (not in registry)", err=True)
+            typer.echo(
+                f"warning: fixtures for unknown agent '{a}' (not in registry)", err=True
+            )
 
     targets = [agent] if agent else agent_names()
     failing = 0
@@ -310,12 +341,20 @@ def eval_agents(
                     found = _eval_run(fx.diff, spec)
                 except Exception:  # noqa: BLE001 - a failed run counts as a non-detection
                     found = []
-                blocked = flags(found, spec, file=fx.seeded_file) if fx.kind == "bad" else flags(found, spec)
+                blocked = (
+                    flags(found, spec, file=fx.seeded_file)
+                    if fx.kind == "bad"
+                    else flags(found, spec)
+                )
                 hits += 1 if blocked else 0
             (bad_rates if fx.kind == "bad" else good_rates).append(hits / repeat)
-        score = score_agent(a, bad_rates, good_rates, thresholds.get(a, DEFAULT_THRESHOLDS))
+        score = score_agent(
+            a, bad_rates, good_rates, thresholds.get(a, DEFAULT_THRESHOLDS)
+        )
         status = "PASS" if score.passed else f"FAIL ({score.reason})"
-        typer.echo(f"{spec.name}    recall {score.recall:.2f}  fp {score.fp_rate:.2f}    {status}")
+        typer.echo(
+            f"{spec.name}    recall {score.recall:.2f}  fp {score.fp_rate:.2f}    {status}"
+        )
         if not score.passed:
             failing += 1
 
@@ -352,7 +391,9 @@ def review(
             write_findings(Path(findings_out), spec.name, conclusion, found)
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        payload = neutral_payload(spec.name, "review skipped — set ANTHROPIC_API_KEY to enable.")
+        payload = neutral_payload(
+            spec.name, "review skipped — set ANTHROPIC_API_KEY to enable."
+        )
         post_or_skip(payload, token=token, repo=repo, sha=sha)
         _emit(payload.conclusion, [])
         typer.echo(f"{spec.name}: skipped (no ANTHROPIC_API_KEY)")
@@ -360,7 +401,9 @@ def review(
 
     try:
         diff = _review_diff()
-        if spec.trigger_globs and not matches_globs(changed_files(diff), spec.trigger_globs):
+        if spec.trigger_globs and not matches_globs(
+            changed_files(diff), spec.trigger_globs
+        ):
             payload = neutral_payload(
                 spec.name, f"not triggered (no {', '.join(spec.trigger_globs)} change)"
             )
@@ -381,5 +424,7 @@ def review(
 
     post_or_skip(payload, token=token, repo=repo, sha=sha)
     _emit(payload.conclusion, findings)
-    typer.echo(f"{spec.name}: {payload.conclusion} ({len(payload.annotations)} finding(s))")
+    typer.echo(
+        f"{spec.name}: {payload.conclusion} ({len(payload.annotations)} finding(s))"
+    )
     raise typer.Exit(1 if payload.conclusion == "failure" else 0)
