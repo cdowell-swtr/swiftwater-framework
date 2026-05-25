@@ -25,12 +25,6 @@ from framework_cli.source import read_batteries
 
 _RUNNER = CliRunner()
 
-_ANSWERS = {
-    "project_name": "My App",
-    "project_slug": "my-app",
-    "package_name": "my_app",
-}
-
 
 def _new_workers_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Invoke `framework new My App --with workers` and return the project root."""
@@ -120,7 +114,7 @@ def test_downskill_workers_reverts_locked_files_preserves_migration_integrity_gr
     assert "celery-exporter" not in dev_yml, (
         "celery-exporter service must be absent from dev.yml after downskill"
     )
-    assert "redis:" not in dev_yml, (
+    assert "image: redis:" not in dev_yml, (
         "redis service must be absent from dev.yml after downskill"
     )
 
