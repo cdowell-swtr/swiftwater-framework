@@ -1605,3 +1605,37 @@ def test_render_health_clean_without_graphql(tmp_path: Path):
         "gql_metrics"
         not in (dest / "src" / "demo" / "routes" / "health.py").read_text()
     )
+
+
+def test_render_graphql_alerts_and_dashboard(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["graphql"]})
+    alerts = (
+        dest
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "graphql_alerts.yml"
+    )
+    dash = dest / "infra" / "observability" / "grafana" / "dashboards" / "graphql.json"
+    assert alerts.exists() and dash.exists()
+    parsed = yaml.safe_load(alerts.read_text())
+    assert parsed["groups"][0]["name"] == "graphql"
+    json.loads(dash.read_text())  # valid JSON
+
+
+def test_render_no_graphql_alerts_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert not (
+        dest
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "graphql_alerts.yml"
+    ).exists()
+    assert not (
+        dest / "infra" / "observability" / "grafana" / "dashboards" / "graphql.json"
+    ).exists()

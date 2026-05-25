@@ -1,0 +1,12 @@
+groups:
+- name: graphql
+  rules:
+  - alert: HighGraphQLErrorRate
+    # `and ... > 0.05` traffic floor suppresses noise at low request rates (where one error
+    # spikes the ratio). App-specific default — tune the threshold/floor or remove.
+    expr: sum(rate(app_graphql_operations_total{outcome="error"}[5m])) / clamp_min(sum(rate(app_graphql_operations_total[5m])), 1) > 0.1 and sum(rate(app_graphql_operations_total[5m])) > 0.05
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Over 10% of GraphQL operations are erroring (resolver failures or invalid queries) — app-specific default; tune the threshold/floor or remove
