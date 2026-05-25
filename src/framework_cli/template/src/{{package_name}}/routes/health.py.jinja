@@ -49,8 +49,11 @@ def metrics(request: Request) -> PlainTextResponse:
     from {{ package_name }}.db.engine import SessionLocal
     from {{ package_name }}.tasks import dead_letter as _dead_letter
 
-    with SessionLocal() as _session:
-        body += _dead_letter.render_dlq_metrics(_session)
+    try:
+        with SessionLocal() as _session:
+            body += _dead_letter.render_dlq_metrics(_session)
+    except Exception:  # DB unreachable — omit the DLQ gauge rather than 500 the endpoint
+        pass
 {% endif %}
     return PlainTextResponse(
         body,

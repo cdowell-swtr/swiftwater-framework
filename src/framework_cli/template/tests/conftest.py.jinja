@@ -118,3 +118,19 @@ def api_client(request: pytest.FixtureRequest) -> Iterator["TestClient | httpx.C
     with engine.connect() as conn:
         conn.execute(text("TRUNCATE TABLE items RESTART IDENTITY CASCADE"))
         conn.commit()
+
+{% if "workers" in batteries %}
+
+@pytest.fixture(scope="session", autouse=True)
+def _celery_eager() -> None:
+    """Run Celery tasks inline in tests (no broker needed).
+
+    Without this, any call to `.delay()` — including the webhook handler when
+    webhooks+workers are both present — attempts a Redis connection that does not
+    exist in the test environment and raises a connection error.
+    """
+    from {{ package_name }}.tasks.app import app as _celery_app
+
+    _celery_app.conf.task_always_eager = True
+    _celery_app.conf.task_eager_propagates = True
+{% endif %}

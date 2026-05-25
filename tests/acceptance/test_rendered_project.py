@@ -169,6 +169,95 @@ def test_rendered_project_with_webhooks_battery_passes(tmp_path: Path):
     not _docker_available(),
     reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
 )
+def test_rendered_project_with_workers_battery_passes(tmp_path: Path):
+    # Renders a project with the workers battery active, asserts the battery files
+    # were emitted, then runs unit+functional (70% gate) to confirm both workers test
+    # files (tests/unit/test_workers_unit.py + tests/functional/test_workers_functional.py)
+    # are collected and pass — exercising the 0003_dead_letter migration and DLQ logic.
+    data_with_workers = {**DATA, "batteries": ["workers"]}
+    dest = tmp_path / "demo"
+    render_project(dest, data_with_workers)
+
+    # Battery files must exist in the rendered project.
+    assert (dest / "src" / "demo" / "tasks" / "app.py").exists(), \
+        "tasks/app.py was not rendered by the workers battery"
+    assert (dest / "tests" / "unit" / "test_workers_unit.py").exists(), \
+        "tests/unit/test_workers_unit.py was not rendered by the workers battery"
+    assert (dest / "tests" / "functional" / "test_workers_functional.py").exists(), \
+        "tests/functional/test_workers_functional.py was not rendered by the workers battery"
+    assert (dest / "migrations" / "versions" / "0003_dead_letter.py").exists(), \
+        "migrations/versions/0003_dead_letter.py was not rendered by the workers battery"
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    # Run unit + functional tiers (70% gate) — this collects both workers test files and
+    # runs the functional tests against a real testcontainers Postgres (0003 migration
+    # provisions the dead_letter_tasks table). Celery runs in eager mode (autouse session
+    # fixture in conftest.py), so no live broker is required.
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional coverage gate did not pass for the workers battery project:\n"
+        + result.stdout + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
+def test_rendered_project_webhooks_and_workers_passes(tmp_path: Path):
+    # Renders a project with BOTH webhooks + workers batteries, verifies the full
+    # migration chain (0001 → 0002 webhook_events → 0003 dead_letter), the webhooks
+    # functional tests pass with the enqueue handler (Celery eager mode), and the
+    # workers functional tests pass — proving end-to-end composition.
+    data_with_both = {**DATA, "batteries": ["webhooks", "workers"]}
+    dest = tmp_path / "demo"
+    render_project(dest, data_with_both)
+
+    # Both battery file sets must exist.
+    assert (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), \
+        "routes/webhooks.py was not rendered"
+    assert (dest / "src" / "demo" / "tasks" / "app.py").exists(), \
+        "tasks/app.py was not rendered"
+    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").exists(), \
+        "0002_webhook_events.py was not rendered"
+    assert (dest / "migrations" / "versions" / "0003_dead_letter.py").exists(), \
+        "0003_dead_letter.py was not rendered"
+
+    # Verify the handler uses process_async.delay (enqueue composition is wired).
+    handler = (dest / "src" / "demo" / "webhooks" / "handler.py").read_text()
+    assert "process_async.delay" in handler, \
+        "handler.py does not call process_async.delay — webhooks+workers composition not wired"
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    # Run unit + functional tiers (70% gate) — alembic upgrade head walks 0001→0002→0003,
+    # the webhooks functional tests pass (the route calls handle_event → process_async.delay,
+    # which runs eagerly via the autouse session fixture), and the workers functional tests
+    # pass. Coverage must reach 70% across the combined project.
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional coverage gate did not pass for the webhooks+workers project:\n"
+        + result.stdout + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
 def test_rendered_project_downskill_webhooks_is_green(tmp_path: Path):
     # Renders a project WITH the webhooks battery, removes it via remove_battery, and
     # verifies that the remaining project is still green (no dangling imports break
