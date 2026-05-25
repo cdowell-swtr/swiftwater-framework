@@ -40,8 +40,8 @@ class Mutation:
 
 
 def build_schema(*, disable_introspection: bool) -> strawberry.Schema:
-    """Build the schema. Introspection is disabled in production via a validation rule;
-    Task 4 will prepend the metrics extension."""
+    """Build the schema. MetricsExtension counts every operation; introspection is disabled
+    in production via a validation rule."""
     extensions: list[type[SchemaExtension] | Callable[[], SchemaExtension]] = [
         MetricsExtension
     ]
