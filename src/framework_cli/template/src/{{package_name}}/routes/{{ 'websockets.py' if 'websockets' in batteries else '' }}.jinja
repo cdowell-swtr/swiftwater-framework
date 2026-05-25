@@ -1,6 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from {{ package_name }}.websockets.connection_manager import ConnectionManager
+from {{ package_name }}.websockets.metrics import ws_metrics
 
 router = APIRouter()
 _manager = ConnectionManager()
@@ -13,6 +14,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     try:
         while True:
             message = await ws.receive_text()
+            ws_metrics.message_received()
             await _manager.broadcast(message)
     except WebSocketDisconnect:
         _manager.disconnect(ws)

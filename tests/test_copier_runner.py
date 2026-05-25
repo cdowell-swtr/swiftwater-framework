@@ -1335,3 +1335,23 @@ def test_render_no_websockets_metrics_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
     assert not (dest / "src" / DATA["package_name"] / "websockets" / "metrics.py").exists()
+
+
+def test_render_websockets_emits_metrics(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["websockets"]})
+    mgr = (dest / "src" / DATA["package_name"] / "websockets" / "connection_manager.py").read_text()
+    assert "ws_metrics.connection_opened" in mgr
+    assert "ws_metrics.connection_closed" in mgr
+    assert "ws_metrics.message_sent" in mgr
+    route = (dest / "src" / DATA["package_name"] / "routes" / "websockets.py").read_text()
+    assert "ws_metrics.message_received" in route
+    health = (dest / "src" / DATA["package_name"] / "routes" / "health.py").read_text()
+    assert "ws_metrics.render_prometheus" in health
+
+
+def test_render_health_clean_without_websockets(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    health = (dest / "src" / DATA["package_name"] / "routes" / "health.py").read_text()
+    assert "ws_metrics" not in health
