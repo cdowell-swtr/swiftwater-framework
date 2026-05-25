@@ -1,0 +1,47 @@
+"""Websockets battery — unit tests for the in-process metrics (hermetic)."""
+
+from {{ package_name }}.websockets.metrics import WebSocketMetrics
+
+
+def test_connection_open_close_tracks_active_gauge():
+    m = WebSocketMetrics()
+    m.connection_opened()
+    m.connection_opened()
+    m.connection_closed()
+    out = m.render_prometheus()
+    assert "app_websocket_connections_active 1" in out
+    assert "app_websocket_connections_opened_total 2" in out
+
+
+def test_connection_closed_floors_at_zero():
+    m = WebSocketMetrics()
+    m.connection_closed()  # close with nothing open
+    m.connection_closed()
+    assert "app_websocket_connections_active 0" in m.render_prometheus()
+
+
+def test_message_counters_increment():
+    m = WebSocketMetrics()
+    m.message_received()
+    m.message_sent()
+    m.message_sent()
+    out = m.render_prometheus()
+    assert "app_websocket_messages_received_total 1" in out
+    assert "app_websocket_messages_sent_total 2" in out
+
+
+def test_render_has_gauge_and_counter_types_at_zero():
+    out = WebSocketMetrics().render_prometheus()
+    assert "# TYPE app_websocket_connections_active gauge" in out
+    assert "# TYPE app_websocket_connections_opened_total counter" in out
+    assert "app_websocket_connections_active 0" in out
+
+
+def test_reset_clears():
+    m = WebSocketMetrics()
+    m.connection_opened()
+    m.message_received()
+    m.reset()
+    out = m.render_prometheus()
+    assert "app_websocket_connections_active 0" in out
+    assert "app_websocket_messages_received_total 0" in out

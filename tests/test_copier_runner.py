@@ -1322,3 +1322,16 @@ def test_render_no_webhooks_alerts_without_battery(tmp_path: Path):
     render_project(dest, {**DATA})
     assert not (dest / "infra" / "observability" / "prometheus" / "alerts" / "webhooks_alerts.yml").exists()
     assert not (dest / "infra" / "observability" / "grafana" / "dashboards" / "webhooks.json").exists()
+
+
+def test_render_websockets_metrics_module(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["websockets"]})
+    assert (dest / "src" / DATA["package_name"] / "websockets" / "metrics.py").exists()
+    assert (dest / "tests" / "unit" / "test_websockets_unit.py").exists()
+
+
+def test_render_no_websockets_metrics_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert not (dest / "src" / DATA["package_name"] / "websockets" / "metrics.py").exists()
