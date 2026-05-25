@@ -61,6 +61,32 @@ def test_usage_references_ignores_owned_files(tmp_path):
     assert refs == []
 
 
+def test_usage_references_excludes_framework_gated_files(tmp_path):
+    """A non-owned file whose battery reference is unmodified framework-gated content
+    (byte-identical to the with-battery render) is excluded; a builder-modified file is not."""
+    from framework_cli.downskill import usage_references
+
+    project = tmp_path / "proj"
+    with_root = tmp_path / "with"
+    (project / "src" / "demo").mkdir(parents=True)
+    (with_root / "src" / "demo").mkdir(parents=True)
+
+    # Framework-gated: identical bytes in the project and the with-battery render → excluded.
+    gated = "from demo.webhooks.metrics import webhook_metrics\n"
+    (project / "src" / "demo" / "health.py").write_text(gated)
+    (with_root / "src" / "demo" / "health.py").write_text(gated)
+
+    # Builder-modified: references the battery but differs from the render → flagged.
+    (project / "src" / "demo" / "mine.py").write_text("import demo.webhooks  # my code\n")
+    (with_root / "src" / "demo" / "mine.py").write_text("import demo.webhooks\n")
+
+    refs = usage_references(
+        project, "webhooks", package_name="demo", owned=set(), with_render_root=with_root
+    )
+    assert not any("health.py" in r for r in refs)
+    assert any("mine.py" in r for r in refs)
+
+
 def test_remove_battery_webhooks_end_to_end(tmp_path, monkeypatch):
     import subprocess
 

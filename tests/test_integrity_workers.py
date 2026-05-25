@@ -80,12 +80,11 @@ def test_downskill_workers_reverts_locked_files_preserves_migration_integrity_gr
     project = _new_workers_project(tmp_path, monkeypatch)
     _git_commit(project)
 
-    # force=True: the 'workers' battery name is a generic English word, so
-    # usage_references produces false positives from the framework's own generated
-    # shared files (health.py carries `report["workers"]` from the liveness check;
-    # settings.py carries a `# Celery workers` comment).  These are battery-rendered
-    # template content, not builder modifications — force is the correct flag.
-    report = remove_battery(project, "workers", force=True)
+    # No --force needed: although framework-gated shared files mention the battery name
+    # ("# Celery workers" in settings.py, report["workers"] in health.py), usage_references
+    # byte-identical-excludes files that match the framework's with-battery render, so a
+    # pristine scaffold downskills cleanly. (Only builder-MODIFIED references would refuse.)
+    report = remove_battery(project, "workers", force=False)
 
     pkg = "my_app"
 
