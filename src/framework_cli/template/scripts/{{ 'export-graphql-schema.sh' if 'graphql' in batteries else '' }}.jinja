@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Export the GraphQL SDL to schema.graphql. The schema is committed and CI checks it is current
+# and diffs it for breaking changes (.github/workflows/ci.yml). Run after changing the GraphQL
+# schema, then commit the result.
+set -euo pipefail
+
+uv run python - > schema.graphql <<'PY'
+import sys
+
+from {{ package_name }}.graphql.schema import schema
+
+sys.stdout.write(schema.as_str())
+sys.stdout.write("\n")
+PY

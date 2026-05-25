@@ -115,6 +115,33 @@ jobs:
           base: https://raw.githubusercontent.com/{% raw %}${{ github.repository }}/${{ github.base_ref }}{% endraw %}/openapi.json
           revision: openapi.json
           fail-on: ERR
+{%- if "graphql" in batteries %}
+      - name: fail if schema.graphql is missing or stale
+        run: |
+          bash scripts/export-graphql-schema.sh
+          if [ -n "$(git status --porcelain -- schema.graphql)" ]; then
+            echo "::error::schema.graphql is missing or out of date. Run scripts/export-graphql-schema.sh and commit it."
+            git --no-pager diff -- schema.graphql
+            exit 1
+          fi
+      - name: graphql breaking-change check (graphql-core)
+        if: {% raw %}${{ github.event_name == 'pull_request' }}{% endraw %}
+        run: |
+          git show "origin/{% raw %}${{ github.base_ref }}{% endraw %}:schema.graphql" > /tmp/base.graphql 2>/dev/null || { echo "no base schema — skipping"; exit 0; }
+          uv run python - <<'PY'
+          import sys
+          from pathlib import Path
+
+          from graphql import build_schema, find_breaking_changes
+
+          old = build_schema(Path("/tmp/base.graphql").read_text())
+          new = build_schema(Path("schema.graphql").read_text())
+          breaking = find_breaking_changes(old, new)
+          for b in breaking:
+              print(f"::error::breaking GraphQL change: {b.type.name}: {b.description}")
+          sys.exit(1 if breaking else 0)
+          PY
+{%- endif %}
 
   # Steps 9-10: Layer-3 AI review agents (spec §7). Opt-in: set the ANTHROPIC_API_KEY secret to
   # enable. `review-plan` lists the agents active for this event (all on a PR; the security/

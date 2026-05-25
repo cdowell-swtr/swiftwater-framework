@@ -1639,3 +1639,20 @@ def test_render_no_graphql_alerts_without_battery(tmp_path: Path):
     assert not (
         dest / "infra" / "observability" / "grafana" / "dashboards" / "graphql.json"
     ).exists()
+
+
+def test_render_graphql_export_script(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["graphql"]})
+    script = dest / "scripts" / "export-graphql-schema.sh"
+    assert script.is_file()
+    assert "schema.graphql" in script.read_text()
+    ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
+    assert "export-graphql-schema.sh" in ci and "find_breaking_changes" in ci
+
+
+def test_render_ci_clean_without_graphql(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
+    assert "graphql" not in ci and "export-graphql-schema" not in ci
