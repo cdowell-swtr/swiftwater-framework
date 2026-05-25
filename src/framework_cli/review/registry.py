@@ -100,6 +100,9 @@ _SPECS: dict[str, AgentSpec] = {
             "package-lock.json",
         ),
     ),
+    "api-design": AgentSpec(
+        "review-api-design", _prompt("api-design"), "high", "battery", DEFAULT_MODEL
+    ),
 }
 
 

@@ -126,3 +126,12 @@ def test_active_agents_ignores_none_gates_agent():
     assert active_agents("pull_request", ["webhooks", "workers"]) == active_agents(
         "pull_request"
     )
+
+
+def test_graphql_battery_gates_api_design():
+    from framework_cli.batteries import get_battery
+    from framework_cli.review.registry import active_agents
+
+    assert get_battery("graphql").gates_agent == "api-design"
+    assert "api-design" in active_agents("pull_request", ["graphql"])
+    assert "api-design" not in active_agents("pull_request", [])

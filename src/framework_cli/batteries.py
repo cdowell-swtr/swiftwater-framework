@@ -27,6 +27,11 @@ _BATTERIES: dict[str, BatterySpec] = {
         "workers",
         "Celery + Redis async task workers with a DB-backed dead-letter queue and beat scheduler",
     ),
+    "graphql": BatterySpec(
+        "graphql",
+        "Strawberry code-first GraphQL endpoint at /graphql over the demo Item model",
+        gates_agent="api-design",
+    ),
 }
 
 

@@ -51,3 +51,11 @@ def test_workers_battery_is_registered():
     assert spec.name == "workers"
     assert spec.requires == ()  # standalone — depends on nothing
     assert resolve(["workers"]) == ["workers"]
+
+
+def test_graphql_battery_registered():
+    from framework_cli.batteries import battery_names, get_battery, resolve
+
+    assert "graphql" in battery_names()
+    assert get_battery("graphql").requires == ()
+    assert resolve(["graphql"]) == ["graphql"]
