@@ -1175,3 +1175,41 @@ def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path)
     assert not (dest / "copier.yml").exists(), "subdir copier.yml leaked into the rendered project"
     assert (dest / "pyproject.toml").is_file()
     assert (dest / ".copier-answers.yml").is_file()
+
+
+def test_render_workers_prometheus_scrape(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    prom = (dest / "infra" / "observability" / "prometheus" / "prometheus.yml").read_text()
+    assert "celery-exporter" in prom
+    import yaml as _yaml
+    parsed = _yaml.safe_load(prom)
+    assert any(j["job_name"] == "celery" for j in parsed["scrape_configs"])
+
+
+def test_render_prometheus_unchanged_without_workers(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    prom = (dest / "infra" / "observability" / "prometheus" / "prometheus.yml").read_text()
+    assert "celery-exporter" not in prom
+    assert "job_name: app" in prom and "job_name: prometheus" in prom
+
+
+def test_render_workers_alerts_and_dashboard(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    alerts = dest / "infra" / "observability" / "prometheus" / "alerts" / "workers_alerts.yml"
+    dash = dest / "infra" / "observability" / "grafana" / "dashboards" / "workers.json"
+    assert alerts.exists() and dash.exists()
+    import json as _json
+    import yaml as _yaml
+    _yaml.safe_load(alerts.read_text())          # valid YAML
+    assert "{{ $value }}" in alerts.read_text()    # Prometheus templating preserved
+    _json.loads(dash.read_text())                  # valid JSON
+
+
+def test_render_no_workers_alerts_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert not (dest / "infra" / "observability" / "prometheus" / "alerts" / "workers_alerts.yml").exists()
+    assert not (dest / "infra" / "observability" / "grafana" / "dashboards" / "workers.json").exists()

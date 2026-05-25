@@ -1,0 +1,24 @@
+groups:
+- name: workers
+  rules:
+  - alert: DeadLetterQueueNonEmpty
+    expr: app_dead_letter_tasks > 0
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: Tasks have landed in the dead-letter queue ({{ '{{' }} $value {{ '}}' }} total)
+  - alert: CeleryWorkerDown
+    expr: up{job="celery"} == 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: No Celery worker is being scraped (celery-exporter target down)
+  - alert: CeleryTaskFailuresHigh
+    expr: increase(celery_task_failed_total[5m]) > 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Celery task failures observed in the last 5m
