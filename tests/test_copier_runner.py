@@ -1540,3 +1540,47 @@ def test_render_no_websockets_alerts_without_battery(tmp_path: Path):
     assert not (
         dest / "infra" / "observability" / "grafana" / "dashboards" / "websockets.json"
     ).exists()
+
+
+def test_render_with_graphql_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["graphql"]})
+    pkg = dest / "src" / "demo"
+    assert (pkg / "graphql" / "schema.py").is_file()
+    assert (pkg / "graphql" / "context.py").is_file()
+    assert (pkg / "routes" / "graphql.py").is_file()
+    assert (dest / "tests" / "functional" / "test_graphql.py").is_file()
+    route = (pkg / "routes" / "graphql.py").read_text()
+    assert "GraphQLRouter" in route and 'prefix="/graphql"' in route
+
+
+def test_render_without_graphql_has_none(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert not (dest / "src" / "demo" / "graphql").exists()
+    assert not (dest / "src" / "demo" / "routes" / "graphql.py").exists()
+
+
+def test_render_graphql_settings_and_dep(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["graphql"]})
+    settings = (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    assert "graphql_ide_enabled" in settings and "resolved_graphql_ide" in settings
+    assert "strawberry-graphql[fastapi]" in (dest / "pyproject.toml").read_text()
+
+
+def test_render_graphql_settings_clean_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert (
+        "graphql_ide_enabled"
+        not in (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    )
+    assert "strawberry-graphql" not in (dest / "pyproject.toml").read_text()
+
+
+def test_render_graphql_battery_is_ruff_format_clean(tmp_path: Path):
+    """Hermetic guard: graphql-only render must be ruff-format-clean without Docker."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["graphql"]})
+    _assert_ruff_format_clean(dest)

@@ -15,7 +15,8 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "tenacity>=9.0",
     "pybreaker>=1.2",
-{% if "workers" in batteries %}    "celery[redis]>=5.4",
+{% if "graphql" in batteries %}    "strawberry-graphql[fastapi]>=0.235",
+{% endif %}{% if "workers" in batteries %}    "celery[redis]>=5.4",
 {% endif %}]
 
 [dependency-groups]

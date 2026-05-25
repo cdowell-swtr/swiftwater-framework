@@ -39,12 +39,26 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/1"
 {%- endif %}
+{%- if "graphql" in batteries %}
+
+    # GraphQL IDE (GraphiQL) + schema introspection: enabled outside production only.
+    # Explicit override; if None, resolved_graphql_ide derives it from environment.
+    graphql_ide_enabled: bool | None = None
+{%- endif %}
 
     @property
     def resolved_log_level(self) -> str:
         if self.log_level is not None:
             return self.log_level.upper()
         return "DEBUG" if self.environment == "dev" else "INFO"
+{%- if "graphql" in batteries %}
+
+    @property
+    def resolved_graphql_ide(self) -> bool:
+        if self.graphql_ide_enabled is not None:
+            return self.graphql_ide_enabled
+        return self.environment != "production"
+{%- endif %}
 
 
 @lru_cache

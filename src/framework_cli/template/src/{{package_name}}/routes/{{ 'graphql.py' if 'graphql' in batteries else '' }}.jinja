@@ -1,0 +1,20 @@
+from fastapi import APIRouter
+from strawberry.fastapi import GraphQLRouter
+
+from ..config.settings import get_settings
+from ..graphql.context import get_context
+from ..graphql.schema import build_schema
+
+router = APIRouter()
+
+_ide = get_settings().resolved_graphql_ide
+_schema = build_schema(disable_introspection=not _ide)
+
+router.include_router(
+    GraphQLRouter(
+        _schema,
+        context_getter=get_context,
+        graphql_ide="graphiql" if _ide else None,
+    ),
+    prefix="/graphql",
+)
