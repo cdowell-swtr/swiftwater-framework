@@ -51,11 +51,21 @@ def blocking_dependents(active: list[str], battery: str) -> list[str]:
     return sorted(b for b in active if b != battery and battery in resolve([b]))
 
 
-def usage_references(project: Path, battery: str, *, package_name: str, owned: set[str]) -> list[str]:
+def usage_references(
+    project: Path,
+    battery: str,
+    *,
+    package_name: str,
+    owned: set[str],
+    with_render_root: Path | None = None,
+) -> list[str]:
     """Builder files that reference the battery (heuristic). Excludes the battery's own owned files.
 
     Looks for the battery's package import (`<package_name>.<battery>`) or a bare `<battery>`
     token in the project's `src/` tree. A guardrail, not a guarantee (can't see dynamic refs).
+
+    Files whose content is byte-identical to the framework-rendered version (``with_render_root``)
+    are excluded — their battery references are framework-managed gated blocks, not builder code.
     """
     hits: list[str] = []
     needles = (f"{package_name}.{battery}", battery)
@@ -68,6 +78,14 @@ def usage_references(project: Path, battery: str, *, package_name: str, owned: s
             continue
         text = path.read_text()
         if any(n in text for n in needles):
+            # Skip if the file is unmodified from the framework's battery render — the
+            # reference lives inside a gated `{% if battery %}` block and will be spliced
+            # out by remove_battery's shared-file step.  Only builder-added references
+            # (i.e. the project file differs from the template render) are actionable.
+            if with_render_root is not None:
+                rendered = with_render_root / rel
+                if rendered.is_file() and rendered.read_bytes() == path.read_bytes():
+                    continue
             hits.append(rel)
     return hits
 
@@ -84,39 +102,47 @@ def remove_battery(project: Path, battery: str, *, force: bool = False) -> Remov
 
     answers = _answers(project)
     package_name = str(answers.get("package_name", ""))
-    owned = owned_files(answers, battery)
-
-    refs = usage_references(project, battery, package_name=package_name, owned=owned)
-    if refs and not force:
-        raise DownskillError(
-            f"battery {battery!r} appears in use by: {', '.join(refs)}. "
-            "Re-run with --force to remove it anyway."
-        )
-
-    report = RemovalReport()
     reduced = [b for b in current if b != battery]
 
-    # 1) delete owned whole-files, preserving migrations
-    for rel in sorted(owned):
-        if rel.startswith(_MIGRATIONS_PREFIX):
-            report.preserved.append(rel)
-            continue
-        target = project / rel
-        if target.is_file():
-            target.unlink()
-        report.removed.append(rel)
-    # prune now-empty owned dirs (deepest first)
-    for rel in sorted(owned, key=len, reverse=True):
-        d = (project / rel).parent
-        if d.is_dir() and d != project and not any(d.iterdir()):
-            d.rmdir()
-
-    # 2) shared files the battery CHANGED: splice hybrid / overwrite-if-unmodified / warn
-    with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
-        with_root = Path(a) / "r"
-        without_root = Path(b) / "r"
+    # Single pair of renders shared by owned-file detection, usage scan, and shared-file splice.
+    with tempfile.TemporaryDirectory() as _a, tempfile.TemporaryDirectory() as _b:
+        with_root = Path(_a) / "r"
+        without_root = Path(_b) / "r"
         with_paths = _render_paths(answers, current, with_root)
         without_paths = _render_paths(answers, reduced, without_root)
+        owned = with_paths - without_paths
+
+        refs = usage_references(
+            project,
+            battery,
+            package_name=package_name,
+            owned=owned,
+            with_render_root=with_root,
+        )
+        if refs and not force:
+            raise DownskillError(
+                f"battery {battery!r} appears in use by: {', '.join(refs)}. "
+                "Re-run with --force to remove it anyway."
+            )
+
+        report = RemovalReport()
+
+        # 1) delete owned whole-files, preserving migrations
+        for rel in sorted(owned):
+            if rel.startswith(_MIGRATIONS_PREFIX):
+                report.preserved.append(rel)
+                continue
+            target = project / rel
+            if target.is_file():
+                target.unlink()
+            report.removed.append(rel)
+        # prune now-empty owned dirs (deepest first)
+        for rel in sorted(owned, key=len, reverse=True):
+            d = (project / rel).parent
+            if d.is_dir() and d != project and not any(d.iterdir()):
+                d.rmdir()
+
+        # 2) shared files the battery CHANGED: splice hybrid / overwrite-if-unmodified / warn
         for rel in sorted(with_paths & without_paths):
             if rel == ".copier-answers.yml":
                 continue  # step 3 (record_batteries) owns this file

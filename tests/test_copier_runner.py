@@ -1268,6 +1268,13 @@ def test_render_webhooks_workers_battery_is_ruff_format_clean(tmp_path: Path):
     _assert_ruff_format_clean(dest)
 
 
+def test_render_webhooks_battery_is_ruff_format_clean(tmp_path: Path):
+    """Hermetic guard: webhooks-only render must be ruff-format-clean without Docker."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["webhooks"]})
+    _assert_ruff_format_clean(dest)
+
+
 def test_render_webhooks_metrics_module(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["webhooks"]})
