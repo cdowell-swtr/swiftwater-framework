@@ -1295,3 +1295,23 @@ def test_render_health_clean_without_webhooks(tmp_path: Path):
     render_project(dest, {**DATA})
     health = (dest / "src" / DATA["package_name"] / "routes" / "health.py").read_text()
     assert "webhook_metrics" not in health
+
+
+def test_render_webhooks_alerts_and_dashboard(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["webhooks"]})
+    alerts = dest / "infra" / "observability" / "prometheus" / "alerts" / "webhooks_alerts.yml"
+    dash = dest / "infra" / "observability" / "grafana" / "dashboards" / "webhooks.json"
+    assert alerts.exists() and dash.exists()
+    import json as _json
+    import yaml as _yaml
+    parsed = _yaml.safe_load(alerts.read_text())
+    assert parsed["groups"][0]["name"] == "webhooks"
+    _json.loads(dash.read_text())  # valid JSON
+
+
+def test_render_no_webhooks_alerts_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert not (dest / "infra" / "observability" / "prometheus" / "alerts" / "webhooks_alerts.yml").exists()
+    assert not (dest / "infra" / "observability" / "grafana" / "dashboards" / "webhooks.json").exists()

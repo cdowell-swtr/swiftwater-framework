@@ -1,0 +1,112 @@
+{
+  "uid": "webhooks",
+  "title": "Webhooks",
+  "tags": [
+    "webhooks"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Webhooks by outcome",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(app_webhooks_received_total{outcome=\"accepted\"}[5m]))",
+          "legendFormat": "accepted"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(app_webhooks_received_total{outcome=\"rejected_signature\"}[5m]))",
+          "legendFormat": "rejected_signature"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(app_webhooks_received_total{outcome=\"malformed\"}[5m]))",
+          "legendFormat": "malformed"
+        },
+        {
+          "refId": "D",
+          "expr": "sum(rate(app_webhooks_received_total{outcome=\"duplicate\"}[5m]))",
+          "legendFormat": "duplicate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Duplicate delivery rate",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(app_webhooks_received_total{outcome=\"duplicate\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

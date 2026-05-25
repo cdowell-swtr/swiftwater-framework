@@ -1,0 +1,17 @@
+groups:
+- name: webhooks
+  rules:
+  - alert: HighWebhookSignatureRejectionRate
+    expr: sum(rate(app_webhooks_received_total{outcome="rejected_signature"}[5m])) / clamp_min(sum(rate(app_webhooks_received_total[5m])), 1) > 0.2
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Over 20% of inbound webhooks are failing signature verification (wrong secret, rotated key, or probing)
+  - alert: HighWebhookMalformedRate
+    expr: sum(rate(app_webhooks_received_total{outcome="malformed"}[5m])) / clamp_min(sum(rate(app_webhooks_received_total[5m])), 1) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Over 10% of signed webhooks have malformed bodies (misbehaving sender)
