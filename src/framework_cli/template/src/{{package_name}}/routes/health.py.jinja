@@ -15,8 +15,24 @@ def heartbeat() -> PlainTextResponse:
 
 @router.get("/health")
 def health(request: Request) -> JSONResponse:
-    """Readiness + SLO status. Returns 200 with the structured SLO report."""
+    """Readiness + SLO status. Returns 200 with the structured SLO report.
+
+    NOTE: the SLO figures are computed from THIS instance's in-process metrics — a per-instance
+    judgement, correct for a load-balancer probe. The fleet-wide SLO view lives in Grafana
+    (Prometheus aggregates every instance's /metrics), not here.
+    """
     report = build_health_report(request.app.state.metrics, request.app.state.settings)
+{% if "workers" in batteries %}
+    import redis as _redis
+
+    from {{ package_name }}.tasks import liveness as _liveness
+
+    _client = _redis.Redis.from_url(request.app.state.settings.redis_url)
+    try:
+        report["workers"] = {"alive": _liveness.is_alive(_client)}
+    except Exception:  # broker unreachable — report degraded, never 500 the probe
+        report["workers"] = {"alive": False}
+{% endif %}
     return JSONResponse(report, status_code=200)
 
 
@@ -27,6 +43,13 @@ def metrics(request: Request) -> PlainTextResponse:
         request.app.state.metrics.render_prometheus()
         + recoverability.render_prometheus()
     )
+{% if "workers" in batteries %}
+    from {{ package_name }}.db.engine import SessionLocal
+    from {{ package_name }}.tasks import dead_letter as _dead_letter
+
+    with SessionLocal() as _session:
+        body += _dead_letter.render_dlq_metrics(_session)
+{% endif %}
     return PlainTextResponse(
         body,
         status_code=200,

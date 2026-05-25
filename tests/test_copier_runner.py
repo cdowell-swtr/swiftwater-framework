@@ -1096,6 +1096,27 @@ def test_render_workers_settings_valid_python(tmp_path: Path):
     ast.parse(settings_text)  # raises SyntaxError if invalid
 
 
+def test_render_health_has_dlq_gauge_with_workers(tmp_path: Path):
+    import ast
+
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    h = (dest / "src" / DATA["package_name"] / "routes" / "health.py").read_text()
+    assert "render_dlq_metrics" in h and "per-instance" in h
+    ast.parse(h)  # must be valid Python after rendering
+
+
+def test_render_health_clean_without_workers(tmp_path: Path):
+    import ast
+
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    h = (dest / "src" / DATA["package_name"] / "routes" / "health.py").read_text()
+    assert "render_dlq_metrics" not in h
+    assert "per-instance" in h  # the SLO comment is unconditional
+    ast.parse(h)  # must be valid Python even without the workers block
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml

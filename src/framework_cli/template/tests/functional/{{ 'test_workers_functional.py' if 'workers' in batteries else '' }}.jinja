@@ -1,8 +1,30 @@
 """Workers battery — functional tests (real Postgres via the project's test fixtures)."""
 
 import json
+from collections.abc import Iterator
 
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine
+
+from {{ package_name }}.db.engine import build_session_factory
+from {{ package_name }}.main import create_app
 from {{ package_name }}.tasks import dead_letter
+
+
+@pytest.fixture
+def http_client(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    """TestClient with the app wired to the test Postgres.
+
+    The /metrics workers block imports SessionLocal directly from db.engine (not via FastAPI
+    DI), so we patch the module attribute to use the test engine's session factory.
+    """
+    import {{ package_name }}.db.engine as _engine_mod
+
+    factory = build_session_factory(engine)
+    monkeypatch.setattr(_engine_mod, "SessionLocal", factory)
+    with TestClient(create_app()) as client:
+        yield client
 
 
 def test_record_failure_and_count(db_session):
@@ -74,3 +96,14 @@ def test_failing_task_lands_in_dead_letter_queue(db_session, monkeypatch):
     assert any(r.task_name == "always_fails" for r in rows)
     failed = next(r for r in rows if r.task_name == "always_fails")
     assert "boom" in failed.traceback
+
+
+def test_metrics_endpoint_exposes_dlq_gauge(http_client: TestClient):
+    body = http_client.get("/metrics").text
+    assert "app_dead_letter_tasks" in body
+
+
+def test_health_reports_workers_block(http_client: TestClient):
+    report = http_client.get("/health").json()
+    assert "workers" in report
+    assert "alive" in report["workers"]
