@@ -128,5 +128,74 @@ services:
     depends_on:
       - tempo
 
+{%- if "workers" in batteries %}
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["dev", "lite"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - "redisdata:/data"
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    profiles: ["dev"]
+    command: ["celery", "-A", "{{ package_name }}.tasks.app", "worker", "--loglevel=info"]
+    environment:
+      APP_REDIS_URL: "redis://redis:6379/0"
+      APP_CELERY_BROKER_URL: "redis://redis:6379/0"
+      APP_CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+      APP_DATABASE_URL: "postgresql+psycopg://app:app@postgres:5432/app"
+    volumes:
+      - ../../src:/app/src
+    healthcheck:
+      test: ["CMD", "celery", "-A", "{{ package_name }}.tasks.app", "inspect", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  beat:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    profiles: ["dev"]
+    command: ["celery", "-A", "{{ package_name }}.tasks.app", "beat", "--loglevel=info"]
+    environment:
+      APP_REDIS_URL: "redis://redis:6379/0"
+      APP_CELERY_BROKER_URL: "redis://redis:6379/0"
+      APP_CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+    volumes:
+      - ../../src:/app/src
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  celery-exporter:
+    image: danihodovic/celery-exporter:0.10.5
+    profiles: ["dev"]
+    command: ["--broker-url=redis://redis:6379/0"]
+    ports:
+      - "9808:9808"
+    depends_on:
+      redis:
+        condition: service_healthy
+{%- endif %}
+
 volumes:
   pgdata: {}
+{% if "workers" in batteries %}  redisdata: {}
+{% endif -%}

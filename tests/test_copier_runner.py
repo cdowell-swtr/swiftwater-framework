@@ -1117,6 +1117,34 @@ def test_render_health_clean_without_workers(tmp_path: Path):
     ast.parse(h)  # must be valid Python even without the workers block
 
 
+def test_render_workers_compose_services(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    import yaml as _yaml
+    dev = _yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    for svc in ("redis", "worker", "beat", "celery-exporter"):
+        assert svc in dev["services"]
+    assert "redisdata" in dev["volumes"]
+
+
+def test_render_compose_byte_identical_without_workers(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    # no workers services leaked
+    assert "redis:" not in dev and "celery-exporter:" not in dev
+    # existing service set intact
+    parsed = yaml.safe_load(dev)
+    svcs = set(parsed["services"].keys())
+    expected = {
+        "app", "postgres", "traefik", "prometheus", "grafana",
+        "alertmanager", "loki", "promtail", "tempo", "otel-collector",
+    }
+    assert svcs == expected, f"unexpected services: {svcs ^ expected}"
+    # volumes: only pgdata, no redisdata
+    assert set(parsed["volumes"].keys()) == {"pgdata"}
+
+
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
     import shutil
     import yaml
