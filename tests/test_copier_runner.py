@@ -1213,3 +1213,19 @@ def test_render_no_workers_alerts_without_battery(tmp_path: Path):
     render_project(dest, {**DATA})
     assert not (dest / "infra" / "observability" / "prometheus" / "alerts" / "workers_alerts.yml").exists()
     assert not (dest / "infra" / "observability" / "grafana" / "dashboards" / "workers.json").exists()
+
+
+def test_render_webhooks_alone_handler_is_inline(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["webhooks"]})
+    h = (dest / "src" / DATA["package_name"] / "webhooks" / "handler.py").read_text()
+    assert "process_async" not in h
+    assert "get_logger().info" in h
+
+
+def test_render_webhooks_plus_workers_handler_enqueues(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["webhooks", "workers"]})
+    h = (dest / "src" / DATA["package_name"] / "webhooks" / "handler.py").read_text()
+    assert "process_async.delay" in h
+    assert "get_logger" not in h
