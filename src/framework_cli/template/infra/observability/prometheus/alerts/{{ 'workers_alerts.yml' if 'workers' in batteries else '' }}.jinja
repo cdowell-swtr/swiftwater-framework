@@ -16,8 +16,9 @@ groups:
     annotations:
       summary: No Celery worker is being scraped (celery-exporter target down)
   - alert: CeleryTaskFailuresHigh
+    # for < the [5m] window, else a single spike falls out of range before `for` elapses
     expr: increase(celery_task_failed_total[5m]) > 0
-    for: 5m
+    for: 1m
     labels:
       severity: warning
     annotations:
