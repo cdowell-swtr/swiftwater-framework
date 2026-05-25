@@ -205,6 +205,19 @@ def test_rendered_project_with_workers_battery_passes(tmp_path: Path):
         "the 70% unit+functional coverage gate did not pass for the workers battery project:\n"
         + result.stdout + result.stderr
     )
+    # Prove the workers functional tests actually ran (not just collected): dead_letter.py
+    # reaches 100% only when test_workers_functional.py exercises record_failure / count /
+    # list_recent / render_dlq_metrics + the on_failure DLQ-drain path against the real DB.
+    combined_output = result.stdout + result.stderr
+    dlq_cov_line = next(
+        (ln for ln in combined_output.splitlines() if "tasks/dead_letter.py" in ln), ""
+    )
+    assert "100%" in dlq_cov_line, (
+        f"DLQ repository not fully exercised; coverage line: {dlq_cov_line!r}\n"
+        "Expected 100% coverage of tasks/dead_letter.py — was "
+        "tests/functional/test_workers_functional.py collected and did it pass?\n"
+        + combined_output
+    )
 
 
 @pytest.mark.skipif(

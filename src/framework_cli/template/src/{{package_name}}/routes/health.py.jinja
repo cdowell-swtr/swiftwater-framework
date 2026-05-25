@@ -52,8 +52,10 @@ def metrics(request: Request) -> PlainTextResponse:
     try:
         with SessionLocal() as _session:
             body += _dead_letter.render_dlq_metrics(_session)
-    except Exception:  # DB unreachable — omit the DLQ gauge rather than 500 the endpoint
-        pass
+    except Exception as _exc:  # DB unreachable — omit the DLQ gauge rather than 500 the endpoint
+        from {{ package_name }}.logging_config import get_logger
+
+        get_logger().warning("dlq_metrics_unavailable", error=str(_exc))
 {% endif %}
     return PlainTextResponse(
         body,
