@@ -29,7 +29,9 @@ def flags(findings: list[Finding], spec: AgentSpec, *, file: str | None = None) 
     for f in findings:
         if file is not None and f.path != file:
             continue
-        if spec.block_threshold is None or severity_rank(f.severity) >= severity_rank(spec.block_threshold):
+        if spec.block_threshold is None or severity_rank(f.severity) >= severity_rank(
+            spec.block_threshold
+        ):
             return True
     return False
 

@@ -50,7 +50,9 @@ def upskill_project(
         raise UpskillError(
             "upskill requires a git-tracked project (run `git init` and commit first)"
         )
-    effective = with_batteries if with_batteries is not None else read_batteries(project)
+    effective = (
+        with_batteries if with_batteries is not None else read_batteries(project)
+    )
     run_update(
         str(project),
         defaults=True,

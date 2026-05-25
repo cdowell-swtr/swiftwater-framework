@@ -25,7 +25,9 @@ def test_parse_empty_array():
 
 
 def test_parse_optional_suggestion_absent():
-    findings = parse_findings('[{"path": "x", "line": 1, "severity": "low", "message": "m"}]')
+    findings = parse_findings(
+        '[{"path": "x", "line": 1, "severity": "low", "message": "m"}]'
+    )
     assert findings[0].suggestion is None
 
 

@@ -46,7 +46,9 @@ def build_manifest(project: Path, framework_version: str) -> Manifest:
                     raise AuthoringError(
                         f"{rule.path} is a hybrid file but has no FRAMEWORK:BEGIN/END markers."
                     )
-                entries.append(Entry(rule.path, rule.cls, rule.tier, sha256=section_hash))
+                entries.append(
+                    Entry(rule.path, rule.cls, rule.tier, sha256=section_hash)
+                )
             else:
                 entries.append(
                     Entry(rule.path, rule.cls, rule.tier, sha256=sha256_file(f))

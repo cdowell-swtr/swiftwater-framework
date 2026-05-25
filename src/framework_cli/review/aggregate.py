@@ -7,7 +7,9 @@ from pathlib import Path
 from framework_cli.review.findings import Finding
 
 
-def write_findings(path: Path, agent: str, conclusion: str, findings: list[Finding]) -> None:
+def write_findings(
+    path: Path, agent: str, conclusion: str, findings: list[Finding]
+) -> None:
     """Write this agent's result as the lossless JSON the aggregator consumes.
 
     Called at every terminal path of `framework review` so a skipped/neutral agent still
@@ -46,7 +48,9 @@ class AggregateResult:
 
 def aggregate(results: list[dict]) -> AggregateResult:
     """Combine per-agent results (parsed findings JSONs) into one summary. Pure, no I/O."""
-    overall = "fail" if any(r.get("conclusion") == "failure" for r in results) else "pass"
+    overall = (
+        "fail" if any(r.get("conclusion") == "failure" for r in results) else "pass"
+    )
 
     severity_counts: dict[str, int] = {}
     by_path: dict[str, set[str]] = {}
@@ -68,13 +72,19 @@ def aggregate(results: list[dict]) -> AggregateResult:
             relationships.append(
                 f"Multiple agents flagged `{path}`: {', '.join(sorted(agents))}"
             )
-    for path in paths:  # (b) known related-domain pairs co-occurring on a file (deterministic order)
+    for path in (
+        paths
+    ):  # (b) known related-domain pairs co-occurring on a file (deterministic order)
         agents = by_path[path]
         for a, b in sorted_pairs:
             if {a, b} <= agents:
-                relationships.append(f"`{a}` + `{b}` both flagged `{path}` — related concern.")
+                relationships.append(
+                    f"`{a}` + `{b}` both flagged `{path}` — related concern."
+                )
 
-    markdown = _render_markdown(overall, severity_counts, relationships, all_findings, paths)
+    markdown = _render_markdown(
+        overall, severity_counts, relationships, all_findings, paths
+    )
     return AggregateResult(overall, severity_counts, relationships, markdown)
 
 
@@ -115,7 +125,10 @@ def _render_markdown(
         if not group:
             continue
         lines.append(f"### {sev}")
-        lines.extend(f"- {agent} · `{f['path']}:{f['line']}` · {f['message']}" for agent, f in group)
+        lines.extend(
+            f"- {agent} · `{f['path']}:{f['line']}` · {f['message']}"
+            for agent, f in group
+        )
         lines.append("")
     lines.append("### Cross-agent relationships")
     lines.extend([f"- {r}" for r in relationships] or ["- none"])

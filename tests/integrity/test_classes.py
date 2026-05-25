@@ -3,7 +3,12 @@ from pathlib import Path
 import pathspec
 
 from framework_cli.copier_runner import render_project
-from framework_cli.integrity.classes import GITIGNORED_EXISTENCE, HYBRID_TRACKED, LOCKED_TRACKED, rules
+from framework_cli.integrity.classes import (
+    GITIGNORED_EXISTENCE,
+    HYBRID_TRACKED,
+    LOCKED_TRACKED,
+    rules,
+)
 
 
 def _render(tmp_path: Path) -> Path:
@@ -32,7 +37,9 @@ def test_no_locked_path_is_gitignored(tmp_path: Path):
         "gitignore", (dest / ".gitignore").read_text().splitlines()
     )
     leaked = [p for p in LOCKED_TRACKED if spec.match_file(p)]
-    assert leaked == [], f"locked files excluded by .gitignore (cannot be tracked): {leaked}"
+    assert leaked == [], (
+        f"locked files excluded by .gitignore (cannot be tracked): {leaked}"
+    )
 
 
 def test_every_hybrid_path_renders_with_markers(tmp_path: Path):
@@ -41,7 +48,9 @@ def test_every_hybrid_path_renders_with_markers(tmp_path: Path):
     dest = _render(tmp_path)
     for rel in HYBRID_TRACKED:
         assert (dest / rel).is_file(), f"hybrid path not rendered: {rel}"
-        assert section_content((dest / rel).read_text()) is not None, f"{rel} lacks markers"
+        assert section_content((dest / rel).read_text()) is not None, (
+            f"{rel} lacks markers"
+        )
 
 
 def test_no_hybrid_path_is_gitignored(tmp_path: Path):
@@ -56,4 +65,6 @@ def test_no_hybrid_path_is_gitignored(tmp_path: Path):
 def test_rules_cover_both_tiers():
     by_tier = {r.tier for r in rules()}
     assert by_tier == {"tracked", "gitignored"}
-    assert set(GITIGNORED_EXISTENCE) == {r.path for r in rules() if r.tier == "gitignored"}
+    assert set(GITIGNORED_EXISTENCE) == {
+        r.path for r in rules() if r.tier == "gitignored"
+    }

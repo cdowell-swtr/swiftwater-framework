@@ -31,7 +31,9 @@ class RemovalReport:
     warnings: list[str] = field(default_factory=list)
 
 
-def _render_paths(answers: Mapping[str, object], batteries: list[str], dest: Path) -> set[str]:
+def _render_paths(
+    answers: Mapping[str, object], batteries: list[str], dest: Path
+) -> set[str]:
     render_project(dest, {**answers, "batteries": batteries})
     return {str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file()}
 
@@ -90,7 +92,9 @@ def usage_references(
     return hits
 
 
-def remove_battery(project: Path, battery: str, *, force: bool = False) -> RemovalReport:
+def remove_battery(
+    project: Path, battery: str, *, force: bool = False
+) -> RemovalReport:
     """Remove `battery` from `project` (framework-owned). Raises DownskillError on a refusal."""
     get_battery(battery)  # KeyError -> unknown battery
     current = read_batteries(project)
@@ -98,7 +102,9 @@ def remove_battery(project: Path, battery: str, *, force: bool = False) -> Remov
         raise DownskillError(f"battery {battery!r} is not active in this project")
     dependents = blocking_dependents(current, battery)
     if dependents:
-        raise DownskillError(f"cannot remove {battery!r}: still required by {', '.join(dependents)}")
+        raise DownskillError(
+            f"cannot remove {battery!r}: still required by {', '.join(dependents)}"
+        )
 
     answers = _answers(project)
     package_name = str(answers.get("package_name", ""))
@@ -164,7 +170,8 @@ def remove_battery(project: Path, battery: str, *, force: bool = False) -> Remov
 
     if report.preserved:
         report.warnings.append(
-            "migration(s) preserved: " + ", ".join(report.preserved)
+            "migration(s) preserved: "
+            + ", ".join(report.preserved)
             + " — write a contract down-migration to drop the table(s) if desired."
         )
     return report

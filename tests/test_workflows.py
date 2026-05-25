@@ -7,7 +7,9 @@ _WF = Path(__file__).parent.parent / ".github" / "workflows" / "agent-evals.yml"
 
 def test_agent_evals_workflow_is_valid():
     wf = yaml.safe_load(_WF.read_text())
-    triggers = wf[True] if True in wf else wf["on"]  # PyYAML parses `on:` as the bool True
+    triggers = (
+        wf[True] if True in wf else wf["on"]
+    )  # PyYAML parses `on:` as the bool True
     assert "schedule" in triggers
     # path-filtered push/PR on agent prompts or review logic
     push_paths = triggers["push"]["paths"]

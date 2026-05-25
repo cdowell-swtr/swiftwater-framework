@@ -64,7 +64,9 @@ def test_integrity_allow_drift_then_passes(tmp_path: Path, monkeypatch):
     project = tmp_path / "my-app"
     (project / "alembic.ini").write_text("tampered\n")
     monkeypatch.chdir(project)
-    assert runner.invoke(app, ["integrity", "--allow-drift", "alembic.ini"]).exit_code == 0
+    assert (
+        runner.invoke(app, ["integrity", "--allow-drift", "alembic.ini"]).exit_code == 0
+    )
     assert runner.invoke(app, ["integrity", "--ci"]).exit_code == 0
 
 
@@ -125,7 +127,9 @@ def test_review_blocking_finding_exits_1(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    monkeypatch.setattr(cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 1, "high", "bad")])
+    monkeypatch.setattr(
+        cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 1, "high", "bad")]
+    )
     result = runner.invoke(app, ["review", "security"])
     assert result.exit_code == 1
     assert "failure" in result.output
@@ -138,7 +142,9 @@ def test_review_low_finding_exits_0(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    monkeypatch.setattr(cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 1, "low", "m")])
+    monkeypatch.setattr(
+        cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 1, "low", "m")]
+    )
     result = runner.invoke(app, ["review", "security"])
     assert result.exit_code == 0
     assert "neutral" in result.output
@@ -161,7 +167,9 @@ def test_review_infra_error_is_neutral_exit_0(monkeypatch):
 
 def test_review_agents_lists_pr_and_push(monkeypatch):
     monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
-    pr = _json.loads(runner.invoke(app, ["review-agents", "--event", "pull_request"]).output)
+    pr = _json.loads(
+        runner.invoke(app, ["review-agents", "--event", "pull_request"]).output
+    )
     push = _json.loads(runner.invoke(app, ["review-agents", "--event", "push"]).output)
     assert "security" in pr and "documentation" in pr
     assert set(push) == {"security", "data-integrity", "data-lineage", "observability"}
@@ -190,7 +198,11 @@ def test_review_dependency_runs_when_dep_file_changed(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "+++ b/pyproject.toml\n")
-    monkeypatch.setattr(cli_mod, "_review_run", lambda diff, spec: [Finding("pyproject.toml", 1, "low", "m")])
+    monkeypatch.setattr(
+        cli_mod,
+        "_review_run",
+        lambda diff, spec: [Finding("pyproject.toml", 1, "low", "m")],
+    )
     result = runner.invoke(app, ["review", "dependency"])
     assert result.exit_code == 0  # advisory → neutral, never blocks
     assert "neutral" in result.output
@@ -203,16 +215,26 @@ def test_review_findings_out_writes_on_normal_path(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    monkeypatch.setattr(cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 3, "low", "m")])
+    monkeypatch.setattr(
+        cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 3, "low", "m")]
+    )
 
     out = tmp_path / "findings" / "security.json"
     result = runner.invoke(app, ["review", "security", "--findings-out", str(out)])
     assert result.exit_code == 0, result.output
     data = _json.loads(out.read_text())
     assert data["agent"] == "review-security"
-    assert data["conclusion"] == "neutral"  # low finding → below "high" threshold → neutral
+    assert (
+        data["conclusion"] == "neutral"
+    )  # low finding → below "high" threshold → neutral
     assert data["findings"] == [
-        {"path": "a.py", "line": 3, "severity": "low", "message": "m", "suggestion": None}
+        {
+            "path": "a.py",
+            "line": 3,
+            "severity": "low",
+            "message": "m",
+            "suggestion": None,
+        }
     ]
 
 
@@ -316,7 +338,9 @@ def test_eval_passes_when_agent_catches_bad_and_clean_on_good(tmp_path, monkeypa
     monkeypatch.setattr(
         cli_mod,
         "_eval_run",
-        lambda diff, spec: [] if "clean" in diff else [Finding("a.py", 1, "high", "danger")],
+        lambda diff, spec: (
+            [] if "clean" in diff else [Finding("a.py", 1, "high", "danger")]
+        ),
     )
     result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
     assert result.exit_code == 0, result.output
@@ -331,7 +355,9 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
     _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
-    monkeypatch.setattr(cli_mod, "_eval_run", lambda diff, spec: [])  # never catches anything
+    monkeypatch.setattr(
+        cli_mod, "_eval_run", lambda diff, spec: []
+    )  # never catches anything
     result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
     assert result.exit_code == 1
     assert "FAIL" in result.output
@@ -339,8 +365,13 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
 
 def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
-    assert runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)]).exit_code == 0
-    r = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path), "--require-fixtures"])
+    assert (
+        runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)]).exit_code
+        == 0
+    )
+    r = runner.invoke(
+        app, ["eval", "security", "--fixtures", str(tmp_path), "--require-fixtures"]
+    )
     assert r.exit_code == 1
     assert "no fixtures" in r.output
 
@@ -364,20 +395,26 @@ def test_new_with_webhooks_passes_integrity(tmp_path, monkeypatch):
     assert runner.invoke(app, ["new", "My App", "--with", "webhooks"]).exit_code == 0
     monkeypatch.chdir(tmp_path / "my-app")
     result = runner.invoke(app, ["integrity", "--ci"])
-    assert result.exit_code == 0, result.output  # battery-active .env.example checksum matches
+    assert result.exit_code == 0, (
+        result.output
+    )  # battery-active .env.example checksum matches
 
 
 def test_new_with_websockets_battery(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["new", "My App", "--with", "websockets"])
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "my-app" / "src" / "my_app" / "routes" / "websockets.py").is_file()
+    assert (
+        tmp_path / "my-app" / "src" / "my_app" / "routes" / "websockets.py"
+    ).is_file()
 
 
 def test_new_without_battery_has_no_websockets(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert runner.invoke(app, ["new", "My App"]).exit_code == 0
-    assert not (tmp_path / "my-app" / "src" / "my_app" / "routes" / "websockets.py").exists()
+    assert not (
+        tmp_path / "my-app" / "src" / "my_app" / "routes" / "websockets.py"
+    ).exists()
 
 
 def test_new_rejects_unknown_battery(tmp_path, monkeypatch):
@@ -434,9 +471,15 @@ def test_restore_env_example_preserves_webhooks_secret(tmp_path, monkeypatch):
     assert runner.invoke(app, ["new", "My App", "--with", "webhooks"]).exit_code == 0
     project = tmp_path / "my-app"
     env = project / ".env.example"
-    env.write_text(env.read_text().replace("APP_WEBHOOK_SIGNING_SECRET=", "APP_WEBHOOK_SIGNING_SECRET=tampered"))
+    env.write_text(
+        env.read_text().replace(
+            "APP_WEBHOOK_SIGNING_SECRET=", "APP_WEBHOOK_SIGNING_SECRET=tampered"
+        )
+    )
     monkeypatch.chdir(project)
-    assert runner.invoke(app, ["restore", ".env.example"]).exit_code == 0, "restore failed"
+    assert runner.invoke(app, ["restore", ".env.example"]).exit_code == 0, (
+        "restore failed"
+    )
     # restore re-renders WITH the recorded batteries -> the secret line is back, integrity green
     assert "APP_WEBHOOK_SIGNING_SECRET=" in (project / ".env.example").read_text()
     assert runner.invoke(app, ["integrity", "--ci"]).exit_code == 0
@@ -460,7 +503,9 @@ def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
         return [Finding("a.py", 1, "high", "danger")] if calls["n"] == 1 else []
 
     monkeypatch.setattr(cli_mod, "_eval_run", flaky)
-    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path), "--repeat", "2"])
+    result = runner.invoke(
+        app, ["eval", "security", "--fixtures", str(tmp_path), "--repeat", "2"]
+    )
     assert "recall 0.50" in result.output  # 1 hit / 2 repeats on the single bad fixture
 
 
@@ -470,8 +515,11 @@ def test_downskill_command_removes_battery(tmp_path, monkeypatch):
     (tmp_path / "proj").mkdir()
     captured = {}
     monkeypatch.setattr(
-        cli_mod, "downskill_project",
-        lambda project, battery, *, force=False: captured.update(b=battery, f=force) or True,
+        cli_mod,
+        "downskill_project",
+        lambda project, battery, *, force=False: (
+            captured.update(b=battery, f=force) or True
+        ),
     )
     result = runner.invoke(app, ["downskill", str(tmp_path / "proj"), "webhooks"])
     assert result.exit_code == 0, result.output
@@ -485,7 +533,9 @@ def test_downskill_command_refusal_exits_1(tmp_path, monkeypatch):
     (tmp_path / "proj").mkdir()
 
     def boom(project, battery, *, force=False):
-        raise DownskillError("battery 'webhooks' appears in use by: src/x.py. Re-run with --force...")
+        raise DownskillError(
+            "battery 'webhooks' appears in use by: src/x.py. Re-run with --force..."
+        )
 
     monkeypatch.setattr(cli_mod, "downskill_project", boom)
     result = runner.invoke(app, ["downskill", str(tmp_path / "proj"), "webhooks"])

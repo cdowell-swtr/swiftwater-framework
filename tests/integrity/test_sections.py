@@ -1,4 +1,8 @@
-from framework_cli.integrity.sections import section_content, section_sha256, section_span
+from framework_cli.integrity.sections import (
+    section_content,
+    section_sha256,
+    section_span,
+)
 
 _DOC = "\n".join(
     [

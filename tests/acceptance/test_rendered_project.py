@@ -24,9 +24,7 @@ DATA = {
 def _docker_available() -> bool:
     if shutil.which("uv") is None or shutil.which("docker") is None:
         return False
-    result = subprocess.run(
-        ["docker", "info"], capture_output=True, timeout=10
-    )
+    result = subprocess.run(["docker", "info"], capture_output=True, timeout=10)
     return result.returncode == 0
 
 
@@ -57,7 +55,9 @@ def test_rendered_project_coverage_gate_passes(tmp_path: Path):
     sync = subprocess.run(["uv", "sync"], cwd=dest)
     assert sync.returncode == 0, "uv sync failed in the generated project"
 
-    result = subprocess.run(["bash", "scripts/coverage.sh", "70", "unit", "functional"], cwd=dest)
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"], cwd=dest
+    )
     assert result.returncode == 0, "the 70% unit+functional coverage gate did not pass"
 
 
@@ -74,12 +74,15 @@ def test_rendered_project_with_websockets_battery_passes(tmp_path: Path):
     render_project(dest, data_with_ws)
 
     # Battery files must exist in the rendered project.
-    assert (dest / "src" / "demo" / "routes" / "websockets.py").exists(), \
+    assert (dest / "src" / "demo" / "routes" / "websockets.py").exists(), (
         "routes/websockets.py was not rendered by the websockets battery"
-    assert (dest / "tests" / "functional" / "test_websockets.py").exists(), \
+    )
+    assert (dest / "tests" / "functional" / "test_websockets.py").exists(), (
         "tests/functional/test_websockets.py was not rendered by the websockets battery"
-    assert (dest / "src" / "demo" / "websockets" / "connection_manager.py").exists(), \
+    )
+    assert (dest / "src" / "demo" / "websockets" / "connection_manager.py").exists(), (
         "websockets/connection_manager.py was not rendered by the websockets battery"
+    )
 
     sync = subprocess.run(["uv", "sync"], cwd=dest)
     assert sync.returncode == 0, "uv sync failed in the generated project"
@@ -93,7 +96,8 @@ def test_rendered_project_with_websockets_battery_passes(tmp_path: Path):
     )
     assert result.returncode == 0, (
         "the 70% unit+functional coverage gate did not pass for the websockets battery project:\n"
-        + result.stdout + result.stderr
+        + result.stdout
+        + result.stderr
     )
     # Prove the WS functional test actually ran: the route handler reaches full coverage
     # only when test_websocket_echo_broadcast exercises it (router autodiscovery alone
@@ -126,12 +130,15 @@ def test_rendered_project_with_webhooks_battery_passes(tmp_path: Path):
     render_project(dest, data_with_webhooks)
 
     # Battery files must exist in the rendered project.
-    assert (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), \
+    assert (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), (
         "routes/webhooks.py was not rendered by the webhooks battery"
-    assert (dest / "tests" / "functional" / "test_webhooks.py").exists(), \
+    )
+    assert (dest / "tests" / "functional" / "test_webhooks.py").exists(), (
         "tests/functional/test_webhooks.py was not rendered by the webhooks battery"
-    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").exists(), \
+    )
+    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").exists(), (
         "migrations/versions/0002_webhook_events.py was not rendered by the webhooks battery"
+    )
 
     sync = subprocess.run(["uv", "sync"], cwd=dest)
     assert sync.returncode == 0, "uv sync failed in the generated project"
@@ -146,7 +153,8 @@ def test_rendered_project_with_webhooks_battery_passes(tmp_path: Path):
     )
     assert result.returncode == 0, (
         "the 70% unit+functional coverage gate did not pass for the webhooks battery project:\n"
-        + result.stdout + result.stderr
+        + result.stdout
+        + result.stderr
     )
     # Prove the webhook functional tests actually ran: the route handler reaches full coverage
     # only when test_webhooks.py exercises the valid-sig 200 / bad-sig 401 / duplicate-dedup
@@ -179,14 +187,18 @@ def test_rendered_project_with_workers_battery_passes(tmp_path: Path):
     render_project(dest, data_with_workers)
 
     # Battery files must exist in the rendered project.
-    assert (dest / "src" / "demo" / "tasks" / "app.py").exists(), \
+    assert (dest / "src" / "demo" / "tasks" / "app.py").exists(), (
         "tasks/app.py was not rendered by the workers battery"
-    assert (dest / "tests" / "unit" / "test_workers_unit.py").exists(), \
+    )
+    assert (dest / "tests" / "unit" / "test_workers_unit.py").exists(), (
         "tests/unit/test_workers_unit.py was not rendered by the workers battery"
-    assert (dest / "tests" / "functional" / "test_workers_functional.py").exists(), \
+    )
+    assert (dest / "tests" / "functional" / "test_workers_functional.py").exists(), (
         "tests/functional/test_workers_functional.py was not rendered by the workers battery"
-    assert (dest / "migrations" / "versions" / "0003_dead_letter.py").exists(), \
+    )
+    assert (dest / "migrations" / "versions" / "0003_dead_letter.py").exists(), (
         "migrations/versions/0003_dead_letter.py was not rendered by the workers battery"
+    )
 
     sync = subprocess.run(["uv", "sync"], cwd=dest)
     assert sync.returncode == 0, "uv sync failed in the generated project"
@@ -203,7 +215,8 @@ def test_rendered_project_with_workers_battery_passes(tmp_path: Path):
     )
     assert result.returncode == 0, (
         "the 70% unit+functional coverage gate did not pass for the workers battery project:\n"
-        + result.stdout + result.stderr
+        + result.stdout
+        + result.stderr
     )
     # Prove the workers functional tests actually ran (not just collected): dead_letter.py
     # reaches 100% only when test_workers_functional.py exercises record_failure / count /
@@ -234,19 +247,24 @@ def test_rendered_project_webhooks_and_workers_passes(tmp_path: Path):
     render_project(dest, data_with_both)
 
     # Both battery file sets must exist.
-    assert (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), \
+    assert (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), (
         "routes/webhooks.py was not rendered"
-    assert (dest / "src" / "demo" / "tasks" / "app.py").exists(), \
+    )
+    assert (dest / "src" / "demo" / "tasks" / "app.py").exists(), (
         "tasks/app.py was not rendered"
-    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").exists(), \
+    )
+    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").exists(), (
         "0002_webhook_events.py was not rendered"
-    assert (dest / "migrations" / "versions" / "0003_dead_letter.py").exists(), \
+    )
+    assert (dest / "migrations" / "versions" / "0003_dead_letter.py").exists(), (
         "0003_dead_letter.py was not rendered"
+    )
 
     # Verify the handler uses process_async.delay (enqueue composition is wired).
     handler = (dest / "src" / "demo" / "webhooks" / "handler.py").read_text()
-    assert "process_async.delay" in handler, \
+    assert "process_async.delay" in handler, (
         "handler.py does not call process_async.delay — webhooks+workers composition not wired"
+    )
 
     sync = subprocess.run(["uv", "sync"], cwd=dest)
     assert sync.returncode == 0, "uv sync failed in the generated project"
@@ -263,7 +281,8 @@ def test_rendered_project_webhooks_and_workers_passes(tmp_path: Path):
     )
     assert result.returncode == 0, (
         "the 70% unit+functional coverage gate did not pass for the webhooks+workers project:\n"
-        + result.stdout + result.stderr
+        + result.stdout
+        + result.stderr
     )
 
 
@@ -280,24 +299,28 @@ def test_rendered_project_downskill_webhooks_is_green(tmp_path: Path):
     render_project(dest, data_with_webhooks)
 
     # Sanity: battery files must exist before removal.
-    assert (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), \
+    assert (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), (
         "routes/webhooks.py was not rendered — webhooks battery did not activate"
+    )
 
     # Remove the battery (no force needed — no builder code references it).
     remove_battery(dest, "webhooks")
 
     # Battery-owned route file must be gone.
-    assert not (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), \
+    assert not (dest / "src" / "demo" / "routes" / "webhooks.py").exists(), (
         "routes/webhooks.py was not deleted by remove_battery"
+    )
 
     # Migration must be PRESERVED (remove_battery keeps migrations/).
-    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").exists(), \
+    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").exists(), (
         "0002_webhook_events.py was unexpectedly deleted — migrations should be preserved"
+    )
 
     # migrations/env.py must no longer reference webhooks (hybrid section stripped).
     env_py = (dest / "migrations" / "env.py").read_text()
-    assert "webhooks" not in env_py, \
+    assert "webhooks" not in env_py, (
         "migrations/env.py still contains 'webhooks' after remove_battery"
+    )
 
     sync = subprocess.run(["uv", "sync"], cwd=dest)
     assert sync.returncode == 0, "uv sync failed in the post-downskill project"
@@ -312,7 +335,8 @@ def test_rendered_project_downskill_webhooks_is_green(tmp_path: Path):
     )
     assert result.returncode == 0, (
         "the 70% unit+functional coverage gate failed after downskilling webhooks:\n"
-        + result.stdout + result.stderr
+        + result.stdout
+        + result.stderr
     )
 
 
@@ -372,7 +396,9 @@ def test_rendered_project_precommit_runs_clean(tmp_path: Path):
         cwd=dest,
         env={**os.environ, "SKIP": "coverage-threshold"},
     )
-    assert result.returncode == 0, "pre-commit hooks did not pass cleanly on a fresh project"
+    assert result.returncode == 0, (
+        "pre-commit hooks did not pass cleanly on a fresh project"
+    )
 
 
 @pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
@@ -458,8 +484,31 @@ def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
 
     base = "infra/compose/base.yml"
     dev = "infra/compose/dev.yml"
-    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "up", "-d", "--build"]
-    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "down", "-v"]
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "up",
+        "-d",
+        "--build",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "down",
+        "-v",
+    ]
     assert subprocess.run(up, cwd=dest).returncode == 0
     try:
         # app is published on 8000 in the `lite` profile (no Traefik)
@@ -467,7 +516,9 @@ def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
         body = None
         while time.time() < deadline:
             try:
-                with urllib.request.urlopen("http://localhost:8000/health", timeout=3) as resp:
+                with urllib.request.urlopen(
+                    "http://localhost:8000/health", timeout=3
+                ) as resp:
                     if resp.status == 200:
                         body = json.loads(resp.read())
                         break
@@ -480,15 +531,40 @@ def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
         subprocess.run(down, cwd=dest)
 
 
-@pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
+@pytest.mark.skipif(
+    not _docker_available(), reason="uv and docker are required for the live-stack test"
+)
 def test_rendered_project_dev_stack_prometheus_scrapes_app(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
 
     base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
-    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "up", "-d", "--build"]
-    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "down", "-v"]
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+        "up",
+        "-d",
+        "--build",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+        "down",
+        "-v",
+    ]
     assert subprocess.run(up, cwd=dest).returncode == 0
     try:
         deadline = time.time() + 120
@@ -500,19 +576,25 @@ def test_rendered_project_dev_stack_prometheus_scrapes_app(tmp_path: Path):
                 ) as resp:
                     data = json.loads(resp.read())
                     actives = data.get("data", {}).get("activeTargets", [])
-                    app_targets = [t for t in actives if t.get("labels", {}).get("job") == "app"]
+                    app_targets = [
+                        t for t in actives if t.get("labels", {}).get("job") == "app"
+                    ]
                     if app_targets and app_targets[0].get("health") == "up":
                         up_targets = app_targets
                         break
             except OSError:
                 pass
             time.sleep(3)
-        assert up_targets, "prometheus did not report the app target healthy within 120s"
+        assert up_targets, (
+            "prometheus did not report the app target healthy within 120s"
+        )
     finally:
         subprocess.run(down, cwd=dest)
 
 
-@pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
+@pytest.mark.skipif(
+    not _docker_available(), reason="uv and docker are required for the live-stack test"
+)
 def test_rendered_project_app_logs_reach_loki(tmp_path: Path):
     import urllib.parse
 
@@ -520,21 +602,48 @@ def test_rendered_project_app_logs_reach_loki(tmp_path: Path):
     render_project(dest, DATA)
     assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
     base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
-    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "up", "-d", "--build"]
-    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "down", "-v"]
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+        "up",
+        "-d",
+        "--build",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+        "down",
+        "-v",
+    ]
     assert subprocess.run(up, cwd=dest).returncode == 0
     try:
         # wait for the app, then generate some log lines (each request is logged)
         deadline = time.time() + 60
         while time.time() < deadline:
             try:
-                urllib.request.urlopen("http://localhost:8000/heartbeat", timeout=3).read()
+                urllib.request.urlopen(
+                    "http://localhost:8000/heartbeat", timeout=3
+                ).read()
                 break
             except OSError:
                 time.sleep(2)
         for _ in range(5):
             try:
-                urllib.request.urlopen("http://localhost:8000/heartbeat", timeout=3).read()
+                urllib.request.urlopen(
+                    "http://localhost:8000/heartbeat", timeout=3
+                ).read()
             except OSError:
                 pass
         # poll Loki for the app's logs (ship + ingest has a lag)
@@ -565,26 +674,55 @@ def test_rendered_project_app_logs_reach_loki(tmp_path: Path):
         subprocess.run(down, cwd=dest)
 
 
-@pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
+@pytest.mark.skipif(
+    not _docker_available(), reason="uv and docker are required for the live-stack test"
+)
 def test_rendered_project_traces_reach_tempo(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
     base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
-    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "up", "-d", "--build"]
-    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "dev", "down", "-v"]
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+        "up",
+        "-d",
+        "--build",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+        "down",
+        "-v",
+    ]
     assert subprocess.run(up, cwd=dest).returncode == 0
     try:
         deadline = time.time() + 60
         while time.time() < deadline:
             try:
-                urllib.request.urlopen("http://localhost:8000/heartbeat", timeout=3).read()
+                urllib.request.urlopen(
+                    "http://localhost:8000/heartbeat", timeout=3
+                ).read()
                 break
             except OSError:
                 time.sleep(2)
         for _ in range(5):
             try:
-                urllib.request.urlopen("http://localhost:8000/heartbeat", timeout=3).read()
+                urllib.request.urlopen(
+                    "http://localhost:8000/heartbeat", timeout=3
+                ).read()
             except OSError:
                 pass
         deadline = time.time() + 120
@@ -592,7 +730,7 @@ def test_rendered_project_traces_reach_tempo(tmp_path: Path):
         while time.time() < deadline and not found:
             try:
                 with urllib.request.urlopen(
-                    'http://localhost:3200/api/search?q=%7Bresource.service.name%3D%22demo%22%7D&limit=1',
+                    "http://localhost:3200/api/search?q=%7Bresource.service.name%3D%22demo%22%7D&limit=1",
                     timeout=5,
                 ) as resp:
                     data = json.loads(resp.read())
@@ -607,14 +745,39 @@ def test_rendered_project_traces_reach_tempo(tmp_path: Path):
         subprocess.run(down, cwd=dest)
 
 
-@pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
+@pytest.mark.skipif(
+    not _docker_available(), reason="uv and docker are required for the live-stack test"
+)
 def test_rendered_project_smoke_and_sniff_against_lite(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
     base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
-    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "up", "-d", "--build"]
-    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "down", "-v"]
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "up",
+        "-d",
+        "--build",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "down",
+        "-v",
+    ]
     assert subprocess.run(up, cwd=dest).returncode == 0
     try:
         # wait for /health (seeded lite app)
@@ -622,21 +785,32 @@ def test_rendered_project_smoke_and_sniff_against_lite(tmp_path: Path):
         ready = False
         while time.time() < deadline:
             try:
-                with urllib.request.urlopen("http://localhost:8000/health", timeout=3) as r:
+                with urllib.request.urlopen(
+                    "http://localhost:8000/health", timeout=3
+                ) as r:
                     if r.status == 200:
                         ready = True
                         break
             except OSError:
                 time.sleep(2)
         assert ready, "lite app did not serve /health within 120s"
-        env = {**os.environ, "SMOKE_TARGET": "http://localhost:8000", "SNIFF_TARGET": "http://localhost:8000"}
-        smoke = subprocess.run(["uv", "run", "pytest", "tests/smoke", "-q"], cwd=dest, env=env)
+        env = {
+            **os.environ,
+            "SMOKE_TARGET": "http://localhost:8000",
+            "SNIFF_TARGET": "http://localhost:8000",
+        }
+        smoke = subprocess.run(
+            ["uv", "run", "pytest", "tests/smoke", "-q"], cwd=dest, env=env
+        )
         assert smoke.returncode == 0, "smoke suite failed against the live lite stack"
-        sniff = subprocess.run(["uv", "run", "pytest", "tests/sniff", "-q"], cwd=dest, env=env)
+        sniff = subprocess.run(
+            ["uv", "run", "pytest", "tests/sniff", "-q"], cwd=dest, env=env
+        )
         assert sniff.returncode == 0, "sniff suite failed against the live lite stack"
         e2e = subprocess.run(
             ["uv", "run", "pytest", "tests/e2e", "-q"],
-            cwd=dest, env={**os.environ, "E2E_TARGET": "http://localhost:8000"},
+            cwd=dest,
+            env={**os.environ, "E2E_TARGET": "http://localhost:8000"},
         )
         assert e2e.returncode == 0, "remote-mode e2e failed against the live lite stack"
     finally:
@@ -650,8 +824,12 @@ def test_rendered_project_blocks_contract_migration(tmp_path: Path):
     assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
 
     # The scaffold's own migration is safe (reversible + expand-only) -> exit 0.
-    clean = subprocess.run(["uv", "run", "python", "scripts/check_migrations.py"], cwd=dest)
-    assert clean.returncode == 0, "the scaffold's 0001 migration should pass both guards"
+    clean = subprocess.run(
+        ["uv", "run", "python", "scripts/check_migrations.py"], cwd=dest
+    )
+    assert clean.returncode == 0, (
+        "the scaffold's 0001 migration should pass both guards"
+    )
 
     versions = dest / "migrations" / "versions"
 
@@ -662,9 +840,14 @@ def test_rendered_project_blocks_contract_migration(tmp_path: Path):
         "def downgrade():\n    op.add_column('items', sa.Column('name', sa.String()))\n"
     )
     blocked = subprocess.run(
-        ["uv", "run", "python", "scripts/check_migrations.py"], cwd=dest, capture_output=True, text=True
+        ["uv", "run", "python", "scripts/check_migrations.py"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
     )
-    assert blocked.returncode == 1, "a contract migration without the marker must be blocked"
+    assert blocked.returncode == 1, (
+        "a contract migration without the marker must be blocked"
+    )
     assert "contract" in (blocked.stdout + blocked.stderr).lower()
 
     # Same migration WITH the acknowledgement marker -> allowed (exit 0).
@@ -673,8 +856,12 @@ def test_rendered_project_blocks_contract_migration(tmp_path: Path):
         "def upgrade():\n    op.drop_column('items', 'name')\n\n"
         "def downgrade():\n    op.add_column('items', sa.Column('name', sa.String()))\n"
     )
-    allowed = subprocess.run(["uv", "run", "python", "scripts/check_migrations.py"], cwd=dest)
-    assert allowed.returncode == 0, "the '# deploy: contract' marker must exempt the migration"
+    allowed = subprocess.run(
+        ["uv", "run", "python", "scripts/check_migrations.py"], cwd=dest
+    )
+    assert allowed.returncode == 0, (
+        "the '# deploy: contract' marker must exempt the migration"
+    )
 
     bad.unlink()
 
@@ -700,7 +887,9 @@ def test_rendered_project_hybrid_section_integrity(tmp_path):
 
     claude = dest / "CLAUDE.md"
     # Editing OUTSIDE the markers (the builder's area) stays clean — defines "hybrid".
-    claude.write_text(claude.read_text() + "\n## My project notes\nsome builder content\n")
+    claude.write_text(
+        claude.read_text() + "\n## My project notes\nsome builder content\n"
+    )
     assert check(dest, ci=True) == []
 
     # Editing INSIDE the markers is fatal.
@@ -743,7 +932,9 @@ def test_rendered_project_integrity_verifies_tamper_and_restore(tmp_path: Path):
     assert check(dest, ci=True) == []
 
 
-@pytest.mark.skipif(not _docker_available(), reason="uv and docker are required for the live-stack test")
+@pytest.mark.skipif(
+    not _docker_available(), reason="uv and docker are required for the live-stack test"
+)
 def test_rendered_project_dev_stack_serves_seeded_items(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
@@ -751,15 +942,40 @@ def test_rendered_project_dev_stack_serves_seeded_items(tmp_path: Path):
 
     base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
     # `lite` profile = app + postgres only (no Traefik/observability) — app on 8000.
-    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "up", "-d", "--build"]
-    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "down", "-v"]
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "up",
+        "-d",
+        "--build",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "down",
+        "-v",
+    ]
     assert subprocess.run(up, cwd=dest).returncode == 0
     try:
         deadline = time.time() + 120
         items = None
         while time.time() < deadline:
             try:
-                with urllib.request.urlopen("http://localhost:8000/items", timeout=3) as resp:
+                with urllib.request.urlopen(
+                    "http://localhost:8000/items", timeout=3
+                ) as resp:
                     if resp.status == 200:
                         payload = json.loads(resp.read())
                         if payload:

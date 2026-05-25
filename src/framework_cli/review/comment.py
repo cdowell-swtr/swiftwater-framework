@@ -31,19 +31,33 @@ def _gh_api(args: list[str], *, token: str, stdin: str | None = None) -> str:
 def post_sticky_comment(markdown: str, *, repo: str, pr: str, token: str) -> None:
     """Create or update the single review-summary comment on the PR. Never raises."""
     try:
-        listed = _gh_api([f"repos/{repo}/issues/{pr}/comments", "--paginate"], token=token)
+        listed = _gh_api(
+            [f"repos/{repo}/issues/{pr}/comments", "--paginate"], token=token
+        )
         comments = json.loads(listed) if listed.strip() else []
         existing = find_sticky_comment(comments)
         body = json.dumps({"body": markdown})
         if existing is not None:
             _gh_api(
-                [f"repos/{repo}/issues/comments/{existing}", "--method", "PATCH", "--input", "-"],
+                [
+                    f"repos/{repo}/issues/comments/{existing}",
+                    "--method",
+                    "PATCH",
+                    "--input",
+                    "-",
+                ],
                 token=token,
                 stdin=body,
             )
         else:
             _gh_api(
-                [f"repos/{repo}/issues/{pr}/comments", "--method", "POST", "--input", "-"],
+                [
+                    f"repos/{repo}/issues/{pr}/comments",
+                    "--method",
+                    "POST",
+                    "--input",
+                    "-",
+                ],
                 token=token,
                 stdin=body,
             )

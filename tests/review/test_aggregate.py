@@ -7,13 +7,21 @@ def test_write_findings_round_trips(tmp_path):
     from framework_cli.review.aggregate import write_findings
 
     out = tmp_path / "sub" / "review-x.json"  # parent dir does not exist yet
-    write_findings(out, "review-x", "failure", [Finding("a.py", 1, "high", "boom", "fix")])
+    write_findings(
+        out, "review-x", "failure", [Finding("a.py", 1, "high", "boom", "fix")]
+    )
 
     assert json.loads(out.read_text()) == {
         "agent": "review-x",
         "conclusion": "failure",
         "findings": [
-            {"path": "a.py", "line": 1, "severity": "high", "message": "boom", "suggestion": "fix"}
+            {
+                "path": "a.py",
+                "line": 1,
+                "severity": "high",
+                "message": "boom",
+                "suggestion": "fix",
+            }
         ],
     }
 
@@ -23,7 +31,11 @@ def test_write_findings_empty_list(tmp_path):
 
     out = tmp_path / "review-y.json"
     write_findings(out, "review-y", "neutral", [])
-    assert json.loads(out.read_text()) == {"agent": "review-y", "conclusion": "neutral", "findings": []}
+    assert json.loads(out.read_text()) == {
+        "agent": "review-y",
+        "conclusion": "neutral",
+        "findings": [],
+    }
 
 
 def _result(agent, conclusion, findings):
@@ -58,7 +70,11 @@ def test_severity_counts_across_agents():
 
     r = aggregate(
         [
-            _result("review-a", "neutral", [_f("a.py", 1, "low", "x"), _f("b.py", 2, "high", "y")]),
+            _result(
+                "review-a",
+                "neutral",
+                [_f("a.py", 1, "low", "x"), _f("b.py", 2, "high", "y")],
+            ),
             _result("review-b", "neutral", [_f("c.py", 3, "low", "z")]),
         ]
     )
@@ -104,7 +120,9 @@ def test_no_relationships_when_files_disjoint():
 def test_markdown_has_header_groups_relationships_files_and_marker():
     from framework_cli.review.aggregate import SUMMARY_MARKER, aggregate
 
-    md = aggregate([_result("review-security", "failure", [_f("a.py", 1, "high", "danger")])]).markdown
+    md = aggregate(
+        [_result("review-security", "failure", [_f("a.py", 1, "high", "danger")])]
+    ).markdown
     assert SUMMARY_MARKER in md
     assert "Review summary" in md and "FAIL" in md
     assert "high" in md and "danger" in md and "review-security" in md
@@ -137,7 +155,9 @@ def test_markdown_with_zero_findings_renders_sensibly():
 
     md = aggregate([_result("review-security", "success", [])]).markdown
     assert "0 finding(s)" in md
-    assert "- none" in md  # both the relationships and affected-files sections fall back
+    assert (
+        "- none" in md
+    )  # both the relationships and affected-files sections fall back
 
 
 def test_load_results_reads_json_and_skips_malformed(tmp_path):

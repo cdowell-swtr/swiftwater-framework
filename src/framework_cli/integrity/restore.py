@@ -43,7 +43,9 @@ def _restore_section(target: Path, canonical: Path) -> None:
     # Line-based splice (LF). Safe for the hybrid file set: text files are LF-normalized via
     # the locked `.gitattributes` (eol=lf), and the framework sections are ASCII.
     new_lines = (
-        t_lines[: t_span[0]] + c_lines[c_span[0] : c_span[1] + 1] + t_lines[t_span[1] + 1 :]
+        t_lines[: t_span[0]]
+        + c_lines[c_span[0] : c_span[1] + 1]
+        + t_lines[t_span[1] + 1 :]
     )
     trailing = "\n" if target_text.endswith("\n") else ""
     target.write_text("\n".join(new_lines) + trailing)

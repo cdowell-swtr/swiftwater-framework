@@ -40,7 +40,10 @@ def test_post_sticky_creates_when_absent(monkeypatch):
 
     monkeypatch.setattr(comment, "_gh_api", fake_gh)
     comment.post_sticky_comment("md", repo="o/r", pr="3", token="t")
-    assert any("--method" in a and "POST" in a and a[0] == "repos/o/r/issues/3/comments" for a in calls)
+    assert any(
+        "--method" in a and "POST" in a and a[0] == "repos/o/r/issues/3/comments"
+        for a in calls
+    )
     list_call = next(a for a in calls if "--method" not in a)
     assert "--paginate" in list_call
 

@@ -31,7 +31,9 @@ class _FakeClient:
 
 
 def test_run_agent_parses_findings_from_client():
-    client = _FakeClient('[{"path": "a.py", "line": 2, "severity": "high", "message": "bad"}]')
+    client = _FakeClient(
+        '[{"path": "a.py", "line": 2, "severity": "high", "message": "bad"}]'
+    )
     findings = run_agent("--- a/a.py\n+++ b/a.py\n", get_agent("security"), client)
     assert findings == [Finding("a.py", 2, "high", "bad")]
 

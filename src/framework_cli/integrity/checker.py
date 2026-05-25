@@ -71,7 +71,12 @@ def check(project: Path, ci: bool = False) -> list[Finding]:
         # tracked tier (locked = full file; hybrid = the FRAMEWORK:BEGIN/END section)
         if not f.is_file():
             findings.append(
-                Finding(e.path, "framework file is missing", f"framework restore {e.path}", True)
+                Finding(
+                    e.path,
+                    "framework file is missing",
+                    f"framework restore {e.path}",
+                    True,
+                )
             )
             continue
         if e.cls == "hybrid":

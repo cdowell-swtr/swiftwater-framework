@@ -81,7 +81,12 @@ def _hybrid_project(tmp_path: Path) -> Path:
     manifest = Manifest(
         framework_version="0.1.0",
         entries=[
-            Entry("CLAUDE.md", "hybrid", "tracked", sha256=section_sha256(claude.read_text()))
+            Entry(
+                "CLAUDE.md",
+                "hybrid",
+                "tracked",
+                sha256=section_sha256(claude.read_text()),
+            )
         ],
     )
     (proj / ".framework" / "integrity.lock").write_text(manifest.dumps())
@@ -111,4 +116,6 @@ def test_hybrid_damaged_markers_are_fatal(tmp_path: Path):
     proj = _hybrid_project(tmp_path)
     (proj / "CLAUDE.md").write_text("markers deleted\n")
     findings = check(proj)
-    assert any(f.path == "CLAUDE.md" and f.fatal and "markers" in f.problem for f in findings)
+    assert any(
+        f.path == "CLAUDE.md" and f.fatal and "markers" in f.problem for f in findings
+    )

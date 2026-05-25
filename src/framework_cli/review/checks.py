@@ -43,19 +43,28 @@ def to_check_run(spec: AgentSpec, findings: list[Finding]) -> CheckRunPayload:
             "end_line": f.line,
             "annotation_level": _LEVEL[f.severity],
             "title": f"{spec.name}: {f.severity}",
-            "message": f.message + (f"\n\nSuggestion: {f.suggestion}" if f.suggestion else ""),
+            "message": f.message
+            + (f"\n\nSuggestion: {f.suggestion}" if f.suggestion else ""),
         }
         for f in findings[:_MAX_ANNOTATIONS]
     ]
-    summary = "No findings." if not findings else f"{len(findings)} finding(s); {len(blocking)} blocking."
-    return CheckRunPayload(spec.name, conclusion, f"{spec.name}: {conclusion}", summary, annotations)
+    summary = (
+        "No findings."
+        if not findings
+        else f"{len(findings)} finding(s); {len(blocking)} blocking."
+    )
+    return CheckRunPayload(
+        spec.name, conclusion, f"{spec.name}: {conclusion}", summary, annotations
+    )
 
 
 def neutral_payload(name: str, reason: str) -> CheckRunPayload:
     return CheckRunPayload(name, "neutral", f"{name}: skipped", reason, [])
 
 
-def post_check_run(payload: CheckRunPayload, *, token: str, repo: str, sha: str) -> None:
+def post_check_run(
+    payload: CheckRunPayload, *, token: str, repo: str, sha: str
+) -> None:
     """Post the Check Run via the `gh` CLI (available on GitHub runners)."""
     body = json.dumps(
         {
@@ -63,7 +72,11 @@ def post_check_run(payload: CheckRunPayload, *, token: str, repo: str, sha: str)
             "head_sha": sha,
             "status": "completed",
             "conclusion": payload.conclusion,
-            "output": {"title": payload.title, "summary": payload.summary, "annotations": payload.annotations},
+            "output": {
+                "title": payload.title,
+                "summary": payload.summary,
+                "annotations": payload.annotations,
+            },
         }
     )
     subprocess.run(

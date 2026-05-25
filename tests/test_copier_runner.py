@@ -166,8 +166,8 @@ def test_render_env_services_and_tasks(tmp_path: Path):
     assert "APP_SLO_REQUEST_LATENCY_P99_MS=" in env
 
     services = (dest / "SERVICES.md").read_text()
-    assert "demo.localhost" in services      # external HTTPS host
-    assert "app:8000" in services             # internal docker address
+    assert "demo.localhost" in services  # external HTTPS host
+    assert "app:8000" in services  # internal docker address
 
     taskfile = (dest / "Taskfile.yml").read_text()
     for task in ("dev:", "dev:lite:", "dev:reset:", "certs:", "test:stack:"):
@@ -182,7 +182,9 @@ def test_render_traefik_and_certs_gitignored(tmp_path: Path):
     assert "websecure" in static["entryPoints"]
     assert static["providers"]["docker"]["exposedByDefault"] is False
 
-    tls = yaml.safe_load((dest / "infra" / "traefik" / "dynamic" / "tls.yml").read_text())
+    tls = yaml.safe_load(
+        (dest / "infra" / "traefik" / "dynamic" / "tls.yml").read_text()
+    )
     certs = tls["tls"]["certificates"][0]
     assert certs["certFile"].endswith(".pem")
 
@@ -222,10 +224,15 @@ def test_render_observability_config(tmp_path: Path):
     app_job = next(s for s in prom["scrape_configs"] if s["job_name"] == "app")
     assert "app:8000" in app_job["static_configs"][0]["targets"]
     assert "/etc/prometheus/alerts/*.yml" in prom["rule_files"]
-    assert "alertmanager:9093" in prom["alerting"]["alertmanagers"][0]["static_configs"][0]["targets"]
+    assert (
+        "alertmanager:9093"
+        in prom["alerting"]["alertmanagers"][0]["static_configs"][0]["targets"]
+    )
 
     ds = yaml.safe_load(
-        (obs / "grafana" / "provisioning" / "datasources" / "prometheus.yml").read_text()
+        (
+            obs / "grafana" / "provisioning" / "datasources" / "prometheus.yml"
+        ).read_text()
     )
     assert ds["datasources"][0]["uid"] == "prometheus"
     assert ds["datasources"][0]["url"] == "http://prometheus:9090"
@@ -270,7 +277,15 @@ def test_render_grafana_loki_datasource(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     ds = yaml.safe_load(
-        (dest / "infra" / "observability" / "grafana" / "provisioning" / "datasources" / "loki.yml").read_text()
+        (
+            dest
+            / "infra"
+            / "observability"
+            / "grafana"
+            / "provisioning"
+            / "datasources"
+            / "loki.yml"
+        ).read_text()
     )
     d = ds["datasources"][0]
     assert d["uid"] == "loki"
@@ -288,7 +303,9 @@ def test_render_docs_mention_logs(tmp_path: Path):
 def test_render_tempo_datasource_and_loki_link(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
-    ds_dir = dest / "infra" / "observability" / "grafana" / "provisioning" / "datasources"
+    ds_dir = (
+        dest / "infra" / "observability" / "grafana" / "provisioning" / "datasources"
+    )
 
     tempo = yaml.safe_load((ds_dir / "tempo.yml").read_text())["datasources"][0]
     assert tempo["uid"] == "tempo"
@@ -303,7 +320,9 @@ def test_render_tempo_datasource_and_loki_link(tmp_path: Path):
     # after the colon), not merely contain "trace_id" — guards the Loki->Tempo link.
     import re
 
-    sample = json.dumps({"event": "request", "trace_id": "0af7651916cd43dd8448eb211c80319c"})
+    sample = json.dumps(
+        {"event": "request", "trace_id": "0af7651916cd43dd8448eb211c80319c"}
+    )
     m = re.search(df["matcherRegex"], sample)
     assert m and m.group(1) == "0af7651916cd43dd8448eb211c80319c"
 
@@ -349,7 +368,9 @@ def test_render_conftest_uses_real_postgres(tmp_path: Path):
     conftest = (dest / "tests" / "conftest.py").read_text()
     assert "PostgresContainer" in conftest
     assert "db_session" in conftest
-    assert "pytest.fail" in conftest  # forcing function: DB tests fail (not skip) w/o Docker
+    assert (
+        "pytest.fail" in conftest
+    )  # forcing function: DB tests fail (not skip) w/o Docker
 
 
 def test_render_tempo_otel_collector(tmp_path: Path):
@@ -462,7 +483,7 @@ def test_render_postgres_in_dev_and_lite(tmp_path: Path):
     render_project(dest, DATA)
     dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
     pg = dev["services"]["postgres"]
-    assert pg["profiles"] == ["dev", "lite"]   # present in dev AND lite, not test
+    assert pg["profiles"] == ["dev", "lite"]  # present in dev AND lite, not test
     assert "pg_isready" in " ".join(pg["healthcheck"]["test"])
     app = dev["services"]["app"]
     assert app["depends_on"]["postgres"]["condition"] == "service_healthy"
@@ -572,7 +593,7 @@ def test_render_sniff_suite(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
 
-    sniff = (dest / "tests" / "sniff" / "test_sniff.py")
+    sniff = dest / "tests" / "sniff" / "test_sniff.py"
     assert sniff.is_file()
     text = sniff.read_text()
     assert "SNIFF_TARGET" in text
@@ -586,13 +607,13 @@ def test_render_load_test(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
 
-    load_js = (dest / "tests" / "non_functional" / "load.js")
+    load_js = dest / "tests" / "non_functional" / "load.js"
     assert load_js.is_file()
     js = load_js.read_text()
     assert "thresholds" in js
     assert "http_req_duration" in js  # k6 maps this to the p99 SLO
 
-    script = (dest / "scripts" / "load.sh")
+    script = dest / "scripts" / "load.sh"
     assert script.is_file()
     assert "grafana/k6" in script.read_text()
 
@@ -617,15 +638,24 @@ def test_render_deploy_strategy_seam(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
 
-    strategy = (dest / "infra" / "deploy" / "strategy.sh")
+    strategy = dest / "infra" / "deploy" / "strategy.sh"
     assert strategy.is_file()
     text = strategy.read_text()
-    for op in ("deploy", "endpoints", "await-healthy", "rollback", "releases", "teardown"):
+    for op in (
+        "deploy",
+        "endpoints",
+        "await-healthy",
+        "rollback",
+        "releases",
+        "teardown",
+    ):
         assert op in text, f"strategy.sh missing operation {op}"
     # opinionated skeleton: config validated; target hooks fail loudly; rollback reverses migrations
     assert "require_var" in text
     assert "_todo" in text
-    assert "downgrade" in text and "__target_migrate" in text  # migration-aware rollback
+    assert (
+        "downgrade" in text and "__target_migrate" in text
+    )  # migration-aware rollback
 
     assert (dest / "infra" / "deploy" / "notify.sh").is_file()
     readme = (dest / "infra" / "deploy" / "README.md").read_text()
@@ -700,7 +730,7 @@ def test_render_migration_guard(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
 
-    guard = (dest / "scripts" / "check_migrations.py")
+    guard = dest / "scripts" / "check_migrations.py"
     assert guard.is_file()
     assert "downgrade" in guard.read_text()
 
@@ -719,7 +749,7 @@ def test_render_deploy_docs(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
 
-    deploy_md = (dest / "DEPLOY.md")
+    deploy_md = dest / "DEPLOY.md"
     assert deploy_md.is_file()
     text = deploy_md.read_text()
     assert "Demo" in text  # {{ project_name }} interpolated
@@ -745,7 +775,9 @@ def test_render_deploy_staging_workflow(tmp_path: Path):
     ci = yaml.safe_load(text)
     jobs = ci["jobs"]
     assert "build-push" in jobs and "deploy-staging" in jobs
-    deploy_steps = " ".join(str(s.get("run", "")) for s in jobs["deploy-staging"]["steps"])
+    deploy_steps = " ".join(
+        str(s.get("run", "")) for s in jobs["deploy-staging"]["steps"]
+    )
     for op in ("strategy.sh deploy", "strategy.sh rollback", "strategy.sh endpoints"):
         assert op in deploy_steps, f"deploy-staging missing {op}"
     assert "tests/smoke" in deploy_steps and "tests/sniff" in deploy_steps
@@ -811,7 +843,9 @@ def test_taskfile_wires_integrity(tmp_path: Path):
 def _repo_root() -> Path:
     p = Path(__file__).resolve()
     for parent in p.parents:
-        if (parent / "pyproject.toml").is_file() and (parent / "src" / "framework_cli").is_dir():
+        if (parent / "pyproject.toml").is_file() and (
+            parent / "src" / "framework_cli"
+        ).is_dir():
             return parent
     raise RuntimeError("repo root not found")
 
@@ -820,7 +854,12 @@ def test_ci_activates_integrity_step(tmp_path: Path):
     dest = tmp_path / "proj"
     render_project(
         dest,
-        {"project_name": "Demo", "project_slug": "demo", "package_name": "demo", "python_version": "3.12"},
+        {
+            "project_name": "Demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+        },
     )
     ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
     assert "framework integrity --ci" in ci
@@ -831,7 +870,12 @@ def test_ci_review_job_runs_framework_review(tmp_path: Path):
     dest = tmp_path / "proj"
     render_project(
         dest,
-        {"project_name": "Demo", "project_slug": "demo", "package_name": "demo", "python_version": "3.12"},
+        {
+            "project_name": "Demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+        },
     )
     ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
     assert "framework review " in ci
@@ -845,7 +889,12 @@ def test_ci_review_matrix(tmp_path: Path):
     dest = tmp_path / "proj"
     render_project(
         dest,
-        {"project_name": "Demo", "project_slug": "demo", "package_name": "demo", "python_version": "3.12"},
+        {
+            "project_name": "Demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+        },
     )
     text = (dest / ".github" / "workflows" / "ci.yml").read_text()
     assert "framework review-agents" in text
@@ -865,7 +914,9 @@ def test_render_ci_review_aggregation(tmp_path: Path):
     review_steps = jobs["review"]["steps"]
     runs = " ".join(str(s.get("run", "")) for s in review_steps)
     assert "--findings-out" in runs
-    upload = next(s for s in review_steps if "upload-artifact" in str(s.get("uses", "")))
+    upload = next(
+        s for s in review_steps if "upload-artifact" in str(s.get("uses", ""))
+    )
     assert upload["if"] == "always()"
     assert "review-findings-" in upload["with"]["name"]
 
@@ -874,8 +925,15 @@ def test_render_ci_review_aggregation(tmp_path: Path):
     agg = jobs["review-aggregate"]
     assert agg["needs"] == "review"
     assert agg["if"] == "always()"
-    assert " ".join(str(s.get("run", "")) for s in agg["steps"]).find("framework review-aggregate") != -1
-    download = next(s for s in agg["steps"] if "download-artifact" in str(s.get("uses", "")))
+    assert (
+        " ".join(str(s.get("run", "")) for s in agg["steps"]).find(
+            "framework review-aggregate"
+        )
+        != -1
+    )
+    download = next(
+        s for s in agg["steps"] if "download-artifact" in str(s.get("uses", ""))
+    )
     assert download["with"]["pattern"] == "review-findings-*"
     assert download["with"]["merge-multiple"] is True
     assert download["with"]["path"] == "all-findings"
@@ -942,7 +1000,10 @@ def test_render_no_webhooks_secret_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     assert "WEBHOOK_SIGNING_SECRET" not in (dest / ".env.example").read_text()
-    assert "webhook_signing_secret" not in (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    assert (
+        "webhook_signing_secret"
+        not in (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    )
     assert not (dest / "migrations" / "versions" / "0002_webhook_events.py").exists()
 
 
@@ -999,7 +1060,9 @@ def test_render_no_workers_migration_without_battery(tmp_path: Path):
 def test_render_env_py_no_workers_import_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
-    assert "tasks import dead_letter" not in (dest / "migrations" / "env.py").read_text()
+    assert (
+        "tasks import dead_letter" not in (dest / "migrations" / "env.py").read_text()
+    )
 
 
 def test_render_env_py_imports_dead_letter_with_workers(tmp_path: Path):
@@ -1091,9 +1154,12 @@ def test_render_workers_taskfile_valid_yaml(tmp_path: Path):
 
 def test_render_workers_settings_valid_python(tmp_path: Path):
     import ast
+
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["workers"]})
-    settings_text = (dest / "src" / DATA["package_name"] / "config" / "settings.py").read_text()
+    settings_text = (
+        dest / "src" / DATA["package_name"] / "config" / "settings.py"
+    ).read_text()
     ast.parse(settings_text)  # raises SyntaxError if invalid
 
 
@@ -1122,6 +1188,7 @@ def test_render_workers_compose_services(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["workers"]})
     import yaml as _yaml
+
     dev = _yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
     for svc in ("redis", "worker", "beat", "celery-exporter"):
         assert svc in dev["services"]
@@ -1138,8 +1205,16 @@ def test_render_compose_byte_identical_without_workers(tmp_path: Path):
     parsed = yaml.safe_load(dev)
     svcs = set(parsed["services"].keys())
     expected = {
-        "app", "postgres", "traefik", "prometheus", "grafana",
-        "alertmanager", "loki", "promtail", "tempo", "otel-collector",
+        "app",
+        "postgres",
+        "traefik",
+        "prometheus",
+        "grafana",
+        "alertmanager",
+        "loki",
+        "promtail",
+        "tempo",
+        "otel-collector",
     }
     assert svcs == expected, f"unexpected services: {svcs ^ expected}"
     # volumes: only pgdata, no redisdata
@@ -1168,12 +1243,19 @@ def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path)
     run_copy(
         str(src),
         str(dest),
-        data={"project_name": "Demo", "project_slug": "demo", "package_name": "demo", "python_version": "3.12"},
+        data={
+            "project_name": "Demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+        },
         defaults=True,
         overwrite=True,
         quiet=True,
     )
-    assert not (dest / "copier.yml").exists(), "subdir copier.yml leaked into the rendered project"
+    assert not (dest / "copier.yml").exists(), (
+        "subdir copier.yml leaked into the rendered project"
+    )
     assert (dest / "pyproject.toml").is_file()
     assert (dest / ".copier-answers.yml").is_file()
 
@@ -1181,9 +1263,12 @@ def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path)
 def test_render_workers_prometheus_scrape(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["workers"]})
-    prom = (dest / "infra" / "observability" / "prometheus" / "prometheus.yml").read_text()
+    prom = (
+        dest / "infra" / "observability" / "prometheus" / "prometheus.yml"
+    ).read_text()
     assert "celery-exporter" in prom
     import yaml as _yaml
+
     parsed = _yaml.safe_load(prom)
     assert any(j["job_name"] == "celery" for j in parsed["scrape_configs"])
 
@@ -1191,7 +1276,9 @@ def test_render_workers_prometheus_scrape(tmp_path: Path):
 def test_render_prometheus_unchanged_without_workers(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
-    prom = (dest / "infra" / "observability" / "prometheus" / "prometheus.yml").read_text()
+    prom = (
+        dest / "infra" / "observability" / "prometheus" / "prometheus.yml"
+    ).read_text()
     assert "celery-exporter" not in prom
     assert "job_name: app" in prom and "job_name: prometheus" in prom
 
@@ -1199,21 +1286,38 @@ def test_render_prometheus_unchanged_without_workers(tmp_path: Path):
 def test_render_workers_alerts_and_dashboard(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["workers"]})
-    alerts = dest / "infra" / "observability" / "prometheus" / "alerts" / "workers_alerts.yml"
+    alerts = (
+        dest
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "workers_alerts.yml"
+    )
     dash = dest / "infra" / "observability" / "grafana" / "dashboards" / "workers.json"
     assert alerts.exists() and dash.exists()
     import json as _json
     import yaml as _yaml
-    _yaml.safe_load(alerts.read_text())          # valid YAML
-    assert "{{ $value }}" in alerts.read_text()    # Prometheus templating preserved
-    _json.loads(dash.read_text())                  # valid JSON
+
+    _yaml.safe_load(alerts.read_text())  # valid YAML
+    assert "{{ $value }}" in alerts.read_text()  # Prometheus templating preserved
+    _json.loads(dash.read_text())  # valid JSON
 
 
 def test_render_no_workers_alerts_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
-    assert not (dest / "infra" / "observability" / "prometheus" / "alerts" / "workers_alerts.yml").exists()
-    assert not (dest / "infra" / "observability" / "grafana" / "dashboards" / "workers.json").exists()
+    assert not (
+        dest
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "workers_alerts.yml"
+    ).exists()
+    assert not (
+        dest / "infra" / "observability" / "grafana" / "dashboards" / "workers.json"
+    ).exists()
 
 
 def test_render_webhooks_alone_handler_is_inline(tmp_path: Path):
@@ -1245,7 +1349,16 @@ def _assert_ruff_format_clean(dest: Path) -> None:
     tests_dir = dest / "tests"
     migrations_dir = dest / "migrations"
     result = subprocess.run(
-        ["uv", "run", "ruff", "format", "--check", str(src_dir), str(tests_dir), str(migrations_dir)],
+        [
+            "uv",
+            "run",
+            "ruff",
+            "format",
+            "--check",
+            str(src_dir),
+            str(tests_dir),
+            str(migrations_dir),
+        ],
         capture_output=True,
         text=True,
     )
@@ -1292,7 +1405,9 @@ def test_render_webhooks_metrics_module(tmp_path: Path):
 def test_render_no_webhooks_metrics_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
-    assert not (dest / "src" / DATA["package_name"] / "webhooks" / "metrics.py").exists()
+    assert not (
+        dest / "src" / DATA["package_name"] / "webhooks" / "metrics.py"
+    ).exists()
 
 
 def test_render_webhooks_route_records_metrics(tmp_path: Path):
@@ -1314,11 +1429,19 @@ def test_render_health_clean_without_webhooks(tmp_path: Path):
 def test_render_webhooks_alerts_and_dashboard(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["webhooks"]})
-    alerts = dest / "infra" / "observability" / "prometheus" / "alerts" / "webhooks_alerts.yml"
+    alerts = (
+        dest
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "webhooks_alerts.yml"
+    )
     dash = dest / "infra" / "observability" / "grafana" / "dashboards" / "webhooks.json"
     assert alerts.exists() and dash.exists()
     import json as _json
     import yaml as _yaml
+
     parsed = _yaml.safe_load(alerts.read_text())
     assert parsed["groups"][0]["name"] == "webhooks"
     _json.loads(dash.read_text())  # valid JSON
@@ -1327,8 +1450,17 @@ def test_render_webhooks_alerts_and_dashboard(tmp_path: Path):
 def test_render_no_webhooks_alerts_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
-    assert not (dest / "infra" / "observability" / "prometheus" / "alerts" / "webhooks_alerts.yml").exists()
-    assert not (dest / "infra" / "observability" / "grafana" / "dashboards" / "webhooks.json").exists()
+    assert not (
+        dest
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "webhooks_alerts.yml"
+    ).exists()
+    assert not (
+        dest / "infra" / "observability" / "grafana" / "dashboards" / "webhooks.json"
+    ).exists()
 
 
 def test_render_websockets_metrics_module(tmp_path: Path):
@@ -1341,17 +1473,23 @@ def test_render_websockets_metrics_module(tmp_path: Path):
 def test_render_no_websockets_metrics_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
-    assert not (dest / "src" / DATA["package_name"] / "websockets" / "metrics.py").exists()
+    assert not (
+        dest / "src" / DATA["package_name"] / "websockets" / "metrics.py"
+    ).exists()
 
 
 def test_render_websockets_emits_metrics(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["websockets"]})
-    mgr = (dest / "src" / DATA["package_name"] / "websockets" / "connection_manager.py").read_text()
+    mgr = (
+        dest / "src" / DATA["package_name"] / "websockets" / "connection_manager.py"
+    ).read_text()
     assert "ws_metrics.connection_opened" in mgr
     assert "ws_metrics.connection_closed" in mgr
     assert "ws_metrics.message_sent" in mgr
-    route = (dest / "src" / DATA["package_name"] / "routes" / "websockets.py").read_text()
+    route = (
+        dest / "src" / DATA["package_name"] / "routes" / "websockets.py"
+    ).read_text()
     assert "ws_metrics.message_received" in route
     health = (dest / "src" / DATA["package_name"] / "routes" / "health.py").read_text()
     assert "ws_metrics.render_prometheus" in health
@@ -1367,11 +1505,21 @@ def test_render_health_clean_without_websockets(tmp_path: Path):
 def test_render_websockets_alerts_and_dashboard(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["websockets"]})
-    alerts = dest / "infra" / "observability" / "prometheus" / "alerts" / "websockets_alerts.yml"
-    dash = dest / "infra" / "observability" / "grafana" / "dashboards" / "websockets.json"
+    alerts = (
+        dest
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "websockets_alerts.yml"
+    )
+    dash = (
+        dest / "infra" / "observability" / "grafana" / "dashboards" / "websockets.json"
+    )
     assert alerts.exists() and dash.exists()
     import yaml as _yaml
     import json as _json
+
     parsed = _yaml.safe_load(alerts.read_text())
     assert parsed["groups"][0]["name"] == "websockets"
     assert len(parsed["groups"][0]["rules"]) == 2
@@ -1381,5 +1529,14 @@ def test_render_websockets_alerts_and_dashboard(tmp_path: Path):
 def test_render_no_websockets_alerts_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
-    assert not (dest / "infra" / "observability" / "prometheus" / "alerts" / "websockets_alerts.yml").exists()
-    assert not (dest / "infra" / "observability" / "grafana" / "dashboards" / "websockets.json").exists()
+    assert not (
+        dest
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "websockets_alerts.yml"
+    ).exists()
+    assert not (
+        dest / "infra" / "observability" / "grafana" / "dashboards" / "websockets.json"
+    ).exists()

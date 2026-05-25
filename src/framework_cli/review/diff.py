@@ -32,7 +32,9 @@ def pr_diff() -> str:
     base = os.environ.get("GITHUB_BASE_REF")
     if base:
         subprocess.run(
-            ["git", "fetch", "--depth=1", "origin", base], check=False, capture_output=True
+            ["git", "fetch", "--depth=1", "origin", base],
+            check=False,
+            capture_output=True,
         )
         rng = f"origin/{base}...HEAD"
     else:

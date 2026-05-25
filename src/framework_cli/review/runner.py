@@ -26,15 +26,21 @@ def run_agent(diff: str, spec: AgentSpec, client: Any) -> list[Finding]:
             },
             {"type": "text", "text": spec.prompt},
         ],
-        messages=[{"role": "user", "content": "Return your findings as a JSON array only."}],
+        messages=[
+            {"role": "user", "content": "Return your findings as a JSON array only."}
+        ],
     )
     text = "".join(
-        block.text for block in message.content if getattr(block, "type", None) == "text"
+        block.text
+        for block in message.content
+        if getattr(block, "type", None) == "text"
     )
     return parse_findings(text)
 
 
-def default_client() -> Any:  # pragma: no cover - thin SDK wrapper, exercised by the manual smoke
+def default_client() -> (
+    Any
+):  # pragma: no cover - thin SDK wrapper, exercised by the manual smoke
     import anthropic
 
     return anthropic.Anthropic()

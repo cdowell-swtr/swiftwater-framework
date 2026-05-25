@@ -13,7 +13,10 @@ def test_load_fixtures_discovers_bad_and_good(tmp_path):
     from framework_cli.review.evals import load_fixtures
 
     _write(tmp_path / "security" / "bad" / "sqli.diff", "+++ b/app.py\n")
-    _write(tmp_path / "security" / "bad" / "sqli.expect.json", json.dumps({"file": "app.py"}))
+    _write(
+        tmp_path / "security" / "bad" / "sqli.expect.json",
+        json.dumps({"file": "app.py"}),
+    )
     _write(tmp_path / "security" / "good" / "ok.diff", "+++ b/app.py\n")
 
     fx = load_fixtures(tmp_path)
@@ -26,7 +29,9 @@ def test_load_fixtures_discovers_bad_and_good(tmp_path):
 def test_load_fixtures_skips_bad_without_valid_sidecar(tmp_path):
     from framework_cli.review.evals import load_fixtures
 
-    _write(tmp_path / "security" / "bad" / "no-sidecar.diff", "+++ b/app.py\n")  # no .expect.json
+    _write(
+        tmp_path / "security" / "bad" / "no-sidecar.diff", "+++ b/app.py\n"
+    )  # no .expect.json
     _write(tmp_path / "security" / "bad" / "bad-json.diff", "+++ b/app.py\n")
     _write(tmp_path / "security" / "bad" / "bad-json.expect.json", "{ not json")
     _write(tmp_path / "security" / "good" / "ok.diff", "+++ b/app.py\n")  # must survive
@@ -87,7 +92,9 @@ def test_flags_no_file_restriction_scans_all():
     from framework_cli.review.findings import Finding
 
     spec = _spec("high")
-    assert flags([Finding("z.py", 9, "critical", "x")], spec) is True  # good-fixture block check
+    assert (
+        flags([Finding("z.py", 9, "critical", "x")], spec) is True
+    )  # good-fixture block check
 
 
 def test_default_thresholds():
@@ -100,7 +107,9 @@ def test_load_thresholds_overrides_and_missing(tmp_path):
     from framework_cli.review.evals import Thresholds, load_thresholds
 
     assert load_thresholds(tmp_path / "nope.yaml") == {}
-    (tmp_path / "thresholds.yaml").write_text("security: {recall_min: 0.5, fp_max: 0.5}\n")
+    (tmp_path / "thresholds.yaml").write_text(
+        "security: {recall_min: 0.5, fp_max: 0.5}\n"
+    )
     got = load_thresholds(tmp_path / "thresholds.yaml")
     assert got == {"security": Thresholds(0.5, 0.5)}
 
@@ -138,7 +147,9 @@ def test_load_thresholds_rejects_malformed_entry(tmp_path):
 
     from framework_cli.review.evals import load_thresholds
 
-    (tmp_path / "thresholds.yaml").write_text("security: {recall_min: 0.5}\n")  # missing fp_max
+    (tmp_path / "thresholds.yaml").write_text(
+        "security: {recall_min: 0.5}\n"
+    )  # missing fp_max
     with pytest.raises(ValueError, match="security"):
         load_thresholds(tmp_path / "thresholds.yaml")
 

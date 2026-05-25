@@ -9,6 +9,7 @@ Test 2: `framework downskill workers` reverts LOCKED files, de-injects HYBRID ma
         sections, removes owned files (tasks package, alerts, dashboard), preserves the
         0003_dead_letter.py migration, and leaves integrity GREEN (manifest regenerated).
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -40,11 +41,18 @@ def _git_commit(project: Path) -> None:
     subprocess.run(["git", "-C", str(project), "add", "-A"], check=True)
     subprocess.run(
         [
-            "git", "-C", str(project),
-            "-c", "commit.gpgsign=false",
-            "-c", "user.email=test@test",
-            "-c", "user.name=Test",
-            "commit", "-qm", "scaffold",
+            "git",
+            "-C",
+            str(project),
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "user.email=test@test",
+            "-c",
+            "user.name=Test",
+            "commit",
+            "-qm",
+            "scaffold",
         ],
         check=True,
     )
@@ -54,7 +62,10 @@ def _git_commit(project: Path) -> None:
 # Test 1: new --with workers → integrity GREEN
 # ---------------------------------------------------------------------------
 
-def test_new_with_workers_integrity_green(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_new_with_workers_integrity_green(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A freshly rendered workers project passes integrity checks with no findings."""
     project = _new_workers_project(tmp_path, monkeypatch)
 
@@ -71,6 +82,7 @@ def test_new_with_workers_integrity_green(tmp_path: Path, monkeypatch: pytest.Mo
 # ---------------------------------------------------------------------------
 # Test 2: downskill workers → reverts everything, preserves migration, integrity GREEN
 # ---------------------------------------------------------------------------
+
 
 def test_downskill_workers_reverts_locked_files_preserves_migration_integrity_green(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -92,9 +104,20 @@ def test_downskill_workers_reverts_locked_files_preserves_migration_integrity_gr
     assert not (project / "src" / pkg / "tasks").exists(), (
         "tasks/ package dir should be removed after downskill"
     )
-    assert not (project / "infra" / "observability" / "prometheus" / "alerts" / "workers_alerts.yml").exists()
-    assert not (project / "infra" / "observability" / "grafana" / "dashboards" / "workers.json").exists()
-    assert not (project / "tests" / "functional" / "test_workers_functional.py").exists()
+    assert not (
+        project
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "workers_alerts.yml"
+    ).exists()
+    assert not (
+        project / "infra" / "observability" / "grafana" / "dashboards" / "workers.json"
+    ).exists()
+    assert not (
+        project / "tests" / "functional" / "test_workers_functional.py"
+    ).exists()
     assert not (project / "tests" / "unit" / "test_workers_unit.py").exists()
 
     # --- migration PRESERVED (battery owns it, but it mutates the DB schema) ---
@@ -117,7 +140,9 @@ def test_downskill_workers_reverts_locked_files_preserves_migration_integrity_gr
         "redis service must be absent from dev.yml after downskill"
     )
 
-    prom_yml = (project / "infra" / "observability" / "prometheus" / "prometheus.yml").read_text()
+    prom_yml = (
+        project / "infra" / "observability" / "prometheus" / "prometheus.yml"
+    ).read_text()
     assert "celery-exporter" not in prom_yml, (
         "celery-exporter scrape target must be absent from prometheus.yml after downskill"
     )
@@ -140,9 +165,7 @@ def test_downskill_workers_reverts_locked_files_preserves_migration_integrity_gr
     )
 
     # --- battery list cleared ---
-    assert read_batteries(project) == [], (
-        "Battery list must be empty after downskill"
-    )
+    assert read_batteries(project) == [], "Battery list must be empty after downskill"
 
     # --- integrity GREEN after downskill (manifest regenerated) ---
     # ci=True: skip the gitignored .env existence check (matches production CI behaviour).

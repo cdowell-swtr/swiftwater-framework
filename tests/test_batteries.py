@@ -6,7 +6,9 @@ def test_websockets_is_registered():
 
     assert "websockets" in battery_names()
     spec = get_battery("websockets")
-    assert spec.name == "websockets" and spec.requires == () and spec.gates_agent is None
+    assert (
+        spec.name == "websockets" and spec.requires == () and spec.gates_agent is None
+    )
 
 
 def test_resolve_unknown_battery_errors():
@@ -33,7 +35,9 @@ def test_resolve_includes_dependency_closure():
     # Use a synthetic spec to prove the closure walks `requires` (no real multi-battery yet).
     from framework_cli import batteries
 
-    batteries._BATTERIES["_child"] = batteries.BatterySpec("_child", "x", requires=("websockets",))
+    batteries._BATTERIES["_child"] = batteries.BatterySpec(
+        "_child", "x", requires=("websockets",)
+    )
     try:
         assert batteries.resolve(["_child"]) == ["_child", "websockets"]
     finally:
@@ -45,5 +49,5 @@ def test_workers_battery_is_registered():
 
     spec = get_battery("workers")
     assert spec.name == "workers"
-    assert spec.requires == ()          # standalone — depends on nothing
+    assert spec.requires == ()  # standalone — depends on nothing
     assert resolve(["workers"]) == ["workers"]

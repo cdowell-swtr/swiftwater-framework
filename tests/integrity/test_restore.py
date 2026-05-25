@@ -63,7 +63,9 @@ def test_restore_hybrid_fixes_block_and_preserves_builder_content(tmp_path: Path
     begin, _ = section_span(original)  # type: ignore[misc]
     lines = original.splitlines()
     lines[begin + 1] = lines[begin + 1] + "  TAMPER"  # edit the first in-block line
-    claude.write_text("\n".join(lines) + "\nMY BUILDER NOTE\n")  # + content outside the block
+    claude.write_text(
+        "\n".join(lines) + "\nMY BUILDER NOTE\n"
+    )  # + content outside the block
 
     assert any(f.path == "CLAUDE.md" and f.fatal for f in check(proj, ci=True))
 

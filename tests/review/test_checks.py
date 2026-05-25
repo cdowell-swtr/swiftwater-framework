@@ -21,7 +21,9 @@ def test_blocking_finding_is_failure():
 
 
 def test_below_threshold_is_neutral():
-    payload = to_check_run(_SPEC, [Finding("a.py", 1, "low", "m"), Finding("b.py", 2, "medium", "m")])
+    payload = to_check_run(
+        _SPEC, [Finding("a.py", 1, "low", "m"), Finding("b.py", 2, "medium", "m")]
+    )
     assert payload.conclusion == "neutral"
     assert len(payload.annotations) == 2
 
@@ -40,5 +42,8 @@ def test_neutral_payload():
 
 def test_advisory_agent_never_fails():
     advisory = replace(_SPEC, block_threshold=None)
-    assert to_check_run(advisory, [Finding("a.py", 1, "critical", "x")]).conclusion == "neutral"
+    assert (
+        to_check_run(advisory, [Finding("a.py", 1, "critical", "x")]).conclusion
+        == "neutral"
+    )
     assert to_check_run(advisory, []).conclusion == "success"
