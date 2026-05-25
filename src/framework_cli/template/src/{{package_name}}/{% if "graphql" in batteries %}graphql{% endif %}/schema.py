@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from collections.abc import Callable
 
 import strawberry
 from graphql.validation import NoSchemaIntrospectionCustomRule
@@ -40,9 +41,11 @@ class Mutation:
 def build_schema(*, disable_introspection: bool) -> strawberry.Schema:
     """Build the schema. Introspection is disabled in production via a validation rule;
     Task 4 will prepend the metrics extension."""
-    extensions: list[type[SchemaExtension] | AddValidationRules] = []
+    extensions: list[type[SchemaExtension] | Callable[[], SchemaExtension]] = []
     if disable_introspection:
-        extensions.append(AddValidationRules([NoSchemaIntrospectionCustomRule]))
+        # A factory (not an instance): Schema wants type|Callable[[], SchemaExtension], and a
+        # fresh instance per request also avoids Strawberry's pass-an-instance deprecation.
+        extensions.append(lambda: AddValidationRules([NoSchemaIntrospectionCustomRule]))
     return strawberry.Schema(query=Query, mutation=Mutation, extensions=extensions)
 
 
