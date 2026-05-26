@@ -53,13 +53,15 @@ def upskill_project(
     effective = (
         with_batteries if with_batteries is not None else read_batteries(project)
     )
+    from framework_cli.migrations import migration_context
+
     run_update(
         str(project),
         defaults=True,
         overwrite=True,
         quiet=True,
         vcs_ref=vcs_ref,
-        data={"batteries": effective},
+        data={"batteries": effective, **migration_context(effective)},
     )
     record_batteries(project, effective)
     # The update may have changed managed sections / locked files (incl. battery-conditional

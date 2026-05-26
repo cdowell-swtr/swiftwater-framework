@@ -1,7 +1,7 @@
 """dead-letter queue
 
 Revision ID: 0003
-Revises: {{ '0002' if 'webhooks' in batteries else '0001' }}
+Revises: {{ down_revision_workers }}
 
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0003"
-down_revision = "{{ '0002' if 'webhooks' in batteries else '0001' }}"
+down_revision = "{{ down_revision_workers }}"
 branch_labels = None
 depends_on = None
 

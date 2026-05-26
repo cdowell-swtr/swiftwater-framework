@@ -12,10 +12,15 @@ def template_path() -> Path:
 
 def render_project(dest: Path, data: Mapping[str, object]) -> None:
     """Render the bundled template into `dest` using the provided answers."""
+    from framework_cli.migrations import migration_context
+
+    merged = dict(data)
+    batteries = merged.get("batteries", []) or []
+    merged.update(migration_context(batteries if isinstance(batteries, list) else []))
     run_copy(
         str(template_path()),
         str(dest),
-        data=dict(data),
+        data=merged,
         defaults=True,
         overwrite=True,
         quiet=True,

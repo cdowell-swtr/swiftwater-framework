@@ -1656,3 +1656,15 @@ def test_render_ci_clean_without_graphql(tmp_path: Path):
     render_project(dest, {**DATA})
     ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
     assert "graphql" not in ci and "export-graphql-schema" not in ci
+
+
+def test_render_workers_migration_down_revision(tmp_path: Path):
+    d1 = tmp_path / "w"
+    render_project(d1, {**DATA, "batteries": ["workers"]})
+    mig = next((d1 / "migrations" / "versions").glob("0003_*.py")).read_text()
+    assert 'down_revision = "0001"' in mig
+
+    d2 = tmp_path / "wh"
+    render_project(d2, {**DATA, "batteries": ["webhooks", "workers"]})
+    mig2 = next((d2 / "migrations" / "versions").glob("0003_*.py")).read_text()
+    assert 'down_revision = "0002"' in mig2
