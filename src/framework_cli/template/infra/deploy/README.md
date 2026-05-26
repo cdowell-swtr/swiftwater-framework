@@ -87,6 +87,21 @@ Rollback can only restore a previous release if its migrations can be reversed, 
 3. Locally point the tiers at any environment: `SMOKE_TARGET=… task test:smoke`,
    `SNIFF_TARGET=… task test:sniff`, `E2E_TARGET=… uv run pytest tests/e2e`, `K6_TARGET=… task test:load`.
 
+## Observability in staging/prod
+
+The full monitoring stack (Prometheus, Grafana, Alertmanager, Loki, Tempo) ships via
+`infra/compose/observability.yml`. Your `__target_place_image` hook must merge it:
+
+```bash
+docker compose -f infra/compose/$DEPLOY_ENV.yml -f infra/compose/observability.yml up -d
+```
+
+Set `GRAFANA_ADMIN_PASSWORD` as a target secret (GitHub Environment secret + injected into the
+target's environment) — Grafana requires authentication in staging/prod (unlike dev, which
+overrides to anonymous). Materialize `APP_ALERT_WEBHOOK_URL` as the Alertmanager webhook file
+on the target (Task 4 wires `url_file` in `alertmanager.yml`); provide it as a mounted secret,
+not a bare env var.
+
 ## Notifications
 
 `notify.sh` logs by default. Wire your channel there (reuse the Alertmanager destination).

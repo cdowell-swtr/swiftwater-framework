@@ -20,7 +20,7 @@ tasks:
       - sh: 'if command -v framework >/dev/null 2>&1; then framework integrity; fi'
         msg: "Framework integrity check failed. Run `framework integrity`, then `framework restore <file>`."
     cmds:
-      - docker compose -f infra/compose/base.yml -f infra/compose/dev.yml --profile dev up --build
+      - docker compose -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev up --build
 
   dev:lite:
     desc: App only over plain HTTP at localhost:8000 (no Traefik) — resource-light.
@@ -38,7 +38,7 @@ tasks:
       - sh: command -v docker
         msg: "Docker is required for `task dev:reset`."
     cmds:
-      - docker compose -f infra/compose/base.yml -f infra/compose/dev.yml --profile dev down -v
+      - docker compose -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev down -v
       - task: dev
 
   test:

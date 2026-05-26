@@ -1862,3 +1862,16 @@ def test_render_postgres_obs(tmp_path: Path):
     assert alerts.exists() and dash.exists()
     assert _y.safe_load(alerts.read_text())["groups"][0]["name"] == "postgres"
     assert _j.loads(dash.read_text())["uid"] == "postgres"
+
+
+def test_render_merge_wiring(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    tf = (dest / "Taskfile.yml").read_text()
+    assert "-f infra/compose/observability.yml" in tf
+    lite_line = next(ln for ln in tf.splitlines() if "--profile lite" in ln)
+    assert "observability.yml" not in lite_line  # dev:lite opts out
+    env = (dest / ".env.example").read_text()
+    assert "APP_ALERT_WEBHOOK_URL" in env and "GRAFANA_ADMIN_PASSWORD" in env
+    strat = (dest / "infra" / "deploy" / "strategy.sh").read_text()
+    assert "observability.yml" in strat  # place-image guidance references the overlay

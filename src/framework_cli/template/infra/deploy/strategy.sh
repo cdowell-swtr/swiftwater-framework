@@ -26,8 +26,11 @@ _todo() {
 # === TARGET HOOKS — the only code you write ==========================================
 # Pull APP_IMAGE and run it from infra/compose/${DEPLOY_ENV}.yml on the target. The image
 # self-migrates UP on start (its entrypoint runs `alembic upgrade head`); do NOT route traffic
-# until healthy. (compose-over-SSH e.g.: scp the compose file, then over ssh
-# `APP_IMAGE=$APP_IMAGE POSTGRES_PASSWORD=$POSTGRES_PASSWORD docker compose -f <env>.yml up -d`.)
+# until healthy. Merge the observability overlay (`-f infra/compose/observability.yml`) so
+# staging/prod run the full monitoring stack (the framework's observability contract); provide
+# `GRAFANA_ADMIN_PASSWORD` and the alertmanager webhook file as target secrets (see infra/deploy/README.md).
+# (compose-over-SSH e.g.: scp the compose files, then over ssh
+# `APP_IMAGE=$APP_IMAGE POSTGRES_PASSWORD=$POSTGRES_PASSWORD docker compose -f <env>.yml -f infra/compose/observability.yml up -d`.)
 __target_place_image() { _todo __target_place_image "pull \$APP_IMAGE and start it from infra/compose/\$DEPLOY_ENV.yml without routing traffic until healthy"; }
 
 # Reverse/apply migrations against the target's stores. \$* is the migration command; the
