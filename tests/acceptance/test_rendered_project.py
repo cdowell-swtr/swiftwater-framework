@@ -1031,19 +1031,21 @@ def test_rendered_project_with_graphql_battery_passes(tmp_path: Path):
         + result.stdout
         + result.stderr
     )
-    # Prove the GraphQL functional tests actually ran: the route handler reaches full
-    # coverage only when test_graphql.py's query + createItem mutation exercise both
-    # the POST handler and the schema resolver paths (router autodiscovery alone imports
-    # routes/graphql.py on every create_app() call, yielding partial coverage — so the
-    # filename appearing in the coverage table is NOT sufficient proof). 100% only occurs
-    # when the query and mutation both run.
+    # Prove the GraphQL functional tests actually RAN (not just that the files exist).
+    # routes/graphql.py is pure module-level wiring, so it hits 100% from autodiscovery
+    # import alone — NOT a discriminating signal. graphql/schema.py is: its _to_item,
+    # Query.items, and Mutation.create_item resolver bodies plus the disable_introspection
+    # branch only reach 100% when the query (success path, introspection off) AND the
+    # createItem mutation AND the introspection-off check all execute. So assert on
+    # schema.py — it is the real proof the functional suite ran. (returncode==0 on the
+    # 70% gate above is the backstop; this pins query+mutation execution specifically.)
     combined_output = result.stdout + result.stderr
-    cov_line = next(
-        (ln for ln in combined_output.splitlines() if "routes/graphql.py" in ln), ""
+    schema_cov_line = next(
+        (ln for ln in combined_output.splitlines() if "graphql/schema.py" in ln), ""
     )
-    assert "100%" in cov_line, (
-        f"GraphQL route not fully exercised; coverage line: {cov_line!r}\n"
-        "Expected 100% coverage of routes/graphql.py — was "
-        "tests/functional/test_graphql.py collected and did it pass?\n"
+    assert "100%" in schema_cov_line, (
+        f"GraphQL resolvers not fully exercised; coverage line: {schema_cov_line!r}\n"
+        "Expected 100% coverage of graphql/schema.py — were the query + createItem "
+        "mutation + introspection-off tests in test_graphql.py collected and did they pass?\n"
         + combined_output
     )
