@@ -15,6 +15,12 @@ MIGRATION_ORDER: tuple[str, ...] = ("webhooks", "workers", "pgvector")
 # Fixed revision id per battery (baseline is 0001).
 REVISIONS: dict[str, str] = {"webhooks": "0002", "workers": "0003", "pgvector": "0004"}
 
+if set(MIGRATION_ORDER) != set(REVISIONS):  # pragma: no cover - authoring guard
+    raise RuntimeError(
+        "MIGRATION_ORDER and REVISIONS must list the same batteries "
+        "(a new migration-adding battery must be added to both)"
+    )
+
 
 def migration_down_revisions(batteries: Sequence[str]) -> dict[str, str]:
     """Map each present migration-adding battery to its down_revision (nearest present

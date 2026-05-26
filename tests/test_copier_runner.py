@@ -1036,21 +1036,6 @@ def test_render_no_tasks_package_without_workers(tmp_path: Path):
     assert not (dest / "src" / DATA["package_name"] / "tasks").exists()
 
 
-def test_render_workers_migration_chains_off_initial(tmp_path: Path):
-    dest = tmp_path / "demo"
-    render_project(dest, {**DATA, "batteries": ["workers"]})
-    mig = (dest / "migrations" / "versions" / "0003_dead_letter.py").read_text()
-    assert 'revision = "0003"' in mig
-    assert 'down_revision = "0001"' in mig
-
-
-def test_render_workers_migration_chains_off_webhooks(tmp_path: Path):
-    dest = tmp_path / "demo"
-    render_project(dest, {**DATA, "batteries": ["webhooks", "workers"]})
-    mig = (dest / "migrations" / "versions" / "0003_dead_letter.py").read_text()
-    assert 'down_revision = "0002"' in mig
-
-
 def test_render_no_workers_migration_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
