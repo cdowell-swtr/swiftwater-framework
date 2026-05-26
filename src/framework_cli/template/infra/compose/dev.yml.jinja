@@ -52,81 +52,12 @@ services:
       app:
         condition: service_healthy
 
-  prometheus:
-    image: prom/prometheus:v2.55.1
-    profiles: ["dev"]
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-    ports:
-      - "9090:9090"
-    volumes:
-      - "../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
-      - "../observability/prometheus/alerts:/etc/prometheus/alerts:ro"
-    depends_on:
-      app:
-        condition: service_healthy
-
   grafana:
-    image: grafana/grafana:11.3.0
     profiles: ["dev"]
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
-    ports:
-      - "3000:3000"
-    volumes:
-      - "../observability/grafana/provisioning:/etc/grafana/provisioning:ro"
-      - "../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro"
-    depends_on:
-      - prometheus
-
-  alertmanager:
-    image: prom/alertmanager:v0.27.0
-    profiles: ["dev"]
-    command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-    ports:
-      - "9093:9093"
-    volumes:
-      - "../observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"
-
-  loki:
-    image: grafana/loki:3.2.1
-    profiles: ["dev"]
-    command: ["-config.file=/etc/loki/loki-config.yml"]
-    ports:
-      - "3100:3100"
-    volumes:
-      - "../observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro"
-
-  promtail:
-    image: grafana/promtail:3.2.1
-    profiles: ["dev"]
-    command: ["-config.file=/etc/promtail/promtail-config.yml"]
-    volumes:
-      - "../observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro"
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    depends_on:
-      - loki
-
-  tempo:
-    image: grafana/tempo:2.6.1
-    profiles: ["dev"]
-    command: ["-config.file=/etc/tempo/tempo.yml"]
-    ports:
-      - "3200:3200"
-    volumes:
-      - "../observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro"
-
-  otel-collector:
-    image: otel/opentelemetry-collector:0.111.0
-    profiles: ["dev"]
-    command: ["--config=/etc/otel/otel-collector.yml"]
-    volumes:
-      - "../observability/otel/otel-collector.yml:/etc/otel/otel-collector.yml:ro"
-    depends_on:
-      - tempo
 
 {%- if "mongodb" in batteries %}
 

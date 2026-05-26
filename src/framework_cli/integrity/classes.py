@@ -30,6 +30,7 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "alembic.ini",
     "infra/compose/base.yml",
     "infra/compose/dev.yml",
+    "infra/compose/observability.yml",
     "infra/compose/prod.yml",
     "infra/compose/staging.yml",
     "infra/compose/test.yml",

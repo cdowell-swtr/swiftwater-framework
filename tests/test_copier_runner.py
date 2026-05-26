@@ -193,17 +193,29 @@ def test_render_traefik_and_certs_gitignored(tmp_path: Path):
     assert "infra/traefik/certs/*.pem" in gitignore
 
 
-def test_render_observability_services_in_dev(tmp_path: Path):
+def test_render_observability_services_in_overlay(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
-    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
-    svcs = dev["services"]
+    # Core obs stack is now in the observability.yml overlay, not dev.yml.
+    overlay = yaml.safe_load(
+        (dest / "infra" / "compose" / "observability.yml").read_text()
+    )
+    svcs = overlay["services"]
     for name in ("prometheus", "grafana", "alertmanager"):
         assert name in svcs
-        assert svcs[name]["profiles"] == ["dev"]  # not in `lite`
+        # The overlay has NO profiles — it runs whenever merged
+        assert "profiles" not in svcs[name]
     assert svcs["prometheus"]["depends_on"]["app"]["condition"] == "service_healthy"
     assert any("3000" in str(p) for p in svcs["grafana"]["ports"])
     assert any("9090" in str(p) for p in svcs["prometheus"]["ports"])
+    # dev.yml has a grafana profile override (anonymous auth) but not the full service:
+    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    assert "grafana" in dev["services"]
+    assert dev["services"]["grafana"]["profiles"] == ["dev"]
+    assert "GF_AUTH_ANONYMOUS_ENABLED" in str(dev["services"]["grafana"]["environment"])
+    # prometheus/alertmanager are NOT in dev.yml (moved to overlay):
+    assert "prometheus" not in dev["services"]
+    assert "alertmanager" not in dev["services"]
 
 
 def test_render_docs_mention_observability(tmp_path: Path):
@@ -264,13 +276,17 @@ def test_render_loki_promtail(tmp_path: Path):
     assert "level" in json_stage["expressions"]
     assert "correlation_id" in json_stage["expressions"]
 
-    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    # loki/promtail are now defined in the observability.yml overlay (no profiles — no gating):
+    overlay = yaml.safe_load(
+        (dest / "infra" / "compose" / "observability.yml").read_text()
+    )
     for name in ("loki", "promtail"):
-        assert dev["services"][name]["profiles"] == ["dev"]
-    assert any("3100" in str(p) for p in dev["services"]["loki"]["ports"])
-    vols = " ".join(dev["services"]["promtail"]["volumes"])
+        assert name in overlay["services"]
+        assert "profiles" not in overlay["services"][name]
+    assert any("3100" in str(p) for p in overlay["services"]["loki"]["ports"])
+    vols = " ".join(overlay["services"]["promtail"]["volumes"])
     assert "/var/run/docker.sock:/var/run/docker.sock:ro" in vols
-    assert "loki" in dev["services"]["promtail"]["depends_on"]
+    assert "loki" in overlay["services"]["promtail"]["depends_on"]
 
 
 def test_render_grafana_loki_datasource(tmp_path: Path):
@@ -387,9 +403,22 @@ def test_render_tempo_otel_collector(tmp_path: Path):
     assert col["exporters"]["otlp/tempo"]["endpoint"] == "tempo:4317"
     assert col["service"]["pipelines"]["traces"]["exporters"] == ["otlp/tempo"]
 
-    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    # tempo/otel-collector are now in the observability.yml overlay (no profiles):
+    overlay = yaml.safe_load(
+        (dest / "infra" / "compose" / "observability.yml").read_text()
+    )
     for name in ("tempo", "otel-collector"):
-        assert dev["services"][name]["profiles"] == ["dev"]
+        assert name in overlay["services"]
+        assert "profiles" not in overlay["services"][name]
+    # The overlay carries the OTEL app fragment (deep-merged onto app):
+    overlay_app_env = overlay["services"]["app"]["environment"]
+    assert overlay_app_env["APP_OTEL_ENABLED"] == "true"
+    assert (
+        overlay_app_env["APP_OTEL_EXPORTER_OTLP_ENDPOINT"]
+        == "http://otel-collector:4317"
+    )
+    # dev.yml app still has these too (harmless redundancy — overlay + dev both set them):
+    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
     app_env = dev["services"]["app"]["environment"]
     assert app_env["APP_OTEL_ENABLED"] == "true"
     assert app_env["APP_OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4317"
@@ -1186,13 +1215,23 @@ def test_render_compose_byte_identical_without_workers(tmp_path: Path):
     dev = (dest / "infra" / "compose" / "dev.yml").read_text()
     # no workers services leaked
     assert "redis:" not in dev and "celery-exporter:" not in dev
-    # existing service set intact
+    # dev.yml service set: core obs moved to overlay; dev keeps app/postgres/traefik + grafana override
     parsed = yaml.safe_load(dev)
     svcs = set(parsed["services"].keys())
     expected = {
         "app",
         "postgres",
         "traefik",
+        "grafana",  # dev-only anonymous override (partial service definition)
+    }
+    assert svcs == expected, f"unexpected services in dev.yml: {svcs ^ expected}"
+    # volumes: only pgdata, no redisdata
+    assert set(parsed["volumes"].keys()) == {"pgdata"}
+    # core obs stack is in the overlay, not dev.yml:
+    overlay = yaml.safe_load(
+        (dest / "infra" / "compose" / "observability.yml").read_text()
+    )
+    for svc in (
         "prometheus",
         "grafana",
         "alertmanager",
@@ -1200,10 +1239,8 @@ def test_render_compose_byte_identical_without_workers(tmp_path: Path):
         "promtail",
         "tempo",
         "otel-collector",
-    }
-    assert svcs == expected, f"unexpected services: {svcs ^ expected}"
-    # volumes: only pgdata, no redisdata
-    assert set(parsed["volumes"].keys()) == {"pgdata"}
+    ):
+        assert svc in overlay["services"]
 
 
 def test_root_copier_yml_renders_template_without_leaking_config(tmp_path: Path):
@@ -1753,3 +1790,50 @@ def test_render_dev_yml_clean_without_mongodb(tmp_path: Path):
             dest / "infra" / "observability" / "prometheus" / "prometheus.yml"
         ).read_text()
     )
+
+
+def test_render_observability_overlay(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(
+        dest, {**DATA}
+    )  # baseline — the overlay is always-on (not battery-gated)
+    overlay = dest / "infra" / "compose" / "observability.yml"
+    assert overlay.exists()
+    text = overlay.read_text()
+    for svc in (
+        "prometheus:",
+        "grafana:",
+        "alertmanager:",
+        "loki:",
+        "promtail:",
+        "tempo:",
+        "otel-collector:",
+        "postgres-exporter:",
+    ):
+        assert svc in text
+    # prod-safe grafana in the overlay (no anonymous), admin password from env:
+    assert (
+        "GF_SECURITY_ADMIN_PASSWORD" in text and "GF_AUTH_ANONYMOUS_ENABLED" not in text
+    )
+
+
+def test_render_dev_yml_core_obs_removed(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    dev_text = (dest / "infra" / "compose" / "dev.yml").read_text()
+    dev = yaml.safe_load(dev_text)
+    # core obs moved to the overlay — dev.yml no longer defines them as services:
+    for svc in (
+        "prometheus",
+        "loki",
+        "tempo",
+        "otel-collector",
+        "promtail",
+        "alertmanager",
+    ):
+        assert svc not in dev["services"], f"{svc} should not be a service in dev.yml"
+    # dev keeps a grafana override re-enabling anonymous auth for local convenience:
+    assert "GF_AUTH_ANONYMOUS_ENABLED" in dev_text
+    assert "grafana" in dev["services"]
+    # app + postgres + traefik stay:
+    assert "traefik" in dev["services"] and "postgres" in dev["services"]

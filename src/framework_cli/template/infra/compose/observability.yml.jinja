@@ -1,0 +1,95 @@
+# Observability overlay — merged into dev/staging/prod (NOT dev:lite/test). Defines the obs
+# stack once so it runs identically in every environment (framework spec §8). dev re-applies
+# its anonymous-grafana convenience via a dev.yml override (see the dev merge order, Task 3).
+services:
+  app:
+    environment:
+      APP_OTEL_ENABLED: "true"
+      APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    ports:
+      - "9090:9090"
+    volumes:
+      - "../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "../observability/prometheus/alerts:/etc/prometheus/alerts:ro"
+      - "promdata:/prometheus"
+    depends_on:
+      app:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    ports:
+      - "3000:3000"
+    volumes:
+      - "../observability/grafana/provisioning:/etc/grafana/provisioning:ro"
+      - "../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro"
+    depends_on:
+      - prometheus
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    ports:
+      - "9093:9093"
+    volumes:
+      - "../observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"
+
+  loki:
+    image: grafana/loki:3.2.1
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - "../observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro"
+      - "lokidata:/loki"
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    command: ["-config.file=/etc/promtail/promtail-config.yml"]
+    volumes:
+      - "../observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    depends_on:
+      - loki
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    ports:
+      - "3200:3200"
+    volumes:
+      - "../observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro"
+      - "tempodata:/var/tempo"
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.111.0
+    command: ["--config=/etc/otel/otel-collector.yml"]
+    volumes:
+      - "../observability/otel/otel-collector.yml:/etc/otel/otel-collector.yml:ro"
+    depends_on:
+      - tempo
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    environment:
+      DATA_SOURCE_NAME: "postgresql://app:${POSTGRES_PASSWORD:-app}@postgres:5432/app?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  promdata: {}
+  lokidata: {}
+  tempodata: {}
