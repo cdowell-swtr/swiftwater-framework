@@ -1207,9 +1207,15 @@ def test_render_workers_compose_services(tmp_path: Path):
     import yaml as _yaml
 
     dev = _yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
-    for svc in ("redis", "worker", "beat", "celery-exporter"):
+    # celery-exporter relocated to observability.yml (runs in prod too)
+    for svc in ("redis", "worker", "beat"):
         assert svc in dev["services"]
+    assert "celery-exporter" not in dev["services"]
     assert "redisdata" in dev["volumes"]
+    obs = _yaml.safe_load(
+        (dest / "infra" / "compose" / "observability.yml").read_text()
+    )
+    assert "celery-exporter" in obs["services"]
 
 
 def test_render_compose_byte_identical_without_workers(tmp_path: Path):
@@ -1763,7 +1769,11 @@ def test_render_mongodb_service_and_obs(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["mongodb"]})
     dev = (dest / "infra" / "compose" / "dev.yml").read_text()
-    assert "mongo:7" in dev and "mongodb-exporter" in dev
+    # mongodb-exporter relocated to observability.yml (runs in prod too)
+    assert "mongo:7" in dev
+    assert "mongodb-exporter" not in dev
+    obs = (dest / "infra" / "compose" / "observability.yml").read_text()
+    assert "mongodb-exporter" in obs
     prom = (
         dest / "infra" / "observability" / "prometheus" / "prometheus.yml"
     ).read_text()
@@ -2019,3 +2029,16 @@ def test_render_services_overlay_empty_is_valid(tmp_path: Path):
     svc = (dest / "infra" / "compose" / "services.yml").read_text()
     parsed = __import__("yaml").safe_load(svc)  # must not raise
     assert not (parsed or {}).get("services")  # no battery services
+
+
+def test_render_exporters_in_observability_overlay(tmp_path: Path):
+    for batteries, exporter in (
+        (["workers"], "celery-exporter"),
+        (["mongodb"], "mongodb-exporter"),
+    ):
+        dest = tmp_path / ("e_" + exporter)
+        render_project(dest, {**DATA, "batteries": batteries})
+        obs = (dest / "infra" / "compose" / "observability.yml").read_text()
+        dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+        assert exporter in obs, f"{exporter} should be in observability.yml"
+        assert exporter not in dev, f"{exporter} should be gone from dev.yml"

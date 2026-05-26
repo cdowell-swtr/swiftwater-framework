@@ -90,6 +90,28 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+{%- if "mongodb" in batteries %}
+
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.43
+    command: ["--mongodb.uri=mongodb://mongo:27017", "--collect-all"]
+    ports:
+      - "9216:9216"
+    depends_on:
+      mongo:
+        condition: service_healthy
+{%- endif %}
+{%- if "workers" in batteries %}
+
+  celery-exporter:
+    image: danihodovic/celery-exporter:0.10.5
+    command: ["--broker-url=redis://redis:6379/0"]
+    ports:
+      - "9808:9808"
+    depends_on:
+      redis:
+        condition: service_healthy
+{%- endif %}
 
 volumes:
   promdata: {}
