@@ -1109,6 +1109,57 @@ def test_rendered_project_with_pgvector_battery_passes(tmp_path: Path):
 
 @pytest.mark.skipif(
     not _docker_available(),
+    reason="uv + docker required: real Mongo + Postgres",
+)
+def test_rendered_project_with_mongodb_battery_passes(tmp_path: Path):
+    # Renders a project with the mongodb battery active, asserts the battery files
+    # were emitted, then runs unit+functional (70% gate) to confirm the mongo functional
+    # test (tests/functional/test_mongo.py) is collected and passes — exercising
+    # insert_document and find_documents against a real MongoDbContainer("mongo:7").
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb"]})
+
+    # Battery files must exist in the rendered project.
+    assert (dest / "src" / "demo" / "mongo" / "repository.py").exists(), (
+        "mongo/repository.py was not rendered by the mongodb battery"
+    )
+    assert (dest / "src" / "demo" / "mongo" / "client.py").exists(), (
+        "mongo/client.py was not rendered by the mongodb battery"
+    )
+    assert (dest / "tests" / "functional" / "test_mongo.py").exists(), (
+        "tests/functional/test_mongo.py was not rendered by the mongodb battery"
+    )
+
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+
+    # Run unit + functional tiers (70% gate) — test_mongo.py spins up a MongoDbContainer
+    # and exercises insert_document + find_documents against a real mongo:7 instance.
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional gate did not pass for the mongodb battery project:\n"
+        + result.stdout
+        + result.stderr
+    )
+    # Prove the mongo functional test actually RAN: mongo/repository.py reaches 100%
+    # only when test_mongo.py exercises both insert_document and find_documents against
+    # the real DB (import-time alone would yield 0% — these are plain functions, not
+    # imported by routes).
+    cov = result.stdout + result.stderr
+    line = next((ln for ln in cov.splitlines() if "mongo/repository.py" in ln), "")
+    assert "100%" in line, (
+        f"mongo repo not fully exercised: {line!r}\n"
+        "Expected 100% coverage of mongo/repository.py — was "
+        "tests/functional/test_mongo.py collected and did it pass?\n" + cov
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
     reason="uv + docker required: real Postgres with pgvector extension",
 )
 def test_rendered_project_migration_chain_webhooks_workers_pgvector(tmp_path: Path):
