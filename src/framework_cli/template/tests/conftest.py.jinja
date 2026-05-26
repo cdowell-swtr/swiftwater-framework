@@ -30,7 +30,7 @@ def pg_url() -> Iterator[str]:
     from testcontainers.postgres import PostgresContainer
 
     try:
-        container = PostgresContainer("postgres:17", driver="psycopg")
+        container = PostgresContainer("{% if "pgvector" in batteries %}pgvector/pgvector:pg17{% else %}postgres:17{% endif %}", driver="psycopg")
         container.start()
     except Exception as exc:  # Docker unavailable, image pull failed, etc.
         pytest.fail(

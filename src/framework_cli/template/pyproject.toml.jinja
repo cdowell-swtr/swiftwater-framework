@@ -16,6 +16,7 @@ dependencies = [
     "tenacity>=9.0",
     "pybreaker>=1.2",
 {% if "graphql" in batteries %}    "strawberry-graphql[fastapi]>=0.235",
+{% endif %}{% if "pgvector" in batteries %}    "pgvector>=0.3",
 {% endif %}{% if "workers" in batteries %}    "celery[redis]>=5.4",
 {% endif %}]
 
@@ -53,6 +54,13 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
+{%- if "pgvector" in batteries %}
+
+[[tool.mypy.overrides]]
+# pgvector ships without PEP 561 type information; ignore its missing stubs.
+module = ["pgvector", "pgvector.*"]
+ignore_missing_imports = true
+{%- endif %}
 {%- if "workers" in batteries %}
 
 [[tool.mypy.overrides]]

@@ -32,6 +32,10 @@ _BATTERIES: dict[str, BatterySpec] = {
         "Strawberry code-first GraphQL endpoint at /graphql over the demo Item model",
         gates_agent="api-design",
     ),
+    "pgvector": BatterySpec(
+        "pgvector",
+        "PostgreSQL pgvector extension + an embeddings table for vector similarity search",
+    ),
 }
 
 

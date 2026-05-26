@@ -1,0 +1,11 @@
+from {{ package_name }}.db.repository import create_item
+from {{ package_name }}.vectors.repository import add_embedding, nearest
+
+
+def test_nearest_returns_by_similarity(db_session):
+    a = create_item(db_session, "a")
+    b = create_item(db_session, "b")
+    add_embedding(db_session, a.id, [1.0] + [0.0] * 1535)
+    add_embedding(db_session, b.id, [0.0, 1.0] + [0.0] * 1534)
+    hits = nearest(db_session, [1.0] + [0.0] * 1535, k=1)
+    assert hits and hits[0].item_id == a.id

@@ -1653,3 +1653,33 @@ def test_render_workers_migration_down_revision(tmp_path: Path):
     render_project(d2, {**DATA, "batteries": ["webhooks", "workers"]})
     mig2 = next((d2 / "migrations" / "versions").glob("0003_*.py")).read_text()
     assert 'down_revision = "0002"' in mig2
+
+
+def test_render_with_pgvector_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["pgvector"]})
+    pkg = dest / "src" / "demo"
+    assert (pkg / "vectors" / "models.py").is_file()
+    assert (pkg / "vectors" / "repository.py").is_file()
+    mig = next((dest / "migrations" / "versions").glob("0004_*.py")).read_text()
+    assert "CREATE EXTENSION" in mig and "vector" in mig
+    assert 'down_revision = "0001"' in mig  # pgvector alone chains to baseline
+    assert "pgvector" in (dest / "pyproject.toml").read_text()
+    assert "pgvector/pgvector" in (dest / "tests" / "conftest.py").read_text()
+    assert (
+        "vectors" in (dest / "migrations" / "env.py").read_text()
+    )  # gated model import
+
+
+def test_render_without_pgvector_clean(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert not (dest / "src" / "demo" / "vectors").exists()
+    assert "pgvector" not in (dest / "pyproject.toml").read_text()
+    assert "pgvector/pgvector" not in (dest / "tests" / "conftest.py").read_text()
+
+
+def test_render_pgvector_battery_is_ruff_format_clean(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["pgvector"]})
+    _assert_ruff_format_clean(dest)

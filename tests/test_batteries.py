@@ -59,3 +59,11 @@ def test_graphql_battery_registered():
     assert "graphql" in battery_names()
     assert get_battery("graphql").requires == ()
     assert resolve(["graphql"]) == ["graphql"]
+
+
+def test_pgvector_battery_registered():
+    from framework_cli.batteries import battery_names, get_battery, resolve
+
+    assert "pgvector" in battery_names()
+    assert get_battery("pgvector").requires == ()
+    assert resolve(["pgvector"]) == ["pgvector"]
