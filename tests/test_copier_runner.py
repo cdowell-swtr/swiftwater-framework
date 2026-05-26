@@ -1713,3 +1713,43 @@ def test_render_mongodb_is_ruff_format_clean(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["mongodb"]})
     _assert_ruff_format_clean(dest)
+
+
+def test_render_mongodb_service_and_obs(tmp_path: Path):
+    import json as _j
+
+    import yaml as _y
+
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb"]})
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    assert "mongo:7" in dev and "mongodb-exporter" in dev
+    prom = (
+        dest / "infra" / "observability" / "prometheus" / "prometheus.yml"
+    ).read_text()
+    assert "mongodb-exporter" in prom
+    assert "APP_MONGO_URL" in (dest / ".env.example").read_text()
+    alerts = (
+        dest
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "mongodb_alerts.yml"
+    )
+    dash = dest / "infra" / "observability" / "grafana" / "dashboards" / "mongodb.json"
+    assert alerts.exists() and dash.exists()
+    assert _y.safe_load(alerts.read_text())["groups"][0]["name"] == "mongodb"
+    assert _j.loads(dash.read_text())["uid"] == "mongodb"
+
+
+def test_render_dev_yml_clean_without_mongodb(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert "mongo" not in (dest / "infra" / "compose" / "dev.yml").read_text()
+    assert (
+        "mongodb"
+        not in (
+            dest / "infra" / "observability" / "prometheus" / "prometheus.yml"
+        ).read_text()
+    )

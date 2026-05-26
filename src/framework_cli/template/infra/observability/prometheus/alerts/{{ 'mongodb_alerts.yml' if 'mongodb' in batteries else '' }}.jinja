@@ -1,0 +1,10 @@
+groups:
+- name: mongodb
+  rules:
+  - alert: MongoDBExporterDown
+    expr: up{job="mongodb"} == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: MongoDB exporter target is down (mongo unreachable or exporter crashed) — app-specific default; tune or remove

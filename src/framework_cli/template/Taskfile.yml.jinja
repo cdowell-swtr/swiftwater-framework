@@ -143,6 +143,11 @@ tasks:
     desc: Run the Celery beat scheduler locally.
     cmds:
       - uv run celery -A {{ package_name }}.tasks.app beat --loglevel=info
+{% endif %}{% if "mongodb" in batteries %}
+  mongo:shell:
+    desc: Open a mongosh shell against the dev Mongo.
+    cmds:
+      - docker compose -f infra/compose/dev.yml exec mongo mongosh
 {% endif %}
   openapi:export:
     desc: Export the OpenAPI schema to openapi.json (commit it; CI diffs it).

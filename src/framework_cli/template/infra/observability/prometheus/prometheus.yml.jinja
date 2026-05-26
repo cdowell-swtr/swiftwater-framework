@@ -23,3 +23,8 @@ scrape_configs:
     static_configs:
       - targets: ["celery-exporter:9808"]
 {%- endif %}
+{%- if "mongodb" in batteries %}
+  - job_name: mongodb
+    static_configs:
+      - targets: ["mongodb-exporter:9216"]
+{%- endif %}
