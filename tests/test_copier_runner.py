@@ -1683,3 +1683,33 @@ def test_render_pgvector_battery_is_ruff_format_clean(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["pgvector"]})
     _assert_ruff_format_clean(dest)
+
+
+def test_render_with_mongodb_core(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb"]})
+    pkg = dest / "src" / "demo"
+    assert (pkg / "mongo" / "client.py").is_file() and (
+        pkg / "mongo" / "repository.py"
+    ).is_file()
+    assert (dest / "tests" / "functional" / "test_mongo.py").is_file()
+    assert "pymongo" in (dest / "pyproject.toml").read_text()
+    assert "mongo_url" in (pkg / "config" / "settings.py").read_text()
+    assert "mongo" in (pkg / "routes" / "health.py").read_text()
+
+
+def test_render_mongodb_core_clean_without(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert not (dest / "src" / "demo" / "mongo").exists()
+    assert "pymongo" not in (dest / "pyproject.toml").read_text()
+    assert (
+        "mongo_url"
+        not in (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    )
+
+
+def test_render_mongodb_is_ruff_format_clean(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb"]})
+    _assert_ruff_format_clean(dest)

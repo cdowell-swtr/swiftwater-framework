@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # Explicit override; if None, resolved_graphql_ide derives it from environment.
     graphql_ide_enabled: bool | None = None
 {%- endif %}
+{%- if "mongodb" in batteries %}
+
+    # MongoDB connection URL (pymongo). The Compose stack injects the in-network URL
+    # via APP_MONGO_URL; the default points to the mongo service in dev.
+    mongo_url: str = "mongodb://mongo:27017/app"
+{%- endif %}
 
     @property
     def resolved_log_level(self) -> str:

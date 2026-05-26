@@ -67,3 +67,11 @@ def test_pgvector_battery_registered():
     assert "pgvector" in battery_names()
     assert get_battery("pgvector").requires == ()
     assert resolve(["pgvector"]) == ["pgvector"]
+
+
+def test_mongodb_battery_registered():
+    from framework_cli.batteries import battery_names, get_battery, resolve
+
+    assert "mongodb" in battery_names()
+    assert get_battery("mongodb").requires == ()
+    assert resolve(["mongodb"]) == ["mongodb"]

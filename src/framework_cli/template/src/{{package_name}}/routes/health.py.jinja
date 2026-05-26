@@ -34,6 +34,15 @@ def health(request: Request) -> JSONResponse:
         report["workers"] = {"alive": False}
     finally:
         _client.close()  # probe fires continuously — don't leak the connection pool
+{% endif -%}
+{% if "mongodb" in batteries %}
+    from {{ package_name }}.mongo.client import get_client as _mongo_client
+
+    try:
+        _mongo_client().admin.command("ping")
+        report["mongo"] = {"alive": True}
+    except Exception:  # mongo unreachable — degrade, never 500 the probe
+        report["mongo"] = {"alive": False}
 {% endif %}
     return JSONResponse(report, status_code=200)
 

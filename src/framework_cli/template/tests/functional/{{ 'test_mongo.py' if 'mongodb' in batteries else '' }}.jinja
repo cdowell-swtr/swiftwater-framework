@@ -1,0 +1,20 @@
+import pytest
+
+
+@pytest.fixture(scope="module")
+def mongo_db():
+    from testcontainers.mongodb import MongoDbContainer
+
+    with MongoDbContainer("mongo:7") as mongo:
+        from pymongo import MongoClient
+
+        client = MongoClient(mongo.get_connection_url())
+        yield client.get_database("test")
+
+
+def test_insert_and_find(mongo_db):
+    from {{ package_name }}.mongo.repository import find_documents, insert_document
+
+    insert_document(mongo_db, {"kind": "note", "body": "hello"})
+    docs = find_documents(mongo_db, {"kind": "note"})
+    assert any(d["body"] == "hello" for d in docs)

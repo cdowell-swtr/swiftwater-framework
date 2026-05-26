@@ -36,6 +36,10 @@ _BATTERIES: dict[str, BatterySpec] = {
         "pgvector",
         "PostgreSQL pgvector extension + an embeddings table for vector similarity search",
     ),
+    "mongodb": BatterySpec(
+        "mongodb",
+        "MongoDB document store (pymongo) with a documents collection + full observability",
+    ),
 }
 
 
