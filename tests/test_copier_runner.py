@@ -1875,3 +1875,17 @@ def test_render_merge_wiring(tmp_path: Path):
     assert "APP_ALERT_WEBHOOK_URL" in env and "GRAFANA_ADMIN_PASSWORD" in env
     strat = (dest / "infra" / "deploy" / "strategy.sh").read_text()
     assert "observability.yml" in strat  # place-image guidance references the overlay
+
+
+def test_render_alertmanager_webhook(tmp_path: Path):
+    import yaml as _y
+
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    am = (
+        dest / "infra" / "observability" / "alertmanager" / "alertmanager.yml"
+    ).read_text()
+    assert "null" not in am  # no longer the null receiver
+    assert "webhook_configs" in am and "url_file" in am
+    cfg = _y.safe_load(am)
+    assert cfg["route"]["receiver"] != "null"

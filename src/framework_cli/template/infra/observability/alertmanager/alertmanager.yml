@@ -1,9 +1,15 @@
 route:
-  receiver: "null"
+  receiver: "default"
   group_by: ["alertname"]
   group_wait: 10s
   group_interval: 1m
   repeat_interval: 1h
 
 receivers:
-  - name: "null"
+  - name: "default"
+    webhook_configs:
+      # The URL is read from a mounted file (the APP_ALERT_WEBHOOK_URL secret, materialized on
+      # deploy at /etc/alertmanager/webhook_url). When the file is absent (e.g. local dev),
+      # alertmanager still loads this config; notifications simply no-op until it exists.
+      - url_file: /etc/alertmanager/webhook_url
+        send_resolved: true

@@ -43,6 +43,8 @@ services:
       - "9093:9093"
     volumes:
       - "../observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"
+      # On deploy, materialize APP_ALERT_WEBHOOK_URL as /etc/alertmanager/webhook_url (a mounted
+      # secret/file) so Alertmanager's webhook receiver can post SLO breaches. Absent locally — fine.
 
   loki:
     image: grafana/loki:3.2.1
