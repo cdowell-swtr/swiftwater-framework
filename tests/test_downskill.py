@@ -222,6 +222,106 @@ def test_remove_battery_graphql_end_to_end(tmp_path, monkeypatch):
     assert CliRunner().invoke(app, ["integrity", "--ci"]).exit_code == 0
 
 
+def test_remove_battery_pgvector_end_to_end(tmp_path, monkeypatch):
+    import subprocess
+
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+    from framework_cli.downskill import remove_battery
+    from framework_cli.source import read_batteries
+
+    monkeypatch.chdir(tmp_path)
+    assert (
+        CliRunner().invoke(app, ["new", "My App", "--with", "pgvector"]).exit_code == 0
+    )
+    project = tmp_path / "my-app"
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "add", "-A"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(project),
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "user.email=b@b",
+            "-c",
+            "user.name=b",
+            "commit",
+            "-qm",
+            "scaffold",
+        ],
+        check=True,
+    )
+
+    report = remove_battery(project, "pgvector", force=False)  # no --force needed
+
+    assert not (project / "src" / "my_app" / "vectors").exists()
+    assert "pgvector" not in (project / "pyproject.toml").read_text()
+    # the 0004 migration is OWNED → PRESERVED + warned (a DB may be at that revision)
+    assert (project / "migrations" / "versions" / "0004_embeddings.py").is_file()
+    assert any("0004_embeddings" in p for p in report.preserved)
+    # the gated env.py model import must be stripped (else alembic ModuleNotFoundErrors)
+    assert "vectors" not in (project / "migrations" / "env.py").read_text()
+    assert read_batteries(project) == []
+    monkeypatch.chdir(project)
+    assert CliRunner().invoke(app, ["integrity", "--ci"]).exit_code == 0
+
+
+def test_remove_battery_mongodb_end_to_end(tmp_path, monkeypatch):
+    import subprocess
+
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+    from framework_cli.downskill import remove_battery
+    from framework_cli.source import read_batteries
+
+    monkeypatch.chdir(tmp_path)
+    assert (
+        CliRunner().invoke(app, ["new", "My App", "--with", "mongodb"]).exit_code == 0
+    )
+    project = tmp_path / "my-app"
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "add", "-A"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(project),
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "user.email=b@b",
+            "-c",
+            "user.name=b",
+            "commit",
+            "-qm",
+            "scaffold",
+        ],
+        check=True,
+    )
+
+    remove_battery(project, "mongodb", force=False)  # no --force needed
+
+    assert not (project / "src" / "my_app" / "mongo").exists()
+    assert "pymongo" not in (project / "pyproject.toml").read_text()
+    assert (
+        "mongo_url"
+        not in (project / "src" / "my_app" / "config" / "settings.py").read_text()
+    )
+    assert "APP_MONGO_URL" not in (project / ".env.example").read_text()
+    assert "mongo" not in (project / "infra" / "compose" / "dev.yml").read_text()
+    assert (
+        "mongo" not in (project / "src" / "my_app" / "routes" / "health.py").read_text()
+    )
+    assert read_batteries(project) == []
+    monkeypatch.chdir(project)
+    assert CliRunner().invoke(app, ["integrity", "--ci"]).exit_code == 0
+
+
 def test_remove_battery_usage_refusal(tmp_path, monkeypatch):
     import subprocess
 
