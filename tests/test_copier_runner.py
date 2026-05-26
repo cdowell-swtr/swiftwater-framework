@@ -1837,3 +1837,28 @@ def test_render_dev_yml_core_obs_removed(tmp_path: Path):
     assert "grafana" in dev["services"]
     # app + postgres + traefik stay:
     assert "traefik" in dev["services"] and "postgres" in dev["services"]
+
+
+def test_render_postgres_obs(tmp_path: Path):
+    import json as _j
+
+    import yaml as _y
+
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})  # baseline — postgres is always-on
+    prom = (
+        dest / "infra" / "observability" / "prometheus" / "prometheus.yml"
+    ).read_text()
+    assert "job_name: postgres" in prom
+    alerts = (
+        dest
+        / "infra"
+        / "observability"
+        / "prometheus"
+        / "alerts"
+        / "postgres_alerts.yml"
+    )
+    dash = dest / "infra" / "observability" / "grafana" / "dashboards" / "postgres.json"
+    assert alerts.exists() and dash.exists()
+    assert _y.safe_load(alerts.read_text())["groups"][0]["name"] == "postgres"
+    assert _j.loads(dash.read_text())["uid"] == "postgres"

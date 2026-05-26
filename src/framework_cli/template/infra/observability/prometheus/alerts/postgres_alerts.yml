@@ -1,0 +1,10 @@
+groups:
+- name: postgres
+  rules:
+  - alert: PostgresDown
+    expr: up{job="postgres"} == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Postgres exporter target is down (postgres unreachable or exporter crashed) — app-specific default; tune or remove
