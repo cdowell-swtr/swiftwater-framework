@@ -2051,3 +2051,81 @@ def test_render_services_deploy_guidance(tmp_path: Path):
     assert "services.yml" in strat  # place-image guidance merges the services overlay
     readme = (dest / "infra" / "deploy" / "README.md").read_text()
     assert "services.yml" in readme and "managed" in readme.lower()
+
+
+def test_dev_and_services_images_match(tmp_path: Path):
+    """Image-drift guard: dev.yml and services.yml must pin the same image tags."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb", "workers"]})
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    svc = (dest / "infra" / "compose" / "services.yml").read_text()
+    for image in ("mongo:7", "redis:7-alpine"):
+        assert image in dev and image in svc, (
+            f"{image} drifted between dev.yml and services.yml"
+        )
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_prod_plus_services_plus_obs_merges(tmp_path: Path):
+    """Docker compose config merge-validation: proves prod+services+obs wiring is correct.
+
+    Asserts the headline SVC-PROD property: prod.yml + services.yml + observability.yml
+    produces a valid topology with worker/beat on the promoted image (APP_RUN_MIGRATIONS=false),
+    mongo/redis, app/postgres, and both battery exporters. dev:lite remains clean (no workers).
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb", "workers"]})
+    comp = dest / "infra" / "compose"
+    env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
+    r = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp / "prod.yml"),
+            "-f",
+            str(comp / "services.yml"),
+            "-f",
+            str(comp / "observability.yml"),
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    for svc in (
+        "worker",
+        "beat",
+        "redis",
+        "mongo",
+        "app",
+        "postgres",
+        "mongodb-exporter",
+        "celery-exporter",
+        "prometheus",
+    ):
+        assert svc in r.stdout, f"{svc} missing from prod+services+obs merge"
+    # worker/beat run the promoted image with APP_RUN_MIGRATIONS=false
+    assert "APP_RUN_MIGRATIONS" in r.stdout and "demo:ci" in r.stdout
+
+    # dev:lite (no overlays) still has its data stores + NO worker/beat/exporters:
+    r2 = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp / "base.yml"),
+            "-f",
+            str(comp / "dev.yml"),
+            "--profile",
+            "lite",
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ},
+    )
+    assert r2.returncode == 0 and "redis" in r2.stdout and "worker" not in r2.stdout
