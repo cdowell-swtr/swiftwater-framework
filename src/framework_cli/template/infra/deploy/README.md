@@ -102,6 +102,24 @@ overrides to anonymous). Materialize `APP_ALERT_WEBHOOK_URL` as the Alertmanager
 on the target (Task 4 wires `url_file` in `alertmanager.yml`); provide it as a mounted secret,
 not a bare env var.
 
+## Battery services in staging/prod
+
+Battery data stores (MongoDB, Redis) and Celery workers live in `infra/compose/services.yml`.
+Your `__target_place_image` hook must merge it alongside `observability.yml`:
+
+```bash
+docker compose -f infra/compose/$DEPLOY_ENV.yml -f infra/compose/services.yml -f infra/compose/observability.yml up -d
+```
+
+Worker and beat services run the promoted `${APP_IMAGE}` with `APP_RUN_MIGRATIONS=false` — the
+app (or a pre-roll migrate step) runs `alembic upgrade head` once; workers must not race it.
+
+**Managed escape hatch:** to use a managed MongoDB or Redis instead of the self-hosted
+containers, set `APP_MONGO_URL`, `APP_REDIS_URL`, `APP_CELERY_BROKER_URL`, and
+`APP_CELERY_RESULT_BACKEND` to the managed endpoint (as target secrets) and omit the
+data-store services from the merge. Worker and beat services stay self-hosted (they run the
+app image) and connect to the managed broker via the env vars above.
+
 ## Notifications
 
 `notify.sh` logs by default. Wire your channel there (reuse the Alertmanager destination).

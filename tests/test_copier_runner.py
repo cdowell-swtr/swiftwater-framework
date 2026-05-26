@@ -2042,3 +2042,12 @@ def test_render_exporters_in_observability_overlay(tmp_path: Path):
         dev = (dest / "infra" / "compose" / "dev.yml").read_text()
         assert exporter in obs, f"{exporter} should be in observability.yml"
         assert exporter not in dev, f"{exporter} should be gone from dev.yml"
+
+
+def test_render_services_deploy_guidance(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    strat = (dest / "infra" / "deploy" / "strategy.sh").read_text()
+    assert "services.yml" in strat  # place-image guidance merges the services overlay
+    readme = (dest / "infra" / "deploy" / "README.md").read_text()
+    assert "services.yml" in readme and "managed" in readme.lower()

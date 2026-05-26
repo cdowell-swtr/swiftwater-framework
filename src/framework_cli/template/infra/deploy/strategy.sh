@@ -29,8 +29,11 @@ _todo() {
 # until healthy. Merge the observability overlay (`-f infra/compose/observability.yml`) so
 # staging/prod run the full monitoring stack (the framework's observability contract); provide
 # `GRAFANA_ADMIN_PASSWORD` and the alertmanager webhook file as target secrets (see infra/deploy/README.md).
+# Merge `services.yml` so a battery-using project's data stores + worker/beat run in staging/prod
+# (set `APP_IMAGE`/`POSTGRES_PASSWORD`). For a managed data store instead, point
+# `APP_MONGO_URL`/`APP_REDIS_URL`/`APP_CELERY_*` at it and omit the data-store services — see README.
 # (compose-over-SSH e.g.: scp the compose files, then over ssh
-# `APP_IMAGE=$APP_IMAGE POSTGRES_PASSWORD=$POSTGRES_PASSWORD docker compose -f <env>.yml -f infra/compose/observability.yml up -d`.)
+# `APP_IMAGE=$APP_IMAGE POSTGRES_PASSWORD=$POSTGRES_PASSWORD docker compose -f <env>.yml -f infra/compose/services.yml -f infra/compose/observability.yml up -d`.)
 __target_place_image() { _todo __target_place_image "pull \$APP_IMAGE and start it from infra/compose/\$DEPLOY_ENV.yml without routing traffic until healthy"; }
 
 # Reverse/apply migrations against the target's stores. \$* is the migration command; the
