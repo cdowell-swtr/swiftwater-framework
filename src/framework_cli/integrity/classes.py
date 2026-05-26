@@ -32,6 +32,7 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "infra/compose/dev.yml",
     "infra/compose/observability.yml",
     "infra/compose/prod.yml",
+    "infra/compose/services.yml",
     "infra/compose/staging.yml",
     "infra/compose/test.yml",
     "infra/deploy/strategy.sh",

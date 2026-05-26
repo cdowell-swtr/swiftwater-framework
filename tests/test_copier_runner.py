@@ -1986,3 +1986,36 @@ def test_prod_plus_overlay_merges_with_obs_stack(tmp_path: Path) -> None:
     assert "GF_AUTH_ANONYMOUS_ENABLED" in r3.stdout, (
         "dev grafana must have GF_AUTH_ANONYMOUS_ENABLED — dev.yml override must win over the overlay"
     )
+
+
+def test_render_services_overlay_workers(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    svc = (dest / "infra" / "compose" / "services.yml").read_text()
+    import yaml as _y
+
+    cfg = _y.safe_load(svc)
+    assert (
+        "redis" in cfg["services"]
+        and "worker" in cfg["services"]
+        and "beat" in cfg["services"]
+    )
+    assert "${APP_IMAGE" in svc and 'APP_RUN_MIGRATIONS: "false"' in svc
+    assert "celery" in svc and "redisdata" in cfg["volumes"]
+
+
+def test_render_services_overlay_mongodb(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb"]})
+    cfg = __import__("yaml").safe_load(
+        (dest / "infra" / "compose" / "services.yml").read_text()
+    )
+    assert "mongo" in cfg["services"] and "mongodata" in cfg["volumes"]
+
+
+def test_render_services_overlay_empty_is_valid(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})  # no battery → valid YAML no-op (comment only)
+    svc = (dest / "infra" / "compose" / "services.yml").read_text()
+    parsed = __import__("yaml").safe_load(svc)  # must not raise
+    assert not (parsed or {}).get("services")  # no battery services

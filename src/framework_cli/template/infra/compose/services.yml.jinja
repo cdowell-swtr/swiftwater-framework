@@ -1,0 +1,76 @@
+# Battery-service overlay for staging/prod — merged by the deploy (infra/deploy/strategy.sh)
+# alongside observability.yml: `-f $DEPLOY_ENV.yml -f services.yml -f observability.yml`. Defines
+# the battery data stores + worker/beat for prod/staging (dev keeps its own build-based, profiled
+# copies in dev.yml). Managed alternative: point APP_MONGO_URL / APP_REDIS_URL / APP_CELERY_* at a
+# managed instance and omit the data-store services here (worker/beat stay self-hosted).
+{%- if "mongodb" in batteries or "workers" in batteries %}
+services:
+{%- if "mongodb" in batteries %}
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping').ok\" | grep -q 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - "mongodata:/data/db"
+{%- endif %}
+{%- if "workers" in batteries %}
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - "redisdata:/data"
+
+  worker:
+    image: ${APP_IMAGE:?set APP_IMAGE to the promoted registry tag}
+    restart: unless-stopped
+    command: ["celery", "-A", "{{ package_name }}.tasks.app", "worker", "--loglevel=info"]
+    environment:
+      APP_RUN_MIGRATIONS: "false"
+      APP_DATABASE_URL: "postgresql+psycopg://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/app"
+      APP_REDIS_URL: "redis://redis:6379/0"
+      APP_CELERY_BROKER_URL: "redis://redis:6379/0"
+      APP_CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+    healthcheck:
+      test: ["CMD", "celery", "-A", "{{ package_name }}.tasks.app", "inspect", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  beat:
+    image: ${APP_IMAGE:?set APP_IMAGE to the promoted registry tag}
+    restart: unless-stopped
+    command: ["celery", "-A", "{{ package_name }}.tasks.app", "beat", "--loglevel=info"]
+    environment:
+      APP_RUN_MIGRATIONS: "false"
+      APP_REDIS_URL: "redis://redis:6379/0"
+      APP_CELERY_BROKER_URL: "redis://redis:6379/0"
+      APP_CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+    depends_on:
+      redis:
+        condition: service_healthy
+{%- endif %}
+
+volumes:
+{%- if "mongodb" in batteries %}
+  mongodata: {}
+{%- endif %}
+{%- if "workers" in batteries %}
+  redisdata: {}
+{%- endif %}
+{%- endif %}
