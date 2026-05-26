@@ -1,7 +1,10 @@
 import json
+import os
+import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 from framework_cli.copier_runner import render_project
@@ -1889,3 +1892,97 @@ def test_render_alertmanager_webhook(tmp_path: Path):
     assert "webhook_configs" in am and "url_file" in am
     cfg = _y.safe_load(am)
     assert cfg["route"]["receiver"] != "null"
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_prod_plus_overlay_merges_with_obs_stack(tmp_path: Path) -> None:
+    """Docker compose config merge-validation: proves the obs overlay wiring is correct.
+
+    Three scenarios:
+    1. prod + overlay → valid topology including obs stack + app + postgres; grafana auth-required.
+    2. dev:lite (base + dev, no overlay) → NO obs services.
+    3. dev (base + overlay + dev) → grafana anonymous (dev override wins via merge order).
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    comp = dest / "infra" / "compose"
+    base_env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
+
+    # --- Scenario 1: prod + overlay → full obs stack, auth-required grafana ---
+
+    r = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp / "prod.yml"),
+            "-f",
+            str(comp / "observability.yml"),
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env=base_env,
+    )
+    assert r.returncode == 0, f"prod + overlay compose config failed:\n{r.stderr}"
+    for svc in (
+        "prometheus",
+        "grafana",
+        "alertmanager",
+        "postgres-exporter",
+        "app",
+        "postgres",
+    ):
+        assert svc in r.stdout, f"service '{svc}' missing from prod+overlay config"
+    # prod grafana must NOT have anonymous auth (the overlay is prod-safe):
+    assert "GF_AUTH_ANONYMOUS_ENABLED" not in r.stdout, (
+        "prod grafana must not have GF_AUTH_ANONYMOUS_ENABLED — the overlay is prod-safe"
+    )
+
+    # --- Scenario 2: dev:lite (base + dev, no overlay) → no obs services ---
+    r2 = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp / "base.yml"),
+            "-f",
+            str(comp / "dev.yml"),
+            "--profile",
+            "lite",
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ},
+    )
+    assert r2.returncode == 0, f"dev:lite compose config failed:\n{r2.stderr}"
+    assert "prometheus" not in r2.stdout, (
+        "dev:lite must not include prometheus — the overlay was not merged"
+    )
+
+    # --- Scenario 3: dev (base + overlay + dev) → grafana is anonymous (dev override wins) ---
+    r3 = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp / "base.yml"),
+            "-f",
+            str(comp / "observability.yml"),
+            "-f",
+            str(comp / "dev.yml"),
+            "--profile",
+            "dev",
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ},
+    )
+    assert r3.returncode == 0, f"dev compose config failed:\n{r3.stderr}"
+    assert "GF_AUTH_ANONYMOUS_ENABLED" in r3.stdout, (
+        "dev grafana must have GF_AUTH_ANONYMOUS_ENABLED — dev.yml override must win over the overlay"
+    )
