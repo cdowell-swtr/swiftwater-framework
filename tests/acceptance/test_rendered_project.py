@@ -1049,3 +1049,98 @@ def test_rendered_project_with_graphql_battery_passes(tmp_path: Path):
         "mutation + introspection-off tests in test_graphql.py collected and did they pass?\n"
         + combined_output
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: real Postgres with pgvector extension",
+)
+def test_rendered_project_with_pgvector_battery_passes(tmp_path: Path):
+    # Renders a project with the pgvector battery active, asserts the battery files
+    # were emitted, then runs unit+functional (70% gate) to confirm the vectors functional
+    # test (tests/functional/test_vectors.py) is collected and passes — exercising the
+    # 0004_embeddings migration, add_embedding, and nearest (similarity search) against
+    # a real pgvector/pgvector:pg17 Postgres testcontainer.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["pgvector"]})
+
+    # Battery files must exist in the rendered project.
+    assert (dest / "src" / "demo" / "vectors" / "repository.py").exists(), (
+        "vectors/repository.py was not rendered by the pgvector battery"
+    )
+    assert (dest / "src" / "demo" / "vectors" / "models.py").exists(), (
+        "vectors/models.py was not rendered by the pgvector battery"
+    )
+    assert (dest / "tests" / "functional" / "test_vectors.py").exists(), (
+        "tests/functional/test_vectors.py was not rendered by the pgvector battery"
+    )
+    assert (dest / "migrations" / "versions" / "0004_embeddings.py").exists(), (
+        "migrations/versions/0004_embeddings.py was not rendered by the pgvector battery"
+    )
+
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+
+    # Run unit + functional tiers (70% gate) — alembic upgrade head applies the 0004
+    # migration (CREATE EXTENSION vector + embeddings table) using the pgvector/pgvector:pg17
+    # testcontainers image, then test_vectors.py inserts two embeddings and asserts that
+    # nearest() returns the closer one by cosine distance.
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional gate did not pass for the pgvector battery project:\n"
+        + result.stdout
+        + result.stderr
+    )
+    # Prove the vectors functional test actually RAN: vectors/repository.py reaches 100%
+    # only when test_vectors.py exercises both add_embedding and nearest against the real DB
+    # (import-time alone would yield 0% — these are plain functions, not imported by routes).
+    cov = result.stdout + result.stderr
+    line = next((ln for ln in cov.splitlines() if "vectors/repository.py" in ln), "")
+    assert "100%" in line, (
+        f"vectors repo not fully exercised; coverage line: {line!r}\n"
+        "Expected 100% coverage of vectors/repository.py — was "
+        "tests/functional/test_vectors.py collected and did it pass?\n" + cov
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: real Postgres with pgvector extension",
+)
+def test_rendered_project_migration_chain_webhooks_workers_pgvector(tmp_path: Path):
+    # Renders a project with webhooks + workers + pgvector batteries, verifies the full
+    # migration chain (0001 → 0002 webhook_events → 0003 dead_letter → 0004 embeddings)
+    # applies cleanly via alembic upgrade head (driven by the engine fixture in conftest),
+    # and the 70% unit+functional gate passes across all three batteries together.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["webhooks", "workers", "pgvector"]})
+
+    # All three battery migration files must be present with the correct chain.
+    assert (dest / "migrations" / "versions" / "0002_webhook_events.py").exists(), (
+        "0002_webhook_events.py was not rendered"
+    )
+    assert (dest / "migrations" / "versions" / "0003_dead_letter.py").exists(), (
+        "0003_dead_letter.py was not rendered"
+    )
+    assert (dest / "migrations" / "versions" / "0004_embeddings.py").exists(), (
+        "0004_embeddings.py was not rendered"
+    )
+
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+
+    # Run unit + functional tiers (70% gate) — alembic upgrade head walks 0001→0002→0003→0004,
+    # so a failure here proves the chain did not apply (the pgvector extension must be available
+    # via the pgvector/pgvector:pg17 image used by the testcontainers conftest fixture).
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "0001->0002->0003->0004 chain did not apply:\n" + result.stdout + result.stderr
+    )
