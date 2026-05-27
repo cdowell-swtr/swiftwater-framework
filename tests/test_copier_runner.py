@@ -2437,3 +2437,33 @@ def test_render_redis_cache_package(tmp_path):
     base = tmp_path / "base"
     render_project(base, {**DATA, "batteries": []})
     assert not (base / "src" / "demo" / "cache").exists()
+
+
+def test_render_redis_observability(tmp_path):
+    for bats in (["redis"], ["workers"], ["workers", "redis"]):
+        d = tmp_path / "_".join(bats)
+        render_project(d, {**DATA, "batteries": bats})
+        obs = (d / "infra" / "compose" / "observability.yml").read_text()
+        assert obs.count("\n  redis-exporter:\n") == 1, (bats, "one redis-exporter")
+        prom = (
+            d / "infra" / "observability" / "prometheus" / "prometheus.yml"
+        ).read_text()
+        assert "job_name: redis" in prom
+        assert (
+            d / "infra" / "observability" / "prometheus" / "alerts" / "redis_alerts.yml"
+        ).exists()
+        assert (
+            d / "infra" / "observability" / "grafana" / "dashboards" / "redis.json"
+        ).exists()
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert (
+        "redis-exporter"
+        not in (base / "infra" / "compose" / "observability.yml").read_text()
+    )
+    assert (
+        "job_name: redis"
+        not in (
+            base / "infra" / "observability" / "prometheus" / "prometheus.yml"
+        ).read_text()
+    )

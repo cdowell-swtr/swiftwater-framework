@@ -31,3 +31,8 @@ scrape_configs:
     static_configs:
       - targets: ["mongodb-exporter:9216"]
 {%- endif %}
+{%- if "redis" in batteries or "workers" in batteries %}
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+{%- endif %}

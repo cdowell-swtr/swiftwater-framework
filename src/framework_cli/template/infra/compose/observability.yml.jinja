@@ -112,6 +112,17 @@ services:
       redis:
         condition: service_healthy
 {%- endif %}
+{%- if "redis" in batteries or "workers" in batteries %}
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    command: ["--redis.addr=redis://redis:6379"]
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+{%- endif %}
 
 volumes:
   promdata: {}
