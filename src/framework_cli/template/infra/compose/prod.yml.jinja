@@ -28,6 +28,9 @@ services:
 {%- else %}
     image: postgres:17
 {%- endif %}
+{%- if "timescaledb" in batteries %}
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
+{%- endif %}
     restart: unless-stopped
     environment:
       POSTGRES_USER: app

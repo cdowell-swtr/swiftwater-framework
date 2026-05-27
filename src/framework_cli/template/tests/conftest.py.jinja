@@ -42,6 +42,9 @@ def pg_url() -> Iterator[str]:
         )
         image.build()  # tag persists for Docker layer cache; fine for a test image
         container = PostgresContainer(str(image), driver="psycopg")
+{%- if "timescaledb" in batteries %}
+        container = container.with_command("postgres -c shared_preload_libraries=timescaledb")
+{%- endif %}
         container.start()
 {%- else %}
         container = PostgresContainer("postgres:17", driver="psycopg")

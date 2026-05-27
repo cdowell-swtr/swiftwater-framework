@@ -1,0 +1,15 @@
+from datetime import datetime, timedelta, timezone
+
+from {{ package_name }}.db.repository import create_item
+from {{ package_name }}.timeseries.repository import add_reading, bucketed_averages
+
+
+def test_bucketed_averages_aggregates_by_time(db_session):
+    item = create_item(db_session, "sensor")
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    add_reading(db_session, item.id, base, 10.0)
+    add_reading(db_session, item.id, base + timedelta(minutes=10), 20.0)
+    add_reading(db_session, item.id, base + timedelta(hours=2), 5.0)
+    buckets = bucketed_averages(db_session, "1 hour")
+    assert len(buckets) == 2  # two distinct hourly buckets
+    assert buckets[0][1] == 15.0  # avg(10, 20)

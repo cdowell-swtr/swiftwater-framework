@@ -1232,3 +1232,25 @@ def test_rendered_pgvector_builds_extension_image_and_migrates(tmp_path: Path):
         + result.stdout
         + result.stderr
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: builds the TimescaleDB image and runs the live test stack",
+)
+def test_rendered_timescaledb_battery_passes(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["timescaledb"]})
+    assert (dest / "migrations" / "versions" / "0005_readings.py").exists()
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "timescaledb gate failed (create_hypertable / time_bucket on the built image?):\n"
+        + result.stdout
+        + result.stderr
+    )

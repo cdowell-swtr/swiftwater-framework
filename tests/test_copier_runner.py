@@ -2139,6 +2139,30 @@ def test_prod_plus_services_plus_obs_merges(tmp_path: Path):
     assert r2.returncode == 0 and "redis" in r2.stdout and "worker" not in r2.stdout
 
 
+def test_timescaledb_migration_ordering():
+    from framework_cli.migrations import migration_down_revisions
+
+    assert migration_down_revisions(["timescaledb"]) == {"timescaledb": "0001"}
+    assert migration_down_revisions(["pgvector", "timescaledb"]) == {
+        "pgvector": "0001",
+        "timescaledb": "0004",
+    }
+
+
+def test_render_timescaledb_battery(tmp_path):
+    dest = tmp_path / "ts"
+    render_project(dest, {**DATA, "batteries": ["timescaledb"]})
+    assert (dest / "src" / "demo" / "timeseries" / "repository.py").exists()
+    mig = (dest / "migrations" / "versions" / "0005_readings.py").read_text()
+    assert "create_hypertable" in mig
+    assert 'down_revision = "0001"' in mig
+    df = (dest / "infra" / "docker" / "postgres.Dockerfile").read_text()
+    assert "timescaledb-2-postgresql-17" in df
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    assert "shared_preload_libraries=timescaledb" in dev
+    assert "timeseries import models" in (dest / "migrations" / "env.py").read_text()
+
+
 def test_uses_postgres_extension_render_switches_postgres_image(tmp_path):
     """With pgvector, dev/test Postgres build the custom Dockerfile; baseline stays postgres:17."""
     base = tmp_path / "base"
