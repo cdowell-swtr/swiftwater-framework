@@ -2158,3 +2158,19 @@ def test_uses_postgres_extension_render_switches_postgres_image(tmp_path):
     test = (ext / "infra" / "compose" / "test.yml").read_text()
     assert "dockerfile: infra/docker/postgres.Dockerfile" in test
     assert "image: postgres:17" not in test
+
+
+def test_prod_staging_postgres_image_switches_for_extensions(tmp_path):
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert "image: postgres:17" in (base / "infra" / "compose" / "prod.yml").read_text()
+    assert (
+        "image: postgres:17" in (base / "infra" / "compose" / "staging.yml").read_text()
+    )
+
+    ext = tmp_path / "ext"
+    render_project(ext, {**DATA, "batteries": ["pgvector"]})
+    prod = (ext / "infra" / "compose" / "prod.yml").read_text()
+    assert "${POSTGRES_IMAGE" in prod and "image: postgres:17" not in prod
+    staging = (ext / "infra" / "compose" / "staging.yml").read_text()
+    assert "${POSTGRES_IMAGE" in staging

@@ -1,13 +1,12 @@
-# Staging topology — production-equivalent. The configured deploy strategy (infra/deploy/)
-# runs the SAME registry image (APP_IMAGE) against this definition on the staging target.
-# No bind mounts, no hot reload, no dev tooling. Secrets come from the target's environment.
+# Production topology — the SAME registry image promoted from staging (no rebuild), run
+# against this definition by the configured deploy strategy. Secrets from the target env.
 services:
   app:
-    image: ${APP_IMAGE:?set APP_IMAGE to the pushed registry tag}
+    image: ${APP_IMAGE:?set APP_IMAGE to the promoted registry tag}
     restart: unless-stopped
     environment:
       TZ: UTC
-      APP_ENVIRONMENT: staging
+      APP_ENVIRONMENT: prod
       APP_DATABASE_URL: "postgresql+psycopg://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/app"
     ports:
       - "8000:8000"
@@ -24,7 +23,11 @@ services:
         condition: service_healthy
 
   postgres:
+{%- if uses_postgres_extension %}
+    image: ${POSTGRES_IMAGE:?set POSTGRES_IMAGE to the built+pushed custom Postgres tag (extensions baked in)}
+{%- else %}
     image: postgres:17
+{%- endif %}
     restart: unless-stopped
     environment:
       POSTGRES_USER: app

@@ -120,6 +120,23 @@ containers, set `APP_MONGO_URL`, `APP_REDIS_URL`, `APP_CELERY_BROKER_URL`, and
 data-store services from the merge. Worker and beat services stay self-hosted (they run the
 app image) and connect to the managed broker via the env vars above.
 
+## Custom Postgres image (extension batteries)
+
+Extension batteries (pgvector, timescaledb) bake their extensions into a custom Postgres image via
+`infra/docker/postgres.Dockerfile`. Dev and test compose files build this image from the local
+Dockerfile; prod and staging reference it via `${POSTGRES_IMAGE}`.
+
+**Self-host:** build and push the custom image alongside `APP_IMAGE`, then set `POSTGRES_IMAGE`:
+
+```bash
+docker build -f infra/docker/postgres.Dockerfile -t $POSTGRES_IMAGE . && docker push $POSTGRES_IMAGE
+```
+
+**Managed escape hatch:** point `APP_DATABASE_URL` at a managed Postgres instance that already
+provides the required extensions (e.g. RDS with pgvector, Timescale Cloud, Supabase, or Cloud SQL).
+Leave `POSTGRES_IMAGE` unset and omit the self-hosted `postgres` service from the merge — the
+managed instance handles the data tier.
+
 ## Notifications
 
 `notify.sh` logs by default. Wire your channel there (reuse the Alertmanager destination).
