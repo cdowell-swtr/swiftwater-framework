@@ -2173,4 +2173,4 @@ def test_prod_staging_postgres_image_switches_for_extensions(tmp_path):
     prod = (ext / "infra" / "compose" / "prod.yml").read_text()
     assert "${POSTGRES_IMAGE" in prod and "image: postgres:17" not in prod
     staging = (ext / "infra" / "compose" / "staging.yml").read_text()
-    assert "${POSTGRES_IMAGE" in staging
+    assert "${POSTGRES_IMAGE" in staging and "image: postgres:17" not in staging

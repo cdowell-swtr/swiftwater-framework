@@ -41,6 +41,7 @@ then, implement the hooks below for your target.
 | `DEPLOY_BASE_URL` | Environment variable | the deployment's base URL (endpoints + health-gate) |
 | `APP_IMAGE` | set by the workflow | the pushed registry tag |
 | `POSTGRES_PASSWORD` | **target env + GitHub Environment secret** | DB credential, injected at runtime |
+| `POSTGRES_IMAGE` | set by the workflow **(only with an extension battery)** | the built+pushed custom Postgres tag — see "Custom Postgres image" below |
 | every var in `.env.example` | **the target's environment** | the app reads config from the target's env — NEVER baked into the image |
 
 Set application config + secrets **in the target's environment** (or the platform's secret
