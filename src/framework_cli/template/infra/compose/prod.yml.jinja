@@ -28,8 +28,11 @@ services:
 {%- else %}
     image: postgres:17
 {%- endif %}
-{%- if "timescaledb" in batteries %}
-    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
+{%- set _preloads = [] %}
+{%- if "timescaledb" in batteries %}{% set _ = _preloads.append("timescaledb") %}{% endif %}
+{%- if "age" in batteries %}{% set _ = _preloads.append("age") %}{% endif %}
+{%- if _preloads %}
+    command: ["postgres", "-c", "shared_preload_libraries={{ _preloads | join(',') }}"]
 {%- endif %}
     restart: unless-stopped
     environment:

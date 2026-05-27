@@ -42,8 +42,11 @@ def pg_url() -> Iterator[str]:
         )
         image.build()  # tag persists for Docker layer cache; fine for a test image
         container = PostgresContainer(str(image), driver="psycopg")
-{%- if "timescaledb" in batteries %}
-        container = container.with_command("postgres -c shared_preload_libraries=timescaledb")
+{%- set _preloads = [] %}
+{%- if "timescaledb" in batteries %}{% set _ = _preloads.append("timescaledb") %}{% endif %}
+{%- if "age" in batteries %}{% set _ = _preloads.append("age") %}{% endif %}
+{%- if _preloads %}
+        container = container.with_command("postgres -c shared_preload_libraries={{ _preloads | join(',') }}")
 {%- endif %}
         container.start()
 {%- else %}

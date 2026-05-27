@@ -11,13 +11,20 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 # Canonical order of migration-adding batteries (others add no alembic migration).
-MIGRATION_ORDER: tuple[str, ...] = ("webhooks", "workers", "pgvector", "timescaledb")
+MIGRATION_ORDER: tuple[str, ...] = (
+    "webhooks",
+    "workers",
+    "pgvector",
+    "timescaledb",
+    "age",
+)
 # Fixed revision id per battery (baseline is 0001).
 REVISIONS: dict[str, str] = {
     "webhooks": "0002",
     "workers": "0003",
     "pgvector": "0004",
     "timescaledb": "0005",
+    "age": "0006",
 }
 
 if set(MIGRATION_ORDER) != set(REVISIONS):  # pragma: no cover - authoring guard

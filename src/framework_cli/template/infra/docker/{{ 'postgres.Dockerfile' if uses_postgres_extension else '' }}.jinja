@@ -24,3 +24,11 @@ RUN apt-get update \
  && apt-get purge -y --auto-remove gnupg wget lsb-release \
  && rm -rf /var/lib/apt/lists/*
 {%- endif %}
+{%- if "age" in batteries %}
+
+# Apache AGE — openCypher graph queries on Postgres (multi-stage COPY of the prebuilt PG17
+# extension; AGE has no apt package). Requires shared_preload_libraries=age at runtime.
+COPY --from=apache/age:release_PG17_1.6.0 /usr/lib/postgresql/17/lib/age.so /usr/lib/postgresql/17/lib/age.so
+COPY --from=apache/age:release_PG17_1.6.0 /usr/share/postgresql/17/extension/age--1.6.0.sql /usr/share/postgresql/17/extension/age--1.6.0.sql
+COPY --from=apache/age:release_PG17_1.6.0 /usr/share/postgresql/17/extension/age.control /usr/share/postgresql/17/extension/age.control
+{%- endif %}

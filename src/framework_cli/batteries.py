@@ -40,6 +40,14 @@ _BATTERIES: dict[str, BatterySpec] = {
         "mongodb",
         "MongoDB document store (pymongo) with a documents collection + full observability",
     ),
+    "timescaledb": BatterySpec(
+        "timescaledb",
+        "PostgreSQL TimescaleDB extension + a readings hypertable for time-series data",
+    ),
+    "age": BatterySpec(
+        "age",
+        "Apache AGE openCypher graph queries on Postgres (no new service)",
+    ),
 }
 
 

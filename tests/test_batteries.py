@@ -75,3 +75,19 @@ def test_mongodb_battery_registered():
     assert "mongodb" in battery_names()
     assert get_battery("mongodb").requires == ()
     assert resolve(["mongodb"]) == ["mongodb"]
+
+
+def test_timescaledb_battery_registered():
+    from framework_cli.batteries import battery_names, get_battery, resolve
+
+    assert "timescaledb" in battery_names()
+    assert get_battery("timescaledb").requires == ()
+    assert resolve(["timescaledb"]) == ["timescaledb"]
+
+
+def test_age_battery_registered():
+    from framework_cli.batteries import battery_names, get_battery, resolve
+
+    assert "age" in battery_names()
+    assert get_battery("age").requires == ()
+    assert resolve(["age"]) == ["age"]

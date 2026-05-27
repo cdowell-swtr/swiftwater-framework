@@ -27,5 +27,5 @@ batteries:
 uses_postgres_extension:
   type: bool
   help: "(computed) any battery that installs a Postgres extension is active"
-  default: "{{ 'pgvector' in batteries or 'timescaledb' in batteries }}"
+  default: "{{ 'pgvector' in batteries or 'timescaledb' in batteries or 'age' in batteries }}"
   when: false

@@ -2207,3 +2207,36 @@ def test_prod_staging_postgres_image_switches_for_extensions(tmp_path):
     assert "${POSTGRES_IMAGE" in prod and "image: postgres:17" not in prod
     staging = (ext / "infra" / "compose" / "staging.yml").read_text()
     assert "${POSTGRES_IMAGE" in staging and "image: postgres:17" not in staging
+
+
+def test_age_migration_ordering():
+    from framework_cli.migrations import migration_down_revisions
+
+    assert migration_down_revisions(["age"]) == {"age": "0001"}
+    assert migration_down_revisions(["timescaledb", "age"]) == {
+        "timescaledb": "0001",
+        "age": "0005",
+    }
+    assert migration_down_revisions(["pgvector", "timescaledb", "age"]) == {
+        "pgvector": "0001",
+        "timescaledb": "0004",
+        "age": "0005",
+    }
+
+
+def test_render_age_battery_foundation(tmp_path):
+    dest = tmp_path / "age"
+    render_project(dest, {**DATA, "batteries": ["age"]})
+    df = (dest / "infra" / "docker" / "postgres.Dockerfile").read_text()
+    assert "apache/age:release_PG17_1.6.0" in df and "age.so" in df
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    assert "shared_preload_libraries=age" in dev
+    mig = (dest / "migrations" / "versions" / "0006_graph.py").read_text()
+    assert "create_graph" in mig and 'down_revision = "0001"' in mig
+    # combined preload list when timescaledb + age
+    both = tmp_path / "both"
+    render_project(both, {**DATA, "batteries": ["timescaledb", "age"]})
+    assert (
+        "shared_preload_libraries=timescaledb,age"
+        in (both / "infra" / "compose" / "dev.yml").read_text()
+    )
