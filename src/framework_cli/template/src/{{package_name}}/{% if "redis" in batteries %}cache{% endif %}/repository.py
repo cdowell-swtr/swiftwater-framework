@@ -8,7 +8,7 @@ def cache_set(
 
 
 def cache_get(client: Redis, key: str) -> str | None:
-    return client.get(key)
+    return client.get(key)  # type: ignore[return-value]
 
 
 def cache_delete(client: Redis, key: str) -> None:

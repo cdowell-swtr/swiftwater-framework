@@ -2467,3 +2467,73 @@ def test_render_redis_observability(tmp_path):
             base / "infra" / "observability" / "prometheus" / "prometheus.yml"
         ).read_text()
     )
+
+
+# ---------------------------------------------------------------------------
+# T4: integrity across redis battery combos + downskill (shared-infra retained)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "batteries",
+    [
+        [],
+        ["redis"],
+        ["workers"],
+        ["workers", "redis"],
+        ["workers", "redis", "mongodb", "pgvector"],
+    ],
+)
+def test_integrity_green_for_redis_combos(tmp_path, batteries):
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": batteries})
+    write_manifest(dest, installed_framework_version())
+    assert check(dest, ci=True) == []
+
+
+def test_downskill_redis_alone_no_force(tmp_path):
+    from framework_cli.downskill import remove_battery
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": ["redis"]})
+    write_manifest(dest, installed_framework_version())
+    _git_init_commit(dest)
+    remove_battery(dest, "redis", force=False)
+    assert not (dest / "src" / "demo" / "cache").exists()
+    assert "\n  redis:\n" not in (dest / "infra" / "compose" / "dev.yml").read_text()
+    assert (
+        "redis_url:"
+        not in (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    )
+    assert check(dest, ci=True) == []
+
+
+def test_downskill_redis_keeps_shared_infra_when_workers_remains(tmp_path):
+    from framework_cli.downskill import remove_battery
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": ["workers", "redis"]})
+    write_manifest(dest, installed_framework_version())
+    _git_init_commit(dest)
+    remove_battery(dest, "redis", force=False)
+    assert not (dest / "src" / "demo" / "cache").exists()  # cache package gone
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    assert "\n  redis:\n" in dev  # redis service STAYS (workers needs it)
+    assert (
+        "redis_url:" in (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    )
+    assert (
+        "redis-exporter"
+        in (dest / "infra" / "compose" / "observability.yml").read_text()
+    )
+    assert check(dest, ci=True) == []

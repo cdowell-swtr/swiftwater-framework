@@ -1339,3 +1339,34 @@ def test_rendered_redis_battery_passes(tmp_path: Path):
         f"cache repo not fully exercised; coverage line: {line!r}\n"
         "Expected 100% of cache/repository.py — did test_cache.py run?\n" + cov
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: workers+redis project (mypy on the merged /health + functional)",
+)
+def test_rendered_workers_redis_battery_passes(tmp_path: Path):
+    # The shared redis service + both /health blocks (workers liveness + redis cache ping) must
+    # type-check together (regression guard for the _redis alias collision) AND the suite must pass.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "redis"]})
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+    mypy = subprocess.run(
+        ["uv", "run", "mypy", "src"], cwd=dest, capture_output=True, text=True
+    )
+    assert mypy.returncode == 0, (
+        "generated project's mypy failed for workers+redis:\n"
+        + mypy.stdout
+        + mypy.stderr
+    )
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional gate did not pass for workers+redis:\n"
+        + result.stdout
+        + result.stderr
+    )
