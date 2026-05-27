@@ -22,17 +22,19 @@ Slice 2 advances **both** archetypes and, in doing so, fixes a latent defect the
 
 3. **neo4j battery (service archetype, fan-out).** A graph database as its own compose service, reusing mongodb's pattern end-to-end — including the SVC-PROD `services.yml` prod presence and an `observability.yml` exporter.
 
-### Why neo4j and not Apache AGE (Postgres graph extension)?
+### Graph paradigm: Apache AGE (Postgres extension) — REVERSED from neo4j mid-build
 
-A spike confirmed Apache AGE supports PG17 and publishes a clean tagged image (`apache/age:release_PG17_1.6.0`), so availability is **not** the blocker. The blocker is **image composition**: pgvector and timescaledb are PGDG `apt` packages and combine trivially in one custom image; AGE has no apt package and would require a source build or a multi-stage `COPY` from `apache/age`, version-coupled to the exact PG/AGE build. Meanwhile, the "one more service" cost that historically counted against neo4j is now a fully solved, patterned path (mongodb's archetype + SVC-PROD `services.yml` + OBS-PROD `observability.yml`). So graph stays **cleanly decoupled** as a service; the custom Postgres image stays **apt-only** and simple. AGE remains documented as a future "graph-without-a-new-service" option.
+> **Amendment (2026-05-27):** the original design chose **neo4j (separate service)** over Apache AGE, reasoning that AGE's lack of an apt package made it hard to compose into the shared custom Postgres image, while neo4j's "one more service" cost was now well-patterned. **That reversed during implementation.** Building neo4j's observability hit a wall: **Neo4j Community has no Prometheus exporter that authenticates** — native Prometheus metrics are Enterprise-only, and the only working community exporter (`ghcr.io/petrov-e/neo4j_exporter`) connects without auth, which forced disabling auth in dev and left metrics **broken in prod** (the exporter can't authenticate against prod's `NEO4J_PASSWORD` → the alert fires forever). That is exactly the dev-only-not-prod defect class this whole slice (and OBS-PROD/SVC-PROD) exists to eliminate. So we re-evaluated AGE — and a spike **succeeded**: a multi-stage `COPY` of the prebuilt PG17 extension files (`age.so`, `age--1.6.0.sql`, `age.control`) from `apache/age:release_PG17_1.6.0` into our `FROM postgres:17` image builds cleanly, `CREATE EXTENSION age` loads with `shared_preload_libraries=age`, and a Cypher `CREATE`→`MATCH` round-trip works. **AGE makes graph observability free and prod-correct**: as a Postgres extension it rides the all-env `postgres-exporter`, the authenticated `/health` DB ping, and Postgres backups/HA — exactly like pgvector and timescaledb. No new service, no exporter, no auth wall. The image-composition cost (the original objection) is tractable now that the custom-image machinery exists (T1/T3). The remaining cost — Cypher-embedded-in-SQL ergonomics (`SELECT * FROM cypher('g', $$ … $$) AS (v agtype)`) — is acceptable for a scaffold seam. **Graph = AGE, a third extension battery (`age`, migration `0006`).** neo4j is dropped from this slice (kept as a future option only if a builder specifically wants a dedicated graph service).
 
 ### Scope
 
-**In scope:** the custom multi-extension Postgres image (Foundation), the pgvector live-gap fix, the `timescaledb` battery, the `neo4j` battery.
+**In scope:** the custom multi-extension Postgres image (Foundation), the pgvector live-gap fix, the `timescaledb` battery, the **`age` (Apache AGE) graph battery**.
 
 **Deferred (named, not dropped):**
 - **`redis` battery → slice 2b.** Its overlap with the workers battery's redis broker (the service cannot be defined twice for `--with workers,redis`) is a distinct design problem that shares nothing with the extension-image work.
-- **Apache AGE** — documented as a future graph-without-a-new-service option.
+- **`neo4j` (dedicated graph service)** — dropped from this slice after the obs wall above; a possible future battery if a builder needs a standalone graph DB (and would need Enterprise for prod Prometheus metrics, or `/health`-only obs).
+
+> **Note:** the **§4 "neo4j Battery" section below is SUPERSEDED** by the AGE design. AGE is an extension battery (no service, no exporter, no settings, no `/health` change, no managed secrets, no `env.py` model import): a Dockerfile multi-stage `COPY` block + `shared_preload_libraries=age` + a `0006` graph migration (`CREATE EXTENSION age` + `create_graph('app_graph')`) + a `graph/` package doing Cypher-in-SQL via SQLAlchemy `text()`. Observability rides the all-env postgres-exporter. The actionable AGE task breakdown lives in the implementation plan (`docs/superpowers/plans/2026-05-26-db-paradigms-slice2.md`, Tasks 4–5, rewritten for AGE).
 
 ---
 

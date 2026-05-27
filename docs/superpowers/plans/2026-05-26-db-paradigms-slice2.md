@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **⚠ PIVOT (2026-05-27): graph = Apache AGE (extension), NOT neo4j (service).** During execution, neo4j was built (Tasks 4–5) then **dropped** — Neo4j Community has no Prometheus exporter that authenticates, so its observability was broken in prod (the dev-only-not-prod defect this slice exists to kill). A spike confirmed Apache AGE multi-stage-copies into the custom `postgres:17` image and runs Cypher. **Tasks 4 & 5 below (neo4j) are SUPERSEDED** by the AGE design — see the spec's "Graph paradigm: Apache AGE" amendment and the **AGE Tasks (4-AGE, 5-AGE) appended at the end of this file**. AGE is an *extension* battery (migration `0006`): Dockerfile multi-stage COPY + `shared_preload_libraries=age` + a `create_graph` migration + a `graph/` Cypher-in-SQL package; obs rides the all-env postgres-exporter (free, prod-correct); no service, no exporter, no settings, no `/health` change, no managed secrets, no `env.py` model import. Task 6 (integrity/combos/downskill) applies with `age` substituted for `neo4j`.
+
 **Goal:** Add the `timescaledb` (extension) and `neo4j` (service) database-paradigm batteries, on a new custom multi-extension Postgres image that also fixes pgvector's latent live-stack gap.
 
 **Architecture:** A templated `infra/docker/postgres.Dockerfile` (apt-installs each present extension) becomes the Postgres image for dev/test/prod compose **and** testcontainers whenever an extension battery is present — so extensions actually load on a live stack, not just in the testcontainers pull. `timescaledb` mirrors the `pgvector` extension archetype (a `0005` hypertable migration, first N>2 migration chain). `neo4j` mirrors the `mongodb` separate-service archetype end-to-end (client + repo + `/health` + dev/`services.yml` service + `observability.yml` exporter + alerts + dashboard).
@@ -1154,3 +1156,100 @@ Then proceed to `superpowers:finishing-a-development-branch`.
 - **testcontainers image build** (Task 1 Step 6) requires Docker build access + network (apt). The `_docker_available` guard skips these tests where Docker is absent. `DockerImage` API: confirm against the installed `testcontainers` version (`DockerImage(path=..., dockerfile_path=..., tag=...).build()`); adjust if the signature differs.
 - **No baseline manifest shift** is a hard invariant: a no-battery render must stay byte-identical (Task 6 integrity `[]` on `batteries=[]`). The renamed `prod.yml.jinja`/`staging.yml.jinja` must render byte-identical to the old `prod.yml`/`staging.yml` for `batteries=[]`.
 - **Whitespace control** in the conditionally-edited LOCKED compose/prometheus files is the most common failure mode (the 8c regression class) — use `{%-`/`-%}` and let Task 6 integrity be the guard.
+
+---
+
+# AGE Tasks (live — supersede neo4j Tasks 4–5)
+
+Graph is delivered as the **`age` extension battery** (Apache AGE on Postgres), a third extension alongside pgvector/timescaledb. Spike-confirmed: a multi-stage `COPY` of `age.so` + `age--1.6.0.sql` + `age.control` from `apache/age:release_PG17_1.6.0` into our `FROM postgres:17` image builds; `CREATE EXTENSION age` loads with `shared_preload_libraries=age`; `create_graph` + a Cypher `CREATE`/`MATCH` round-trip works.
+
+**NB — re-register timescaledb:** the dropped neo4j commits had also registered `timescaledb` in `batteries.py` (a T3 gap fix). Task 4-AGE re-adds both `timescaledb` and `age` registration + their `test_*_battery_registered` guards.
+
+## Task 4-AGE: AGE foundation — Dockerfile multi-stage COPY + shared_preload join + 0006 migration + registration
+
+**Files:** `copier.yml` (add `age` to `uses_postgres_extension`), `infra/docker/postgres.Dockerfile.jinja` (AGE multi-stage block), `infra/compose/{dev,test,prod,staging}.yml.jinja` + `tests/conftest.py.jinja` (generalize the timescaledb `shared_preload_libraries` command to a comma-joined list over {timescaledb, age}), new `migrations/versions/{{ '0006_graph.py' if 'age' in batteries else '' }}.jinja`, `src/framework_cli/migrations.py` (`age`→`0006`), `src/framework_cli/batteries.py` (register `age` + `timescaledb`), `tests/test_batteries.py` (+ `test_age_battery_registered`, `test_timescaledb_battery_registered`), `tests/test_copier_runner.py`.
+
+- `uses_postgres_extension` default → `"{{ 'pgvector' in batteries or 'timescaledb' in batteries or 'age' in batteries }}"`.
+- Dockerfile AGE block (gated `{%- if "age" in batteries %}`):
+  ```dockerfile
+  # Apache AGE — openCypher graph queries on Postgres (multi-stage COPY of the prebuilt PG17
+  # extension; AGE has no apt package). Requires shared_preload_libraries=age at runtime.
+  COPY --from=apache/age:release_PG17_1.6.0 /usr/lib/postgresql/17/lib/age.so /usr/lib/postgresql/17/lib/age.so
+  COPY --from=apache/age:release_PG17_1.6.0 /usr/share/postgresql/17/extension/age--1.6.0.sql /usr/share/postgresql/17/extension/age--1.6.0.sql
+  COPY --from=apache/age:release_PG17_1.6.0 /usr/share/postgresql/17/extension/age.control /usr/share/postgresql/17/extension/age.control
+  ```
+- **shared_preload_libraries join** — replace the timescaledb-only `command:` in dev/test/prod/staging postgres services with a computed list so `timescaledb` + `age` (or either) are joined:
+  ```jinja
+  {%- set _preloads = [] %}
+  {%- if "timescaledb" in batteries %}{% set _ = _preloads.append("timescaledb") %}{% endif %}
+  {%- if "age" in batteries %}{% set _ = _preloads.append("age") %}{% endif %}
+  {%- if _preloads %}
+      command: ["postgres", "-c", "shared_preload_libraries={{ _preloads | join(',') }}"]
+  {%- endif %}
+  ```
+  (and the conftest `with_command` likewise: `"postgres -c shared_preload_libraries=" + the joined list`, gated `{%- if "timescaledb" in batteries or "age" in batteries %}`.)
+- **0006 migration** (`down_revision = "{{ down_revision_age }}"`): `op.execute("CREATE EXTENSION IF NOT EXISTS age")`; `op.execute("SELECT ag_catalog.create_graph('app_graph')")`. downgrade: `op.execute("SELECT ag_catalog.drop_graph('app_graph', true)")`. (Graph functions are available because `shared_preload_libraries=age` is set on the server alembic runs against; qualify `ag_catalog.create_graph`.)
+- `migrations.py`: `MIGRATION_ORDER += ("age",)` (after timescaledb), `REVISIONS["age"]="0006"`.
+- `batteries.py`: register `timescaledb` ("PostgreSQL TimescaleDB extension + a readings hypertable for time-series data") and `age` ("Apache AGE openCypher graph queries on Postgres (no new service)"), both `requires=()`.
+- Render tests: `migration_down_revisions(["age"])=={"age":"0001"}`, `(["timescaledb","age"])=={"timescaledb":"0001","age":"0005"}`, `(["pgvector","timescaledb","age"])` chains 0004→0005→0006; render `["age"]` → Dockerfile has the AGE COPY, `shared_preload_libraries=age` in dev, `0006_graph.py` with `create_graph`; render `["timescaledb","age"]` → `shared_preload_libraries=timescaledb,age`; baseline `[]` byte-identical.
+- TDD + fast gate + commit (`feat(db): age graph battery foundation — AGE multi-stage image, shared_preload join, 0006 create_graph migration, registration`).
+
+## Task 5-AGE: AGE graph package + functional/acceptance tests
+
+**Files:** new `src/{{package_name}}/{% if "age" in batteries %}graph{% endif %}/{__init__,repository}.py`, new `tests/functional/{{ 'test_graph.py' if 'age' in batteries else '' }}.jinja`, `tests/test_copier_runner.py` (render test), `tests/acceptance/test_rendered_project.py` (live acceptance).
+
+- `graph/repository.py` — Cypher-in-SQL over the project's SQLAlchemy `Session` (no new dep, no bolt driver):
+  ```python
+  from sqlalchemy import text
+  from sqlalchemy.orm import Session
+
+  _GRAPH = "app_graph"
+
+
+  def _prepare(session: Session) -> None:
+      # AGE functions live in ag_catalog; make them resolvable for this session.
+      session.execute(text('SET search_path = ag_catalog, "$user", public'))
+
+
+  def relate(session: Session, src: str, dst: str, kind: str = "KNOWS") -> None:
+      """Create two Person nodes (by name) and a typed relationship between them.
+
+      ``src``/``dst``/``kind`` are interpolated into the Cypher text — AGE's cypher()
+      cannot bind them as parameters — so pass only trusted, app-controlled values.
+      """
+      _prepare(session)
+      session.execute(
+          text(
+              f"SELECT * FROM cypher('{_GRAPH}', $$ "
+              f"MERGE (a:Person {{name: '{src}'}}) MERGE (b:Person {{name: '{dst}'}}) "
+              f"MERGE (a)-[:{kind}]->(b) $$) AS (v agtype)"
+          )
+      )
+      session.commit()
+
+
+  def neighbors(session: Session, name: str) -> list[str]:
+      """Names directly reachable from `name` by any outgoing relationship."""
+      _prepare(session)
+      rows = session.execute(
+          text(
+              f"SELECT * FROM cypher('{_GRAPH}', $$ "
+              f"MATCH (a:Person {{name: '{name}'}})-->(b:Person) RETURN b.name $$) AS (name agtype)"
+          )
+      )
+      # agtype string results come back JSON-quoted (e.g. '"beta"'); strip the quotes.
+      return [str(r.name).strip('"') for r in rows]
+  ```
+  `graph/__init__.py` empty.
+- `tests/functional/test_graph.py.jinja` (uses the `db_session` fixture — which builds the AGE custom image + runs `alembic upgrade head` including 0006):
+  ```python
+  from {{ package_name }}.graph.repository import neighbors, relate
+
+
+  def test_relate_and_neighbors(db_session):
+      relate(db_session, "alpha", "beta")
+      assert "beta" in neighbors(db_session, "alpha")
+  ```
+- Render test: `["age"]` renders `graph/repository.py` + `test_graph.py`; baseline omits them.
+- Acceptance test `test_rendered_age_battery_passes` (mirror the pgvector one): render `["age"]`, `uv sync`, `bash scripts/coverage.sh 70 unit functional` returncode 0 + `graph/repository.py` reaches 100% (proves the round-trip ran on the live AGE image). Run it, then `rm -rf /tmp/pytest-of-chris/* 2>/dev/null`.
+- TDD + fast gate + commit (`feat(db): age graph battery — Cypher-in-SQL graph repo + functional test`).
