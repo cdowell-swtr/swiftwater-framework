@@ -40,7 +40,7 @@ def pg_url() -> Iterator[str]:
             dockerfile_path="infra/docker/postgres.Dockerfile",
             tag="{{ package_name }}-postgres:test",
         )
-        image.build()
+        image.build()  # tag persists for Docker layer cache; fine for a test image
         container = PostgresContainer(str(image), driver="psycopg")
         container.start()
 {%- else %}

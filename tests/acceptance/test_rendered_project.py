@@ -1072,7 +1072,8 @@ def test_rendered_project_with_pgvector_battery_passes(tmp_path: Path):
     # were emitted, then runs unit+functional (70% gate) to confirm the vectors functional
     # test (tests/functional/test_vectors.py) is collected and passes — exercising the
     # 0004_embeddings migration, add_embedding, and nearest (similarity search) against
-    # a real pgvector/pgvector:pg17 Postgres testcontainer.
+    # the custom Postgres image built from infra/docker/postgres.Dockerfile (via DockerImage
+    # in the conftest fixture).
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["pgvector"]})
 
@@ -1093,9 +1094,9 @@ def test_rendered_project_with_pgvector_battery_passes(tmp_path: Path):
     assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
 
     # Run unit + functional tiers (70% gate) — alembic upgrade head applies the 0004
-    # migration (CREATE EXTENSION vector + embeddings table) using the pgvector/pgvector:pg17
-    # testcontainers image, then test_vectors.py inserts two embeddings and asserts that
-    # nearest() returns the closer one by cosine distance.
+    # migration (CREATE EXTENSION vector + embeddings table) on the custom Postgres image
+    # built from infra/docker/postgres.Dockerfile, then test_vectors.py inserts two embeddings
+    # and asserts that nearest() returns the closer one by cosine distance.
     result = subprocess.run(
         ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
         cwd=dest,
@@ -1197,7 +1198,7 @@ def test_rendered_project_migration_chain_webhooks_workers_pgvector(tmp_path: Pa
 
     # Run unit + functional tiers (70% gate) — alembic upgrade head walks 0001→0002→0003→0004,
     # so a failure here proves the chain did not apply (the pgvector extension must be available
-    # via the pgvector/pgvector:pg17 image used by the testcontainers conftest fixture).
+    # via the custom Postgres image built from infra/docker/postgres.Dockerfile in the conftest fixture).
     result = subprocess.run(
         ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
         cwd=dest,

@@ -2157,3 +2157,4 @@ def test_uses_postgres_extension_render_switches_postgres_image(tmp_path):
     assert "image: postgres:17" not in dev
     test = (ext / "infra" / "compose" / "test.yml").read_text()
     assert "dockerfile: infra/docker/postgres.Dockerfile" in test
+    assert "image: postgres:17" not in test
