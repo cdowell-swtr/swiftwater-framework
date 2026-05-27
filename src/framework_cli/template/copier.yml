@@ -23,3 +23,9 @@ batteries:
   type: yaml
   help: Active batteries (set via `framework new --with`); not prompted.
   default: []
+
+uses_postgres_extension:
+  type: bool
+  help: "(computed) any battery that installs a Postgres extension is active"
+  default: "{{ 'pgvector' in batteries or 'timescaledb' in batteries }}"
+  when: false

@@ -30,8 +30,23 @@ def pg_url() -> Iterator[str]:
     from testcontainers.postgres import PostgresContainer
 
     try:
-        container = PostgresContainer("{% if "pgvector" in batteries %}pgvector/pgvector:pg17{% else %}postgres:17{% endif %}", driver="psycopg")
+{%- if uses_postgres_extension %}
+        from testcontainers.core.image import DockerImage
+
+        # Build the same custom image the compose stack uses, so tests exercise the real
+        # extension install (not a prebuilt pull). cwd is the project root under pytest.
+        image = DockerImage(
+            path=".",
+            dockerfile_path="infra/docker/postgres.Dockerfile",
+            tag="{{ package_name }}-postgres:test",
+        )
+        image.build()
+        container = PostgresContainer(str(image), driver="psycopg")
         container.start()
+{%- else %}
+        container = PostgresContainer("postgres:17", driver="psycopg")
+        container.start()
+{%- endif %}
     except Exception as exc:  # Docker unavailable, image pull failed, etc.
         pytest.fail(
             "Database tests need Docker (a Postgres test container). "

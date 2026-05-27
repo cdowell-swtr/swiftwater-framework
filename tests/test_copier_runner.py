@@ -1711,7 +1711,11 @@ def test_render_with_pgvector_battery(tmp_path: Path):
     assert "CREATE EXTENSION" in mig and "vector" in mig
     assert 'down_revision = "0001"' in mig  # pgvector alone chains to baseline
     assert "pgvector" in (dest / "pyproject.toml").read_text()
-    assert "pgvector/pgvector" in (dest / "tests" / "conftest.py").read_text()
+    conftest = (dest / "tests" / "conftest.py").read_text()
+    # pgvector now builds a custom Postgres image via DockerImage (not a prebuilt pull)
+    assert "DockerImage" in conftest
+    assert "postgres.Dockerfile" in conftest
+    assert "pgvector/pgvector" not in conftest  # prebuilt image no longer used
     assert (
         "vectors" in (dest / "migrations" / "env.py").read_text()
     )  # gated model import
@@ -1722,7 +1726,11 @@ def test_render_without_pgvector_clean(tmp_path: Path):
     render_project(dest, {**DATA})
     assert not (dest / "src" / "demo" / "vectors").exists()
     assert "pgvector" not in (dest / "pyproject.toml").read_text()
-    assert "pgvector/pgvector" not in (dest / "tests" / "conftest.py").read_text()
+    conftest = (dest / "tests" / "conftest.py").read_text()
+    assert "pgvector/pgvector" not in conftest
+    assert (
+        "DockerImage" not in conftest
+    )  # custom build only present with extension battery
 
 
 def test_render_pgvector_battery_is_ruff_format_clean(tmp_path: Path):
@@ -2129,3 +2137,23 @@ def test_prod_plus_services_plus_obs_merges(tmp_path: Path):
         env={**os.environ},
     )
     assert r2.returncode == 0 and "redis" in r2.stdout and "worker" not in r2.stdout
+
+
+def test_uses_postgres_extension_render_switches_postgres_image(tmp_path):
+    """With pgvector, dev/test Postgres build the custom Dockerfile; baseline stays postgres:17."""
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert not (base / "infra" / "docker" / "postgres.Dockerfile").exists()
+    assert "image: postgres:17" in (base / "infra" / "compose" / "dev.yml").read_text()
+    assert "image: postgres:17" in (base / "infra" / "compose" / "test.yml").read_text()
+
+    ext = tmp_path / "ext"
+    render_project(ext, {**DATA, "batteries": ["pgvector"]})
+    dockerfile = ext / "infra" / "docker" / "postgres.Dockerfile"
+    assert dockerfile.exists()
+    assert "postgresql-17-pgvector" in dockerfile.read_text()
+    dev = (ext / "infra" / "compose" / "dev.yml").read_text()
+    assert "dockerfile: infra/docker/postgres.Dockerfile" in dev
+    assert "image: postgres:17" not in dev
+    test = (ext / "infra" / "compose" / "test.yml").read_text()
+    assert "dockerfile: infra/docker/postgres.Dockerfile" in test

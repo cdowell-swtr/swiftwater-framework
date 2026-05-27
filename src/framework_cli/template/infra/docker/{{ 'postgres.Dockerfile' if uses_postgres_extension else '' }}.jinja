@@ -1,0 +1,11 @@
+# Custom Postgres image — installs the active extension batteries onto the official image so the
+# extensions are available on EVERY stack (dev/test/prod compose + testcontainers), not just a
+# prebuilt testcontainers pull. Rendered only when an extension battery is present.
+FROM postgres:17
+{%- if "pgvector" in batteries %}
+
+# pgvector — vector similarity search (PGDG apt; present on the official postgres image's repo).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-17-pgvector \
+ && rm -rf /var/lib/apt/lists/*
+{%- endif %}

@@ -13,7 +13,13 @@ services:
         condition: service_healthy
 
   postgres-test:
+{%- if uses_postgres_extension %}
+    build:
+      context: ../..
+      dockerfile: infra/docker/postgres.Dockerfile
+{%- else %}
     image: postgres:17
+{%- endif %}
     profiles: ["test"]
     environment:
       POSTGRES_USER: app

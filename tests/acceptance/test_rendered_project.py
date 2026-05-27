@@ -1207,3 +1207,27 @@ def test_rendered_project_migration_chain_webhooks_workers_pgvector(tmp_path: Pa
     assert result.returncode == 0, (
         "0001->0002->0003->0004 chain did not apply:\n" + result.stdout + result.stderr
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: builds the custom Postgres image and runs the live test stack",
+)
+def test_rendered_pgvector_builds_extension_image_and_migrates(tmp_path: Path):
+    """The pgvector project's Postgres image actually installs `vector`, so the 0004
+    CREATE EXTENSION migration succeeds against the BUILT image (not just a prebuilt pull)."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["pgvector"]})
+    assert (dest / "infra" / "docker" / "postgres.Dockerfile").exists()
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "pgvector live-build gate failed (CREATE EXTENSION vector on the built image?):\n"
+        + result.stdout
+        + result.stderr
+    )
