@@ -1122,6 +1122,39 @@ def test_rendered_project_with_pgvector_battery_passes(tmp_path: Path):
 
 @pytest.mark.skipif(
     not _docker_available(),
+    reason="uv + docker required: builds the AGE Postgres image and runs the live graph test",
+)
+def test_rendered_age_battery_passes(tmp_path: Path):
+    # Renders the age (Apache AGE) battery, runs unit+functional (70% gate) so test_graph.py
+    # runs relate()/neighbors() Cypher against the custom Postgres image (AGE + create_graph
+    # via the 0006 migration) — proving graph queries work on the built image, not just a spike.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["age"]})
+    assert (dest / "src" / "demo" / "graph" / "repository.py").exists()
+    assert (dest / "migrations" / "versions" / "0006_graph.py").exists()
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional gate did not pass for the age battery project:\n"
+        + result.stdout
+        + result.stderr
+    )
+    cov = result.stdout + result.stderr
+    line = next((ln for ln in cov.splitlines() if "graph/repository.py" in ln), "")
+    assert "100%" in line, (
+        f"graph repo not fully exercised; coverage line: {line!r}\n"
+        "Expected 100% of graph/repository.py — did test_graph.py run on the AGE image?\n"
+        + cov
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
     reason="uv + docker required: real Mongo + Postgres",
 )
 def test_rendered_project_with_mongodb_battery_passes(tmp_path: Path):

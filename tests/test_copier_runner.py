@@ -2240,3 +2240,15 @@ def test_render_age_battery_foundation(tmp_path):
         "shared_preload_libraries=timescaledb,age"
         in (both / "infra" / "compose" / "dev.yml").read_text()
     )
+
+
+def test_render_age_graph_package(tmp_path):
+    dest = tmp_path / "age"
+    render_project(dest, {**DATA, "batteries": ["age"]})
+    assert (dest / "src" / "demo" / "graph" / "repository.py").exists()
+    assert (dest / "tests" / "functional" / "test_graph.py").exists()
+    repo = (dest / "src" / "demo" / "graph" / "repository.py").read_text()
+    assert "cypher(" in repo and "app_graph" in repo
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert not (base / "src" / "demo" / "graph").exists()

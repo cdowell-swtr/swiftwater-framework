@@ -1,0 +1,6 @@
+from {{ package_name }}.graph.repository import neighbors, relate
+
+
+def test_relate_and_neighbors(db_session):
+    relate(db_session, "alpha", "beta")
+    assert "beta" in neighbors(db_session, "alpha")
