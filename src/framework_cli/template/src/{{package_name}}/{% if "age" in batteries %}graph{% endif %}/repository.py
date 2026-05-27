@@ -29,7 +29,11 @@ def relate(session: Session, src: str, dst: str, kind: str = "KNOWS") -> None:
 
 
 def neighbors(session: Session, name: str) -> list[str]:
-    """Names directly reachable from `name` by any outgoing relationship."""
+    """Names directly reachable from `name` by any outgoing relationship.
+
+    ``name`` is interpolated into the Cypher text — AGE's cypher() cannot bind
+    it as a parameter — so pass only trusted, app-controlled values.
+    """
     _prepare(session)
     rows = session.execute(
         text(

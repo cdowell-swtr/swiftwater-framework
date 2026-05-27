@@ -2249,6 +2249,8 @@ def test_render_age_graph_package(tmp_path):
     assert (dest / "tests" / "functional" / "test_graph.py").exists()
     repo = (dest / "src" / "demo" / "graph" / "repository.py").read_text()
     assert "cypher(" in repo and "app_graph" in repo
+    # the relationship-type colon must stay escaped (\:) or text() misreads :KNOWS as a bind param
+    assert r"\:" in repo, "colon-escape missing — relate() would raise on :KNOWS"
     base = tmp_path / "base"
     render_project(base, {**DATA, "batteries": []})
     assert not (base / "src" / "demo" / "graph").exists()
