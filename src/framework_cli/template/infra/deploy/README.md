@@ -123,9 +123,10 @@ app image) and connect to the managed broker via the env vars above.
 
 ## Custom Postgres image (extension batteries)
 
-Extension batteries (pgvector, timescaledb) bake their extensions into a custom Postgres image via
+Extension batteries (pgvector, timescaledb, age) bake their extensions into a custom Postgres image via
 `infra/docker/postgres.Dockerfile`. Dev and test compose files build this image from the local
-Dockerfile; prod and staging reference it via `${POSTGRES_IMAGE}`.
+Dockerfile; prod and staging reference it via `${POSTGRES_IMAGE}`. (Managed Postgres often offers
+pgvector/timescaledb as the escape hatch; **Apache AGE** is rarely managed — self-host the custom image.)
 
 **Self-host:** build and push the custom image alongside `APP_IMAGE`, then set `POSTGRES_IMAGE`:
 

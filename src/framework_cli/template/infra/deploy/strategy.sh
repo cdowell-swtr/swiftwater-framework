@@ -34,7 +34,7 @@ _todo() {
 # `APP_MONGO_URL`/`APP_REDIS_URL`/`APP_CELERY_*` at it and omit the data-store services — see README.
 # (compose-over-SSH e.g.: scp the compose files, then over ssh
 # `APP_IMAGE=$APP_IMAGE POSTGRES_PASSWORD=$POSTGRES_PASSWORD docker compose -f <env>.yml -f infra/compose/services.yml -f infra/compose/observability.yml up -d`.)
-# When an extension battery (pgvector/timescaledb) is active, the Postgres service uses the custom
+# When an extension battery (pgvector/timescaledb/age) is active, the Postgres service uses the custom
 # image (extensions baked in). Build+push it alongside APP_IMAGE and set POSTGRES_IMAGE, e.g.:
 #   docker build -f infra/docker/postgres.Dockerfile -t $POSTGRES_IMAGE . && docker push $POSTGRES_IMAGE
 # Managed alternative: point APP_DATABASE_URL at a managed Postgres that provides the extensions
