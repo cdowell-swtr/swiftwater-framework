@@ -48,6 +48,10 @@ _BATTERIES: dict[str, BatterySpec] = {
         "age",
         "Apache AGE openCypher graph queries on Postgres (no new service)",
     ),
+    "redis": BatterySpec(
+        "redis",
+        "Redis key/value datastore (cache/sessions) — shares the workers redis service when both are active",
+    ),
 }
 
 

@@ -88,7 +88,7 @@ services:
       - "mongodata:/data/db"
 
 {%- endif %}
-{%- if "workers" in batteries %}
+{%- if "workers" in batteries or "redis" in batteries %}
 
   redis:
     image: redis:7-alpine
@@ -102,6 +102,8 @@ services:
       retries: 10
     volumes:
       - "redisdata:/data"
+{%- endif %}
+{%- if "workers" in batteries %}
 
   worker:
     build:
@@ -153,5 +155,5 @@ services:
 volumes:
   pgdata: {}
 {% if "mongodb" in batteries %}  mongodata: {}
-{% endif %}{% if "workers" in batteries %}  redisdata: {}
+{% endif %}{% if "workers" in batteries or "redis" in batteries %}  redisdata: {}
 {% endif -%}

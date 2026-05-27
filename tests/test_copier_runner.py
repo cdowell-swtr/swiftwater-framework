@@ -2372,3 +2372,33 @@ def test_downskill_timescaledb_no_force(tmp_path):
     # preserved (8a-2 rule)
     assert (dest / "migrations" / "versions" / "0005_readings.py").exists()
     assert check(dest, ci=True) == []
+
+
+def test_redis_service_shared_by_workers_or_redis(tmp_path):
+    for bats, want_redis, want_worker in [
+        ([], False, False),
+        (["redis"], True, False),
+        (["workers"], True, True),
+        (["workers", "redis"], True, True),
+    ]:
+        d = tmp_path / ("_".join(bats) or "base")
+        render_project(d, {**DATA, "batteries": bats})
+        dev = (d / "infra" / "compose" / "dev.yml").read_text()
+        assert dev.count("\n  redis:\n") == (1 if want_redis else 0), (
+            bats,
+            "redis svc count",
+        )
+        assert ("\n  worker:\n" in dev) == want_worker, (bats, "worker presence")
+        settings = (d / "src" / "demo" / "config" / "settings.py").read_text()
+        assert settings.count("redis_url:") == (1 if want_redis else 0), (
+            bats,
+            "redis_url count",
+        )
+
+
+def test_redis_battery_registered():
+    from framework_cli.batteries import battery_names, get_battery, resolve
+
+    assert "redis" in battery_names()
+    assert get_battery("redis").requires == ()
+    assert resolve(["redis"]) == ["redis"]

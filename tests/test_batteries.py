@@ -91,3 +91,11 @@ def test_age_battery_registered():
     assert "age" in battery_names()
     assert get_battery("age").requires == ()
     assert resolve(["age"]) == ["age"]
+
+
+def test_redis_battery_registered():
+    from framework_cli.batteries import battery_names, get_battery, resolve
+
+    assert "redis" in battery_names()
+    assert get_battery("redis").requires == ()
+    assert resolve(["redis"]) == ["redis"]

@@ -32,10 +32,14 @@ class Settings(BaseSettings):
     # Webhook ingress: HMAC-SHA256 signing secret (read from APP_WEBHOOK_SIGNING_SECRET).
     webhook_signing_secret: str = ""
 {%- endif %}
+{%- if "workers" in batteries or "redis" in batteries %}
+
+    # Redis connection (shared by the workers broker and the redis datastore battery).
+    redis_url: str = "redis://redis:6379/0"
+{%- endif %}
 {%- if "workers" in batteries %}
 
-    # Celery workers (Redis broker + result backend).
-    redis_url: str = "redis://redis:6379/0"
+    # Celery workers (broker + result backend).
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/1"
 {%- endif %}

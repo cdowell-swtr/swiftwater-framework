@@ -3,7 +3,7 @@
 # the battery data stores + worker/beat for prod/staging (dev keeps its own build-based, profiled
 # copies in dev.yml). Managed alternative: point APP_MONGO_URL / APP_REDIS_URL / APP_CELERY_* at a
 # managed instance and omit the data-store services here (worker/beat stay self-hosted).
-{%- if "mongodb" in batteries or "workers" in batteries %}
+{%- if "mongodb" in batteries or "workers" in batteries or "redis" in batteries %}
 services:
 {%- if "mongodb" in batteries %}
   mongo:
@@ -18,7 +18,7 @@ services:
     volumes:
       - "mongodata:/data/db"
 {%- endif %}
-{%- if "workers" in batteries %}
+{%- if "workers" in batteries or "redis" in batteries %}
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -29,6 +29,8 @@ services:
       retries: 10
     volumes:
       - "redisdata:/data"
+{%- endif %}
+{%- if "workers" in batteries %}
 
   worker:
     image: ${APP_IMAGE:?set APP_IMAGE to the promoted registry tag}
@@ -70,7 +72,7 @@ volumes:
 {%- if "mongodb" in batteries %}
   mongodata: {}
 {%- endif %}
-{%- if "workers" in batteries %}
+{%- if "workers" in batteries or "redis" in batteries %}
   redisdata: {}
 {%- endif %}
 {%- endif %}
