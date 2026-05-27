@@ -1412,6 +1412,33 @@ def test_render_webhooks_workers_battery_is_ruff_format_clean(tmp_path: Path):
     _assert_ruff_format_clean(dest)
 
 
+def test_render_redis_battery_is_ruff_format_clean(tmp_path: Path):
+    """Hermetic guard: redis-only render must be ruff-format-clean without Docker."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["redis"]})
+    _assert_ruff_format_clean(dest)
+
+
+def test_render_workers_redis_battery_is_ruff_format_clean(tmp_path: Path):
+    """Hermetic guard: workers+redis render (shared redis service + both /health blocks)
+    must be ruff-format-clean without Docker."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "redis"]})
+    _assert_ruff_format_clean(dest)
+
+
+def test_render_workers_redis_health_alias_distinct(tmp_path: Path):
+    """workers + redis both touch /health: workers does `import redis as _redis`, so the redis
+    cache ping must use a DISTINCT alias — else the generated project's mypy gate fails [no-redef]."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "redis"]})
+    health = (dest / "src" / "demo" / "routes" / "health.py").read_text()
+    assert "get_redis as _get_redis" in health  # distinct alias for the cache ping
+    assert (
+        "get_redis as _redis" not in health
+    )  # must not collide with workers' `import redis as _redis`
+
+
 def test_render_webhooks_battery_is_ruff_format_clean(tmp_path: Path):
     """Hermetic guard: webhooks-only render must be ruff-format-clean without Docker."""
     dest = tmp_path / "demo"

@@ -13,7 +13,7 @@ _CACHE_DB = 3
 @lru_cache
 def get_redis() -> Redis:
     # redis-py honors the DB in the URL path over a db= kwarg, so substitute the path
-    # explicitly to land on the dedicated cache DB regardless of how redis_url is written.
+    # explicitly to land on the dedicated cache DB regardless of which DB the URL path encodes.
     parts = urlparse(get_settings().redis_url)
     url = urlunparse(parts._replace(path=f"/{_CACHE_DB}"))
     return Redis.from_url(url, decode_responses=True)
