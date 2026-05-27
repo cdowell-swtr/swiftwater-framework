@@ -121,10 +121,10 @@ def test_active_agents_adds_gated_agent_when_battery_present(monkeypatch):
         del registry._SPECS["_demo-agent"], registry._SPECS["_demo-push-agent"]
 
 
-def test_active_agents_ignores_none_gates_agent():
+def test_active_agents_ignores_empty_gates_agents():
     from framework_cli.review.registry import active_agents
 
-    # webhooks/websockets/workers have gates_agent=None → adding them changes nothing.
+    # webhooks/websockets/workers have gates_agents=() → adding them changes nothing.
     assert active_agents("pull_request", ["webhooks", "workers"]) == active_agents(
         "pull_request"
     )
