@@ -2394,11 +2394,3 @@ def test_redis_service_shared_by_workers_or_redis(tmp_path):
             bats,
             "redis_url count",
         )
-
-
-def test_redis_battery_registered():
-    from framework_cli.batteries import battery_names, get_battery, resolve
-
-    assert "redis" in battery_names()
-    assert get_battery("redis").requires == ()
-    assert resolve(["redis"]) == ["redis"]

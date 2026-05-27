@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 {%- endif %}
 {%- if "workers" in batteries or "redis" in batteries %}
 
-    # Redis connection (shared by the workers broker and the redis datastore battery).
+    # Redis connection URL (used by the workers broker and/or the redis datastore battery).
     redis_url: str = "redis://redis:6379/0"
 {%- endif %}
 {%- if "workers" in batteries %}
