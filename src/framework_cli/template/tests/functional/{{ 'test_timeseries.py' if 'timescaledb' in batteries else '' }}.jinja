@@ -13,3 +13,4 @@ def test_bucketed_averages_aggregates_by_time(db_session):
     buckets = bucketed_averages(db_session, "1 hour")
     assert len(buckets) == 2  # two distinct hourly buckets
     assert buckets[0][1] == 15.0  # avg(10, 20)
+    assert buckets[1][1] == 5.0  # second bucket, two hours later

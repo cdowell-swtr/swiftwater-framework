@@ -2160,6 +2160,15 @@ def test_render_timescaledb_battery(tmp_path):
     assert "timescaledb-2-postgresql-17" in df
     dev = (dest / "infra" / "compose" / "dev.yml").read_text()
     assert "shared_preload_libraries=timescaledb" in dev
+    # prod + staging carry the same shared_preload_libraries command (regression guard)
+    assert (
+        "shared_preload_libraries=timescaledb"
+        in (dest / "infra" / "compose" / "prod.yml").read_text()
+    )
+    assert (
+        "shared_preload_libraries=timescaledb"
+        in (dest / "infra" / "compose" / "staging.yml").read_text()
+    )
     assert "timeseries import models" in (dest / "migrations" / "env.py").read_text()
 
 
