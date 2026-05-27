@@ -1287,3 +1287,27 @@ def test_rendered_timescaledb_battery_passes(tmp_path: Path):
         + result.stdout
         + result.stderr
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: builds the all-extension Postgres image (pgvector+timescaledb+age)",
+)
+def test_rendered_all_extensions_chain_passes(tmp_path: Path):
+    # The custom image installs pgvector (apt) + timescaledb (apt) + AGE (multi-stage COPY) together,
+    # alembic walks 0001->0004(pgvector)->0005(timescaledb)->0006(age create_graph), and all three
+    # functional tests (vectors, timeseries, graph) run against the one live image.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["pgvector", "timescaledb", "age"]})
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "all-extensions chain gate failed (pgvector+timescaledb+age on one built image?):\n"
+        + result.stdout
+        + result.stderr
+    )

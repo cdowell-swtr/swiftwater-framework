@@ -2254,3 +2254,121 @@ def test_render_age_graph_package(tmp_path):
     base = tmp_path / "base"
     render_project(base, {**DATA, "batteries": []})
     assert not (base / "src" / "demo" / "graph").exists()
+
+
+# ---------------------------------------------------------------------------
+# T6: integrity across slice-2 battery combos + migration chain + preload
+# coverage + downskill (age / timescaledb)
+# ---------------------------------------------------------------------------
+
+
+def _git_init_commit(project: Path) -> None:
+    """Initialise a git repo and commit everything (required for remove_battery)."""
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "add", "-A"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(project),
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "user.email=test@test",
+            "-c",
+            "user.name=Test",
+            "commit",
+            "-qm",
+            "scaffold",
+        ],
+        check=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "batteries",
+    [
+        [],
+        ["pgvector"],
+        ["timescaledb"],
+        ["age"],
+        ["pgvector", "timescaledb"],
+        ["timescaledb", "age"],
+        ["pgvector", "age"],
+        ["pgvector", "timescaledb", "age"],
+        ["webhooks", "workers", "pgvector", "timescaledb", "age"],
+        ["workers", "mongodb", "age", "timescaledb"],
+    ],
+)
+def test_integrity_green_for_slice2_combos(tmp_path, batteries):
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": batteries})
+    write_manifest(dest, installed_framework_version())
+    assert check(dest, ci=True) == []
+
+
+def test_full_migration_chain_ordering():
+    from framework_cli.migrations import migration_down_revisions
+
+    assert migration_down_revisions(
+        ["webhooks", "workers", "pgvector", "timescaledb", "age"]
+    ) == {
+        "webhooks": "0001",
+        "workers": "0002",
+        "pgvector": "0003",
+        "timescaledb": "0004",
+        "age": "0005",
+    }
+
+
+def test_preload_join_in_all_compose_files(tmp_path):
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": ["timescaledb", "age"]})
+    for f in ["dev.yml", "test.yml", "prod.yml", "staging.yml"]:
+        text = (dest / "infra" / "compose" / f).read_text()
+        assert "shared_preload_libraries=timescaledb,age" in text, (
+            f"{f} is missing the joined preload 'shared_preload_libraries=timescaledb,age'"
+        )
+    # conftest builds the testcontainer with the same joined preload
+    conftest = (dest / "tests" / "conftest.py").read_text()
+    assert "shared_preload_libraries=timescaledb,age" in conftest, (
+        "tests/conftest.py is missing the joined preload 'shared_preload_libraries=timescaledb,age'"
+    )
+
+
+def test_downskill_age_no_force(tmp_path):
+    from framework_cli.downskill import remove_battery
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": ["age"]})
+    write_manifest(dest, installed_framework_version())
+    _git_init_commit(dest)
+    remove_battery(dest, "age", force=False)
+    assert not (dest / "src" / "demo" / "graph").exists()
+    # migrations preserved (8a-2 rule)
+    assert (dest / "migrations" / "versions" / "0006_graph.py").exists()
+    assert check(dest, ci=True) == []
+
+
+def test_downskill_timescaledb_no_force(tmp_path):
+    from framework_cli.downskill import remove_battery
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": ["timescaledb"]})
+    write_manifest(dest, installed_framework_version())
+    _git_init_commit(dest)
+    remove_battery(dest, "timescaledb", force=False)
+    assert not (dest / "src" / "demo" / "timeseries").exists()
+    # preserved (8a-2 rule)
+    assert (dest / "migrations" / "versions" / "0005_readings.py").exists()
+    assert check(dest, ci=True) == []
