@@ -2394,3 +2394,19 @@ def test_redis_service_shared_by_workers_or_redis(tmp_path):
             bats,
             "redis_url count",
         )
+
+
+def test_render_redis_cache_package(tmp_path):
+    dest = tmp_path / "r"
+    render_project(dest, {**DATA, "batteries": ["redis"]})
+    assert (dest / "src" / "demo" / "cache" / "client.py").exists()
+    repo = (dest / "src" / "demo" / "cache" / "repository.py").read_text()
+    assert "cache_set" in repo and "cache_get" in repo and "cache_delete" in repo
+    health = (dest / "src" / "demo" / "routes" / "health.py").read_text()
+    assert "redis" in health and "ping" in health
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "redis>=5" in pyproject and "testcontainers[redis]" in pyproject
+    assert (dest / "tests" / "functional" / "test_cache.py").exists()
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert not (base / "src" / "demo" / "cache").exists()

@@ -1311,3 +1311,31 @@ def test_rendered_all_extensions_chain_passes(tmp_path: Path):
         + result.stdout
         + result.stderr
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: real Redis + Postgres",
+)
+def test_rendered_redis_battery_passes(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["redis"]})
+    assert (dest / "src" / "demo" / "cache" / "repository.py").exists()
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional gate did not pass for the redis battery project:\n"
+        + result.stdout
+        + result.stderr
+    )
+    cov = result.stdout + result.stderr
+    line = next((ln for ln in cov.splitlines() if "cache/repository.py" in ln), "")
+    assert "100%" in line, (
+        f"cache repo not fully exercised; coverage line: {line!r}\n"
+        "Expected 100% of cache/repository.py — did test_cache.py run?\n" + cov
+    )

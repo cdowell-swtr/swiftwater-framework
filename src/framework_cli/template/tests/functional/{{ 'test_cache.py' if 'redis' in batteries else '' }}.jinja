@@ -1,0 +1,19 @@
+import pytest
+
+
+@pytest.fixture(scope="module")
+def redis_client():
+    from testcontainers.redis import RedisContainer
+
+    with RedisContainer("redis:7-alpine") as container:
+        yield container.get_client(db=3, decode_responses=True)
+
+
+def test_set_get_delete_with_ttl(redis_client):
+    from {{ package_name }}.cache.repository import cache_delete, cache_get, cache_set
+
+    cache_set(redis_client, "k", "v", ttl_seconds=60)
+    assert cache_get(redis_client, "k") == "v"
+    assert redis_client.ttl("k") > 0
+    cache_delete(redis_client, "k")
+    assert cache_get(redis_client, "k") is None

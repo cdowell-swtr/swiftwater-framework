@@ -43,6 +43,15 @@ def health(request: Request) -> JSONResponse:
         report["mongo"] = {"alive": True}
     except Exception:  # mongo unreachable — degrade, never 500 the probe
         report["mongo"] = {"alive": False}
+{% endif -%}
+{% if "redis" in batteries %}
+    from {{ package_name }}.cache.client import get_redis as _redis
+
+    try:
+        _redis().ping()
+        report["redis"] = {"alive": True}
+    except Exception:  # redis unreachable — degrade, never 500 the probe
+        report["redis"] = {"alive": False}
 {% endif %}
     return JSONResponse(report, status_code=200)
 
