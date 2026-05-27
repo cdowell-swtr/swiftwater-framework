@@ -94,9 +94,11 @@ def test_active_agents_adds_gated_agent_when_battery_present(monkeypatch):
     from framework_cli import batteries as bat
     from framework_cli.review import registry
 
-    bat._BATTERIES["_demo"] = bat.BatterySpec("_demo", "x", gates_agent="_demo-agent")
+    bat._BATTERIES["_demo"] = bat.BatterySpec(
+        "_demo", "x", gates_agents=("_demo-agent",)
+    )
     bat._BATTERIES["_demo2"] = bat.BatterySpec(
-        "_demo2", "x", gates_agent="_demo-push-agent"
+        "_demo2", "x", gates_agents=("_demo-push-agent",)
     )
     registry._SPECS["_demo-agent"] = registry.AgentSpec(
         "review-demo", "p", "high", "battery", registry.DEFAULT_MODEL
@@ -132,6 +134,19 @@ def test_graphql_battery_gates_api_design():
     from framework_cli.batteries import get_battery
     from framework_cli.review.registry import active_agents
 
-    assert get_battery("graphql").gates_agent == "api-design"
+    assert get_battery("graphql").gates_agents == ("api-design",)
     assert "api-design" in active_agents("pull_request", ["graphql"])
     assert "api-design" not in active_agents("pull_request", [])
+
+
+def test_active_agents_battery_can_gate_multiple(monkeypatch):
+    import framework_cli.batteries as bat
+    from framework_cli.review.registry import active_agents
+
+    monkeypatch.setitem(
+        bat._BATTERIES,
+        "_multi",
+        bat.BatterySpec("_multi", "x", gates_agents=("api-design", "documentation")),
+    )
+    out = active_agents("pull_request", ["_multi"])
+    assert "api-design" in out and "documentation" in out

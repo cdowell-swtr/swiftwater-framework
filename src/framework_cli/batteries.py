@@ -11,9 +11,9 @@ class BatterySpec:
     requires: tuple[
         str, ...
     ] = ()  # batteries this one implies (e.g. pgvector -> postgres, later)
-    gates_agent: str | None = (
-        None  # review agent activated when present (wired by 8d/8g)
-    )
+    gates_agents: tuple[
+        str, ...
+    ] = ()  # review agents activated when this battery is present (8d/8g)
 
 
 _BATTERIES: dict[str, BatterySpec] = {
@@ -30,7 +30,7 @@ _BATTERIES: dict[str, BatterySpec] = {
     "graphql": BatterySpec(
         "graphql",
         "Strawberry code-first GraphQL endpoint at /graphql over the demo Item model",
-        gates_agent="api-design",
+        gates_agents=("api-design",),
     ),
     "pgvector": BatterySpec(
         "pgvector",
@@ -51,6 +51,11 @@ _BATTERIES: dict[str, BatterySpec] = {
     "redis": BatterySpec(
         "redis",
         "Redis key/value datastore (cache/sessions) — shares the workers redis service when both are active",
+    ),
+    "react": BatterySpec(
+        "react",
+        "React + TypeScript SPA served by FastAPI, with Vitest/Playwright/axe and accessibility/usability review",
+        gates_agents=("accessibility", "usability"),
     ),
 }
 

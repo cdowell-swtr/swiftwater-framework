@@ -118,9 +118,9 @@ def agent_names() -> list[str]:
 
 def active_agents(event: str, batteries: Sequence[str] = ()) -> list[str]:
     """Agent names active for a CI event. On push, the always-on-main subset; on a PR, all
-    non-battery agents. A battery in `batteries` additionally activates its `gates_agent` —
+    non-battery agents. A battery in `batteries` additionally activates its `gates_agents` —
     on push only if that agent is itself `on_push` (so the push set stays the curated subset)."""
-    gated = {get_battery(b).gates_agent for b in batteries} - {None}
+    gated = {a for b in batteries for a in get_battery(b).gates_agents}
     if event == "push":
         base = {
             k for k, s in _SPECS.items() if s.on_push and s.active_when != "battery"

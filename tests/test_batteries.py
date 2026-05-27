@@ -6,9 +6,7 @@ def test_websockets_is_registered():
 
     assert "websockets" in battery_names()
     spec = get_battery("websockets")
-    assert (
-        spec.name == "websockets" and spec.requires == () and spec.gates_agent is None
-    )
+    assert spec.name == "websockets" and spec.requires == () and spec.gates_agents == ()
 
 
 def test_resolve_unknown_battery_errors():
@@ -28,7 +26,7 @@ def test_webhooks_is_registered():
     from framework_cli.batteries import get_battery
 
     spec = get_battery("webhooks")
-    assert spec.name == "webhooks" and spec.requires == () and spec.gates_agent is None
+    assert spec.name == "webhooks" and spec.requires == () and spec.gates_agents == ()
 
 
 def test_resolve_includes_dependency_closure():
@@ -99,3 +97,12 @@ def test_redis_battery_registered():
     assert "redis" in battery_names()
     assert get_battery("redis").requires == ()
     assert resolve(["redis"]) == ["redis"]
+
+
+def test_react_battery_registered():
+    from framework_cli.batteries import battery_names, get_battery, resolve
+
+    assert "react" in battery_names()
+    assert get_battery("react").requires == ()
+    assert get_battery("react").gates_agents == ("accessibility", "usability")
+    assert resolve(["react"]) == ["react"]
