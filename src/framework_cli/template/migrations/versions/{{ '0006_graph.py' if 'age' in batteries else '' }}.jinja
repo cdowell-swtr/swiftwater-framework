@@ -20,4 +20,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop the graph (and its vertices/edges); leave the age extension (dropping a shared extension is destructive).
     op.execute("SELECT ag_catalog.drop_graph('app_graph', true)")
