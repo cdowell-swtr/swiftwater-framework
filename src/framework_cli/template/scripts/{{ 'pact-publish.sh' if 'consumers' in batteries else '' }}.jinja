@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Publish generated pacts to a Pact Broker (opt-in). No-ops if PACT_BROKER_URL is unset.
+# Real multi-repo flow: consumers publish here; providers verify against broker pacts +
+# `pact-broker can-i-deploy` gates releases. See README for the full workflow.
+set -euo pipefail
+if [ -z "${PACT_BROKER_URL:-}" ]; then
+  echo "PACT_BROKER_URL unset — skipping pact publish (local-file flow only)."
+  exit 0
+fi
+uv run pact-broker publish pacts/ \
+  --broker-base-url "${PACT_BROKER_URL}" \
+  --consumer-app-version "$(git rev-parse --short HEAD)" \
+  ${PACT_BROKER_TOKEN:+--broker-token "${PACT_BROKER_TOKEN}"}

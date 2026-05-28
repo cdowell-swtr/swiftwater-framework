@@ -118,6 +118,27 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://localhost:5173 >/dev/null && break; sleep 1; done
           E2E_BASE_URL=http://localhost:5173 npm run test:e2e
 {%- endif %}
+{%- if "consumers" in batteries %}
+
+  # Pact: provider verification (replays the committed example consumer pact against the app
+  # over a testcontainers Postgres) + opt-in broker publish (only when PACT_BROKER_URL is set).
+  # The consumer pact test runs in the `test` job (functional tier).
+  contracts:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: provider verification (Pact)
+        run: uv run pytest tests/contract/test_provider_pact.py -q
+      - name: publish pacts to broker (opt-in)
+        if: {% raw %}${{ env.PACT_BROKER_URL != '' }}{% endraw %}
+        env:
+          PACT_BROKER_URL: {% raw %}${{ secrets.PACT_BROKER_URL }}{% endraw %}
+          PACT_BROKER_TOKEN: {% raw %}${{ secrets.PACT_BROKER_TOKEN }}{% endraw %}
+        run: bash scripts/pact-publish.sh
+{%- endif %}
 
   # Step 7: OpenAPI contract — the committed spec must be current; breaking changes fail.
   contract:

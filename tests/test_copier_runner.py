@@ -2671,3 +2671,19 @@ def test_render_consumers_provider(tmp_path):
     render_project(base, {**DATA, "batteries": []})
     assert not (base / "pacts").exists()
     assert not (base / "tests" / "contract").exists()
+
+
+def test_render_consumers_ci_and_broker(tmp_path):
+    dest = tmp_path / "c"
+    render_project(dest, {**DATA, "batteries": ["consumers"]})
+    ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
+    assert "test_provider_pact" in ci or "contract:pact" in ci
+    yaml.safe_load(ci)
+    assert (dest / "scripts" / "pact-publish.sh").exists()
+    assert "PACT_BROKER_URL" in (dest / "scripts" / "pact-publish.sh").read_text()
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert (
+        "test_provider_pact"
+        not in (base / ".github" / "workflows" / "ci.yml").read_text()
+    )

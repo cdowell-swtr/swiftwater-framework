@@ -167,6 +167,11 @@ tasks:
     cmds:
       - npm --prefix frontend run lint
       - npm --prefix frontend run typecheck
+{% endif %}{% if "consumers" in batteries %}
+  contract:pact:
+    desc: Run Pact contract tests (consumer + provider verification).
+    cmds:
+      - uv run pytest tests/functional/test_consumer_inventory.py tests/contract/test_provider_pact.py -q
 {% endif %}
   openapi:export:
     desc: Export the OpenAPI schema to openapi.json (commit it; CI diffs it).

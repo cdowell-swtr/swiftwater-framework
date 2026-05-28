@@ -75,3 +75,15 @@ separate, ephemeral Postgres (`postgres-test`, reset every run) for the full E2E
 - `GET /health` — readiness + SLO status
 - `GET /metrics` — Prometheus metrics
 - `GET /items` — example DB-backed listing (seeded data)
+{%- if "consumers" in batteries %}
+
+## Contract testing (Pact)
+
+This project uses [Pact](https://docs.pact.io/) for consumer-driven contract testing:
+
+- **Consumer test** (`tests/functional/test_consumer_inventory.py`): runs the inventory client against a Pact mock server and writes `pacts/<app>-inventory.json`. Runs in the normal `test` CI job (functional tier, no real network).
+- **Provider verification** (`tests/contract/test_provider_pact.py`): replays the committed example consumer pact (`pacts/examplewebapp-app.json`) against the running app + testcontainers Postgres. Runs in the gated `contracts` CI job.
+- `task contract:pact` — run both locally.
+
+**Pact Broker (opt-in):** set `PACT_BROKER_URL` + `PACT_BROKER_TOKEN` (GitHub repo secrets) to publish pacts and verify against a real broker. Without those secrets the `contracts` CI job uses local pact files only (`scripts/pact-publish.sh` no-ops). The multi-repo flow — consumer publishes, provider verifies broker pacts, `pact-broker can-i-deploy` gates releases — is documented in the script.
+{%- endif %}
