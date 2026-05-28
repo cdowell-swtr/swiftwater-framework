@@ -28,6 +28,11 @@ def _docker_available() -> bool:
     return result.returncode == 0
 
 
+def _compose_env() -> dict:
+    """Env for `docker compose up` so the dev app runs as the host user (host-owned bind writes)."""
+    return {**os.environ, "UID": str(os.getuid()), "GID": str(os.getgid())}
+
+
 @pytest.mark.skipif(
     not _docker_available(),
     reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
@@ -509,7 +514,7 @@ def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
         "down",
         "-v",
     ]
-    assert subprocess.run(up, cwd=dest).returncode == 0
+    assert subprocess.run(up, cwd=dest, env=_compose_env()).returncode == 0
     try:
         # app is published on 8000 in the `lite` profile (no Traefik)
         deadline = time.time() + 90
@@ -569,7 +574,7 @@ def test_rendered_project_dev_stack_prometheus_scrapes_app(tmp_path: Path):
         "down",
         "-v",
     ]
-    assert subprocess.run(up, cwd=dest).returncode == 0
+    assert subprocess.run(up, cwd=dest, env=_compose_env()).returncode == 0
     try:
         deadline = time.time() + 120
         up_targets = None
@@ -1478,3 +1483,31 @@ def test_alertmanager_config_valid_multichannel(tmp_path: Path):
         + result.stdout
         + result.stderr
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(), reason="uv and docker are required for the live-stack test"
+)
+def test_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "up", "-d", "--build"]
+    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "down", "-v"]
+    assert subprocess.run(up, cwd=dest, env=_compose_env()).returncode == 0
+    try:
+        # let uvicorn import the app + write __pycache__ into the bind-mounted src
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen("http://localhost:8000/health", timeout=3) as resp:
+                    if resp.status == 200:
+                        break
+            except OSError:
+                time.sleep(2)
+    finally:
+        subprocess.run(down, cwd=dest, env=_compose_env())
+    me = os.getuid()
+    bad = [p for p in (dest / "src").rglob("*") if p.stat().st_uid != me]
+    assert not bad, f"root/non-host-owned files left behind: {bad[:5]}"
