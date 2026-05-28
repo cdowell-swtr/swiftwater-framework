@@ -48,7 +48,7 @@ def parse_channels(channels: list[str]) -> list[str]:
     return [c for c in KNOWN_CHANNELS if c in selected]
 
 
-_NEED_CHOICES = [
+_NEED_CHOICES: list[tuple[str, str]] = [
     ("Document store", "document"),
     ("Vector / similarity search", "vector"),
     ("Time-series", "timeseries"),
@@ -57,9 +57,8 @@ _NEED_CHOICES = [
 ]
 
 
-def _prompt_needs() -> list[
-    str
-]:  # pragma: no cover - thin questionary wrapper, mocked in tests
+def _prompt_needs() -> list[str]:  # pragma: no cover
+    # Thin questionary wrapper, mocked in tests; the real body never runs under test.
     import questionary
 
     answer = questionary.checkbox(
@@ -72,9 +71,8 @@ def _prompt_needs() -> list[
     return list(answer or [])
 
 
-def _prompt_channels() -> list[
-    str
-]:  # pragma: no cover - thin questionary wrapper, mocked in tests
+def _prompt_channels() -> list[str]:  # pragma: no cover
+    # Thin questionary wrapper, mocked in tests; the real body never runs under test.
     import questionary
 
     answer = questionary.checkbox(

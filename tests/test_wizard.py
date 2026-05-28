@@ -65,6 +65,10 @@ def test_known_channels_order():
     assert KNOWN_CHANNELS == ("webhook", "slack", "email", "pagerduty")
 
 
+def _fail_if_called(*_a, **_k):
+    raise AssertionError("prompt should not be called when its flag is provided")
+
+
 def test_run_wizard_non_interactive_no_flags_uses_defaults():
     out = wiz.run_wizard(with_=[], alerts=None, interactive=False)
     assert out == {"batteries": [], "alert_channels": ["webhook"]}
@@ -72,9 +76,7 @@ def test_run_wizard_non_interactive_no_flags_uses_defaults():
 
 def test_run_wizard_with_flag_skips_needs_prompt(monkeypatch):
     # interactive, but --with passed → the needs prompt must NOT run
-    monkeypatch.setattr(
-        wiz, "_prompt_needs", lambda: (_ for _ in ()).throw(AssertionError("prompted"))
-    )
+    monkeypatch.setattr(wiz, "_prompt_needs", _fail_if_called)
     monkeypatch.setattr(wiz, "_prompt_channels", lambda: ["webhook"])
     out = wiz.run_wizard(with_=["graphql"], alerts=None, interactive=True)
     assert out["batteries"] == ["graphql"]
@@ -82,11 +84,7 @@ def test_run_wizard_with_flag_skips_needs_prompt(monkeypatch):
 
 def test_run_wizard_alerts_flag_skips_channel_prompt(monkeypatch):
     monkeypatch.setattr(wiz, "_prompt_needs", lambda: [])
-    monkeypatch.setattr(
-        wiz,
-        "_prompt_channels",
-        lambda: (_ for _ in ()).throw(AssertionError("prompted")),
-    )
+    monkeypatch.setattr(wiz, "_prompt_channels", _fail_if_called)
     out = wiz.run_wizard(with_=[], alerts="slack,email", interactive=True)
     assert out["alert_channels"] == ["slack", "email"]
 
