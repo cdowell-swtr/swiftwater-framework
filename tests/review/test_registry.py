@@ -150,3 +150,14 @@ def test_active_agents_battery_can_gate_multiple(monkeypatch):
     )
     out = active_agents("pull_request", ["_multi"])
     assert "api-design" in out and "documentation" in out
+
+
+def test_react_agents_active_on_pr_not_push():
+    from framework_cli.review.registry import active_agents
+
+    pr = active_agents("pull_request", ["react"])
+    assert "accessibility" in pr and "usability" in pr
+    push = active_agents(
+        "push", ["react"]
+    )  # battery agents are off-push unless on_push
+    assert "accessibility" not in push and "usability" not in push

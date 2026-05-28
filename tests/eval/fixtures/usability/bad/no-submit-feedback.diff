@@ -1,0 +1,16 @@
+--- a/frontend/src/CreateItem.tsx
++++ b/frontend/src/CreateItem.tsx
+@@ -5,5 +5,9 @@ export function CreateItem() {
++  const [name, setName] = useState("");
++  async function handleSubmit(e: React.FormEvent) {
++    e.preventDefault();
++    await fetch("/items", { method: "POST", body: JSON.stringify({ name }) });
++  }
+   return (
+-    <p>Create item form placeholder</p>
++    <form onSubmit={handleSubmit}>
++      <input value={name} onChange={(e) => setName(e.target.value)} />
++      <button type="submit">Create</button>
++    </form>
+   );
+ }

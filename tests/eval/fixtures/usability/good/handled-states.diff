@@ -1,0 +1,9 @@
+--- a/frontend/src/Items.tsx
++++ b/frontend/src/Items.tsx
+@@ -3,4 +3,8 @@ export function Items() {
+   const { data, isLoading, error } = useItems();
++  if (isLoading) return <p>Loading…</p>;
++  if (error) return <p role="alert">Failed to load items.</p>;
++  if (data.length === 0) return <p>No items yet.</p>;
+   return <ul>{data.map((i) => <li key={i.id}>{i.name}</li>)}</ul>;
+ }
