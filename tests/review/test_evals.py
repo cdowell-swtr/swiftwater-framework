@@ -168,6 +168,18 @@ def test_every_registered_agent_has_fixtures():
         assert good >= 1, f"{a}: needs >= 1 good fixture, has {good}"
 
 
+def test_contracts_has_full_fixture_set():
+    from pathlib import Path
+
+    from framework_cli.review.evals import load_fixtures
+
+    fx = [f for f in load_fixtures(Path("tests/eval/fixtures")) if f.agent == "contracts"]
+    kinds = sorted({f.kind for f in fx})
+    assert kinds == ["bad", "good"], kinds
+    assert sum(1 for f in fx if f.kind == "bad") >= 3
+    assert any(f.kind == "good" for f in fx)
+
+
 def test_fixtures_are_wellformed():
     from framework_cli.review.diff import changed_files
     from framework_cli.review.evals import load_fixtures
