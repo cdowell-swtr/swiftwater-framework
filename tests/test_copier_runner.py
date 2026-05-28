@@ -2966,3 +2966,23 @@ def test_alert_smoke_advisory_when_alertmanager_unreachable(tmp_path: Path):
     result = _run_smoke(dest, "http://127.0.0.1:1")  # port 1 → connection refused
     assert result.returncode == 0
     assert "could not reach" in (result.stdout + result.stderr).lower()
+
+
+def test_integrity_green_across_alert_channel_combos(tmp_path: Path):
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    for i, channels in enumerate(
+        [
+            ["webhook"],
+            ["slack"],
+            ["email", "pagerduty"],
+            ["webhook", "slack", "email", "pagerduty"],
+        ]
+    ):
+        dest = tmp_path / f"demo{i}"
+        render_project(dest, {**DATA, "alert_channels": channels})
+        write_manifest(dest, installed_framework_version())
+        findings = check(dest, ci=True)
+        assert not [f for f in findings if f.fatal], (channels, findings)

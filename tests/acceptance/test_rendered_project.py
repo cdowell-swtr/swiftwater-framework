@@ -1443,3 +1443,37 @@ def test_rendered_consumers_battery_passes(tmp_path: Path):
     assert provider.returncode == 0, (
         "provider verification failed:\n" + provider.stdout + provider.stderr
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="docker required: validates rendered alertmanager.yml with amtool inside the alertmanager image",
+)
+def test_alertmanager_config_valid_multichannel(tmp_path: Path):
+    # Validates the rendered alertmanager.yml with amtool (webhook+slack+pagerduty).
+    # Email is excluded: its ${...} non-secret fields are envsubst'd by the deploy host
+    # before mounting — raw ${...} is not valid amtool input.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "alert_channels": ["webhook", "slack", "pagerduty"]})
+    cfg = dest / "infra/observability/alertmanager/alertmanager.yml"
+    assert cfg.is_file(), f"alertmanager.yml was not rendered at {cfg}"
+    result = subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{cfg}:/cfg.yml:ro",
+            "--entrypoint",
+            "amtool",
+            "prom/alertmanager:v0.27.0",
+            "check-config",
+            "/cfg.yml",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "amtool check-config failed for webhook+slack+pagerduty alertmanager.yml:\n"
+        + result.stderr
+    )

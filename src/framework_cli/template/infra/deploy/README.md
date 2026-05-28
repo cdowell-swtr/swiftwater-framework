@@ -139,6 +139,67 @@ provides the required extensions (e.g. RDS with pgvector, Timescale Cloud, Supab
 Leave `POSTGRES_IMAGE` unset and omit the self-hosted `postgres` service from the merge — the
 managed instance handles the data tier.
 
+## Alert channels
+
+Alert channels are chosen at `framework new` (interactive wizard or `--alerts webhook,slack`) and
+reconfigured at any time with:
+
+```bash
+framework upskill <project> --alerts slack,email
+```
+
+This is a **set-replacement** — it overwrites the previous selection and re-renders
+`alertmanager.yml` and the `.env.example` managed section for the new channel set.
+
+### Secrets: mounted files at deploy
+
+Each configured channel requires its secret materialized as a file on the deploy host and mounted
+into the `alertmanager` container at `/etc/alertmanager/<name>`:
+
+| Channel | Mount path | Secret env var |
+|---|---|---|
+| `webhook` | `/etc/alertmanager/webhook_url` | `APP_ALERT_WEBHOOK_URL` |
+| `slack` | `/etc/alertmanager/slack_api_url` | `APP_ALERT_SLACK_API_URL` |
+| `pagerduty` | `/etc/alertmanager/pagerduty_routing_key` | `APP_ALERT_PAGERDUTY_ROUTING_KEY` |
+| `email` | `/etc/alertmanager/smtp_auth_password` | `APP_ALERT_SMTP_AUTH_PASSWORD` |
+
+Materialize each secret from your secret store (e.g. GitHub Environment secret → deploy step)
+before starting the Alertmanager container.
+
+### Email: envsubst required at deploy
+
+The email channel's non-secret fields (`APP_ALERT_SMTP_TO`, `APP_ALERT_SMTP_FROM`,
+`APP_ALERT_SMTP_SMARTHOST`, `APP_ALERT_SMTP_AUTH_USERNAME`) are written as `${...}` placeholders
+in `alertmanager.yml`. The busybox-based Alertmanager image has no `envsubst`, so **the deploy
+host must expand them before mounting**:
+
+```bash
+envsubst < infra/observability/alertmanager/alertmanager.yml > /tmp/alertmanager.rendered.yml
+# then mount /tmp/alertmanager.rendered.yml into the container
+```
+
+Only the email channel uses `${...}` placeholders; webhook, slack, and pagerduty configs use
+`*_file` directives and need no envsubst.
+
+### Precondition: `check_alert_secrets.sh`
+
+The `deploy` op runs `infra/deploy/check_alert_secrets.sh` before any containers start. It
+hard-fails the deploy if a configured channel's secret env var is empty or unset — catching a
+silent no-op at deploy time rather than during a real incident.
+
+### CD smoke: `strategy.sh alert-smoke`
+
+After deploy, the CD workflow runs `strategy.sh alert-smoke` (advisory, `continue-on-error`):
+it fires a synthetic auto-resolved alert and checks
+`alertmanager_notifications_failed_total`. If the counter is non-zero after the smoke, the step
+warns but does **not** fail the deploy (notification delivery is best-effort; the smoke surfaces
+misconfiguration early).
+
+Set `ALERTMANAGER_URL` as a GitHub Environment variable pointing to your deployed Alertmanager's
+URL (e.g. `https://alertmanager.example.com`). If unset it defaults to `http://localhost:9093`
+and the smoke exits advisory — a harmless no-op in CI environments where Alertmanager is not
+reachable.
+
 ## Notifications
 
 `notify.sh` logs by default. Wire your channel there (reuse the Alertmanager destination).
