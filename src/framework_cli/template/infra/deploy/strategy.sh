@@ -132,9 +132,10 @@ case "${operation}" in
   releases)        __target_release_history ;;
   current-release) __target_release_history | tail -n 1 | cut -f1 ;;
   teardown)        __target_teardown ;;
+  alert-smoke)     bash "$(dirname "$0")/alert_smoke.sh" ;;
   *)
     echo "::error::unknown deploy operation '${operation}'." >&2
-    echo "Valid: deploy await-healthy endpoints rollback releases current-release teardown." >&2
+    echo "Valid: deploy await-healthy endpoints rollback releases current-release teardown alert-smoke." >&2
     exit 2
     ;;
 esac

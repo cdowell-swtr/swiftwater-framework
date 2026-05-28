@@ -1,7 +1,9 @@
+import http.server
 import json
 import os
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -2875,3 +2877,73 @@ def test_alertmanager_meta_alert_present_always(tmp_path: Path):
     names = {r["alert"] for g in parsed["groups"] for r in g["rules"]}
     assert "AlertmanagerNotificationsFailing" in names
     assert "alertmanager_notifications_failed_total" in rule.read_text()
+
+
+# ---------------------------------------------------------------------------
+# #3 Advisory alert delivery smoke
+# ---------------------------------------------------------------------------
+
+
+class _FakeAM(http.server.BaseHTTPRequestHandler):
+    failed_total = 0.0  # set per test
+
+    def log_message(self, *a):  # silence
+        pass
+
+    def do_POST(self):  # /api/v2/alerts
+        length = int(self.headers.get("Content-Length", 0))
+        self.rfile.read(length)
+        self.send_response(200)
+        self.end_headers()
+
+    def do_GET(self):  # /metrics
+        body = (
+            'alertmanager_notifications_failed_total{integration="webhook"} '
+            f"{self.failed_total}\n"
+        ).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def _serve_fake_am(failed_total: float):
+    _FakeAM.failed_total = failed_total
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _FakeAM)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def _run_smoke(dest: Path, am_url: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bash", str(dest / "infra/deploy/alert_smoke.sh")],
+        env={"PATH": os.environ["PATH"], "ALERTMANAGER_URL": am_url, "SMOKE_WAIT": "1"},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_alert_smoke_reports_failure_but_exits_zero(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    srv = _serve_fake_am(failed_total=3.0)  # non-zero failures present
+    try:
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        result = _run_smoke(dest, url)
+    finally:
+        srv.shutdown()
+    assert result.returncode == 0  # advisory — never fails the deploy
+    assert "delivery" in (result.stdout + result.stderr).lower()
+
+
+def test_alert_smoke_clean_when_no_failures(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    srv = _serve_fake_am(failed_total=0.0)
+    try:
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        result = _run_smoke(dest, url)
+    finally:
+        srv.shutdown()
+    assert result.returncode == 0
+    assert "ok" in (result.stdout + result.stderr).lower()

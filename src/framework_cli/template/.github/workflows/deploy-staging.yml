@@ -47,6 +47,9 @@ jobs:
         run: bash infra/deploy/strategy.sh deploy
       - name: await healthy
         run: bash infra/deploy/strategy.sh await-healthy 120
+      - name: alert delivery smoke (advisory)
+        continue-on-error: true
+        run: bash infra/deploy/strategy.sh alert-smoke
       - name: resolve endpoint
         id: ep
         run: echo "url=$(bash infra/deploy/strategy.sh endpoints | head -n1)" >> "$GITHUB_OUTPUT"
