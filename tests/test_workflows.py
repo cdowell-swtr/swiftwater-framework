@@ -94,3 +94,16 @@ def test_release_workflow():
     assert set(jobs["release"]["needs"]) >= {"gate", "matrix"}
     rel_uses = " ".join(str(s.get("uses", "")) for s in jobs["release"]["steps"])
     assert "action-gh-release" in rel_uses
+
+
+def test_agent_evals_triggers_cover_all_agent_prompts():
+    wf = yaml.safe_load(_WF.read_text())
+    triggers = wf[True] if True in wf else wf["on"]
+    push_paths = triggers["push"]["paths"]
+    agents_dir = (
+        Path(__file__).parent.parent / "src" / "framework_cli" / "review" / "agents"
+    )
+    prompts = list(agents_dir.glob("*.md"))
+    have = {p.stem for p in prompts}
+    assert {"contracts", "observability-infra", "observability-db"} <= have
+    assert any("agents" in p for p in push_paths)
