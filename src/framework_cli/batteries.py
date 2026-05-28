@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Literal
+
+ObsSurface = Literal["service", "in-process", "rides-existing"]
 
 
 @dataclass(frozen=True)
@@ -10,57 +13,74 @@ class BatterySpec:
     summary: str  # one line, for --help / error messages
     requires: tuple[
         str, ...
-    ] = ()  # batteries this one implies (e.g. pgvector -> postgres, later)
-    gates_agents: tuple[
-        str, ...
-    ] = ()  # review agents activated when this battery is present (8d/8g)
+    ] = ()  # batteries this one implies (e.g. pgvector -> postgres)
+    gates_agents: tuple[str, ...] = ()  # review agents activated when present (8d/8g)
+    # §5 observability surface — REQUIRED, keyword-only. Forces every battery author to
+    # declare obs intent; verified against the rendered template by tests/test_obs_completeness.py.
+    #   "service"        -> a separate process/exporter: owes scrape + alert + dashboard + prod-wiring
+    #   "in-process"     -> metrics on the app's own /metrics: owes alert + dashboard
+    #   "rides-existing" -> no new §5 surface (postgres-extension, frontend-deferred, test harness)
+    obs: ObsSurface = field(kw_only=True)
 
 
 _BATTERIES: dict[str, BatterySpec] = {
     "webhooks": BatterySpec(
-        "webhooks", "Signed inbound webhook ingress (HMAC) with an idempotent inbox"
+        "webhooks",
+        "Signed inbound webhook ingress (HMAC) with an idempotent inbox",
+        obs="in-process",
     ),
     "websockets": BatterySpec(
-        "websockets", "FastAPI WebSocket routes + a connection manager"
+        "websockets",
+        "FastAPI WebSocket routes + a connection manager",
+        obs="in-process",
     ),
     "workers": BatterySpec(
         "workers",
         "Celery + Redis async task workers with a DB-backed dead-letter queue and beat scheduler",
+        obs="service",
     ),
     "graphql": BatterySpec(
         "graphql",
         "Strawberry code-first GraphQL endpoint at /graphql over the demo Item model",
         gates_agents=("api-design",),
+        obs="in-process",
     ),
     "pgvector": BatterySpec(
         "pgvector",
         "PostgreSQL pgvector extension + an embeddings table for vector similarity search",
+        obs="rides-existing",
     ),
     "mongodb": BatterySpec(
         "mongodb",
         "MongoDB document store (pymongo) with a documents collection + full observability",
+        obs="service",
     ),
     "timescaledb": BatterySpec(
         "timescaledb",
         "PostgreSQL TimescaleDB extension + a readings hypertable for time-series data",
+        obs="rides-existing",
     ),
     "age": BatterySpec(
         "age",
         "Apache AGE openCypher graph queries on Postgres (no new service)",
+        obs="rides-existing",
     ),
     "redis": BatterySpec(
         "redis",
         "Redis key/value datastore (cache/sessions) — shares the workers redis service when both are active",
+        obs="service",
     ),
     "react": BatterySpec(
         "react",
         "React + TypeScript SPA served by FastAPI, with Vitest/Playwright/axe and accessibility/usability review",
         gates_agents=("accessibility", "usability"),
+        obs="rides-existing",
     ),
     "consumers": BatterySpec(
         "consumers",
         "Pact consumer-driven contract testing (consumer + provider verification) for inter-service contracts",
         gates_agents=("contracts",),
+        obs="rides-existing",
     ),
 }
 

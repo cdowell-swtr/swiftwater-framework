@@ -34,7 +34,7 @@ def test_resolve_includes_dependency_closure():
     from framework_cli import batteries
 
     batteries._BATTERIES["_child"] = batteries.BatterySpec(
-        "_child", "x", requires=("websockets",)
+        "_child", "x", requires=("websockets",), obs="rides-existing"
     )
     try:
         assert batteries.resolve(["_child"]) == ["_child", "websockets"]
@@ -120,3 +120,40 @@ def test_consumers_battery_gates_contracts():
     from framework_cli.batteries import get_battery
 
     assert "contracts" in get_battery("consumers").gates_agents
+
+
+def test_batteryspec_requires_obs():
+    from framework_cli.batteries import BatterySpec
+
+    with pytest.raises(TypeError):
+        BatterySpec("x", "y")  # obs is a required keyword-only field
+
+
+def test_every_battery_declares_a_valid_obs_surface():
+    from framework_cli.batteries import battery_names, get_battery
+
+    valid = {"service", "in-process", "rides-existing"}
+    for name in battery_names():
+        assert get_battery(name).obs in valid, name
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("mongodb", "service"),
+        ("workers", "service"),
+        ("redis", "service"),
+        ("webhooks", "in-process"),
+        ("websockets", "in-process"),
+        ("graphql", "in-process"),
+        ("pgvector", "rides-existing"),
+        ("timescaledb", "rides-existing"),
+        ("age", "rides-existing"),
+        ("react", "rides-existing"),
+        ("consumers", "rides-existing"),
+    ],
+)
+def test_battery_obs_surface(name, expected):
+    from framework_cli.batteries import get_battery
+
+    assert get_battery(name).obs == expected
