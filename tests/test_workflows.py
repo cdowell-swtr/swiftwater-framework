@@ -44,3 +44,34 @@ def test_framework_ci_fast_tier():
     assert "pytest -q --ignore=tests/acceptance" in run
     assert "uv lock --check" in run
     assert "uv build" in run
+
+
+_RM = Path(__file__).parent.parent / ".github" / "workflows" / "render-matrix.yml"
+
+
+def test_render_matrix_workflow():
+    wf = yaml.safe_load(_RM.read_text())
+    triggers = wf[True] if True in wf else wf["on"]
+    assert "pull_request" in triggers
+    assert "push" in triggers
+    assert "schedule" in triggers
+    assert "workflow_call" in triggers
+    assert "workflow_dispatch" in triggers
+
+    jobs = wf["jobs"]
+    gen_run = " ".join(str(s.get("run", "")) for s in jobs["generate-matrix"]["steps"])
+    assert "framework dev-combos" in gen_run
+    assert jobs["generate-matrix"]["outputs"]["combos"]
+
+    render = jobs["render"]
+    assert "fromJSON" in str(render["strategy"]["matrix"]["combo"])
+    assert render["strategy"]["fail-fast"] is False
+    render_run = " ".join(str(s.get("run", "")) for s in render["steps"])
+    assert "framework new demo" in render_run
+    assert "framework integrity --ci" in render_run
+    assert "task ci" in render_run
+    assert "npm ci" in render_run  # react frontend gate
+    assert any(
+        "setup-node" in str(s.get("uses", "")) and "react" in str(s.get("if", ""))
+        for s in render["steps"]
+    )

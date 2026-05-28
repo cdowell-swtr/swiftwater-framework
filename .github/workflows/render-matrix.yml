@@ -1,0 +1,75 @@
+name: render-matrix
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC — drift backstop
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      strategy:
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      combos: ${{ steps.gen.outputs.combos }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - id: gen
+        env:
+          # PR -> fast representative set; everything else -> broad (pairwise + rotation).
+          # A workflow_call may override via inputs.strategy.
+          STRATEGY: ${{ inputs.strategy || (github.event_name == 'pull_request' && 'representative' || 'broad') }}
+          SEED: ${{ github.run_number }}
+        run: |
+          combos=$(uv run framework dev-combos --strategy "$STRATEGY" --seed "$SEED")
+          echo "combos=$combos" >> "$GITHUB_OUTPUT"
+
+  render:
+    needs: generate-matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        combo: ${{ fromJSON(needs.generate-matrix.outputs.combos) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Node (react combos only)
+        if: contains(matrix.combo.batteries, 'react')
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: uv sync
+      - run: uv tool install .
+      - name: render the project (real builder path)
+        run: framework new demo ${{ matrix.combo.with_flags }} ${{ matrix.combo.alerts_flag }}
+      - run: uv sync
+        working-directory: demo
+      - run: framework integrity --ci
+        working-directory: demo
+      - run: task ci
+        working-directory: demo
+      - name: frontend gate (react combos only)
+        if: contains(matrix.combo.batteries, 'react')
+        working-directory: demo/frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
