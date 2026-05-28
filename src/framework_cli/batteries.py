@@ -57,6 +57,10 @@ _BATTERIES: dict[str, BatterySpec] = {
         "React + TypeScript SPA served by FastAPI, with Vitest/Playwright/axe and accessibility/usability review",
         gates_agents=("accessibility", "usability"),
     ),
+    "consumers": BatterySpec(
+        "consumers",
+        "Pact consumer-driven contract testing (consumer + provider verification) for inter-service contracts",
+    ),
 }
 
 

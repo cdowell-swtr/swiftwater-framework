@@ -2626,3 +2626,22 @@ def test_downskill_react_no_force(tmp_path):
     assert "setup-node" not in (dest / ".github" / "workflows" / "ci.yml").read_text()
     assert "\n  frontend:\n" not in (dest / "infra" / "compose" / "dev.yml").read_text()
     assert check(dest, ci=True) == []
+
+
+def test_render_consumers_foundation(tmp_path):
+    dest = tmp_path / "c"
+    render_project(dest, {**DATA, "batteries": ["consumers"]})
+    assert (dest / "src" / "demo" / "clients" / "inventory.py").exists()
+    assert (
+        "inventory_url"
+        in (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    )
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "pact-python" in pyproject and "httpx" in pyproject
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert not (base / "src" / "demo" / "clients").exists()
+    assert (
+        "inventory_url"
+        not in (base / "src" / "demo" / "config" / "settings.py").read_text()
+    )

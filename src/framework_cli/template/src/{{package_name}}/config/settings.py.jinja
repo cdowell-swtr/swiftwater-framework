@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # via APP_MONGO_URL; the default points to the mongo service in dev.
     mongo_url: str = "mongodb://mongo:27017/app"
 {%- endif %}
+{%- if "consumers" in batteries %}
+
+    # Downstream inventory service (Pact consumer demo). Override per environment.
+    inventory_url: str = "http://inventory:8080"
+{%- endif %}
 
     @property
     def resolved_log_level(self) -> str:

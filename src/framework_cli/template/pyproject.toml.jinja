@@ -20,6 +20,7 @@ dependencies = [
 {% endif %}{% if "workers" in batteries %}    "celery[redis]>=5.4",
 {% endif %}{% if "mongodb" in batteries %}    "pymongo>=4.9",
 {% endif %}{% if "redis" in batteries %}    "redis>=5",
+{% endif %}{% if "consumers" in batteries %}    "httpx>=0.28",
 {% endif %}]
 
 [dependency-groups]
@@ -35,6 +36,7 @@ dev = [
     "testcontainers[postgresql]>=4.8",
 {% if "mongodb" in batteries %}    "testcontainers[mongodb]>=4.8",
 {% endif %}{% if "redis" in batteries %}    "testcontainers[redis]>=4.8",
+{% endif %}{% if "consumers" in batteries %}    "pact-python>=3.4",
 {% endif %}]
 
 [build-system]

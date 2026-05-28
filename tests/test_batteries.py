@@ -106,3 +106,12 @@ def test_react_battery_registered():
     assert get_battery("react").requires == ()
     assert get_battery("react").gates_agents == ("accessibility", "usability")
     assert resolve(["react"]) == ["react"]
+
+
+def test_consumers_battery_registered():
+    from framework_cli.batteries import battery_names, get_battery, resolve
+
+    assert "consumers" in battery_names()
+    assert get_battery("consumers").requires == ()
+    assert get_battery("consumers").gates_agents == ()
+    assert resolve(["consumers"]) == ["consumers"]
