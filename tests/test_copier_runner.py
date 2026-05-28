@@ -2845,3 +2845,17 @@ def test_alert_precondition_default_checks_webhook(tmp_path: Path):
     render_project(dest, {**DATA})
     assert _run_precondition(dest, {}).returncode == 1  # webhook url missing
     assert _run_precondition(dest, {"APP_ALERT_WEBHOOK_URL": "https://x"}).returncode == 0
+
+
+def test_alert_precondition_email_reports_all_missing_secrets(tmp_path: Path):
+    # email is the multi-secret channel: with only some set, ALL missing ones must be named
+    # (accumulate-then-exit, not fail-on-first).
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "alert_channels": ["email"]})
+    result = _run_precondition(
+        dest,
+        {"APP_ALERT_SMTP_SMARTHOST": "smtp:587", "APP_ALERT_SMTP_FROM": "a@x"},
+    )
+    assert result.returncode == 1
+    assert "APP_ALERT_SMTP_TO" in result.stderr
+    assert "APP_ALERT_SMTP_AUTH_PASSWORD" in result.stderr
