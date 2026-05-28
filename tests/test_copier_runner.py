@@ -2588,3 +2588,41 @@ def test_render_react_ci_job(tmp_path):
     base = tmp_path / "base"
     render_project(base, {**DATA, "batteries": []})
     assert "setup-node" not in (base / ".github" / "workflows" / "ci.yml").read_text()
+
+
+# ---------------------------------------------------------------------------
+# T6: integrity across react battery combos + downskill
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "batteries",
+    [[], ["react"], ["react", "graphql"], ["react", "workers", "redis"]],
+)
+def test_integrity_green_for_react_combos(tmp_path, batteries):
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": batteries})
+    write_manifest(dest, installed_framework_version())
+    assert check(dest, ci=True) == []
+
+
+def test_downskill_react_no_force(tmp_path):
+    from framework_cli.downskill import remove_battery
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    write_manifest(dest, installed_framework_version())
+    _git_init_commit(dest)
+    remove_battery(dest, "react", force=False)
+    assert not (dest / "frontend").exists()
+    assert "StaticFiles" not in (dest / "src" / "demo" / "main.py").read_text()
+    assert "setup-node" not in (dest / ".github" / "workflows" / "ci.yml").read_text()
+    assert "\n  frontend:\n" not in (dest / "infra" / "compose" / "dev.yml").read_text()
+    assert check(dest, ci=True) == []
