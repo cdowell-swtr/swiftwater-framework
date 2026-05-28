@@ -113,5 +113,10 @@ def test_consumers_battery_registered():
 
     assert "consumers" in battery_names()
     assert get_battery("consumers").requires == ()
-    assert get_battery("consumers").gates_agents == ()
     assert resolve(["consumers"]) == ["consumers"]
+
+
+def test_consumers_battery_gates_contracts():
+    from framework_cli.batteries import get_battery
+
+    assert "contracts" in get_battery("consumers").gates_agents

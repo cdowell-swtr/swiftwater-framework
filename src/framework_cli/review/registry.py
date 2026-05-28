@@ -103,6 +103,9 @@ _SPECS: dict[str, AgentSpec] = {
     "api-design": AgentSpec(
         "review-api-design", _prompt("api-design"), "high", "battery", DEFAULT_MODEL
     ),
+    "contracts": AgentSpec(
+        "review-contracts", _prompt("contracts"), "high", "battery", DEFAULT_MODEL
+    ),
     "accessibility": AgentSpec(
         "review-accessibility",
         _prompt("accessibility"),

@@ -60,6 +60,7 @@ _BATTERIES: dict[str, BatterySpec] = {
     "consumers": BatterySpec(
         "consumers",
         "Pact consumer-driven contract testing (consumer + provider verification) for inter-service contracts",
+        gates_agents=("contracts",),
     ),
 }
 

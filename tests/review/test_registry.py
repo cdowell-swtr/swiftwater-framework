@@ -172,3 +172,16 @@ def test_react_agents_active_on_pr_not_push():
         "push", ["react"]
     )  # battery agents are off-push unless on_push
     assert "accessibility" not in push and "usability" not in push
+
+
+def test_review_contracts_registered_and_gated():
+    from framework_cli.review.registry import active_agents, get_agent
+
+    spec = get_agent("contracts")
+    assert spec.name == "review-contracts"
+    assert spec.block_threshold == "high"
+    assert spec.active_when == "battery"
+    # gated by the consumers battery, PR-only (battery agents are off on push)
+    assert "contracts" in active_agents("pull_request", ["consumers"])
+    assert "contracts" not in active_agents("pull_request", [])
+    assert "contracts" not in active_agents("push", ["consumers"])
