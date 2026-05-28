@@ -11,7 +11,9 @@ build/
 *.egg-info/
 .env
 infra/traefik/certs/*.pem
+{%- if "react" in batteries %}
 # Frontend (react battery): never ship host node_modules/dist into the build context — the
-# Dockerfile's frontend-build stage runs its own clean `npm ci` + build. (Harmless without react.)
+# Dockerfile's frontend-build stage runs its own clean `npm ci` + build.
 frontend/node_modules/
 frontend/dist/
+{%- endif %}
