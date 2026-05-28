@@ -2687,3 +2687,48 @@ def test_render_consumers_ci_and_broker(tmp_path):
         "test_provider_pact"
         not in (base / ".github" / "workflows" / "ci.yml").read_text()
     )
+
+
+# ---------------------------------------------------------------------------
+# Consumers: integrity combos + downskill
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "batteries",
+    [[], ["consumers"], ["consumers", "graphql"], ["consumers", "workers"]],
+)
+def test_integrity_green_for_consumers_combos(tmp_path, batteries):
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": batteries})
+    write_manifest(dest, installed_framework_version())
+    assert check(dest, ci=True) == []
+
+
+def test_downskill_consumers_no_force(tmp_path):
+    from framework_cli.downskill import remove_battery
+    from framework_cli.integrity.checker import check
+    from framework_cli.integrity.generate import write_manifest
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": ["consumers"]})
+    write_manifest(dest, installed_framework_version())
+    _git_init_commit(dest)
+    remove_battery(dest, "consumers", force=False)
+    assert not (dest / "src" / "demo" / "clients").exists()
+    assert not (dest / "tests" / "contract").exists()
+    assert not (dest / "pacts").exists()
+    assert (
+        "inventory_url"
+        not in (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    )
+    assert (
+        "test_provider_pact"
+        not in (dest / ".github" / "workflows" / "ci.yml").read_text()
+    )
+    assert check(dest, ci=True) == []

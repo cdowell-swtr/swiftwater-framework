@@ -12,7 +12,7 @@ from sqlalchemy import Engine
 
 def _free_port() -> int:
     with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
+        s.bind(("localhost", 0))
         return int(s.getsockname()[1])
 
 
@@ -24,6 +24,10 @@ def provider_url(engine: Engine, pg_url: str):
     APP_DATABASE_URL) points at the test DB — an in-process thread would inherit the
     test session's already-imported engine. pg_url is the raw DSN (password intact);
     str(engine.url) would mask it.
+
+    Uses ``localhost`` (not ``127.0.0.1``) throughout so pact-python's Verifier host
+    check passes — Verifier defaults its internal host to ``localhost`` and validates
+    that the transport URL's host matches.
     """
     from {{ package_name }}.db.engine import build_session_factory
     from {{ package_name }}.db.repository import create_item
@@ -42,7 +46,7 @@ def provider_url(engine: Engine, pg_url: str):
             "uvicorn",
             "{{ package_name }}.main:app",
             "--host",
-            "127.0.0.1",
+            "localhost",
             "--port",
             str(port),
             "--log-level",
@@ -50,7 +54,7 @@ def provider_url(engine: Engine, pg_url: str):
         ],
         env={**os.environ, "APP_DATABASE_URL": pg_url},
     )
-    url = f"http://127.0.0.1:{port}"
+    url = f"http://localhost:{port}"
     try:
         deadline = time.time() + 30
         while time.time() < deadline:

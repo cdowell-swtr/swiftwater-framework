@@ -1412,3 +1412,34 @@ def test_rendered_react_battery_passes(tmp_path: Path):
     assert build.returncode == 0, (
         "react app image build failed:\n" + build.stdout + build.stderr
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: pact consumer + provider verification (app over testcontainers Postgres)",
+)
+def test_rendered_consumers_battery_passes(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["consumers"]})
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+    consumer = subprocess.run(
+        ["uv", "run", "pytest", "tests/functional/test_consumer_inventory.py", "-q"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert consumer.returncode == 0, (
+        "consumer pact test failed:\n" + consumer.stdout + consumer.stderr
+    )
+    assert (dest / "pacts" / "demo-inventory.json").exists(), (
+        "consumer test did not write its pact"
+    )
+    provider = subprocess.run(
+        ["uv", "run", "pytest", "tests/contract/test_provider_pact.py", "-q"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert provider.returncode == 0, (
+        "provider verification failed:\n" + provider.stdout + provider.stderr
+    )
