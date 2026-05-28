@@ -24,7 +24,10 @@ receivers:
 {%- endif %}
 {%- if "email" in alert_channels %}
     email_configs:
-      # SMTP config from the .env managed section; password from the mounted secret file.
+      # The ${...} non-secret fields are NOT expanded by Alertmanager (the busybox image has no
+      # envsubst — same reason webhook/slack/pagerduty secrets use *_file). The DEPLOY HOST renders
+      # this file with `envsubst` before mounting it; the password stays a mounted secret file.
+      # See infra/deploy/README.md.
       - to: "${APP_ALERT_SMTP_TO}"
         from: "${APP_ALERT_SMTP_FROM}"
         smarthost: "${APP_ALERT_SMTP_SMARTHOST}"
