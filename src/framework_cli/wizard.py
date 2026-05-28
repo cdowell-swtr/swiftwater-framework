@@ -85,7 +85,7 @@ def _prompt_channels() -> list[str]:  # pragma: no cover
     return list(answer or [])
 
 
-def _split_alerts(value: str) -> list[str]:
+def split_alerts(value: str) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
@@ -106,7 +106,7 @@ def run_wizard(
         batteries = []
 
     if alerts is not None:
-        channels = parse_channels(_split_alerts(alerts))
+        channels = parse_channels(split_alerts(alerts))
     elif interactive:
         channels = parse_channels(_prompt_channels())
     else:

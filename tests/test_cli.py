@@ -466,6 +466,34 @@ def test_upskill_with_unions_batteries(tmp_path, monkeypatch):
     assert captured["with_batteries"] == ["_x", "websockets"]  # union, sorted
 
 
+def test_upskill_alerts_flag_passes_parsed_channels(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["new", "My App"]).exit_code == 0
+    project = tmp_path / "my-app"
+
+    captured = {}
+
+    def fake_upskill(proj, vcs_ref=None, with_batteries=None, alert_channels=None):
+        captured["alert_channels"] = alert_channels
+        return True
+
+    monkeypatch.setattr(cli_mod, "upskill_project", fake_upskill)
+    result = runner.invoke(app, ["upskill", str(project), "--alerts", "slack,email"])
+    assert result.exit_code == 0, result.output
+    assert captured["alert_channels"] == ["slack", "email"]
+
+
+def test_upskill_bad_alert_channel_errors(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["new", "My App"]).exit_code == 0
+    project = tmp_path / "my-app"
+    result = runner.invoke(app, ["upskill", str(project), "--alerts", "sms"])
+    assert result.exit_code == 1
+    assert "unknown alert channel" in result.output
+
+
 def test_restore_env_example_preserves_webhooks_secret(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert runner.invoke(app, ["new", "My App", "--with", "webhooks"]).exit_code == 0

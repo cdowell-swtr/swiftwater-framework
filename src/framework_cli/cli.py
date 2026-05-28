@@ -150,7 +150,7 @@ def upskill(
 ) -> None:
     """Update a project to a newer framework version, then run its tests."""
     from framework_cli.source import read_batteries
-    from framework_cli.wizard import _split_alerts, parse_channels
+    from framework_cli.wizard import parse_channels, split_alerts
 
     project = Path(name)
     if not project.is_dir():
@@ -168,7 +168,7 @@ def upskill(
     channels = None
     if alerts is not None:
         try:
-            channels = parse_channels(_split_alerts(alerts))
+            channels = parse_channels(split_alerts(alerts))
         except ValueError as exc:
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(1) from exc
