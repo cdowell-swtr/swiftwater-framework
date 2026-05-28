@@ -1,0 +1,8 @@
+--- a/src/myapp/mongo/repository.py
++++ b/src/myapp/mongo/repository.py
+@@ -8,3 +8,6 @@ def insert_document(db, doc: dict) -> str:
+     return str(db.documents.insert_one(doc).inserted_id)
++
++
++def find_documents(db, query: dict) -> list[dict]:
++    return list(db.documents.find(query))

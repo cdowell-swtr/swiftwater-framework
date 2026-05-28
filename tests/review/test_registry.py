@@ -15,6 +15,7 @@ _EXPECTED_PR = sorted(
         "application-logic",
         "observability",
         "observability-infra",
+        "observability-db",
         "test-quality",
         "architecture",
         "performance",
@@ -210,3 +211,21 @@ def test_observability_split_infra():
     assert "observability-infra" in active_agents("pull_request")
     # not on push (file-trigger, on_push defaults False) — keeps the curated push subset.
     assert "observability-infra" not in active_agents("push")
+
+
+def test_observability_split_db():
+    from framework_cli.review.registry import active_agents, get_agent
+
+    spec = get_agent("observability-db")
+    assert spec.name == "review-observability-db"
+    assert spec.block_threshold == "high"
+    assert spec.active_when == "file-trigger"
+    # data-layer globs, NOT battery-gated (baseline always ships postgres).
+    assert spec.trigger_globs and "*/db/*" in spec.trigger_globs
+    from framework_cli.review.diff import matches_globs
+
+    assert matches_globs(["src/demo/db/repository.py"], spec.trigger_globs)
+    assert matches_globs(["migrations/versions/0001_init.py"], spec.trigger_globs)
+    assert not matches_globs(["infra/compose/dev.yml"], spec.trigger_globs)
+    assert "observability-db" in active_agents("pull_request")
+    assert "observability-db" not in active_agents("push")

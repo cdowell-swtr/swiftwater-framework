@@ -1,0 +1,9 @@
+--- a/src/myapp/db/repository.py
++++ b/src/myapp/db/repository.py
+@@ -10,3 +10,9 @@ def list_items(session: Session) -> list[Item]:
+     return list(session.scalars(select(Item)).all())
++
++
++def count_items(session: Session) -> int:
++    with tracer.start_as_current_span("db.count_items"):
++        return session.scalar(select(func.count()).select_from(Item)) or 0
