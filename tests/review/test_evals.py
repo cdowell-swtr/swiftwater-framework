@@ -173,7 +173,9 @@ def test_contracts_has_full_fixture_set():
 
     from framework_cli.review.evals import load_fixtures
 
-    fx = [f for f in load_fixtures(Path("tests/eval/fixtures")) if f.agent == "contracts"]
+    fx = [
+        f for f in load_fixtures(Path("tests/eval/fixtures")) if f.agent == "contracts"
+    ]
     kinds = sorted({f.kind for f in fx})
     assert kinds == ["bad", "good"], kinds
     assert sum(1 for f in fx if f.kind == "bad") >= 3

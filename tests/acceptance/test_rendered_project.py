@@ -1493,8 +1493,31 @@ def test_rendered_project_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Pa
     render_project(dest, DATA)
     assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
     base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
-    up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "up", "-d", "--build"]
-    down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "down", "-v"]
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "up",
+        "-d",
+        "--build",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "down",
+        "-v",
+    ]
     assert subprocess.run(up, cwd=dest, env=_compose_env()).returncode == 0
     served = False
     try:
@@ -1502,7 +1525,9 @@ def test_rendered_project_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Pa
         deadline = time.time() + 90
         while time.time() < deadline:
             try:
-                with urllib.request.urlopen("http://localhost:8000/health", timeout=3) as resp:
+                with urllib.request.urlopen(
+                    "http://localhost:8000/health", timeout=3
+                ) as resp:
                     if resp.status == 200:
                         served = True
                         break
@@ -1512,7 +1537,9 @@ def test_rendered_project_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Pa
         subprocess.run(down, cwd=dest, env=_compose_env())
     # Liveness gate: if the app never served, the ownership scan below would pass vacuously
     # (no container ever wrote into src). Assert the stack actually came up first.
-    assert served, "app did not serve /health within 90s — ownership check would be vacuous"
+    assert served, (
+        "app did not serve /health within 90s — ownership check would be vacuous"
+    )
     me = os.getuid()
     bad = [p for p in (dest / "src").rglob("*") if p.stat().st_uid != me]
     assert not bad, f"root/non-host-owned files left behind: {bad[:5]}"
