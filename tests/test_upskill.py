@@ -242,3 +242,28 @@ def test_upskill_regenerates_the_manifest(tmp_path, monkeypatch):
 
     assert up.upskill_project(proj) is True
     assert captured["project"] == proj  # manifest regenerated after the update
+
+
+def test_upskill_records_alert_channels(monkeypatch, tmp_path: Path):
+    import framework_cli.upskill as up
+
+    project = tmp_path / "demo"
+    project.mkdir()
+    (project / ".copier-answers.yml").write_text(
+        "_src_path: gh:x\n_commit: v0.1.0\nbatteries: []\nalert_channels:\n- webhook\n"
+    )
+    calls = {}
+
+    monkeypatch.setattr(up, "_is_git_tracked", lambda p: True)
+    monkeypatch.setattr(
+        up, "run_update", lambda *a, **k: calls.update(data=k.get("data"))
+    )
+    monkeypatch.setattr(
+        up.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0})()
+    )
+
+    up.upskill_project(project, alert_channels=["slack", "email"])
+
+    assert calls["data"]["alert_channels"] == ["slack", "email"]
+    answers = (project / ".copier-answers.yml").read_text()
+    assert "alert_channels:\n- slack\n- email\n" in answers

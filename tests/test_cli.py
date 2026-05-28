@@ -449,7 +449,7 @@ def test_upskill_with_unions_batteries(tmp_path, monkeypatch):
 
     captured = {}
 
-    def fake_upskill(proj, vcs_ref=None, with_batteries=None):
+    def fake_upskill(proj, vcs_ref=None, with_batteries=None, alert_channels=None):
         captured["with_batteries"] = with_batteries
         return True
 

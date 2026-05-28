@@ -2770,8 +2770,14 @@ def test_alertmanager_renders_slack_and_pagerduty(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "alert_channels": ["slack", "pagerduty"]})
     text = (dest / "infra/observability/alertmanager/alertmanager.yml").read_text()
-    assert "slack_configs:" in text and "api_url_file: /etc/alertmanager/slack_api_url" in text
-    assert "pagerduty_configs:" in text and "routing_key_file: /etc/alertmanager/pagerduty_routing_key" in text
+    assert (
+        "slack_configs:" in text
+        and "api_url_file: /etc/alertmanager/slack_api_url" in text
+    )
+    assert (
+        "pagerduty_configs:" in text
+        and "routing_key_file: /etc/alertmanager/pagerduty_routing_key" in text
+    )
     assert "webhook_configs:" not in text  # webhook not selected
     parsed = yaml.safe_load(text)
     assert parsed["receivers"][0]["name"] == "default"
@@ -2838,7 +2844,9 @@ def test_alert_precondition_fails_when_secret_missing(tmp_path: Path):
 def test_alert_precondition_passes_when_secret_present(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "alert_channels": ["slack"]})
-    result = _run_precondition(dest, {"APP_ALERT_SLACK_API_URL": "https://hooks.example/x"})
+    result = _run_precondition(
+        dest, {"APP_ALERT_SLACK_API_URL": "https://hooks.example/x"}
+    )
     assert result.returncode == 0, result.stderr
 
 
@@ -2846,7 +2854,9 @@ def test_alert_precondition_default_checks_webhook(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
     assert _run_precondition(dest, {}).returncode == 1  # webhook url missing
-    assert _run_precondition(dest, {"APP_ALERT_WEBHOOK_URL": "https://x"}).returncode == 0
+    assert (
+        _run_precondition(dest, {"APP_ALERT_WEBHOOK_URL": "https://x"}).returncode == 0
+    )
 
 
 def test_alert_precondition_email_reports_all_missing_secrets(tmp_path: Path):

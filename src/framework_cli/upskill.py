@@ -35,7 +35,10 @@ def _is_git_tracked(project: Path) -> bool:
 
 
 def upskill_project(
-    project: Path, vcs_ref: str | None = None, with_batteries: list[str] | None = None
+    project: Path,
+    vcs_ref: str | None = None,
+    with_batteries: list[str] | None = None,
+    alert_channels: list[str] | None = None,
 ) -> bool:
     """Update `project` to `vcs_ref` (default: latest tag) and run `task test`.
 
@@ -43,8 +46,16 @@ def upskill_project(
     passed to the update AND re-recorded afterward — the framework owns the battery record,
     since Copier does not preserve the subdir-declared `batteries` answer through the portable
     source on update.
+
+    `alert_channels` replaces the channel set when given; if omitted the project's recorded
+    channels are preserved (same set-replacement semantics as batteries).
     """
-    from framework_cli.source import read_batteries, record_batteries
+    from framework_cli.source import (
+        read_alert_channels,
+        read_batteries,
+        record_alert_channels,
+        record_batteries,
+    )
 
     if not _is_git_tracked(project):
         raise UpskillError(
@@ -52,6 +63,9 @@ def upskill_project(
         )
     effective = (
         with_batteries if with_batteries is not None else read_batteries(project)
+    )
+    channels = (
+        alert_channels if alert_channels is not None else read_alert_channels(project)
     )
     from framework_cli.migrations import migration_context
 
@@ -61,9 +75,14 @@ def upskill_project(
         overwrite=True,
         quiet=True,
         vcs_ref=vcs_ref,
-        data={"batteries": effective, **migration_context(effective)},
+        data={
+            "batteries": effective,
+            "alert_channels": channels,
+            **migration_context(effective),
+        },
     )
     record_batteries(project, effective)
+    record_alert_channels(project, channels)
     # The update may have changed managed sections / locked files (incl. battery-conditional
     # lines like the webhooks secret in .env.example). Re-record the integrity manifest so
     # `framework integrity` reflects the upgraded state.
