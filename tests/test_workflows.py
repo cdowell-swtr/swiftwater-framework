@@ -26,3 +26,21 @@ def test_agent_evals_workflow_is_valid():
     # the key is supplied from secrets
     env_blocks = [s.get("env", {}) for s in steps]
     assert any("ANTHROPIC_API_KEY" in e for e in env_blocks)
+
+
+_CI = Path(__file__).parent.parent / ".github" / "workflows" / "ci.yml"
+
+
+def test_framework_ci_fast_tier():
+    wf = yaml.safe_load(_CI.read_text())
+    triggers = wf[True] if True in wf else wf["on"]
+    assert "pull_request" in triggers
+    assert "workflow_call" in triggers  # reusable by release.yml
+    steps = wf["jobs"]["gate"]["steps"]
+    run = " ".join(str(s.get("run", "")) for s in steps)
+    assert "ruff check" in run
+    assert "ruff format --check" in run
+    assert "mypy src" in run
+    assert "pytest -q --ignore=tests/acceptance" in run
+    assert "uv lock --check" in run
+    assert "uv build" in run
