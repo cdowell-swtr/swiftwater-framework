@@ -2537,3 +2537,19 @@ def test_downskill_redis_keeps_shared_infra_when_workers_remains(tmp_path):
         in (dest / "infra" / "compose" / "observability.yml").read_text()
     )
     assert check(dest, ci=True) == []
+
+
+def test_render_react_frontend_scaffold(tmp_path):
+    dest = tmp_path / "r"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    fe = dest / "frontend"
+    assert (fe / "package.json").exists()
+    assert (fe / "vite.config.ts").exists()
+    assert (fe / "src" / "Items.tsx").exists()
+    assert (fe / "src" / "Items.test.tsx").exists()
+    assert (fe / "e2e" / "items.spec.ts").exists()
+    pkg = (fe / "package.json").read_text()
+    assert "vite" in pkg and "vitest" in pkg and "@axe-core/playwright" in pkg
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert not (base / "frontend").exists()
