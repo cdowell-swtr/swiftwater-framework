@@ -174,8 +174,9 @@ in `alertmanager.yml`. The busybox-based Alertmanager image has no `envsubst`, s
 host must expand them before mounting**:
 
 ```bash
-envsubst < infra/observability/alertmanager/alertmanager.yml > /tmp/alertmanager.rendered.yml
-# then mount /tmp/alertmanager.rendered.yml into the container
+rendered="$(mktemp)"   # unique path — avoids collisions across concurrent deploys
+envsubst < infra/observability/alertmanager/alertmanager.yml > "$rendered"
+# then mount "$rendered" at /etc/alertmanager/alertmanager.yml in the container
 ```
 
 Only the email channel uses `${...}` placeholders; webhook, slack, and pagerduty configs use

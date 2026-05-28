@@ -1475,5 +1475,6 @@ def test_alertmanager_config_valid_multichannel(tmp_path: Path):
     )
     assert result.returncode == 0, (
         "amtool check-config failed for webhook+slack+pagerduty alertmanager.yml:\n"
+        + result.stdout
         + result.stderr
     )
