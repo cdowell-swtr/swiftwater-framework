@@ -1,0 +1,82 @@
+import os
+import socket
+import subprocess
+import sys
+import time
+
+import httpx
+import pytest
+from pact import Verifier
+from sqlalchemy import Engine
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+@pytest.fixture
+def provider_url(engine: Engine, pg_url: str):
+    """Start the real app over the testcontainers Postgres and seed the 'items exist' state.
+
+    The app runs in a SUBPROCESS so its module-level engine (bound at import from
+    APP_DATABASE_URL) points at the test DB — an in-process thread would inherit the
+    test session's already-imported engine. pg_url is the raw DSN (password intact);
+    str(engine.url) would mask it.
+    """
+    from {{ package_name }}.db.engine import build_session_factory
+    from {{ package_name }}.db.repository import create_item
+
+    factory = build_session_factory(engine)
+    with factory() as session:
+        create_item(session, "alpha")
+        create_item(session, "beta")
+        session.commit()
+
+    port = _free_port()
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "{{ package_name }}.main:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--log-level",
+            "warning",
+        ],
+        env={**os.environ, "APP_DATABASE_URL": pg_url},
+    )
+    url = f"http://127.0.0.1:{port}"
+    try:
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                raise RuntimeError("provider app exited during startup")
+            try:
+                if httpx.get(f"{url}/heartbeat", timeout=1).status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.3)
+        else:
+            raise RuntimeError("provider app did not start in time")
+        yield url
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def test_items_provider_honors_example_pact(provider_url: str):
+    """Verify the real /items API satisfies the committed example consumer pact."""
+    (
+        Verifier("app")
+        .add_source("pacts/examplewebapp-app.json")
+        .add_transport(url=provider_url)
+        .verify()
+    )

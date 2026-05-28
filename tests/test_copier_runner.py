@@ -2656,3 +2656,18 @@ def test_render_consumers_consumer_test(tmp_path):
     base = tmp_path / "base"
     render_project(base, {**DATA, "batteries": []})
     assert not (base / "tests" / "functional" / "test_consumer_inventory.py").exists()
+
+
+def test_render_consumers_provider(tmp_path):
+    dest = tmp_path / "c"
+    render_project(dest, {**DATA, "batteries": ["consumers"]})
+    pact_file = dest / "pacts" / "examplewebapp-app.json"
+    assert pact_file.exists()
+    doc = json.loads(pact_file.read_text())
+    assert doc["provider"]["name"] == "app"
+    t = (dest / "tests" / "contract" / "test_provider_pact.py").read_text()
+    assert "from pact import Verifier" in t and "add_transport" in t
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert not (base / "pacts").exists()
+    assert not (base / "tests" / "contract").exists()
