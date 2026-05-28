@@ -2565,6 +2565,8 @@ def test_render_react_serving_wiring(tmp_path):
     main = (dest / "src" / "demo" / "main.py").read_text()
     assert "StaticFiles" in main and "frontend/dist" in main
     assert "frontend/dist" in (dest / ".gitignore").read_text()
+    # host node_modules must be kept out of the docker build context (else COPY frontend/ clobbers npm ci)
+    assert "frontend/node_modules" in (dest / ".dockerignore").read_text()
     # baseline: none of it
     base = tmp_path / "base"
     render_project(base, {**DATA, "batteries": []})

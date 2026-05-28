@@ -150,10 +150,10 @@ tasks:
       - docker compose -f infra/compose/dev.yml exec mongo mongosh
 {% endif %}{% if "react" in batteries %}
   fe:dev:
-    desc: Run the Vite dev server (frontend).
+    desc: Run the Vite dev server on the host (proxies the API to the published app port).
     cmds:
       - npm --prefix frontend install
-      - npm --prefix frontend run dev
+      - VITE_PROXY_TARGET=http://localhost:8000 npm --prefix frontend run dev
   fe:build:
     desc: Build the frontend (dist/).
     cmds:
