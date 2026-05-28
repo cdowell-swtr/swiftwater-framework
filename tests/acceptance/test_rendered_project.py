@@ -28,7 +28,7 @@ def _docker_available() -> bool:
     return result.returncode == 0
 
 
-def _compose_env() -> dict:
+def _compose_env() -> dict[str, str]:
     """Env for `docker compose up` so the dev app runs as the host user (host-owned bind writes)."""
     return {**os.environ, "UID": str(os.getuid()), "GID": str(os.getgid())}
 
@@ -1488,7 +1488,7 @@ def test_alertmanager_config_valid_multichannel(tmp_path: Path):
 @pytest.mark.skipif(
     not _docker_available(), reason="uv and docker are required for the live-stack test"
 )
-def test_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Path):
+def test_rendered_project_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
@@ -1496,18 +1496,23 @@ def test_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Path):
     up = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "up", "-d", "--build"]
     down = ["docker", "compose", "-f", base, "-f", dev, "--profile", "lite", "down", "-v"]
     assert subprocess.run(up, cwd=dest, env=_compose_env()).returncode == 0
+    served = False
     try:
         # let uvicorn import the app + write __pycache__ into the bind-mounted src
-        deadline = time.time() + 60
+        deadline = time.time() + 90
         while time.time() < deadline:
             try:
                 with urllib.request.urlopen("http://localhost:8000/health", timeout=3) as resp:
                     if resp.status == 200:
+                        served = True
                         break
             except OSError:
                 time.sleep(2)
     finally:
         subprocess.run(down, cwd=dest, env=_compose_env())
+    # Liveness gate: if the app never served, the ownership scan below would pass vacuously
+    # (no container ever wrote into src). Assert the stack actually came up first.
+    assert served, "app did not serve /health within 90s — ownership check would be vacuous"
     me = os.getuid()
     bad = [p for p in (dest / "src").rglob("*") if p.stat().st_uid != me]
     assert not bad, f"root/non-host-owned files left behind: {bad[:5]}"
