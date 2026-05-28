@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { configDefaults } from "vitest/config";
 
 // In the compose `frontend` service the backend is the in-network `app`; from a host-run
 // `task fe:dev` it's the published localhost port (set via VITE_PROXY_TARGET).
@@ -20,5 +21,7 @@ export default defineConfig({
     globals: true,
     setupFiles: "./src/setupTests.ts",
     coverage: { provider: "v8" },
+    // Playwright owns e2e/**; keep Vitest's defaults (node_modules, dist, …) and add it.
+    exclude: [...configDefaults.exclude, "e2e/**"],
   },
 });
