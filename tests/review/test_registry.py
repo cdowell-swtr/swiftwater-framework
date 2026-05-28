@@ -25,7 +25,7 @@ _EXPECTED_PR = sorted(
 )
 _EXPECTED_PUSH = sorted(["security", "data-integrity", "data-lineage", "observability"])
 # Battery-gated agents (active_when="battery") — excluded from the always-on sets above.
-_EXPECTED_BATTERY = ["accessibility", "api-design", "usability"]
+_EXPECTED_BATTERY = ["accessibility", "api-design", "contracts", "usability"]
 
 
 def test_security_agent_spec():
