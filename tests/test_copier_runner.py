@@ -3004,3 +3004,17 @@ def test_taskfile_dev_plumbs_uid_gid(tmp_path: Path):
         env = tf["tasks"][task]["env"]
         assert env["UID"] == {"sh": "id -u"}
         assert env["GID"] == {"sh": "id -g"}
+
+
+def test_secrets_doc_renders_with_convention(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    secrets = (dest / "SECRETS.md").read_text()
+    # the two-tier naming convention + the project's secrets are documented
+    assert "ANTHROPIC_API_KEY" in secrets
+    assert "GITLEAKS_LICENSE" in secrets
+    assert "provider console" in secrets.lower()
+    # project/package name interpolates (DATA → project_name="Demo", package_name="demo")
+    assert "demo" in secrets.lower()
+    # the `{{ package_name | upper }}` filter inside a markdown table cell renders correctly
+    assert "ANTHROPIC_DEMO_CI_RUNTIME" in secrets
