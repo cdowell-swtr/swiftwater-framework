@@ -558,12 +558,14 @@ def test_new_records_alert_channels_default(tmp_path, monkeypatch):
 
 
 def test_new_alerts_flag_sets_channels(tmp_path, monkeypatch):
+    import yaml
+
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["new", "Demo", "--alerts", "slack,pagerduty"])
     assert result.exit_code == 0, result.output
     answers = (tmp_path / "demo" / ".copier-answers.yml").read_text()
-    assert "- slack" in answers and "- pagerduty" in answers
-    assert "- webhook" not in answers
+    # parse rather than substring-match so an unrelated key containing "webhook" can't fool us
+    assert yaml.safe_load(answers)["alert_channels"] == ["slack", "pagerduty"]
 
 
 def test_new_with_flag_still_resolves_batteries(tmp_path, monkeypatch):
