@@ -95,6 +95,8 @@ def read_alert_channels(project: Path) -> list[str]:
         return ["webhook"]
     data = yaml.safe_load(answers.read_text()) or {}
     value = data.get("alert_channels")
+    # Unlike batteries, an *empty* channel set is incoherent (a project must alert somewhere),
+    # so present-but-empty falls back to the default rather than being returned as-is.
     if isinstance(value, list) and value:
         return [str(c) for c in value]
     return ["webhook"]

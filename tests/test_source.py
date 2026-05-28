@@ -83,6 +83,15 @@ def test_read_alert_channels_reads_recorded_list(tmp_path: Path):
     assert read_alert_channels(tmp_path) == ["slack", "email"]
 
 
+def test_read_alert_channels_missing_file_returns_default(tmp_path: Path):
+    assert read_alert_channels(tmp_path) == ["webhook"]
+
+
+def test_read_alert_channels_empty_list_returns_default(tmp_path: Path):
+    _answers(tmp_path, "alert_channels: []\n")
+    assert read_alert_channels(tmp_path) == ["webhook"]
+
+
 def test_record_alert_channels_replaces_existing_block(tmp_path: Path):
     project = _answers(tmp_path, "alert_channels:\n- webhook\nproject_name: Demo\n")
     record_alert_channels(project, ["slack", "pagerduty"])
