@@ -24,6 +24,8 @@ _EXPECTED_PR = sorted(
     ]
 )
 _EXPECTED_PUSH = sorted(["security", "data-integrity", "data-lineage", "observability"])
+# Battery-gated agents (active_when="battery") — excluded from the always-on sets above.
+_EXPECTED_BATTERY = ["accessibility", "api-design", "usability"]
 
 
 def test_security_agent_spec():
@@ -71,6 +73,15 @@ def test_full_active_sets():
 def test_every_agent_prompt_loads_and_demands_json(name):
     spec = get_agent(name)
     assert spec.name == f"review-{name}"
+    assert spec.prompt.strip()
+    assert "JSON" in spec.prompt
+
+
+@pytest.mark.parametrize("name", _EXPECTED_BATTERY)
+def test_every_battery_agent_prompt_loads_and_demands_json(name):
+    spec = get_agent(name)
+    assert spec.name == f"review-{name}"
+    assert spec.active_when == "battery"
     assert spec.prompt.strip()
     assert "JSON" in spec.prompt
 
