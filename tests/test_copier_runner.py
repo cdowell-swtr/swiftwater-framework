@@ -2947,3 +2947,12 @@ def test_alert_smoke_clean_when_no_failures(tmp_path: Path):
         srv.shutdown()
     assert result.returncode == 0
     assert "ok" in (result.stdout + result.stderr).lower()
+
+
+def test_alert_smoke_advisory_when_alertmanager_unreachable(tmp_path: Path):
+    # The common CI case: Alertmanager not reachable from the runner → skip, still exit 0.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    result = _run_smoke(dest, "http://127.0.0.1:1")  # port 1 → connection refused
+    assert result.returncode == 0
+    assert "could not reach" in (result.stdout + result.stderr).lower()
