@@ -1,7 +1,13 @@
 import subprocess
 from pathlib import Path
 
-from framework_cli.source import REPO_GH, record_portable_source, version_tag
+from framework_cli.source import (
+    REPO_GH,
+    read_alert_channels,
+    record_alert_channels,
+    record_portable_source,
+    version_tag,
+)
 
 
 def _tagged_repo(tmp_path: Path, tags: list[str]) -> Path:
@@ -59,3 +65,36 @@ def test_record_portable_source_rewrites_answers(tmp_path: Path):
     assert "_commit: v0.3.0" in text
     assert "/abs/local/path" not in text
     assert "project_name: Demo" in text and "package_name: demo" in text
+
+
+def _answers(tmp_path: Path, body: str) -> Path:
+    p = tmp_path / ".copier-answers.yml"
+    p.write_text(body)
+    return tmp_path
+
+
+def test_read_alert_channels_defaults_to_webhook_when_absent(tmp_path: Path):
+    _answers(tmp_path, "_commit: v0.1.0\n")
+    assert read_alert_channels(tmp_path) == ["webhook"]
+
+
+def test_read_alert_channels_reads_recorded_list(tmp_path: Path):
+    _answers(tmp_path, "alert_channels:\n- slack\n- email\n")
+    assert read_alert_channels(tmp_path) == ["slack", "email"]
+
+
+def test_record_alert_channels_replaces_existing_block(tmp_path: Path):
+    project = _answers(tmp_path, "alert_channels:\n- webhook\nproject_name: Demo\n")
+    record_alert_channels(project, ["slack", "pagerduty"])
+    text = (project / ".copier-answers.yml").read_text()
+    assert "project_name: Demo" in text
+    assert "alert_channels:\n- slack\n- pagerduty\n" in text
+    assert "- webhook" not in text
+
+
+def test_record_alert_channels_empty_writes_default(tmp_path: Path):
+    project = _answers(tmp_path, "alert_channels:\n- slack\n")
+    record_alert_channels(project, [])
+    assert (
+        "alert_channels:\n- webhook\n" in (project / ".copier-answers.yml").read_text()
+    )

@@ -86,6 +86,42 @@ def record_batteries(project: Path, batteries: list[str]) -> None:
     answers.write_text("\n".join(out) + "\n")
 
 
+def read_alert_channels(project: Path) -> list[str]:
+    """The alert channels recorded in .copier-answers.yml (['webhook'] if none/absent)."""
+    import yaml
+
+    answers = project / _ANSWERS_REL
+    if not answers.is_file():
+        return ["webhook"]
+    data = yaml.safe_load(answers.read_text()) or {}
+    value = data.get("alert_channels")
+    if isinstance(value, list) and value:
+        return [str(c) for c in value]
+    return ["webhook"]
+
+
+def record_alert_channels(project: Path, channels: list[str]) -> None:
+    """Write the alert-channel set into .copier-answers.yml (framework-owned, like batteries).
+
+    Empty input records the ['webhook'] default so a project always has a channel.
+    """
+    effective = channels or ["webhook"]
+    answers = project / _ANSWERS_REL
+    out: list[str] = []
+    skipping = False
+    for line in answers.read_text().splitlines():
+        if line.startswith("alert_channels:"):
+            skipping = True
+            continue
+        if skipping and line.startswith("- "):
+            continue
+        skipping = False
+        out.append(line)
+    out.append("alert_channels:")
+    out.extend(f"- {c}" for c in effective)
+    answers.write_text("\n".join(out) + "\n")
+
+
 def record_portable_source(project: Path, version: str) -> None:
     """Rewrite the project's .copier-answers.yml to a portable git source + version tag.
 

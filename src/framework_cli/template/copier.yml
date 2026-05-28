@@ -24,6 +24,11 @@ batteries:
   help: Active batteries (set via `framework new --with`); not prompted.
   default: []
 
+alert_channels:
+  type: yaml
+  help: Active alert channels (set via the wizard / --alerts); not prompted.
+  default: ["webhook"]
+
 uses_postgres_extension:
   type: bool
   help: "(computed) any battery that installs a Postgres extension is active"
