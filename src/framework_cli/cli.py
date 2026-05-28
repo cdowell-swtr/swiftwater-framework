@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -118,6 +119,29 @@ def integrity(
         typer.echo(f"\nframework integrity: {fatal} problem(s) found.", err=True)
         raise typer.Exit(1)
     typer.echo("framework integrity: OK")
+
+
+@app.command(name="dev-combos")
+def dev_combos(
+    strategy: str = typer.Option(
+        "representative",
+        "--strategy",
+        help="representative | pairwise | sample | broad",
+    ),
+    seed: int = typer.Option(0, "--seed", help="Seed for the random rotation."),
+    sample_size: int = typer.Option(
+        6, "--sample-size", help="Random combos added to the broad/sample set."
+    ),
+) -> None:
+    """Emit the render-matrix battery combinations as JSON (framework dogfooding CI)."""
+    from framework_cli.devmatrix import combos_for_strategy
+
+    try:
+        combos = combos_for_strategy(strategy, seed=seed, sample_size=sample_size)
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(json.dumps([c.as_dict() for c in combos]))
 
 
 @app.command()
@@ -284,8 +308,6 @@ def review_agents(
     ),
 ) -> None:
     """Print the JSON array of review agents active for the event (drives the CI matrix)."""
-    import json
-
     from framework_cli.source import read_batteries
 
     resolved = event or os.environ.get("GITHUB_EVENT_NAME", "pull_request")

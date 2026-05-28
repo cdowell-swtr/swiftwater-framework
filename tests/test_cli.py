@@ -609,3 +609,29 @@ def test_new_bad_alert_channel_errors(tmp_path, monkeypatch):
     result = runner.invoke(app, ["new", "Demo", "--alerts", "sms"])
     assert result.exit_code == 1
     assert "unknown alert channel" in result.output
+
+
+def test_dev_combos_emits_matrix_json():
+    result = runner.invoke(app, ["dev-combos", "--strategy", "representative"])
+    assert result.exit_code == 0, result.output
+    combos = _json.loads(result.output)
+    assert isinstance(combos, list)
+    names = [c["name"] for c in combos]
+    assert names[0] == "baseline" and "full" in names
+    full = next(c for c in combos if c["name"] == "full")
+    assert full["alerts_flag"] == "--alerts webhook,slack,email,pagerduty"
+    assert all(
+        {"name", "batteries", "with_flags", "has_react"} <= set(c) for c in combos
+    )
+
+
+def test_dev_combos_broad_is_seeded():
+    a = runner.invoke(app, ["dev-combos", "--strategy", "broad", "--seed", "4"])
+    b = runner.invoke(app, ["dev-combos", "--strategy", "broad", "--seed", "4"])
+    assert a.exit_code == 0 and a.output == b.output
+
+
+def test_dev_combos_rejects_unknown_strategy():
+    result = runner.invoke(app, ["dev-combos", "--strategy", "nope"])
+    assert result.exit_code == 1
+    assert "unknown strategy" in result.output
