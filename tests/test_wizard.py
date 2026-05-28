@@ -22,6 +22,20 @@ def test_resolve_needs_maps_and_dedups():
     assert resolve_needs(["vector", "cache", "vector"]) == ["pgvector", "redis"]
 
 
+def test_resolve_needs_maps_every_paradigm():
+    assert resolve_needs(["document", "timeseries", "graph"]) == [
+        "mongodb",
+        "timescaledb",
+        "age",
+    ]
+
+
+def test_need_to_battery_values_are_registered_batteries():
+    from framework_cli.batteries import battery_names
+
+    assert set(NEED_TO_BATTERY.values()) <= set(battery_names())
+
+
 def test_resolve_needs_empty_is_empty():
     assert resolve_needs([]) == []
 

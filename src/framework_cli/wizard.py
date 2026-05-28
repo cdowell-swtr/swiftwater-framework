@@ -21,7 +21,9 @@ def resolve_needs(needs: list[str]) -> list[str]:
     out: list[str] = []
     for need in needs:
         if need not in NEED_TO_BATTERY:
-            raise ValueError(f"unknown data need: {need!r}")
+            raise ValueError(
+                f"unknown data need: {need!r} (known: {', '.join(NEED_TO_BATTERY)})"
+            )
         battery = NEED_TO_BATTERY[need]
         if battery not in out:
             out.append(battery)
@@ -44,3 +46,12 @@ def parse_channels(channels: list[str]) -> list[str]:
     if not selected:
         raise ValueError("select at least one alert channel")
     return [c for c in KNOWN_CHANNELS if c in selected]
+
+
+# Drift guard (mirrors migrations.py): every mapped battery must be a real, registered battery,
+# so a battery rename fails loudly at import rather than silently downstream.
+from framework_cli.batteries import battery_names as _battery_names  # noqa: E402
+
+assert set(NEED_TO_BATTERY.values()) <= set(_battery_names()), (
+    "NEED_TO_BATTERY references an unknown battery — sync it with framework_cli.batteries"
+)
