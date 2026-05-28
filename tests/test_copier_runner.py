@@ -2986,3 +2986,21 @@ def test_integrity_green_across_alert_channel_combos(tmp_path: Path):
         write_manifest(dest, installed_framework_version())
         findings = check(dest, ci=True)
         assert not [f for f in findings if f.fatal], (channels, findings)
+
+
+def test_dev_app_runs_as_host_uid(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    dev = (dest / "infra/compose/dev.yml").read_text()
+    parsed = yaml.safe_load(dev)
+    assert parsed["services"]["app"]["user"] == "${UID:-1000}:${GID:-1000}"
+
+
+def test_taskfile_dev_plumbs_uid_gid(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    tf = yaml.safe_load((dest / "Taskfile.yml").read_text())
+    for task in ("dev", "dev:lite"):
+        env = tf["tasks"][task]["env"]
+        assert env["UID"] == {"sh": "id -u"}
+        assert env["GID"] == {"sh": "id -g"}

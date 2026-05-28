@@ -2,6 +2,10 @@
 services:
   app:
     profiles: ["dev", "lite"]
+    # Run as the invoking host user so bind-mounted --reload writes (__pycache__ in /app/src)
+    # are host-owned, not root-owned. UID/GID come from the env (task dev sets them); the
+    # :-1000 default keeps a raw `docker compose` invocation working.
+    user: "${UID:-1000}:${GID:-1000}"
     command: ["uvicorn", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000", "--reload", "{{ package_name }}.main:app"]
     ports:
       - "8000:8000"

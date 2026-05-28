@@ -19,6 +19,11 @@ tasks:
         msg: "Run `uv sync` first to create uv.lock (the image build uses --frozen)."
       - sh: 'if command -v framework >/dev/null 2>&1; then framework integrity; fi'
         msg: "Framework integrity check failed. Run `framework integrity`, then `framework restore <file>`."
+    env:
+      UID:
+        sh: id -u
+      GID:
+        sh: id -g
     cmds:
       - docker compose -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev up --build
 
@@ -29,6 +34,11 @@ tasks:
         msg: "Docker is required for `task dev:lite`."
       - sh: test -f uv.lock
         msg: "Run `uv sync` first to create uv.lock (the image build uses --frozen)."
+    env:
+      UID:
+        sh: id -u
+      GID:
+        sh: id -g
     cmds:
       - docker compose -f infra/compose/base.yml -f infra/compose/dev.yml --profile lite up --build
 
