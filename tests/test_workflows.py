@@ -75,3 +75,22 @@ def test_render_matrix_workflow():
         "setup-node" in str(s.get("uses", "")) and "react" in str(s.get("if", ""))
         for s in render["steps"]
     )
+
+
+_REL = Path(__file__).parent.parent / ".github" / "workflows" / "release.yml"
+
+
+def test_release_workflow():
+    wf = yaml.safe_load(_REL.read_text())
+    triggers = wf[True] if True in wf else wf["on"]
+    assert triggers["push"]["tags"] == ["v*"]
+    assert wf["permissions"]["contents"] == "write"  # to create a Release
+
+    jobs = wf["jobs"]
+    guard_run = " ".join(str(s.get("run", "")) for s in jobs["guard"]["steps"])
+    assert "verify_release_tag.py" in guard_run
+    assert jobs["gate"]["uses"].endswith("ci.yml")
+    assert jobs["matrix"]["uses"].endswith("render-matrix.yml")
+    assert set(jobs["release"]["needs"]) >= {"gate", "matrix"}
+    rel_uses = " ".join(str(s.get("uses", "")) for s in jobs["release"]["steps"])
+    assert "action-gh-release" in rel_uses

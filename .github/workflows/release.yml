@@ -1,0 +1,41 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the GitHub Release
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - name: invariant guard (tag == pyproject version)
+        run: uv run python scripts/verify_release_tag.py "${GITHUB_REF_NAME}"
+
+  gate:
+    needs: guard
+    uses: ./.github/workflows/ci.yml
+
+  matrix:
+    needs: guard
+    uses: ./.github/workflows/render-matrix.yml
+    with:
+      strategy: broad
+
+  release:
+    needs: [gate, matrix]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: uv build
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*
