@@ -1370,3 +1370,45 @@ def test_rendered_workers_redis_battery_passes(tmp_path: Path):
         + result.stdout
         + result.stderr
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: builds the react frontend + the prod image",
+)
+def test_rendered_react_battery_passes(tmp_path: Path):
+    import shutil
+
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    assert (dest / "frontend" / "package.json").exists()
+    if shutil.which("npm"):
+        assert subprocess.run(["npm", "ci"], cwd=dest / "frontend").returncode == 0
+        assert (
+            subprocess.run(
+                ["npm", "run", "typecheck"], cwd=dest / "frontend"
+            ).returncode
+            == 0
+        )
+        assert (
+            subprocess.run(["npm", "run", "test"], cwd=dest / "frontend").returncode
+            == 0
+        )
+    # the prod image builds (incl. the frontend-build stage) — proves the SPA build wiring
+    build = subprocess.run(
+        [
+            "docker",
+            "build",
+            "-f",
+            "infra/docker/Dockerfile",
+            "-t",
+            "demo-react:ci",
+            ".",
+        ],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert build.returncode == 0, (
+        "react app image build failed:\n" + build.stdout + build.stderr
+    )

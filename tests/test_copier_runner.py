@@ -2575,3 +2575,16 @@ def test_render_react_serving_wiring(tmp_path):
     assert (
         "frontend-build" not in (base / "infra" / "docker" / "Dockerfile").read_text()
     )
+
+
+def test_render_react_ci_job(tmp_path):
+    import yaml
+
+    dest = tmp_path / "r"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
+    assert "frontend:" in ci and "setup-node" in ci and "vitest" in ci.lower()
+    yaml.safe_load(ci)  # valid YAML
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert "setup-node" not in (base / ".github" / "workflows" / "ci.yml").read_text()

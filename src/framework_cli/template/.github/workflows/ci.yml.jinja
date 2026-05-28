@@ -90,6 +90,35 @@ jobs:
       - name: docker build (app image)
         run: docker build -f infra/docker/Dockerfile -t {{ project_slug }}:ci .
 
+{%- if "react" in batteries %}
+
+  # Frontend (react battery): lint + typecheck + Vitest, then build + Playwright/axe e2e against
+  # the served build. Separate from the Python coverage gate (its own JS test tier).
+  frontend:
+    needs: integrity
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - name: install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: build + e2e (Playwright + axe)
+        run: |
+          npm run build
+          npm run preview &
+          for i in $(seq 1 30); do curl -sf http://localhost:5173 >/dev/null && break; sleep 1; done
+          E2E_BASE_URL=http://localhost:5173 npm run test:e2e
+{%- endif %}
+
   # Step 7: OpenAPI contract — the committed spec must be current; breaking changes fail.
   contract:
     needs: lint
