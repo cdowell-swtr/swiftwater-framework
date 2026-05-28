@@ -1,5 +1,6 @@
 import pytest
 
+from framework_cli import wizard as wiz
 from framework_cli.wizard import (
     KNOWN_CHANNELS,
     NEED_TO_BATTERY,
@@ -62,3 +63,41 @@ def test_parse_channels_rejects_unknown():
 
 def test_known_channels_order():
     assert KNOWN_CHANNELS == ("webhook", "slack", "email", "pagerduty")
+
+
+def test_run_wizard_non_interactive_no_flags_uses_defaults():
+    out = wiz.run_wizard(with_=[], alerts=None, interactive=False)
+    assert out == {"batteries": [], "alert_channels": ["webhook"]}
+
+
+def test_run_wizard_with_flag_skips_needs_prompt(monkeypatch):
+    # interactive, but --with passed → the needs prompt must NOT run
+    monkeypatch.setattr(
+        wiz, "_prompt_needs", lambda: (_ for _ in ()).throw(AssertionError("prompted"))
+    )
+    monkeypatch.setattr(wiz, "_prompt_channels", lambda: ["webhook"])
+    out = wiz.run_wizard(with_=["graphql"], alerts=None, interactive=True)
+    assert out["batteries"] == ["graphql"]
+
+
+def test_run_wizard_alerts_flag_skips_channel_prompt(monkeypatch):
+    monkeypatch.setattr(wiz, "_prompt_needs", lambda: [])
+    monkeypatch.setattr(
+        wiz,
+        "_prompt_channels",
+        lambda: (_ for _ in ()).throw(AssertionError("prompted")),
+    )
+    out = wiz.run_wizard(with_=[], alerts="slack,email", interactive=True)
+    assert out["alert_channels"] == ["slack", "email"]
+
+
+def test_run_wizard_interactive_prompts_both(monkeypatch):
+    monkeypatch.setattr(wiz, "_prompt_needs", lambda: ["vector"])
+    monkeypatch.setattr(wiz, "_prompt_channels", lambda: ["webhook", "slack"])
+    out = wiz.run_wizard(with_=[], alerts=None, interactive=True)
+    assert out == {"batteries": ["pgvector"], "alert_channels": ["webhook", "slack"]}
+
+
+def test_run_wizard_parses_comma_separated_alerts_flag():
+    out = wiz.run_wizard(with_=[], alerts="webhook, pagerduty", interactive=False)
+    assert out["alert_channels"] == ["webhook", "pagerduty"]

@@ -48,6 +48,75 @@ def parse_channels(channels: list[str]) -> list[str]:
     return [c for c in KNOWN_CHANNELS if c in selected]
 
 
+_NEED_CHOICES = [
+    ("Document store", "document"),
+    ("Vector / similarity search", "vector"),
+    ("Time-series", "timeseries"),
+    ("Graph (Cypher)", "graph"),
+    ("Cache / key-value", "cache"),
+]
+
+
+def _prompt_needs() -> list[
+    str
+]:  # pragma: no cover - thin questionary wrapper, mocked in tests
+    import questionary
+
+    answer = questionary.checkbox(
+        "What kind of data does it store? (relational is always on)",
+        choices=[
+            questionary.Choice(title=label, value=value)
+            for label, value in _NEED_CHOICES
+        ],
+    ).ask()
+    return list(answer or [])
+
+
+def _prompt_channels() -> list[
+    str
+]:  # pragma: no cover - thin questionary wrapper, mocked in tests
+    import questionary
+
+    answer = questionary.checkbox(
+        "Where should alerts go?",
+        choices=[
+            questionary.Choice(title=c, value=c, checked=(c == "webhook"))
+            for c in KNOWN_CHANNELS
+        ],
+    ).ask()
+    return list(answer or [])
+
+
+def _split_alerts(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def run_wizard(
+    *, with_: list[str], alerts: str | None, interactive: bool
+) -> dict[str, list[str]]:
+    """Source the wizard answers. Flags win and skip their prompt; on a TTY with no flag we
+    prompt; otherwise we fall back to defaults (batteries=[], channels=['webhook']).
+
+    Returns the *pre-resolution* battery names (the caller runs resolve()) and the validated
+    alert-channel list.
+    """
+    if with_:
+        batteries = list(with_)
+    elif interactive:
+        batteries = resolve_needs(_prompt_needs())
+    else:
+        batteries = []
+
+    if alerts is not None:
+        channels = parse_channels(_split_alerts(alerts))
+    elif interactive:
+        channels = parse_channels(_prompt_channels())
+    else:
+        channels = ["webhook"]
+
+    return {"batteries": batteries, "alert_channels": channels}
+
+
 # Drift guard (mirrors migrations.py): every mapped battery must be a real, registered battery,
 # so a battery rename fails loudly at import rather than silently downstream.
 from framework_cli.batteries import battery_names as _battery_names  # noqa: E402
