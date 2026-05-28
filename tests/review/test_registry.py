@@ -14,6 +14,7 @@ _EXPECTED_PR = sorted(
         "data-lineage",
         "application-logic",
         "observability",
+        "observability-infra",
         "test-quality",
         "architecture",
         "performance",
@@ -106,10 +107,10 @@ def test_active_agents_adds_gated_agent_when_battery_present(monkeypatch):
     from framework_cli.review import registry
 
     bat._BATTERIES["_demo"] = bat.BatterySpec(
-        "_demo", "x", gates_agents=("_demo-agent",)
+        "_demo", "x", gates_agents=("_demo-agent",), obs="rides-existing"
     )
     bat._BATTERIES["_demo2"] = bat.BatterySpec(
-        "_demo2", "x", gates_agents=("_demo-push-agent",)
+        "_demo2", "x", gates_agents=("_demo-push-agent",), obs="rides-existing"
     )
     registry._SPECS["_demo-agent"] = registry.AgentSpec(
         "review-demo", "p", "high", "battery", registry.DEFAULT_MODEL
@@ -157,7 +158,12 @@ def test_active_agents_battery_can_gate_multiple(monkeypatch):
     monkeypatch.setitem(
         bat._BATTERIES,
         "_multi",
-        bat.BatterySpec("_multi", "x", gates_agents=("api-design", "documentation")),
+        bat.BatterySpec(
+            "_multi",
+            "x",
+            gates_agents=("api-design", "documentation"),
+            obs="rides-existing",
+        ),
     )
     out = active_agents("pull_request", ["_multi"])
     assert "api-design" in out and "documentation" in out
@@ -185,3 +191,22 @@ def test_review_contracts_registered_and_gated():
     assert "contracts" in active_agents("pull_request", ["consumers"])
     assert "contracts" not in active_agents("pull_request", [])
     assert "contracts" not in active_agents("push", ["consumers"])
+
+
+def test_observability_split_infra():
+    from framework_cli.review.registry import active_agents, get_agent
+
+    spec = get_agent("observability-infra")
+    assert spec.name == "review-observability-infra"
+    assert spec.block_threshold == "high"
+    assert spec.active_when == "file-trigger"
+    assert spec.trigger_globs and "infra/*" in spec.trigger_globs
+    # the glob actually matches real infra paths (fnmatch '*' spans '/') and misses app code.
+    from framework_cli.review.diff import matches_globs
+
+    assert matches_globs(["infra/compose/dev.yml"], spec.trigger_globs)
+    assert not matches_globs(["src/demo/db/repository.py"], spec.trigger_globs)
+    # file-trigger agents are PR candidates; gated at runtime by the diff's changed files.
+    assert "observability-infra" in active_agents("pull_request")
+    # not on push (file-trigger, on_push defaults False) — keeps the curated push subset.
+    assert "observability-infra" not in active_agents("push")

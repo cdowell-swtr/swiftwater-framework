@@ -1,0 +1,9 @@
+--- a/infra/compose/dev.yml
++++ b/infra/compose/dev.yml
+@@ -40,3 +40,7 @@ services:
+   redis:
+     image: redis:7
++  search-exporter:
++    image: prometheuscommunity/opensearch-exporter:latest
++    command: ["--es.uri=http://search:9200"]
++    restart: unless-stopped

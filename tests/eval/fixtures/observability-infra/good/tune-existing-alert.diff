@@ -1,0 +1,9 @@
+--- a/infra/observability/prometheus/alerts/postgres_alerts.yml
++++ b/infra/observability/prometheus/alerts/postgres_alerts.yml
+@@ -5,6 +5,6 @@ groups:
+       - alert: PostgresDown
+         expr: up{job="postgres"} == 0
+-        for: 1m
++        for: 2m
+         labels:
+           severity: critical

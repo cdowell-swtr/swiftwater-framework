@@ -69,6 +69,14 @@ _SPECS: dict[str, AgentSpec] = {
         DEFAULT_MODEL,
         on_push=True,
     ),
+    "observability-infra": AgentSpec(
+        "review-observability-infra",
+        _prompt("observability-infra"),
+        "high",
+        "file-trigger",
+        DEFAULT_MODEL,
+        trigger_globs=("infra/*",),
+    ),
     "test-quality": AgentSpec(
         "review-test-quality", _prompt("test-quality"), "high", "always", DEFAULT_MODEL
     ),
