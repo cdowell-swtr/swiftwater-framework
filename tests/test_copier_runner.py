@@ -2809,3 +2809,39 @@ def test_env_example_adds_selected_channel_secrets(tmp_path: Path):
         assert f"APP_ALERT_SMTP_{v}=" in env
     # webhook not selected → its var absent
     assert "APP_ALERT_WEBHOOK_URL=" not in env
+
+
+# ---------------------------------------------------------------------------
+# Alert-secrets deploy precondition (Task 7)
+# ---------------------------------------------------------------------------
+
+
+def _run_precondition(dest: Path, env: dict) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bash", str(dest / "infra/deploy/check_alert_secrets.sh")],
+        env={"PATH": os.environ["PATH"], **env},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_alert_precondition_fails_when_secret_missing(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "alert_channels": ["slack"]})
+    result = _run_precondition(dest, {})  # APP_ALERT_SLACK_API_URL unset
+    assert result.returncode == 1
+    assert "APP_ALERT_SLACK_API_URL" in result.stderr
+
+
+def test_alert_precondition_passes_when_secret_present(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "alert_channels": ["slack"]})
+    result = _run_precondition(dest, {"APP_ALERT_SLACK_API_URL": "https://hooks.example/x"})
+    assert result.returncode == 0, result.stderr
+
+
+def test_alert_precondition_default_checks_webhook(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    assert _run_precondition(dest, {}).returncode == 1  # webhook url missing
+    assert _run_precondition(dest, {"APP_ALERT_WEBHOOK_URL": "https://x"}).returncode == 0

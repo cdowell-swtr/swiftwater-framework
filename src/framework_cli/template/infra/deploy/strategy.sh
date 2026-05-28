@@ -92,6 +92,8 @@ await_healthy() {
 deploy() {
   require_var APP_IMAGE
   require_var DEPLOY_ENV
+  # Kill the silent no-op: refuse to deploy if a configured alert channel lacks its secret.
+  bash "$(dirname "$0")/check_alert_secrets.sh"
   # Record BEFORE placing so a rollback target is tracked even if this deploy fails midway.
   local rev
   rev="$(repo_head_revision)"
