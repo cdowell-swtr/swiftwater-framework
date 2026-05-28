@@ -1,0 +1,40 @@
+route:
+  receiver: "default"
+  group_by: ["alertname"]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 1h
+
+receivers:
+  - name: "default"
+{%- if "webhook" in alert_channels %}
+    webhook_configs:
+      # The URL is read from a mounted file (the APP_ALERT_WEBHOOK_URL secret, materialized on
+      # deploy at /etc/alertmanager/webhook_url). When the file is absent (e.g. local dev),
+      # alertmanager still loads this config; notifications simply no-op until it exists.
+      - url_file: /etc/alertmanager/webhook_url
+        send_resolved: true
+{%- endif %}
+{%- if "slack" in alert_channels %}
+    slack_configs:
+      # api_url read from the mounted APP_ALERT_SLACK_API_URL secret (see infra/deploy/README.md).
+      - api_url_file: /etc/alertmanager/slack_api_url
+        channel: "#alerts"
+        send_resolved: true
+{%- endif %}
+{%- if "email" in alert_channels %}
+    email_configs:
+      # SMTP config from the .env managed section; password from the mounted secret file.
+      - to: "${APP_ALERT_SMTP_TO}"
+        from: "${APP_ALERT_SMTP_FROM}"
+        smarthost: "${APP_ALERT_SMTP_SMARTHOST}"
+        auth_username: "${APP_ALERT_SMTP_AUTH_USERNAME}"
+        auth_password_file: /etc/alertmanager/smtp_auth_password
+        send_resolved: true
+{%- endif %}
+{%- if "pagerduty" in alert_channels %}
+    pagerduty_configs:
+      # routing_key read from the mounted APP_ALERT_PAGERDUTY_ROUTING_KEY secret.
+      - routing_key_file: /etc/alertmanager/pagerduty_routing_key
+        send_resolved: true
+{%- endif %}

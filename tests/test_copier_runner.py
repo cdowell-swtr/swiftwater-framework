@@ -2732,3 +2732,53 @@ def test_downskill_consumers_no_force(tmp_path):
         not in (dest / ".github" / "workflows" / "ci.yml").read_text()
     )
     assert check(dest, ci=True) == []
+
+
+# ---------------------------------------------------------------------------
+# Alertmanager: conditional receivers per alert_channels
+# ---------------------------------------------------------------------------
+
+ALERTMANAGER_DEFAULT = """\
+route:
+  receiver: "default"
+  group_by: ["alertname"]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 1h
+
+receivers:
+  - name: "default"
+    webhook_configs:
+      # The URL is read from a mounted file (the APP_ALERT_WEBHOOK_URL secret, materialized on
+      # deploy at /etc/alertmanager/webhook_url). When the file is absent (e.g. local dev),
+      # alertmanager still loads this config; notifications simply no-op until it exists.
+      - url_file: /etc/alertmanager/webhook_url
+        send_resolved: true
+"""
+
+
+def test_alertmanager_byte_identical_for_default_webhook(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})  # alert_channels defaults to ["webhook"]
+    rendered = (dest / "infra/observability/alertmanager/alertmanager.yml").read_text()
+    assert rendered == ALERTMANAGER_DEFAULT
+
+
+def test_alertmanager_renders_slack_and_pagerduty(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "alert_channels": ["slack", "pagerduty"]})
+    text = (dest / "infra/observability/alertmanager/alertmanager.yml").read_text()
+    assert "slack_configs:" in text and "api_url_file: /etc/alertmanager/slack_api_url" in text
+    assert "pagerduty_configs:" in text and "routing_key_file: /etc/alertmanager/pagerduty_routing_key" in text
+    assert "webhook_configs:" not in text  # webhook not selected
+    parsed = yaml.safe_load(text)
+    assert parsed["receivers"][0]["name"] == "default"
+
+
+def test_alertmanager_renders_email(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "alert_channels": ["email"]})
+    text = (dest / "infra/observability/alertmanager/alertmanager.yml").read_text()
+    assert "email_configs:" in text
+    assert "auth_password_file: /etc/alertmanager/smtp_auth_password" in text
+    assert yaml.safe_load(text)["receivers"][0]["name"] == "default"
