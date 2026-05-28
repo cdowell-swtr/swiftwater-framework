@@ -541,3 +541,41 @@ def test_downskill_command_refusal_exits_1(tmp_path, monkeypatch):
     result = runner.invoke(app, ["downskill", str(tmp_path / "proj"), "webhooks"])
     assert result.exit_code == 1
     assert "in use" in result.output
+
+
+# ---------------------------------------------------------------------------
+# wizard wiring: --alerts flag + alert_channels recorded
+# ---------------------------------------------------------------------------
+
+
+def test_new_records_alert_channels_default(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # non-TTY in tests → no prompts, defaults
+    result = runner.invoke(app, ["new", "Demo"])
+    assert result.exit_code == 0, result.output
+    answers = (tmp_path / "demo" / ".copier-answers.yml").read_text()
+    assert "alert_channels:" in answers and "- webhook" in answers
+
+
+def test_new_alerts_flag_sets_channels(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["new", "Demo", "--alerts", "slack,pagerduty"])
+    assert result.exit_code == 0, result.output
+    answers = (tmp_path / "demo" / ".copier-answers.yml").read_text()
+    assert "- slack" in answers and "- pagerduty" in answers
+    assert "- webhook" not in answers
+
+
+def test_new_with_flag_still_resolves_batteries(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["new", "Demo", "--with", "graphql"])
+    assert result.exit_code == 0, result.output
+    answers = (tmp_path / "demo" / ".copier-answers.yml").read_text()
+    assert "- graphql" in answers
+
+
+def test_new_bad_alert_channel_errors(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["new", "Demo", "--alerts", "sms"])
+    assert result.exit_code == 1
+    assert "unknown alert channel" in result.output

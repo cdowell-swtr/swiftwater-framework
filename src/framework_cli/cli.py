@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import typer
@@ -42,8 +43,15 @@ def new(
     with_: list[str] = typer.Option(
         [], "--with", help="Activate a battery (repeatable), e.g. --with websockets."
     ),
+    alerts: str = typer.Option(
+        None,
+        "--alerts",
+        help="Alert channels, comma-separated: webhook,slack,email,pagerduty.",
+    ),
 ) -> None:
     """Scaffold a new project from the framework template."""
+    from framework_cli.wizard import run_wizard
+
     names = derive_names(name)
     dest = Path.cwd() / names.project_slug
 
@@ -52,7 +60,8 @@ def new(
         raise typer.Exit(code=1)
 
     try:
-        batteries = resolve_batteries(with_)
+        answers = run_wizard(with_=with_, alerts=alerts, interactive=sys.stdin.isatty())
+        batteries = resolve_batteries(answers["batteries"])
     except ValueError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -65,6 +74,7 @@ def new(
             "package_name": names.package_name,
             "python_version": python_version,
             "batteries": batteries,
+            "alert_channels": answers["alert_channels"],
         },
     )
     write_manifest(dest, installed_framework_version())
@@ -72,6 +82,8 @@ def new(
     msg = f"Created '{names.project_slug}' at {dest}"
     if batteries:
         msg += f" (batteries: {', '.join(batteries)})"
+    if answers["alert_channels"] != ["webhook"]:
+        msg += f" (alerts: {', '.join(answers['alert_channels'])})"
     typer.echo(msg)
 
 
