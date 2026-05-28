@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import random
 from dataclasses import dataclass
 
 from framework_cli.batteries import battery_names
@@ -75,3 +76,46 @@ def pairwise_combos(max_size: int = 4) -> list[Combo]:
             uncovered.discard(frozenset((a, b)))
         combos.append(Combo(_name_for(tuple(chosen)), tuple(chosen)))
     return combos
+
+
+def sample_combos(seed: int, n: int) -> list[Combo]:
+    """N distinct pseudo-random battery subsets, deterministic for `seed`."""
+    rng = random.Random(seed)
+    names = battery_names()
+    seen: set[tuple[str, ...]] = set()
+    combos: list[Combo] = []
+    attempts = 0
+    while len(combos) < n and attempts < n * 50:
+        attempts += 1
+        k = rng.randint(1, len(names))
+        subset = tuple(sorted(rng.sample(names, k)))
+        if subset in seen:
+            continue
+        seen.add(subset)
+        combos.append(Combo(_name_for(subset), subset))
+    return combos
+
+
+def broad_combos(seed: int, sample_size: int = 6) -> list[Combo]:
+    """The pairwise floor plus a seeded random rotation (spec section 5.3)."""
+    floor = pairwise_combos()
+    floor_sets = {c.batteries for c in floor}
+    extra = [
+        c for c in sample_combos(seed, sample_size) if c.batteries not in floor_sets
+    ]
+    return floor + extra
+
+
+def combos_for_strategy(
+    strategy: str, *, seed: int = 0, sample_size: int = 6
+) -> list[Combo]:
+    """Dispatch to the named combo strategy; seed/sample_size apply to sample & broad."""
+    if strategy == "representative":
+        return representative_combos()
+    if strategy == "pairwise":
+        return pairwise_combos()
+    if strategy == "sample":
+        return sample_combos(seed, sample_size)
+    if strategy == "broad":
+        return broad_combos(seed, sample_size)
+    raise ValueError(f"unknown strategy: {strategy!r}")
