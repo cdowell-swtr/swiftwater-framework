@@ -40,10 +40,10 @@ A single enum value per battery is sufficient — no current battery is simultan
 | `obs` | Artifacts that MUST appear in the diff | Artifacts that MUST NOT appear |
 |---|---|---|
 | `service` | a new Prometheus **scrape job** (in `prometheus.yml`) **and** a new **`*_alerts.yml`** **and** a new Grafana **dashboard** (`*.json`) **and** the service in **`infra/compose/services.yml`** (prod) **and** its exporter in **`infra/compose/observability.yml`** (the SVC-PROD prod-wiring gap) | — |
-| `in-process` | a new **`*_alerts.yml`** **and** a new **dashboard** | no new compose service, no new scrape job |
-| `rides-existing` | — | no new alert, dashboard, compose service, or scrape job |
+| `in-process` | a new **`*_alerts.yml`** **and** a new **dashboard** | no new **prod** service (`services.yml`), no new scrape job |
+| `rides-existing` | — | no new alert, dashboard, **prod** service (`services.yml`), or scrape job |
 
-The scrape-job, `services.yml`, and `observability.yml` checks read the **rendered** files (battery-gated Jinja blocks already render these as static YAML — verified), so no `docker compose` merge is needed. The assertion is on artifact *categories* being non-empty (not exact filenames), so the `workers` battery legitimately bringing two exporters' worth of artifacts (celery + redis) still passes.
+The "service appeared" check keys off the **prod overlay `infra/compose/services.yml`**, not `dev.yml`. This is deliberate: the SVC-PROD gap was *prod-wiring*, and it cleanly excludes dev-only tooling services (e.g. the `react` battery's Vite dev server lives only in `dev.yml`, owes no §5 observability, and is correctly `rides-existing`). The scrape-job, `services.yml`, and `observability.yml` checks read the **rendered** files (battery-gated Jinja blocks already render these as static YAML — verified), so no `docker compose` merge is needed. The assertion is on artifact *categories* being non-empty (not exact filenames), so the `workers` battery legitimately bringing two exporters' worth of artifacts (celery + redis) still passes.
 
 This is both a **forcing function** (a battery cannot be registered without declaring its obs intent) and a **lie-detector** (the render-diff proves the declaration matches what the template actually ships). It closes the service-omission gap *and* the in-process-omission gap that pure render-diff heuristics would miss.
 
