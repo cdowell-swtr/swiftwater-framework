@@ -48,6 +48,7 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "infra/observability/prometheus/prometheus.yml",
     "infra/observability/prometheus/alerts/slo_alerts.yml",
     "infra/observability/prometheus/alerts/postgres_alerts.yml",
+    "infra/observability/prometheus/alerts/alertmanager_alerts.yml",
     "infra/observability/promtail/promtail-config.yml",
     "infra/observability/tempo/tempo.yml",
     "infra/observability/grafana/dashboards/slo.json",

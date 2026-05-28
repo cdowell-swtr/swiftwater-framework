@@ -2859,3 +2859,19 @@ def test_alert_precondition_email_reports_all_missing_secrets(tmp_path: Path):
     assert result.returncode == 1
     assert "APP_ALERT_SMTP_TO" in result.stderr
     assert "APP_ALERT_SMTP_AUTH_PASSWORD" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Always-on meta-alert: AlertmanagerNotificationsFailing
+# ---------------------------------------------------------------------------
+
+
+def test_alertmanager_meta_alert_present_always(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})  # no batteries, default channels
+    rule = dest / "infra/observability/prometheus/alerts/alertmanager_alerts.yml"
+    assert rule.is_file()
+    parsed = yaml.safe_load(rule.read_text())
+    names = {r["alert"] for g in parsed["groups"] for r in g["rules"]}
+    assert "AlertmanagerNotificationsFailing" in names
+    assert "alertmanager_notifications_failed_total" in rule.read_text()

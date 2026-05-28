@@ -1,0 +1,14 @@
+groups:
+  - name: alertmanager
+    rules:
+      # Meta-monitoring: Alertmanager itself is failing to deliver notifications to a receiver.
+      # This is the steady-state guard against the silent no-op — if delivery breaks, this fires
+      # (visible in Grafana even if the broken channel is the one that would have paged you).
+      - alert: AlertmanagerNotificationsFailing
+        expr: rate(alertmanager_notifications_failed_total[5m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alertmanager failing to deliver notifications"
+          description: "Integration {{ $labels.integration }} has failed deliveries over the last 10m — alerts may be silently lost."
