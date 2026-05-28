@@ -2553,3 +2553,23 @@ def test_render_react_frontend_scaffold(tmp_path):
     base = tmp_path / "base"
     render_project(base, {**DATA, "batteries": []})
     assert not (base / "frontend").exists()
+
+
+def test_render_react_serving_wiring(tmp_path):
+    dest = tmp_path / "r"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    assert "\n  frontend:\n" in dev and "node:" in dev
+    dockerfile = (dest / "infra" / "docker" / "Dockerfile").read_text()
+    assert "frontend-build" in dockerfile and "npm run build" in dockerfile
+    main = (dest / "src" / "demo" / "main.py").read_text()
+    assert "StaticFiles" in main and "frontend/dist" in main
+    assert "frontend/dist" in (dest / ".gitignore").read_text()
+    # baseline: none of it
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert "frontend" not in (base / "infra" / "compose" / "dev.yml").read_text()
+    assert "StaticFiles" not in (base / "src" / "demo" / "main.py").read_text()
+    assert (
+        "frontend-build" not in (base / "infra" / "docker" / "Dockerfile").read_text()
+    )

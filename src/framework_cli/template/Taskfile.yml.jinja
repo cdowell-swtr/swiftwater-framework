@@ -148,6 +148,25 @@ tasks:
     desc: Open a mongosh shell against the dev Mongo.
     cmds:
       - docker compose -f infra/compose/dev.yml exec mongo mongosh
+{% endif %}{% if "react" in batteries %}
+  fe:dev:
+    desc: Run the Vite dev server (frontend).
+    cmds:
+      - npm --prefix frontend install
+      - npm --prefix frontend run dev
+  fe:build:
+    desc: Build the frontend (dist/).
+    cmds:
+      - npm --prefix frontend run build
+  fe:test:
+    desc: Frontend unit tests (Vitest).
+    cmds:
+      - npm --prefix frontend run test
+  fe:lint:
+    desc: Frontend lint + typecheck.
+    cmds:
+      - npm --prefix frontend run lint
+      - npm --prefix frontend run typecheck
 {% endif %}
   openapi:export:
     desc: Export the OpenAPI schema to openapi.json (commit it; CI diffs it).

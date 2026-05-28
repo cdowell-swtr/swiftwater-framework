@@ -38,6 +38,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(ObservabilityMiddleware, metrics=app.state.metrics)
     register_exception_handlers(app)
     include_routers(app)
+{%- if "react" in batteries %}
+
+    from pathlib import Path
+
+    _dist = Path("frontend/dist")
+    if _dist.exists():
+        from fastapi.staticfiles import StaticFiles
+
+        # Serve the built SPA at / (index.html fallback for client-side routing). Mounted last so
+        # the API routes above take precedence; only when the build output exists (prod image) —
+        # in dev the Vite server serves the SPA, so this is skipped.
+        app.mount("/", StaticFiles(directory=str(_dist), html=True), name="spa")
+{%- endif %}
     configure_tracing(app, settings)
     return app
 
