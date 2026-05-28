@@ -2645,3 +2645,14 @@ def test_render_consumers_foundation(tmp_path):
         "inventory_url"
         not in (base / "src" / "demo" / "config" / "settings.py").read_text()
     )
+
+
+def test_render_consumers_consumer_test(tmp_path):
+    dest = tmp_path / "c"
+    render_project(dest, {**DATA, "batteries": ["consumers"]})
+    t = (dest / "tests" / "functional" / "test_consumer_inventory.py").read_text()
+    assert "from pact import Pact" in t and "get_stock" in t and "pact.serve()" in t
+    assert "pacts/" in (dest / ".gitignore").read_text()
+    base = tmp_path / "base"
+    render_project(base, {**DATA, "batteries": []})
+    assert not (base / "tests" / "functional" / "test_consumer_inventory.py").exists()

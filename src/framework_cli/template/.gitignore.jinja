@@ -17,3 +17,8 @@ infra/traefik/certs/*.pem
 frontend/node_modules/
 frontend/dist/
 {%- endif %}
+{%- if "consumers" in batteries %}
+# Pact: generated consumer contracts (the example provider pact is committed)
+pacts/*.json
+!pacts/examplewebapp-app.json
+{%- endif %}

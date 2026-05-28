@@ -1,0 +1,23 @@
+from pathlib import Path
+
+from pact import Pact, match
+
+from {{ package_name }}.clients.inventory import get_stock
+
+
+def test_inventory_consumer_contract():
+    """Consumer-driven contract: our client's expectations of the inventory service.
+
+    Runs the real client against a Pact mock server and writes pacts/{{ package_name }}-inventory.json.
+    """
+    pact = Pact("{{ package_name }}", "inventory").with_specification("V4")
+    (
+        pact.upon_receiving("a stock query for item 1")
+        .given("item 1 is in stock")
+        .with_request("GET", "/inventory/1")
+        .will_respond_with(200)
+        .with_body({"item_id": match.int(1), "in_stock": match.int(5)})
+    )
+    with pact.serve() as srv:
+        assert get_stock(str(srv.url), 1) == 5
+    pact.write_file(Path("pacts"))
