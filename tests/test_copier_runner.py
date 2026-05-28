@@ -2782,3 +2782,30 @@ def test_alertmanager_renders_email(tmp_path: Path):
     assert "email_configs:" in text
     assert "auth_password_file: /etc/alertmanager/smtp_auth_password" in text
     assert yaml.safe_load(text)["receivers"][0]["name"] == "default"
+
+
+# ---------------------------------------------------------------------------
+# .env.example managed section: per-channel alert secret vars
+# ---------------------------------------------------------------------------
+
+
+def test_env_example_default_has_only_webhook_secret(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    env = (dest / ".env.example").read_text()
+    assert "APP_ALERT_WEBHOOK_URL=" in env
+    assert "APP_ALERT_SLACK_API_URL" not in env
+    assert "APP_ALERT_PAGERDUTY_ROUTING_KEY" not in env
+    assert "APP_ALERT_SMTP_" not in env
+
+
+def test_env_example_adds_selected_channel_secrets(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "alert_channels": ["slack", "email", "pagerduty"]})
+    env = (dest / ".env.example").read_text()
+    assert "APP_ALERT_SLACK_API_URL=" in env
+    assert "APP_ALERT_PAGERDUTY_ROUTING_KEY=" in env
+    for v in ("SMARTHOST", "FROM", "TO", "AUTH_USERNAME", "AUTH_PASSWORD"):
+        assert f"APP_ALERT_SMTP_{v}=" in env
+    # webhook not selected → its var absent
+    assert "APP_ALERT_WEBHOOK_URL=" not in env
