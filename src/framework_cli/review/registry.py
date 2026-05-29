@@ -12,6 +12,9 @@ ActiveWhen = Literal["always", "battery", "file-trigger"]
 
 # Latest Sonnet (good cost/quality default; per-agent overridable).
 DEFAULT_MODEL = "claude-sonnet-4-6"
+# Agentic tier uses Opus: multi-turn tool-use loop benefits from the most capable model,
+# and the 1M-token context window gives the loop full headroom.
+AGENTIC_MODEL = "claude-opus-4-8"
 
 
 @dataclass(frozen=True)
@@ -81,7 +84,7 @@ _SPECS: dict[str, AgentSpec] = {
         _prompt("data-lineage"),
         "high",
         "always",
-        DEFAULT_MODEL,
+        AGENTIC_MODEL,
         on_push=True,
         context=ContextPolicy("agentic"),
     ),
@@ -120,7 +123,7 @@ _SPECS: dict[str, AgentSpec] = {
         _prompt("observability-infra"),
         "high",
         "file-trigger",
-        DEFAULT_MODEL,
+        AGENTIC_MODEL,
         trigger_globs=("infra/*",),
         context=ContextPolicy("agentic"),
     ),
@@ -129,7 +132,7 @@ _SPECS: dict[str, AgentSpec] = {
         _prompt("observability-db"),
         "high",
         "file-trigger",
-        DEFAULT_MODEL,
+        AGENTIC_MODEL,
         trigger_globs=(
             "*/db/*",
             "*/vectors/*",
@@ -160,7 +163,7 @@ _SPECS: dict[str, AgentSpec] = {
         _prompt("architecture"),
         "high",
         "always",
-        DEFAULT_MODEL,
+        AGENTIC_MODEL,
         context=ContextPolicy("agentic"),
     ),
     "performance": AgentSpec(
@@ -197,7 +200,7 @@ _SPECS: dict[str, AgentSpec] = {
         _prompt("privacy"),
         "high",
         "always",
-        DEFAULT_MODEL,
+        AGENTIC_MODEL,
         context=ContextPolicy("agentic"),
     ),
     "documentation": AgentSpec(
@@ -240,7 +243,7 @@ _SPECS: dict[str, AgentSpec] = {
         _prompt("api-design"),
         "high",
         "battery",
-        DEFAULT_MODEL,
+        AGENTIC_MODEL,
         context=ContextPolicy("agentic"),
     ),
     "contracts": AgentSpec(
@@ -248,7 +251,7 @@ _SPECS: dict[str, AgentSpec] = {
         _prompt("contracts"),
         "high",
         "battery",
-        DEFAULT_MODEL,
+        AGENTIC_MODEL,
         context=ContextPolicy("agentic"),
     ),
     "accessibility": AgentSpec(

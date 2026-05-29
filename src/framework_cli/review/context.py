@@ -9,7 +9,8 @@ from framework_cli.review.registry import ContextPolicy
 # Model context windows (input+output tokens). Unknown models use the default.
 _MODEL_CONTEXT_TOKENS: dict[str, int] = {
     "claude-sonnet-4-6": 200_000,
-    "claude-opus-4-7": 200_000,
+    "claude-opus-4-7": 1_000_000,
+    "claude-opus-4-8": 1_000_000,
     "claude-haiku-4-5-20251001": 200_000,
 }
 _DEFAULT_CONTEXT_TOKENS = 200_000

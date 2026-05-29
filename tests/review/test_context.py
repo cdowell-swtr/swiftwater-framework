@@ -108,3 +108,8 @@ def test_bundle_skips_changed_file_missing_on_disk(tmp_path: Path):
 def test_reviewtarget_defaults_active_to_empty(tmp_path: Path):
     assert ReviewTarget(root=tmp_path).active == ()
     assert ReviewTarget(root=tmp_path, active=("security",)).active == ("security",)
+
+
+def test_budget_opus_has_1m_window():
+    assert context_budget_chars("claude-opus-4-8") == (1_000_000 - 4096 - 8_000) * 4
+    assert context_budget_chars("claude-opus-4-7") == (1_000_000 - 4096 - 8_000) * 4
