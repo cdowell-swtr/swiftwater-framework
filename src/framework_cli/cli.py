@@ -279,6 +279,8 @@ def _eval_run(diff: str, root: object, spec: object) -> list:
     from framework_cli.review.context import assemble
     from framework_cli.review.runner import run_agent
 
+    # `root` is None for legacy diff-only fixtures (Fixture.root arrives in Task 6); for
+    # those, assemble short-circuits on the diff strategy before the cwd base is used.
     base = root if isinstance(root, Path) else Path.cwd()
     bundle = assemble(diff, base, spec.context, model=spec.model)  # type: ignore[attr-defined]
     return run_agent(bundle, spec, default_client())  # type: ignore[arg-type]
