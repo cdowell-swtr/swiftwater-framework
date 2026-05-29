@@ -18,7 +18,13 @@ def test_contextpolicy_defaults_to_diff():
 def test_agentspec_context_defaults_to_diff():
     # Agents not yet migrated to a richer context strategy use the "diff" default.
     # Update this set as each agent is migrated (Slice A: observability → "bundle").
-    _MIGRATED_TO_BUNDLE = {"observability"}
+    _MIGRATED_TO_BUNDLE = {
+        "observability",
+        "application-logic",
+        "performance",
+        "data-integrity",
+        "security",
+    }
     for name in agent_names():
         if name in _MIGRATED_TO_BUNDLE:
             assert get_agent(name).context.strategy == "bundle"

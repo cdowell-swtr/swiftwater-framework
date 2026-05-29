@@ -1,5 +1,7 @@
+import fnmatch
 from pathlib import Path
 
+import pytest
 import yaml
 
 from framework_cli.review.context import assemble
@@ -42,3 +44,46 @@ def test_observability_good_fixture_applies(tmp_path: Path):
         _FIXTURES / "observability" / "good" / "instrumented-route", tmp_path
     )
     assert diff.strip()
+
+
+# ---------------------------------------------------------------------------
+# Parametrized: every migrated bundle agent assembles domain context
+# ---------------------------------------------------------------------------
+
+_BUNDLE_AGENTS = {
+    "observability": [],
+    "application-logic": [],
+    "performance": [],
+    "data-integrity": [],
+    "security": [],
+}
+
+
+def _first_bad_case(agent: str) -> Path:
+    bad = _FIXTURES / agent / "bad"
+    cases = sorted(
+        p for p in bad.glob("*") if p.is_dir() and (p / "change.patch").is_file()
+    )
+    assert cases, f"{agent}: no rendered-project bad fixture"
+    return cases[0]
+
+
+@pytest.mark.parametrize("agent", sorted(_BUNDLE_AGENTS))
+def test_bundle_agent_assembles_domain_context(agent, tmp_path):
+    spec = get_agent(agent)
+    assert spec.context.strategy == "bundle"
+    case = _first_bad_case(agent)
+    batteries = (yaml.safe_load((case / "fixture.yaml").read_text()) or {}).get(
+        "batteries", []
+    )
+    root, diff = realize_fixture(
+        tmp_path, batteries=batteries, patch=(case / "change.patch").read_text()
+    )
+    bundle = assemble(diff, root, spec.context, model=spec.model)
+    assert bundle.context_files, f"{agent}: empty bundle"
+    rels = [p for p, _ in bundle.context_files]
+    assert any(
+        fnmatch.fnmatch(r, g) for r in rels for g in spec.context.context_globs
+    ), (
+        f"{agent}: no context file matched globs {spec.context.context_globs}; got {rels}"
+    )

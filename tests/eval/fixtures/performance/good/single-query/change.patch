@@ -1,0 +1,15 @@
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -29,3 +29,12 @@
+     FastAPI serializes the ORM objects through ItemRead (the response contract).
+     """
+     return list_items(session)
++
++
++@router.get("/items/names", response_model=list[str])
++def get_item_names(session: SessionDep) -> list[str]:
++    """Return a list of item names in a single query."""
++    from sqlalchemy import select
++
++    names = list(session.scalars(select(Item.name)))
++    return names

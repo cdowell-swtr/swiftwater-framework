@@ -1,0 +1,20 @@
+--- a/src/demo/db/repository.py
++++ b/src/demo/db/repository.py
+@@ -14,3 +14,15 @@
+     session.commit()
+     session.refresh(item)
+     return item
++
++
++def bulk_create_items(session: Session, names: list[str]) -> list[Item]:
++    """Insert multiple items atomically in a single transaction."""
++    created = []
++    for name in names:
++        item = Item(name=name)
++        session.add(item)
++        created.append(item)
++    # Single commit — all rows land together or none do.
++    session.commit()
++    for item in created:
++        session.refresh(item)
++    return created

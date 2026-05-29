@@ -53,6 +53,13 @@ _SPECS: dict[str, AgentSpec] = {
         active_when="always",
         model=DEFAULT_MODEL,
         on_push=True,
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "src/*/**/*.py",
+                "src/*/config/*.py",
+            ),
+        ),
     ),
     "data-integrity": AgentSpec(
         "review-data-integrity",
@@ -61,6 +68,13 @@ _SPECS: dict[str, AgentSpec] = {
         "always",
         DEFAULT_MODEL,
         on_push=True,
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "src/*/db/*.py",
+                "migrations/versions/*.py",
+            ),
+        ),
     ),
     "data-lineage": AgentSpec(
         "review-data-lineage",
@@ -76,6 +90,13 @@ _SPECS: dict[str, AgentSpec] = {
         "info",
         "always",
         DEFAULT_MODEL,
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "src/*/routes/*.py",
+                "src/*/db/*.py",
+            ),
+        ),
     ),
     "observability": AgentSpec(
         "review-observability",
@@ -124,7 +145,18 @@ _SPECS: dict[str, AgentSpec] = {
         "review-architecture", _prompt("architecture"), "high", "always", DEFAULT_MODEL
     ),
     "performance": AgentSpec(
-        "review-performance", _prompt("performance"), "high", "always", DEFAULT_MODEL
+        "review-performance",
+        _prompt("performance"),
+        "high",
+        "always",
+        DEFAULT_MODEL,
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "src/*/routes/*.py",
+                "src/*/db/*.py",
+            ),
+        ),
     ),
     "compliance": AgentSpec(
         "review-compliance", _prompt("compliance"), "high", "always", DEFAULT_MODEL

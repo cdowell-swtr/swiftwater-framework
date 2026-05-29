@@ -1,0 +1,19 @@
+--- a/src/demo/db/repository.py
++++ b/src/demo/db/repository.py
+@@ -14,3 +14,15 @@
+     session.commit()
+     session.refresh(item)
+     return item
++
++
++def bulk_create_items(session: Session, names: list[str]) -> list[Item]:
++    """Insert multiple items — but each is committed separately, risking partial writes."""
++    created = []
++    for name in names:
++        item = Item(name=name)
++        session.add(item)
++        # Bug: commits inside the loop — no atomicity across the batch.
++        session.commit()
++        session.refresh(item)
++        created.append(item)
++    return created
