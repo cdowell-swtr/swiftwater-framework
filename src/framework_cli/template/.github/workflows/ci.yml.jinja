@@ -193,8 +193,8 @@ jobs:
           PY
 {%- endif %}
 
-  # Steps 9-10: Layer-3 AI review agents (spec §7). Opt-in: set the ANTHROPIC_API_KEY secret to
-  # enable. `review-plan` lists the agents active for this event (all on a PR; the security/
+  # Steps 9-10: Layer-3 AI review agents (spec §7). Opt-in: set the `ANTHROPIC_<PKG>_CI_RUNTIME`
+  # secret to enable. `review-plan` lists the agents active for this event (all on a PR; the security/
   # data-integrity/data-lineage/observability subset on a push to main); `review` runs them in
   # parallel, each posting a `review-*` GitHub Check Run. Require those checks in branch
   # protection to gate merges. A missing key / API error / untriggered agent → a neutral check
@@ -236,7 +236,7 @@ jobs:
           uv tool install "git+https://github.com/cdowell-swtr/swiftwater-framework@${ref}"
       - name: review {% raw %}${{ matrix.agent }}{% endraw %}
         env:
-          ANTHROPIC_API_KEY: {% raw %}${{ secrets.ANTHROPIC_API_KEY }}{% endraw %}
+          ANTHROPIC_RUNTIME_API_KEY: {% raw %}${{ secrets.ANTHROPIC_{% endraw %}{{ package_name | upper }}{% raw %}_CI_RUNTIME }}{% endraw %}
           GITHUB_TOKEN: {% raw %}${{ github.token }}{% endraw %}
         run: framework review {% raw %}${{ matrix.agent }}{% endraw %} --findings-out findings/{% raw %}${{ matrix.agent }}{% endraw %}.json
       - name: upload findings

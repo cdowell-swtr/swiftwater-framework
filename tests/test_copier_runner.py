@@ -914,7 +914,9 @@ def test_ci_review_job_runs_framework_review(tmp_path: Path):
     ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
     assert "framework review " in ci
     assert "uv tool install" in ci and "_commit" in ci
-    assert "ANTHROPIC_API_KEY" in ci
+    assert "ANTHROPIC_RUNTIME_API_KEY" in ci
+    assert "secrets.ANTHROPIC_DEMO_CI_RUNTIME" in ci
+    assert "ANTHROPIC_API_KEY" not in ci
 
 
 def test_ci_review_matrix(tmp_path: Path):
@@ -3011,7 +3013,7 @@ def test_secrets_doc_renders_with_convention(tmp_path: Path):
     render_project(dest, DATA)
     secrets = (dest / "SECRETS.md").read_text()
     # the two-tier naming convention + the project's secrets are documented
-    assert "ANTHROPIC_API_KEY" in secrets
+    assert "ANTHROPIC_RUNTIME_API_KEY" in secrets
     assert "GITLEAKS_LICENSE" in secrets
     assert "provider console" in secrets.lower()
     # project/package name interpolates (DATA → project_name="Demo", package_name="demo")
