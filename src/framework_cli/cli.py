@@ -16,7 +16,7 @@ from framework_cli.review.aggregate import write_findings
 from framework_cli.review.checks import neutral_payload, post_or_skip, to_check_run
 from framework_cli.review.diff import changed_files, matches_globs, pr_diff
 from framework_cli.review.registry import active_agents, agent_names, get_agent
-from framework_cli.review.runner import default_client, run_agent
+from framework_cli.review.runner import default_client
 from framework_cli.source import (
     REPO_URL,
     latest_release,
@@ -268,11 +268,20 @@ def _review_diff() -> str:
 
 
 def _review_run(diff: str, spec: object) -> list:
-    return run_agent(diff, spec, default_client())  # type: ignore[arg-type]
+    from framework_cli.review.context import assemble
+    from framework_cli.review.runner import run_agent
+
+    bundle = assemble(diff, Path.cwd(), spec.context, model=spec.model)  # type: ignore[attr-defined]
+    return run_agent(bundle, spec, default_client())  # type: ignore[arg-type]
 
 
-def _eval_run(diff: str, spec: object) -> list:
-    return run_agent(diff, spec, default_client())  # type: ignore[arg-type]
+def _eval_run(diff: str, root: object, spec: object) -> list:
+    from framework_cli.review.context import assemble
+    from framework_cli.review.runner import run_agent
+
+    base = root if isinstance(root, Path) else Path.cwd()
+    bundle = assemble(diff, base, spec.context, model=spec.model)  # type: ignore[attr-defined]
+    return run_agent(bundle, spec, default_client())  # type: ignore[arg-type]
 
 
 @app.command(name="review-aggregate")
@@ -388,7 +397,7 @@ def eval_agents(
             hits = 0
             for _ in range(repeat):
                 try:
-                    found = _eval_run(fx.diff, spec)
+                    found = _eval_run(fx.diff, getattr(fx, "root", None), spec)
                 except Exception:  # noqa: BLE001 - a failed run counts as a non-detection
                     found = []
                 blocked = (

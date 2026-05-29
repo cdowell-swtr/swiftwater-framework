@@ -51,6 +51,11 @@ class ReviewTarget:
     )  # agent names active for this target
 
 
+def generated_project_target(root: Path, active: tuple[str, ...]) -> ReviewTarget:
+    """The shipped-use target: a checked-out generated project at `root`."""
+    return ReviewTarget(root=root, active=tuple(active))
+
+
 def assemble(diff: str, root: Path, policy: ContextPolicy, *, model: str) -> Bundle:
     """Assemble the review bundle for `policy` against the tree at `root`.
 

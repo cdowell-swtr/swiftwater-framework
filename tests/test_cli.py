@@ -338,7 +338,7 @@ def test_eval_passes_when_agent_catches_bad_and_clean_on_good(tmp_path, monkeypa
     monkeypatch.setattr(
         cli_mod,
         "_eval_run",
-        lambda diff, spec: (
+        lambda diff, root, spec: (
             [] if "clean" in diff else [Finding("a.py", 1, "high", "danger")]
         ),
     )
@@ -356,7 +356,7 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
     monkeypatch.setattr(
-        cli_mod, "_eval_run", lambda diff, spec: []
+        cli_mod, "_eval_run", lambda diff, root, spec: []
     )  # never catches anything
     result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
     assert result.exit_code == 1
@@ -523,7 +523,7 @@ def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
 
     calls = {"n": 0}
 
-    def flaky(diff, spec):
+    def flaky(diff, root, spec):
         if "clean" in diff:
             return []
         calls["n"] += 1
