@@ -17,7 +17,9 @@ def test_contextpolicy_defaults_to_diff():
 
 def test_agentspec_context_defaults_to_diff():
     # Agents not yet migrated to a richer context strategy use the "diff" default.
-    # Update this set as each agent is migrated (Slice A: observability → "bundle").
+    # Slice A migrated all 11 static-bundle-tier agents (below). Slice B promotes the 7
+    # agentic-tier agents (architecture, data-lineage, privacy, api-design,
+    # observability-infra, observability-db, contracts) — add them here when it does.
     _MIGRATED_TO_BUNDLE = {
         "observability",
         "application-logic",

@@ -4,6 +4,7 @@ import pytest
 import yaml
 
 from framework_cli.review.context import assemble
+from framework_cli.review.diff import changed_files
 from framework_cli.review.evals import realize_fixture
 from framework_cli.review.registry import get_agent
 
@@ -88,8 +89,7 @@ def test_bundle_agent_assembles_domain_context(agent, tmp_path):
     assert bundle.context_files, f"{agent}: empty bundle"
     rels = {p for p, _ in bundle.context_files}
     # The bundle must reach the agent's declared glob domain. Resolve the globs the same
-    # way the assembler does (root.glob — correct for `**`, unlike fnmatch) and require a
-    # non-empty intersection with the assembled files.
+    # way the assembler does (root.glob — correct for `**`, unlike fnmatch).
     domain = {
         str(p.relative_to(root))
         for g in spec.context.context_globs
@@ -99,3 +99,13 @@ def test_bundle_agent_assembles_domain_context(agent, tmp_path):
     assert rels & domain, (
         f"{agent}: no context file in glob domain {spec.context.context_globs}; got {sorted(rels)}"
     )
+    # Prove glob ENRICHMENT, not just that the changed file happens to match a glob:
+    # where the domain has files beyond the diff, at least one must be pulled in. (For an
+    # agent whose domain is only the changed file — e.g. dependency/pyproject.toml — there
+    # is nothing beyond the diff, so the intersection check above is the strongest possible.)
+    beyond_diff = domain - set(changed_files(diff))
+    if beyond_diff:
+        assert beyond_diff & rels, (
+            f"{agent}: bundle pulled no glob context beyond the diff; "
+            f"expected one of {sorted(beyond_diff)} in {sorted(rels)}"
+        )

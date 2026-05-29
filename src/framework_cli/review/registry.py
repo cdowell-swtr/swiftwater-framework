@@ -55,10 +55,8 @@ _SPECS: dict[str, AgentSpec] = {
         on_push=True,
         context=ContextPolicy(
             "bundle",
-            context_globs=(
-                "src/*/**/*.py",
-                "src/*/config/*.py",
-            ),
+            # The whole package: a security reviewer needs the full attack surface.
+            context_globs=("src/*/**/*.py",),
         ),
     ),
     "data-integrity": AgentSpec(
