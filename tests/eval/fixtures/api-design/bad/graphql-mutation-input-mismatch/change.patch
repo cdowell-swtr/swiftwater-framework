@@ -1,0 +1,13 @@
+--- a/src/demo/graphql/schema.py
++++ b/src/demo/graphql/schema.py
+@@ -34,8 +34,9 @@ class Query:
+ @strawberry.type
+ class Mutation:
+     @strawberry.mutation
+-    def create_item(self, info: strawberry.Info, name: str) -> Item:
++    def create_item(self, info: strawberry.Info, name: str, description: str) -> Item:
+         session = info.context["session"]
++        # description silently dropped: not in the DB model or REST POST contract
+         return _to_item(repository.create_item(session, name))
+ 
+ 

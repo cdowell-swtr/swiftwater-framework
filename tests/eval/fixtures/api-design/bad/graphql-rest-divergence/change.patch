@@ -1,0 +1,23 @@
+--- a/src/demo/graphql/schema.py
++++ b/src/demo/graphql/schema.py
+@@ -15,12 +15,18 @@ from .extension import MetricsExtension
+ @strawberry.type
+ class Item:
+     id: int
+-    name: str
++    title: str
+     created_at: datetime.datetime
++    description: str | None = None
+ 
+ 
+ def _to_item(row: ItemModel) -> Item:
+-    return Item(id=row.id, name=row.name, created_at=row.created_at)
++    return Item(
++        id=row.id,
++        title=row.name,
++        created_at=row.created_at,
++        description=None,
++    )
+ 
+ 
+ @strawberry.type

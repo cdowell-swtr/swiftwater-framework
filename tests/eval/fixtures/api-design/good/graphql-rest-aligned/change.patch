@@ -1,0 +1,16 @@
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -1,3 +1,5 @@
++import datetime
++
+ from typing import Annotated
+ 
+ from fastapi import APIRouter, Depends
+@@ -20,6 +22,7 @@ class ItemRead(BaseModel):
+ 
+     id: int
+     name: str
++    created_at: datetime.datetime
+ 
+ 
+ @router.get("/items", response_model=list[ItemRead])

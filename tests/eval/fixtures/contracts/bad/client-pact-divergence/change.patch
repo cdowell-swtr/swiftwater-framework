@@ -1,0 +1,20 @@
+diff --git a/src/demo/clients/inventory.py b/src/demo/clients/inventory.py
+index 2f78780..01bc110 100644
+--- a/src/demo/clients/inventory.py
++++ b/src/demo/clients/inventory.py
+@@ -7,6 +7,13 @@ def get_stock(base_url: str, item_id: int) -> int:
+     base_url is injected (the app passes settings.inventory_url; the consumer Pact
+     test passes the mock server URL) so the call is contract-testable in isolation.
+     """
+-    res = httpx.get(f"{base_url.rstrip('/')}/inventory/{item_id}", timeout=5.0)
++    res = httpx.get(
++        f"{base_url.rstrip('/')}/inventory/{item_id}",
++        params={"include_location": "true"},
++        timeout=5.0,
++    )
+     res.raise_for_status()
+-    return int(res.json()["in_stock"])
++    data = res.json()
++    # location is used downstream but no pact interaction covers this query param
++    _ = data.get("location")
++    return int(data["in_stock"])

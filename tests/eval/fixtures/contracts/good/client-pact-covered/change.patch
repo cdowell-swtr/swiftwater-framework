@@ -1,0 +1,37 @@
+diff --git a/src/demo/clients/inventory.py b/src/demo/clients/inventory.py
+index 2f78780..116d6ad 100644
+--- a/src/demo/clients/inventory.py
++++ b/src/demo/clients/inventory.py
+@@ -1,12 +1,13 @@
+ import httpx
+ 
+ 
+-def get_stock(base_url: str, item_id: int) -> int:
+-    """Fetch an item's stock level from the downstream inventory service.
++def get_stock(base_url: str, item_id: int) -> dict[str, int]:
++    """Fetch an item's stock level and warehouse from the downstream inventory service.
+ 
+     base_url is injected (the app passes settings.inventory_url; the consumer Pact
+     test passes the mock server URL) so the call is contract-testable in isolation.
+     """
+     res = httpx.get(f"{base_url.rstrip('/')}/inventory/{item_id}", timeout=5.0)
+     res.raise_for_status()
+-    return int(res.json()["in_stock"])
++    data = res.json()
++    return {"in_stock": int(data["in_stock"]), "warehouse_id": int(data["warehouse_id"])}
+diff --git a/tests/functional/test_consumer_inventory.py b/tests/functional/test_consumer_inventory.py
+index 7c5de42..44d328e 100644
+--- a/tests/functional/test_consumer_inventory.py
++++ b/tests/functional/test_consumer_inventory.py
+@@ -16,8 +16,9 @@ def test_inventory_consumer_contract():
+         .given("item 1 is in stock")
+         .with_request("GET", "/inventory/1")
+         .will_respond_with(200)
+-        .with_body({"item_id": match.int(1), "in_stock": match.int(5)})
++        .with_body({"item_id": match.int(1), "in_stock": match.int(5), "warehouse_id": match.int(1)})
+     )
+     with pact.serve() as srv:
+-        assert get_stock(str(srv.url), 1) == 5
++        result = get_stock(str(srv.url), 1)
++        assert result["in_stock"] == 5
+     pact.write_file(Path("pacts"))

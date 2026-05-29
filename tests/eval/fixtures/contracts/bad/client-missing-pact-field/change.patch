@@ -1,0 +1,22 @@
+diff --git a/src/demo/clients/inventory.py b/src/demo/clients/inventory.py
+index 2f78780..01c4eb7 100644
+--- a/src/demo/clients/inventory.py
++++ b/src/demo/clients/inventory.py
+@@ -1,12 +1,14 @@
+ import httpx
+ 
+ 
+-def get_stock(base_url: str, item_id: int) -> int:
+-    """Fetch an item's stock level from the downstream inventory service.
++def get_stock(base_url: str, item_id: int) -> dict[str, int]:
++    """Fetch an item's stock level and reserved count from the downstream inventory service.
+ 
+     base_url is injected (the app passes settings.inventory_url; the consumer Pact
+     test passes the mock server URL) so the call is contract-testable in isolation.
+     """
+     res = httpx.get(f"{base_url.rstrip('/')}/inventory/{item_id}", timeout=5.0)
+     res.raise_for_status()
+-    return int(res.json()["in_stock"])
++    data = res.json()
++    # reserved_count is expected in the response but not declared in the pact interaction
++    return {"in_stock": int(data["in_stock"]), "reserved_count": int(data["reserved_count"])}
