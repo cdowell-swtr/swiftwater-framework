@@ -1,0 +1,33 @@
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -1,10 +1,10 @@
+ from typing import Annotated
+ 
+ from fastapi import APIRouter, Depends
+-from pydantic import BaseModel, ConfigDict
++from pydantic import BaseModel, ConfigDict, Field
+ from sqlalchemy.orm import Session
+ 
+-from ..db.engine import get_session
++from ..db.engine import SessionLocal, get_session
+ from ..db.models import Item
+ from ..db.repository import list_items
+ 
+@@ -29,3 +29,17 @@
+     FastAPI serializes the ORM objects through ItemRead (the response contract).
+     """
+     return list_items(session)
++
++
++class ItemCreate(BaseModel):
++    name: str = Field(min_length=1, max_length=255)
++
++
++@router.post("/items", response_model=ItemRead, status_code=201)
++def create_item(payload: ItemCreate) -> Item:
++    """Create a new item — opens its own session, bypassing the repository layer."""
++    with SessionLocal() as session:
++        item = Item(name=payload.name)
++        session.add(item)
++        session.refresh(item)
++        return item
