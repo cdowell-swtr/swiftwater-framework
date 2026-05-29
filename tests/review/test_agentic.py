@@ -228,3 +228,23 @@ def test_agentic_loop_finalizes_at_turn_cap(tmp_path):
     assert "tools" not in client.calls[3]
     # Still returns a (partial) findings list, never hangs or raises.
     assert findings == [Finding("x.py", 1, "high", "late")]
+
+
+def test_cli_dispatches_agentic_strategy(monkeypatch, tmp_path):
+    import framework_cli.cli as cli_mod
+
+    called = {}
+
+    def fake_agentic(diff, root, spec, client, *, max_turns):
+        called["root"] = root
+        called["max_turns"] = max_turns
+        return []
+
+    monkeypatch.setattr("framework_cli.review.agentic.run_agent_agentic", fake_agentic)
+    monkeypatch.setattr(cli_mod, "default_client", lambda: object())
+    monkeypatch.chdir(tmp_path)
+    cli_mod._review_run("--- a/x\n+++ b/x\n", get_agent("architecture"))
+    assert called["root"] == tmp_path
+    assert (
+        called["max_turns"] == 12
+    )  # DEFAULT_MAX_TURNS (architecture sets no override)

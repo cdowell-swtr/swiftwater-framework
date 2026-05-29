@@ -15,12 +15,10 @@ def test_contextpolicy_defaults_to_diff():
     assert p.max_context_tokens is None
 
 
-def test_agentspec_context_defaults_to_diff():
-    # Agents not yet migrated to a richer context strategy use the "diff" default.
-    # Slice A migrated all 11 static-bundle-tier agents (below). Slice B promotes the 7
-    # agentic-tier agents (architecture, data-lineage, privacy, api-design,
-    # observability-infra, observability-db, contracts) — add them here when it does.
-    _MIGRATED_TO_BUNDLE = {
+def test_every_agent_has_an_explicit_context_strategy():
+    # Slice A migrated 11 agents to "bundle"; Slice B migrates 7 to "agentic".
+    # After Slice B, NO registered agent is left on the "diff" default.
+    bundle = {
         "observability",
         "application-logic",
         "performance",
@@ -33,11 +31,23 @@ def test_agentspec_context_defaults_to_diff():
         "accessibility",
         "usability",
     }
+    agentic = {
+        "architecture",
+        "data-lineage",
+        "privacy",
+        "api-design",
+        "observability-infra",
+        "observability-db",
+        "contracts",
+    }
     for name in agent_names():
-        if name in _MIGRATED_TO_BUNDLE:
-            assert get_agent(name).context.strategy == "bundle"
+        strat = get_agent(name).context.strategy
+        if name in bundle:
+            assert strat == "bundle", f"{name} should be bundle, is {strat}"
+        elif name in agentic:
+            assert strat == "agentic", f"{name} should be agentic, is {strat}"
         else:
-            assert get_agent(name).context.strategy == "diff"
+            raise AssertionError(f"{name} is in neither tier — classify it")
 
 
 def test_contextpolicy_bundle_carries_globs():

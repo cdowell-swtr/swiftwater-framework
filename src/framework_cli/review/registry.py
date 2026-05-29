@@ -83,6 +83,7 @@ _SPECS: dict[str, AgentSpec] = {
         "always",
         DEFAULT_MODEL,
         on_push=True,
+        context=ContextPolicy("agentic"),
     ),
     "application-logic": AgentSpec(
         "review-application-logic",
@@ -121,6 +122,7 @@ _SPECS: dict[str, AgentSpec] = {
         "file-trigger",
         DEFAULT_MODEL,
         trigger_globs=("infra/*",),
+        context=ContextPolicy("agentic"),
     ),
     "observability-db": AgentSpec(
         "review-observability-db",
@@ -137,6 +139,7 @@ _SPECS: dict[str, AgentSpec] = {
             "*/graph/*",
             "migrations/*",
         ),
+        context=ContextPolicy("agentic"),
     ),
     "test-quality": AgentSpec(
         "review-test-quality",
@@ -153,7 +156,12 @@ _SPECS: dict[str, AgentSpec] = {
         ),
     ),
     "architecture": AgentSpec(
-        "review-architecture", _prompt("architecture"), "high", "always", DEFAULT_MODEL
+        "review-architecture",
+        _prompt("architecture"),
+        "high",
+        "always",
+        DEFAULT_MODEL,
+        context=ContextPolicy("agentic"),
     ),
     "performance": AgentSpec(
         "review-performance",
@@ -185,7 +193,12 @@ _SPECS: dict[str, AgentSpec] = {
         ),
     ),
     "privacy": AgentSpec(
-        "review-privacy", _prompt("privacy"), "high", "always", DEFAULT_MODEL
+        "review-privacy",
+        _prompt("privacy"),
+        "high",
+        "always",
+        DEFAULT_MODEL,
+        context=ContextPolicy("agentic"),
     ),
     "documentation": AgentSpec(
         "review-documentation",
@@ -223,10 +236,20 @@ _SPECS: dict[str, AgentSpec] = {
         ),
     ),
     "api-design": AgentSpec(
-        "review-api-design", _prompt("api-design"), "high", "battery", DEFAULT_MODEL
+        "review-api-design",
+        _prompt("api-design"),
+        "high",
+        "battery",
+        DEFAULT_MODEL,
+        context=ContextPolicy("agentic"),
     ),
     "contracts": AgentSpec(
-        "review-contracts", _prompt("contracts"), "high", "battery", DEFAULT_MODEL
+        "review-contracts",
+        _prompt("contracts"),
+        "high",
+        "battery",
+        DEFAULT_MODEL,
+        context=ContextPolicy("agentic"),
     ),
     "accessibility": AgentSpec(
         "review-accessibility",

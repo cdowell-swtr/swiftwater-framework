@@ -271,6 +271,13 @@ def _review_run(diff: str, spec: object) -> list:
     from framework_cli.review.context import assemble
     from framework_cli.review.runner import run_agent
 
+    if spec.context.strategy == "agentic":  # type: ignore[attr-defined]
+        from framework_cli.review.agentic import DEFAULT_MAX_TURNS, run_agent_agentic
+
+        turns = spec.context.max_agentic_turns or DEFAULT_MAX_TURNS  # type: ignore[attr-defined]
+        return run_agent_agentic(
+            diff, Path.cwd(), spec, default_client(), max_turns=turns
+        )
     bundle = assemble(diff, Path.cwd(), spec.context, model=spec.model)  # type: ignore[attr-defined]
     return run_agent(bundle, spec, default_client())  # type: ignore[arg-type]
 
@@ -279,9 +286,12 @@ def _eval_run(diff: str, root: object, spec: object) -> list:
     from framework_cli.review.context import assemble
     from framework_cli.review.runner import run_agent
 
-    # `root` is None for legacy diff-only fixtures (Fixture.root arrives in Task 6); for
-    # those, assemble short-circuits on the diff strategy before the cwd base is used.
     base = root if isinstance(root, Path) else Path.cwd()
+    if spec.context.strategy == "agentic":  # type: ignore[attr-defined]
+        from framework_cli.review.agentic import DEFAULT_MAX_TURNS, run_agent_agentic
+
+        turns = spec.context.max_agentic_turns or DEFAULT_MAX_TURNS  # type: ignore[attr-defined]
+        return run_agent_agentic(diff, base, spec, default_client(), max_turns=turns)
     bundle = assemble(diff, base, spec.context, model=spec.model)  # type: ignore[attr-defined]
     return run_agent(bundle, spec, default_client())  # type: ignore[arg-type]
 
