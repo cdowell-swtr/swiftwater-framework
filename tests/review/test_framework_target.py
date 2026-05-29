@@ -1,5 +1,6 @@
 import json
 import subprocess
+from pathlib import Path
 
 from framework_cli.review.diff import framework_diff
 
@@ -112,3 +113,21 @@ def test_review_command_target_framework_sources_framework_diff(monkeypatch):
     )  # empty diff → no findings
     result = CliRunner().invoke(app, ["review", "security", "--target", "framework"])
     assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# T5 — .github/workflows/review.yml dogfooding workflow
+# ---------------------------------------------------------------------------
+def test_review_workflow_is_valid_and_uses_framework_target():
+    import yaml
+
+    wf = yaml.safe_load(Path(".github/workflows/review.yml").read_text())
+    # PyYAML parses the bare `on:` key as the boolean True; accept either.
+    triggers = wf.get("on") or wf.get(True)
+    assert "pull_request" in triggers and "push" in triggers
+    jobs = wf["jobs"]
+    assert {"review-plan", "review", "review-aggregate"} <= set(jobs)
+    text = Path(".github/workflows/review.yml").read_text()
+    assert "review-agents --target framework" in text
+    assert "review ${{ matrix.agent }} --target framework" in text
+    assert "ANTHROPIC_FRAMEWORK_CI_EVAL" in text
