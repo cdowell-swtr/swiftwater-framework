@@ -112,15 +112,17 @@ Both targets are instances of the same `ReviewTarget` type and drive the identic
 
 ## 6. Tier assignment
 
-- **Static `bundle` tier** (migrated in Slice A): observability, observability-db, observability-infra, accessibility, usability, api-design, contracts, test-quality, performance, data-integrity, compliance, documentation, security, dependency, application-logic. Principle: a bounded domain subtree (via globs) + changed files is enough.
-- **Agentic tier** (stays `diff` until Slice B): architecture (module graph), data-lineage (cross-file data-flow), privacy (data-flow tracing). Principle: the agent must *follow references across the repo*, which a static subtree can't satisfy.
+Principle: **`bundle`** if a bounded domain subtree (globs) + changed files suffices; **`agentic`** if the agent must *follow references across the repo* — e.g. trace a concern from a changed file out to where it is consumed/produced, which a static subtree can't satisfy.
 
-The exact per-agent `context_globs` are finalized during migration (Slice A) and recorded in the registry.
+- **Static `bundle` tier** (migrated in Slice A) — 11: accessibility, application-logic, compliance, data-integrity, dependency, documentation, observability (app), performance, security, test-quality, usability.
+- **Agentic tier** (stays `diff` until Slice B) — 7: architecture (module graph), data-lineage (cross-file data-flow), privacy (data-flow tracing), api-design (a contract can match while the *both-ends* usage is wrong → must see consumers), observability-infra (infra obs correctness depends on the app's instrumentation + topology, not just `infra/`), observability-db (db problems surface in *app* files, not only the data layer), contracts (Pact: consumer client + provider live in different files — the both-ends back-and-forth is the whole point).
+
+The exact per-agent `context_globs` (bundle tier) are finalized during migration (Slice A) and recorded in the registry; the agentic tier's tool scope is designed in Slice B.
 
 ## 7. Decomposition (slices — each its own spec → plan → implement cycle)
 
 - **Slice A — context-model spine + static tier (generated-project target).** `ContextPolicy` on `AgentSpec` (default `diff`), `ReviewTarget`, `ContextAssembler` (model-derived budget), runner refactor + cache layout, the generated-project profile, migration of the static-tier agents to `bundle` with rendered-project fixtures, and the target-agnostic invariant test. **This spec details Slice A.**
-- **Slice B — agentic tier.** read/grep/glob tools, a token/tool-call budget, the three exploration agents, their fixtures, and the `strategy="agentic"` execution path.
+- **Slice B — agentic tier.** read/grep/glob tools, a token/tool-call budget, the seven agentic agents (architecture, data-lineage, privacy, api-design, observability-infra, observability-db, contracts), their fixtures, and the `strategy="agentic"` execution path.
 - **Slice C — framework-repo target (dogfooding).** Add the second `ReviewTarget` profile (applicable agent subset + framework-repo glob roots + render-then-review for template payload) + CI wiring. Reuses the spine verbatim — the proof the pattern is genuinely identical.
 - **Slice D — real-key eval scoring + threshold tuning (the original Plan 11).** Score the now-context-aware agents against the rendered fixtures with `--repeat`-averaging; calibrate `thresholds.yaml` per agent with a safety margin (`recall_min` below observed healthy recall, `fp_max` above observed false-positive rate); commit a dated scorecard under `docs/superpowers/eval-scorecards/`; confirm green on real GitHub Actions (local-key iteration first, then the `ANTHROPIC_FRAMEWORK_CI_EVAL` secret on a `workflow_dispatch`-enabled `agent-evals.yml`). Also enrich shallow good fixtures across all agents (single-good ⇒ coarse precision), act on the carried-over OBS-COMPLETE inputs (richer obs good fixtures with health-signal + correlation-id cases; tighten `observability-infra/bad/exporter-dev-only`; per-store `matches_globs` assertions). Cost is modest — diff-scoped, prompt-cached calls — but bundle/agentic strategies raise per-call input above the old diff-only baseline; budget accordingly.
 
