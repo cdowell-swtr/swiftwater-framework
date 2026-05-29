@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import mean
 from typing import Literal
 
+from framework_cli.copier_runner import render_project
 from framework_cli.review.findings import Finding, severity_rank
 from framework_cli.review.registry import AgentSpec
 
@@ -98,6 +100,39 @@ def score_agent(
         not reasons,
         "; ".join(reasons),
     )
+
+
+_FIXTURE_ANSWERS = {
+    "project_name": "Demo",
+    "project_slug": "demo",
+    "package_name": "demo",
+    "python_version": "3.12",
+}
+
+
+def realize_fixture(
+    dest: Path, *, batteries: list[str], patch: str
+) -> tuple[Path, str]:
+    """Render the template into `dest`, apply `patch`, and return (project root, diff).
+
+    The render is a real generated project, so the same assembler used in production runs
+    against it. The patch is the seeded bad/good change; the returned diff is what the
+    review sees. `dest` must be an empty directory the caller owns (e.g. a tmp_path).
+    """
+    root = dest / "demo"
+    render_project(root, {**_FIXTURE_ANSWERS, "batteries": batteries})
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(["git", "apply", "-"], cwd=root, input=patch, text=True, check=True)
+    diff = subprocess.run(
+        ["git", "diff"], cwd=root, capture_output=True, text=True, check=True
+    ).stdout
+    return root, diff
 
 
 def load_fixtures(root: Path) -> list[Fixture]:

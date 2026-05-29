@@ -587,10 +587,12 @@ git commit -m "feat(review): assemble bundles from a ReviewTarget in the CLI pat
 
 ---
 
-## Task 6: Rendered-project fixture format + `realize_fixture`
+## Task 6: Rendered-project fixture realization primitive (`realize_fixture`)
+
+> **Scope refinement (during execution):** Three gate tests (`test_every_registered_agent_has_fixtures`, `test_contracts_has_full_fixture_set`, `test_fixtures_are_wellformed`) call `load_fixtures` and rely on `fx.diff`. Rendering new-format fixtures eagerly inside `load_fixtures` would render dozens of projects on every suite run as Task 8 migrates agents. So Slice A does **not** modify `load_fixtures`: migrated agents **keep their legacy `.diff` fixtures** (the existing `load_fixtures` ignores case-subdirectories, so the gate + scoring path stay green) and **add** rendered-project fixtures consumed only by the new assembly tests via `realize_fixture`. Migrating the eval harness to consume rendered fixtures + retiring the `.diff` ones is **Slice D**. Task 6 therefore ships only the `realize_fixture` primitive + its test; `Fixture`/`load_fixtures` are untouched.
 
 **Files:**
-- Modify: `src/framework_cli/review/evals.py` (`Fixture`, `load_fixtures`; add `realize_fixture`)
+- Modify: `src/framework_cli/review/evals.py` (add `realize_fixture`)
 - Test: `tests/review/test_fixture_realize.py`
 
 The new fixture layout (per migrated agent case):
@@ -895,7 +897,7 @@ def test_migrated_agent_assembles_nonempty_bundle(agent, tmp_path):
 
 For agent in the table (do these one at a time, committing each):
   - Set `context=ContextPolicy("bundle", context_globs=(...))` in `registry.py`.
-  - Convert each existing `.diff` case to a `<case>/` dir with `fixture.yaml` (`batteries:` from the table), `change.patch` (the defect re-expressed against the rendered file), and `expect.json` (the rendered seeded path) for `bad`; `fixture.yaml` + `change.patch` for `good`. Delete the old `.diff`/`.expect.json` pair.
+  - ADD rendered-project fixtures (do NOT delete the legacy `.diff`/`.expect.json` — they keep the eval-harness gate/scoring green until Slice D migrates the harness). For each defect intent, create a `<case>/` dir with `fixture.yaml` (`batteries:` from the table), `change.patch` (the defect re-expressed against the rendered file), and `expect.json` (the rendered seeded path) for `bad`; `fixture.yaml` + `change.patch` for `good`.
   - Run: `uv run pytest tests/review/test_migrated_agent_assembly.py -k <agent> tests/ -k fixture -v` — Expected: PASS.
   - Commit: `git add src/framework_cli/review/registry.py tests/eval/fixtures/<agent> && git commit -m "feat(review): migrate <agent> agent to bundle context"`.
 
