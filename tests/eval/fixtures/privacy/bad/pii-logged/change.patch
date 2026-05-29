@@ -1,0 +1,61 @@
+--- a/src/demo/db/models.py
++++ b/src/demo/db/models.py
+@@ -13,6 +13,8 @@
+
+     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+     name: Mapped[str] = mapped_column(String(255), nullable=False)
++    # PII: owner email address — do not include in logs or external responses.
++    owner_email: Mapped[str | None] = mapped_column(String(254), nullable=True)
+     created_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=True), server_default=func.now(), nullable=False
+     )
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -1,17 +1,20 @@
+ from typing import Annotated
+
+ from fastapi import APIRouter, Depends
+-from pydantic import BaseModel, ConfigDict
++from pydantic import BaseModel, ConfigDict, Field
+ from sqlalchemy.orm import Session
+
+ from ..db.engine import get_session
+ from ..db.models import Item
+-from ..db.repository import list_items
++from ..db.repository import create_item, list_items
++from ..logging_config import get_logger
+
+ router = APIRouter()
+
+ SessionDep = Annotated[Session, Depends(get_session)]
+
++log = get_logger()
++
+
+ class ItemRead(BaseModel):
+     """Response schema — the contract the API exposes (decoupled from the ORM model)."""
+@@ -22,6 +25,11 @@
+     name: str
+
+
++class ItemCreate(BaseModel):
++    name: str = Field(min_length=1, max_length=255)
++    owner_email: str | None = None
++
++
+ @router.get("/items", response_model=list[ItemRead])
+ def get_items(session: SessionDep) -> list[Item]:
+     """List seeded/created items — demonstrates the DB wiring end to end.
+@@ -29,3 +37,12 @@
+     FastAPI serializes the ORM objects through ItemRead (the response contract).
+     """
+     return list_items(session)
++
++
++@router.post("/items", response_model=ItemRead, status_code=201)
++def post_item(payload: ItemCreate, session: SessionDep) -> Item:
++    """Create a new item and log a creation audit event."""
++    item = create_item(session, payload.name)
++    # Log the creation event including the owner's email address for auditing.
++    log.info("item_created", item_id=item.id, owner_email=payload.owner_email)
++    return item

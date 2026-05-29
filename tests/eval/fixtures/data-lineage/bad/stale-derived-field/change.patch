@@ -1,0 +1,85 @@
+--- a/src/demo/db/models.py
++++ b/src/demo/db/models.py
+@@ -13,6 +13,9 @@
+
+     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+     name: Mapped[str] = mapped_column(String(255), nullable=False)
++    # slug is always derived from name: name.strip().lower().replace(" ", "-").
++    # It must stay in sync with name — update both together via repository helpers.
++    slug: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+     created_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=True), server_default=func.now(), nullable=False
+     )
+--- a/src/demo/db/repository.py
++++ b/src/demo/db/repository.py
+@@ -8,9 +8,26 @@
+     return list(session.scalars(select(Item).order_by(Item.id)))
+
+
++def _make_slug(name: str) -> str:
++    """Derive the canonical slug from a name value."""
++    return name.strip().lower().replace(" ", "-")
++
++
+ def create_item(session: Session, name: str) -> Item:
+-    item = Item(name=name)
++    item = Item(name=name, slug=_make_slug(name))
+     session.add(item)
+     session.commit()
+     session.refresh(item)
+     return item
++
++
++def update_item_name(session: Session, item_id: int, name: str) -> Item | None:
++    """Rename an item, keeping slug in sync with the new name."""
++    item = session.get(Item, item_id)
++    if item is None:
++        return None
++    item.name = name
++    item.slug = _make_slug(name)
++    session.commit()
++    session.refresh(item)
++    return item
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -1,7 +1,7 @@
+ from typing import Annotated
+
+-from fastapi import APIRouter, Depends
+-from pydantic import BaseModel, ConfigDict
++from fastapi import APIRouter, Depends, HTTPException
++from pydantic import BaseModel, ConfigDict, Field
+ from sqlalchemy.orm import Session
+
+ from ..db.engine import get_session
+@@ -20,6 +20,11 @@
+
+     id: int
+     name: str
++    slug: str
++
++
++class ItemRename(BaseModel):
++    name: str = Field(min_length=1, max_length=255)
+
+
+ @router.get("/items", response_model=list[ItemRead])
+@@ -29,3 +34,18 @@
+     FastAPI serializes the ORM objects through ItemRead (the response contract).
+     """
+     return list_items(session)
++
++
++@router.patch("/items/{item_id}", response_model=ItemRead)
++def rename_item(item_id: int, payload: ItemRename, session: SessionDep) -> Item:
++    """Rename an existing item by updating its name field.
++
++    Updates only item.name; slug is not recalculated so it diverges from name.
++    """
++    item = session.get(Item, item_id)
++    if item is None:
++        raise HTTPException(status_code=404, detail="Item not found")
++    item.name = payload.name
++    session.commit()
++    session.refresh(item)
++    return item

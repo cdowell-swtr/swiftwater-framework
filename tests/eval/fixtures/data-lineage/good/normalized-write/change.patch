@@ -1,0 +1,69 @@
+--- a/src/demo/db/repository.py
++++ b/src/demo/db/repository.py
+@@ -9,8 +9,24 @@
+
+
+ def create_item(session: Session, name: str) -> Item:
++    """Persist an item.  Use create_item_normalized for user-supplied input."""
+     item = Item(name=name)
+     session.add(item)
+     session.commit()
+     session.refresh(item)
++    return item
++
++
++def create_item_normalized(session: Session, name: str) -> Item:
++    """Canonical entry-point for user-supplied names.
++
++    Strips surrounding whitespace and lowercases the value so that all stored
++    names follow a consistent casing convention.  Callers that accept user
++    input MUST go through this function, not the bare create_item().
++    """
++    normalized = name.strip().lower()
++    item = Item(name=normalized)
++    session.add(item)
++    session.commit()
++    session.refresh(item)
+     return item
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -1,12 +1,12 @@
+ from typing import Annotated
+
+ from fastapi import APIRouter, Depends
+-from pydantic import BaseModel, ConfigDict
++from pydantic import BaseModel, ConfigDict, Field
+ from sqlalchemy.orm import Session
+
+ from ..db.engine import get_session
+ from ..db.models import Item
+-from ..db.repository import list_items
++from ..db.repository import create_item_normalized, list_items
+
+ router = APIRouter()
+
+@@ -22,6 +22,10 @@
+     name: str
+
+
++class ItemCreate(BaseModel):
++    name: str = Field(min_length=1, max_length=500)
++
++
+ @router.get("/items", response_model=list[ItemRead])
+ def get_items(session: SessionDep) -> list[Item]:
+     """List seeded/created items — demonstrates the DB wiring end to end.
+@@ -29,3 +33,13 @@
+     FastAPI serializes the ORM objects through ItemRead (the response contract).
+     """
+     return list_items(session)
++
++
++@router.post("/items", response_model=ItemRead, status_code=201)
++def post_item(payload: ItemCreate, session: SessionDep) -> Item:
++    """Accept a user-supplied name and create a new item.
++
++    Routes user input through create_item_normalized so the stored name is
++    always stripped and lowercased — consistent provenance across all writes.
++    """
++    return create_item_normalized(session, payload.name)
