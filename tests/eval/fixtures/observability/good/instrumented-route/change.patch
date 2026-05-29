@@ -8,7 +8,7 @@
 +
 +@router.post("/items/{item_id}/archive")
 +def archive_item(item_id: int, session: SessionDep) -> dict:
-+    """Mark an item as archived — properly instrumented with span, metric counter, and structured log."""
++    """Mark an item as archived — properly instrumented with a span and structured logging."""
 +    from opentelemetry import trace
 +    from ..logging_config import get_logger
 +
