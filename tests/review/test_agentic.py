@@ -55,6 +55,31 @@ def test_unknown_tool_and_missing_arg_return_error(tmp_path):
     assert "error" in _run_tool("read_file", {}, tmp_path).lower()  # missing 'path'
 
 
+def test_glob_does_not_escape_root(tmp_path):
+    # A sibling file outside the project root must never be surfaced.
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "inside.py").write_text("x = 1\n")
+    (tmp_path / "outside-secret.txt").write_text("TOP SECRET\n")
+    out = _run_tool("glob", {"pattern": "../*"}, root)
+    assert "outside-secret" not in out
+    assert "TOP SECRET" not in out
+    # An absolute / non-relative pattern is rejected with an error, not a crash.
+    assert "error" in _run_tool("glob", {"pattern": "/etc/*"}, root).lower()
+
+
+def test_grep_does_not_escape_root_via_path_glob(tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "inside.py").write_text("hello = 1\n")
+    (tmp_path / "outside-secret.txt").write_text("TOP SECRET CREDENTIALS\n")
+    out = _run_tool(
+        "grep", {"pattern": "SECRET|CREDENTIALS", "path_glob": "../*"}, root
+    )
+    assert "TOP SECRET" not in out
+    assert "outside-secret" not in out
+
+
 def test_tools_work_on_a_real_rendered_project(tmp_path):
     from framework_cli.copier_runner import render_project
 

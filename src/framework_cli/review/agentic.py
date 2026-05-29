@@ -30,6 +30,27 @@ def _skip(p: Path) -> bool:
     return ".git" in p.parts
 
 
+def _within_root(p: Path, root_resolved: Path) -> bool:
+    """True if `p` (after resolving symlinks) is `root` itself or a descendant of it."""
+    try:
+        rp = p.resolve()
+    except OSError:
+        return False
+    return rp == root_resolved or root_resolved in rp.parents
+
+
+def _safe_glob(root: Path, pattern: str) -> list[Path]:
+    """`root.glob`, confined to the tree: rejects non-relative patterns and drops any
+    match (e.g. via `../`) that resolves outside `root`."""
+    try:
+        matches = list(root.glob(pattern))
+    except (ValueError, NotImplementedError) as exc:
+        # pathlib rejects absolute / non-relative patterns (NotImplementedError on 3.12).
+        raise _ToolError(f"invalid glob pattern: {pattern!r} ({exc})") from exc
+    root_resolved = root.resolve()
+    return [p for p in matches if _within_root(p, root_resolved)]
+
+
 def _read_file(root: Path, path: str) -> str:
     fp = _resolve_within_root(root, path)
     if not fp.is_file():
@@ -45,7 +66,11 @@ def _grep(root: Path, pattern: str, path_glob: str | None = None) -> str:
         rx = re.compile(pattern)
     except re.error as exc:
         return f"error: invalid regex: {exc}"
-    paths = root.glob(path_glob) if path_glob else root.rglob("*")
+    if path_glob:
+        paths = _safe_glob(root, path_glob)
+    else:
+        root_resolved = root.resolve()
+        paths = [p for p in root.rglob("*") if _within_root(p, root_resolved)]
     hits: list[str] = []
     for p in sorted(paths):
         if not p.is_file() or _skip(p):
@@ -64,7 +89,7 @@ def _grep(root: Path, pattern: str, path_glob: str | None = None) -> str:
 
 def _glob(root: Path, pattern: str) -> str:
     out: list[str] = []
-    for p in sorted(root.glob(pattern)):
+    for p in sorted(_safe_glob(root, pattern)):
         if _skip(p):
             continue
         out.append(str(p.relative_to(root)))
