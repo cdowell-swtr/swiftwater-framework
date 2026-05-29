@@ -1,4 +1,3 @@
-import fnmatch
 from pathlib import Path
 
 import pytest
@@ -60,6 +59,8 @@ _BUNDLE_AGENTS = {
     "test-quality": [],
     "documentation": [],
     "dependency": [],
+    "accessibility": ["react"],
+    "usability": ["react"],
 }
 
 
@@ -85,9 +86,16 @@ def test_bundle_agent_assembles_domain_context(agent, tmp_path):
     )
     bundle = assemble(diff, root, spec.context, model=spec.model)
     assert bundle.context_files, f"{agent}: empty bundle"
-    rels = [p for p, _ in bundle.context_files]
-    assert any(
-        fnmatch.fnmatch(r, g) for r in rels for g in spec.context.context_globs
-    ), (
-        f"{agent}: no context file matched globs {spec.context.context_globs}; got {rels}"
+    rels = {p for p, _ in bundle.context_files}
+    # The bundle must reach the agent's declared glob domain. Resolve the globs the same
+    # way the assembler does (root.glob — correct for `**`, unlike fnmatch) and require a
+    # non-empty intersection with the assembled files.
+    domain = {
+        str(p.relative_to(root))
+        for g in spec.context.context_globs
+        for p in root.glob(g)
+        if p.is_file()
+    }
+    assert rels & domain, (
+        f"{agent}: no context file in glob domain {spec.context.context_globs}; got {sorted(rels)}"
     )

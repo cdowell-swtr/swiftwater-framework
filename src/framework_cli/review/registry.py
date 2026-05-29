@@ -234,9 +234,28 @@ _SPECS: dict[str, AgentSpec] = {
         "high",
         "battery",
         DEFAULT_MODEL,
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "frontend/src/**/*.tsx",
+                "frontend/src/**/*.ts",
+                "frontend/index.html",
+            ),
+        ),
     ),
     "usability": AgentSpec(
-        "review-usability", _prompt("usability"), None, "battery", DEFAULT_MODEL
+        "review-usability",
+        _prompt("usability"),
+        None,
+        "battery",
+        DEFAULT_MODEL,
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "frontend/src/**/*.tsx",
+                "frontend/src/**/*.css",
+            ),
+        ),
     ),
 }
 

@@ -1,0 +1,17 @@
+--- a/frontend/src/Items.tsx
++++ b/frontend/src/Items.tsx
+@@ -23,3 +23,12 @@ export function Items() {
+     </ul>
+   );
+ }
++
++// Bug: ItemBanner renders an image without an alt attribute — screen readers
++// cannot describe the image content, violating WCAG 2.1 SC 1.1.1.
++export function ItemBanner() {
++  return (
++    <div>
++      <img src="/static/banner.png" />
++      <p>Welcome to the items catalogue.</p>
++    </div>
++  );
++}

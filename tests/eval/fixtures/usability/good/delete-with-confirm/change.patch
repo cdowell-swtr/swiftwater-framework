@@ -1,0 +1,35 @@
+--- a/frontend/src/Items.tsx
++++ b/frontend/src/Items.tsx
+@@ -1,4 +1,4 @@
+-import { useEffect, useState } from "react";
++import { useEffect, useState, useCallback } from "react";
+ 
+ import { fetchItems, type Item } from "./api";
+ 
+@@ -23,3 +23,22 @@ export function Items() {
+     </ul>
+   );
+ }
++
++// Good: DeleteButton asks for confirmation before the destructive action and
++// shows a loading state while the request is in flight.
++export function DeleteButton({ itemId, onDeleted }: { itemId: number; onDeleted: () => void }) {
++  const [pending, setPending] = useState(false);
++
++  const handleDelete = useCallback(async () => {
++    if (!window.confirm("Delete this item? This cannot be undone.")) return;
++    setPending(true);
++    try {
++      await fetch(`/items/${itemId}`, { method: "DELETE" });
++      onDeleted();
++    } finally {
++      setPending(false);
++    }
++  }, [itemId, onDeleted]);
++
++  return (
++    <button onClick={handleDelete} disabled={pending} aria-busy={pending}>
++      {pending ? "Deleting…" : "Delete"}
++    </button>
++  );
++}

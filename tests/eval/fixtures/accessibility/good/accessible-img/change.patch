@@ -1,0 +1,17 @@
+--- a/frontend/src/Items.tsx
++++ b/frontend/src/Items.tsx
+@@ -23,3 +23,12 @@ export function Items() {
+     </ul>
+   );
+ }
++
++// Good: ItemBanner renders an image with a descriptive alt attribute so
++// screen readers can convey the image content to non-sighted users.
++export function ItemBanner() {
++  return (
++    <div>
++      <img src="/static/banner.png" alt="Items catalogue banner" />
++      <p>Welcome to the items catalogue.</p>
++    </div>
++  );
++}

@@ -1,0 +1,26 @@
+--- a/frontend/src/Items.tsx
++++ b/frontend/src/Items.tsx
+@@ -1,4 +1,4 @@
+-import { useEffect, useState } from "react";
++import { useEffect, useState, useCallback } from "react";
+ 
+ import { fetchItems, type Item } from "./api";
+ 
+@@ -23,3 +23,17 @@ export function Items() {
+     </ul>
+   );
+ }
++
++// Bug: DeleteButton performs a destructive action (removing an item) with no
++// confirmation step. Users who misclick cannot recover; there is also no
++// loading or error feedback while the DELETE request is in flight.
++export function DeleteButton({ itemId }: { itemId: number }) {
++  const handleDelete = useCallback(async () => {
++    await fetch(`/items/${itemId}`, { method: "DELETE" });
++    window.location.reload();
++  }, [itemId]);
++
++  return (
++    <button onClick={handleDelete}>Delete</button>
++  );
++}
