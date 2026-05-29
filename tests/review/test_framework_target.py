@@ -133,7 +133,8 @@ def test_review_workflow_is_valid_and_uses_framework_target():
     # Runtime-scoped reviewer key (review-at-runtime), per the two-tier convention in
     # the repo-root SECRETS.md — distinct from agent-evals.yml's eval-scoped key.
     assert "ANTHROPIC_FRAMEWORK_CI_RUNTIME" in text
-    assert "ANTHROPIC_RUNTIME_API_KEY" in text  # the scoped env var the secret maps into
+    # the scoped env var the secret maps into:
+    assert "ANTHROPIC_RUNTIME_API_KEY" in text
     assert (
         "ANTHROPIC_FRAMEWORK_CI_EVAL" not in text
     )  # eval key must not leak into the runtime job

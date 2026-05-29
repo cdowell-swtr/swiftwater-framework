@@ -664,3 +664,16 @@ def test_review_reads_runtime_key_not_shared_or_eval(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
     res = runner.invoke(app, ["review", "security"])
     assert res.exit_code == 0 and "skipped" in res.stdout.lower()
+
+
+def test_eval_reads_eval_key_not_runtime(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+
+    runner = CliRunner()
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_EVAL_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")  # wrong scope for eval
+    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
+    assert result.exit_code == 0 and "skipped" in result.stdout.lower()
