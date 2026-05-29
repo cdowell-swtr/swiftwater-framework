@@ -15,6 +15,21 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
 @dataclass(frozen=True)
+class ContextPolicy:
+    """How much repository context an agent's review call receives.
+
+    - "diff": the unified diff only (legacy behavior; the default).
+    - "bundle": diff + full content of changed files + files matching `context_globs`.
+    - "agentic": a tool-using loop over the project tree (designed in Slice B).
+    `max_context_tokens` overrides the model-window-derived budget when set.
+    """
+
+    strategy: Literal["diff", "bundle", "agentic"]
+    context_globs: tuple[str, ...] = ()
+    max_context_tokens: int | None = None
+
+
+@dataclass(frozen=True)
 class AgentSpec:
     name: str
     prompt: str
@@ -23,6 +38,7 @@ class AgentSpec:
     model: str
     on_push: bool = False
     trigger_globs: tuple[str, ...] | None = None
+    context: ContextPolicy = ContextPolicy("diff")
 
 
 def _prompt(name: str) -> str:
