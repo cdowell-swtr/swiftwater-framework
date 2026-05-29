@@ -25,7 +25,7 @@ def test_agent_evals_workflow_is_valid():
     assert "framework eval tests/eval/fixtures" not in run
     # the key is supplied from secrets
     env_blocks = [s.get("env", {}) for s in steps]
-    assert any("ANTHROPIC_API_KEY" in e for e in env_blocks)
+    assert any("ANTHROPIC_EVAL_API_KEY" in e for e in env_blocks)
 
 
 _CI = Path(__file__).parent.parent / ".github" / "workflows" / "ci.yml"

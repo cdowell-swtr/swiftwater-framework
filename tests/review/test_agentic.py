@@ -241,7 +241,7 @@ def test_cli_dispatches_agentic_strategy(monkeypatch, tmp_path):
         return []
 
     monkeypatch.setattr("framework_cli.review.agentic.run_agent_agentic", fake_agentic)
-    monkeypatch.setattr(cli_mod, "default_client", lambda: object())
+    monkeypatch.setattr(cli_mod, "default_client", lambda env: object())
     monkeypatch.chdir(tmp_path)
     cli_mod._review_run("--- a/x\n+++ b/x\n", get_agent("architecture"))
     assert called["root"] == tmp_path

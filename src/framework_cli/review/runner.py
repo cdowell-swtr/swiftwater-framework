@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from framework_cli.review.context import Bundle
@@ -53,7 +54,11 @@ def run_agent(bundle: Bundle, spec: AgentSpec, client: Any) -> list[Finding]:
     return parse_findings(text)
 
 
-def default_client() -> Any:  # pragma: no cover - thin SDK wrapper
+EVAL_KEY_ENV = "ANTHROPIC_EVAL_API_KEY"
+RUNTIME_KEY_ENV = "ANTHROPIC_RUNTIME_API_KEY"
+
+
+def default_client(api_key_env: str) -> Any:  # pragma: no cover - thin SDK wrapper
     import anthropic
 
-    return anthropic.Anthropic()
+    return anthropic.Anthropic(api_key=os.environ.get(api_key_env))

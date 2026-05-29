@@ -107,7 +107,7 @@ def test_upskill_command_rejects_non_directory(tmp_path: Path, monkeypatch):
 
 
 def test_review_skips_without_api_key(tmp_path, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_RUNTIME_API_KEY", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     result = runner.invoke(app, ["review", "security"])
     assert result.exit_code == 0
@@ -124,7 +124,7 @@ def test_review_blocking_finding_exits_1(monkeypatch):
     import framework_cli.cli as cli_mod
     from framework_cli.review.findings import Finding
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
     monkeypatch.setattr(
@@ -141,7 +141,7 @@ def test_review_low_finding_exits_0(monkeypatch):
     import framework_cli.cli as cli_mod
     from framework_cli.review.findings import Finding
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
     monkeypatch.setattr(
@@ -157,7 +157,7 @@ def test_review_low_finding_exits_0(monkeypatch):
 def test_review_infra_error_is_neutral_exit_0(monkeypatch):
     import framework_cli.cli as cli_mod
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
     def _boom():
@@ -182,7 +182,7 @@ def test_review_agents_lists_pr_and_push(monkeypatch):
 def test_review_dependency_skips_when_no_dep_files(monkeypatch):
     import framework_cli.cli as cli_mod
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "+++ b/src/app/main.py\n")
 
@@ -199,7 +199,7 @@ def test_review_dependency_runs_when_dep_file_changed(monkeypatch):
     import framework_cli.cli as cli_mod
     from framework_cli.review.findings import Finding
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "+++ b/pyproject.toml\n")
     monkeypatch.setattr(
@@ -218,7 +218,7 @@ def test_review_findings_out_writes_on_normal_path(tmp_path, monkeypatch):
     import framework_cli.cli as cli_mod
     from framework_cli.review.findings import Finding
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
     monkeypatch.setattr(
@@ -249,7 +249,7 @@ def test_review_findings_out_writes_on_normal_path(tmp_path, monkeypatch):
 def test_review_findings_out_on_infra_error(tmp_path, monkeypatch):
     import framework_cli.cli as cli_mod
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
     def _boom():
@@ -265,7 +265,7 @@ def test_review_findings_out_on_infra_error(tmp_path, monkeypatch):
 
 
 def test_review_findings_out_on_skip_path(tmp_path, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_RUNTIME_API_KEY", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
     out = tmp_path / "findings" / "security.json"
@@ -320,14 +320,14 @@ def _make_fixture(tmp_path, agent, kind, slug, diff, seeded_file=None):
 
 
 def test_eval_skips_without_key(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_EVAL_API_KEY", raising=False)
     result = runner.invoke(app, ["eval", "security"])
     assert result.exit_code == 0
     assert "skipped" in result.output
 
 
 def test_eval_require_key_fails_without_key(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_EVAL_API_KEY", raising=False)
     result = runner.invoke(app, ["eval", "security", "--require-key"])
     assert result.exit_code == 1
     assert "required" in result.output
@@ -341,7 +341,7 @@ def test_eval_passes_when_agent_catches_bad_and_clean_on_good(tmp_path, monkeypa
     _make_fixture(tmp_path, "security", "bad", "b2", "+++ b/a.py\n", "a.py")
     _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     # catch the bad diffs (a high finding on a.py); stay clean on the good diff (marked "# clean")
     monkeypatch.setattr(
         cli_mod,
@@ -362,7 +362,7 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
     _make_fixture(tmp_path, "security", "bad", "b2", "+++ b/a.py\n", "a.py")
     _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     monkeypatch.setattr(
         cli_mod, "_eval_run", lambda diff, root, spec: []
     )  # never catches anything
@@ -372,7 +372,7 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
 
 
 def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     assert (
         runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)]).exit_code
         == 0
@@ -385,14 +385,14 @@ def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
 
 
 def test_eval_repeat_zero_is_rejected(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     result = runner.invoke(app, ["eval", "security", "--repeat", "0"])
     assert result.exit_code == 2
     assert "--repeat must be >= 1" in result.output
 
 
 def test_eval_unknown_agent_errors(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     result = runner.invoke(app, ["eval", "nonsense-agent"])
     assert result.exit_code == 1
     assert "unknown review agent" in result.output
@@ -527,7 +527,7 @@ def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
 
     _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
     _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
 
     calls = {"n": 0}
 
@@ -643,3 +643,24 @@ def test_dev_combos_rejects_unknown_strategy():
     result = runner.invoke(app, ["dev-combos", "--strategy", "nope"])
     assert result.exit_code == 1
     assert "unknown strategy" in result.output
+
+
+def test_review_reads_runtime_key_not_shared_or_eval(monkeypatch):
+    import framework_cli.cli as cli_mod
+    from framework_cli.cli import app
+    from typer.testing import CliRunner
+
+    runner = CliRunner()
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_EVAL_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    monkeypatch.setattr(
+        cli_mod, "_review_run", lambda diff, spec, force_agentic=False: []
+    )
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    assert runner.invoke(app, ["review", "security"]).exit_code == 0
+    monkeypatch.delenv("ANTHROPIC_RUNTIME_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    res = runner.invoke(app, ["review", "security"])
+    assert res.exit_code == 0 and "skipped" in res.stdout.lower()

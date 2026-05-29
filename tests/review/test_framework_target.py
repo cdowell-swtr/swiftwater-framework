@@ -94,7 +94,7 @@ def test_review_run_force_agentic_uses_the_loop(monkeypatch, tmp_path):
         return []
 
     monkeypatch.setattr("framework_cli.review.agentic.run_agent_agentic", fake_agentic)
-    monkeypatch.setattr(cli_mod, "default_client", lambda: object())
+    monkeypatch.setattr(cli_mod, "default_client", lambda env: object())
     out = cli_mod._review_run(
         "--- a/x\n+++ b/x\n", get_agent("security"), force_agentic=True
     )
@@ -107,7 +107,7 @@ def test_review_command_target_framework_sources_framework_diff(monkeypatch):
     from typer.testing import CliRunner
     from framework_cli.cli import app
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
     monkeypatch.setattr(
         cli_mod, "framework_diff", lambda: ""
     )  # empty diff → no findings
@@ -133,6 +133,7 @@ def test_review_workflow_is_valid_and_uses_framework_target():
     # Runtime-scoped reviewer key (review-at-runtime), per the two-tier convention in
     # the repo-root SECRETS.md — distinct from agent-evals.yml's eval-scoped key.
     assert "ANTHROPIC_FRAMEWORK_CI_RUNTIME" in text
+    assert "ANTHROPIC_RUNTIME_API_KEY" in text  # the scoped env var the secret maps into
     assert (
         "ANTHROPIC_FRAMEWORK_CI_EVAL" not in text
     )  # eval key must not leak into the runtime job

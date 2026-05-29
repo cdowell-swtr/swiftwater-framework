@@ -21,7 +21,7 @@ from framework_cli.review.diff import (
     pr_diff,
 )
 from framework_cli.review.registry import active_agents, agent_names, get_agent
-from framework_cli.review.runner import default_client
+from framework_cli.review.runner import EVAL_KEY_ENV, RUNTIME_KEY_ENV, default_client
 from framework_cli.source import (
     REPO_URL,
     latest_release,
@@ -281,10 +281,10 @@ def _review_run(diff: str, spec: object, force_agentic: bool = False) -> list:
 
         turns = spec.context.max_agentic_turns or DEFAULT_MAX_TURNS  # type: ignore[attr-defined]
         return run_agent_agentic(
-            diff, Path.cwd(), spec, default_client(), max_turns=turns
+            diff, Path.cwd(), spec, default_client(RUNTIME_KEY_ENV), max_turns=turns
         )
     bundle = assemble(diff, Path.cwd(), spec.context, model=spec.model)  # type: ignore[attr-defined]
-    return run_agent(bundle, spec, default_client())  # type: ignore[arg-type]
+    return run_agent(bundle, spec, default_client(RUNTIME_KEY_ENV))  # type: ignore[arg-type]
 
 
 def _eval_run(diff: str, root: object, spec: object) -> list:
@@ -296,9 +296,11 @@ def _eval_run(diff: str, root: object, spec: object) -> list:
         from framework_cli.review.agentic import DEFAULT_MAX_TURNS, run_agent_agentic
 
         turns = spec.context.max_agentic_turns or DEFAULT_MAX_TURNS  # type: ignore[attr-defined]
-        return run_agent_agentic(diff, base, spec, default_client(), max_turns=turns)
+        return run_agent_agentic(
+            diff, base, spec, default_client(EVAL_KEY_ENV), max_turns=turns
+        )
     bundle = assemble(diff, base, spec.context, model=spec.model)  # type: ignore[attr-defined]
-    return run_agent(bundle, spec, default_client())  # type: ignore[arg-type]
+    return run_agent(bundle, spec, default_client(EVAL_KEY_ENV))  # type: ignore[arg-type]
 
 
 @app.command(name="review-aggregate")
@@ -367,7 +369,9 @@ def eval_agents(
         False, "--require-fixtures", help="Fail if an evaluated agent has no fixtures."
     ),
     require_key: bool = typer.Option(
-        False, "--require-key", help="Fail (not skip) if ANTHROPIC_API_KEY is unset."
+        False,
+        "--require-key",
+        help="Fail (not skip) if ANTHROPIC_EVAL_API_KEY is unset.",
     ),
 ) -> None:
     """Run golden fixtures through the review agents and score recall/precision (spec §20)."""
@@ -379,11 +383,11 @@ def eval_agents(
         score_agent,
     )
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    if not os.environ.get(EVAL_KEY_ENV):
         if require_key:
-            typer.echo("eval: ANTHROPIC_API_KEY is required but unset", err=True)
+            typer.echo("eval: ANTHROPIC_EVAL_API_KEY is required but unset", err=True)
             raise typer.Exit(1)
-        typer.echo("eval: skipped (no ANTHROPIC_API_KEY)")
+        typer.echo("eval: skipped (no ANTHROPIC_EVAL_API_KEY)")
         raise typer.Exit(0)
 
     if repeat < 1:
@@ -478,13 +482,13 @@ def review(
         if findings_out:
             write_findings(Path(findings_out), spec.name, conclusion, found)
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    if not os.environ.get(RUNTIME_KEY_ENV):
         payload = neutral_payload(
-            spec.name, "review skipped — set ANTHROPIC_API_KEY to enable."
+            spec.name, "review skipped — set ANTHROPIC_RUNTIME_API_KEY to enable."
         )
         post_or_skip(payload, token=token, repo=repo, sha=sha)
         _emit(payload.conclusion, [])
-        typer.echo(f"{spec.name}: skipped (no ANTHROPIC_API_KEY)")
+        typer.echo(f"{spec.name}: skipped (no ANTHROPIC_RUNTIME_API_KEY)")
         raise typer.Exit(0)
 
     try:
