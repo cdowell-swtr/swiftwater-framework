@@ -1,8 +1,0 @@
---- a/src/myapp/routes/items.py
-+++ b/src/myapp/routes/items.py
-@@ -12,5 +12,5 @@ router = APIRouter()
- @router.get("/items")
- def list_items(session: Session = Depends(get_session)):
-     rows = repository.list_items(session)
--    return [{"id": r.id, "name": r.name} for r in rows]
-+    return [{"id": r.id, "name": r.name, "created_at": r.created_at} for r in rows]

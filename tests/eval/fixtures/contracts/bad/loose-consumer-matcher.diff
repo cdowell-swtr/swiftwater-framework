@@ -1,9 +1,0 @@
---- a/tests/functional/test_inventory_pact.py
-+++ b/tests/functional/test_inventory_pact.py
-@@ -14,7 +14,7 @@ def test_inventory_contract(pact):
-         .upon_receiving("a request for items")
-         .with_request("GET", "/items")
-         .will_respond_with(200)
--        .with_body(match.each_like({"id": match.integer(1), "name": match.string("widget")}))
-+        .with_body(match.like({}))
-     )

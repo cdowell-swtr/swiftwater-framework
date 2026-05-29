@@ -268,6 +268,13 @@ def check() -> None:
 
 
 # Module-level seams so tests can monkeypatch the I/O without the SDK.
+def realize_cached(fx: object, cache: dict, base_dir: object) -> tuple:
+    """Thin seam delegating to evals.realize_cached so tests can monkeypatch it."""
+    from framework_cli.review.evals import realize_cached as _rc
+
+    return _rc(fx, cache, base_dir)  # type: ignore[arg-type]
+
+
 def _review_diff() -> str:
     return pr_diff()
 
@@ -394,7 +401,11 @@ def eval_agents(
         typer.echo("eval: --repeat must be >= 1", err=True)
         raise typer.Exit(2)
 
+    import tempfile
+
     root = Path(fixtures)
+    _base_dir = Path(tempfile.mkdtemp(prefix="evalbase-"))
+    _combo_cache: dict = {}
     thresholds = load_thresholds(root / "thresholds.yaml")
     by_agent: dict[str, list] = {}
     for fx in load_fixtures(root):
@@ -424,10 +435,11 @@ def eval_agents(
         bad_rates: list[float] = []
         good_rates: list[float] = []
         for fx in fx_list:
+            rroot, rdiff = realize_cached(fx, _combo_cache, _base_dir)
             hits = 0
             for _ in range(repeat):
                 try:
-                    found = _eval_run(fx.diff, getattr(fx, "root", None), spec)
+                    found = _eval_run(rdiff, rroot, spec)
                 except Exception:  # noqa: BLE001 - a failed run counts as a non-detection
                     found = []
                 blocked = (

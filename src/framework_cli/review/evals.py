@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,8 +18,9 @@ class Fixture:
     agent: str
     kind: Literal["bad", "good"]
     name: str
-    diff: str
-    seeded_file: str | None  # the path the detection rule matches; set for bad fixtures
+    batteries: tuple[str, ...]
+    patch: str
+    seeded_file: str | None  # new-side path the detection matches; set for bad
 
 
 def flags(findings: list[Finding], spec: AgentSpec, *, file: str | None = None) -> bool:
@@ -135,25 +137,75 @@ def realize_fixture(
     return root, diff
 
 
+def realize_cached(
+    fx: Fixture, cache: dict[tuple[str, ...], Path], base_dir: Path
+) -> tuple[Path, str]:
+    """Realize `fx` reusing a per-combo rendered+committed base. `base_dir` is a
+    caller-owned tempdir; `cache` maps battery-combo → committed base path."""
+    if fx.batteries not in cache:
+        base = base_dir / ("base-" + ("-".join(fx.batteries) or "none")) / "demo"
+        render_project(base, {**_FIXTURE_ANSWERS, "batteries": list(fx.batteries)})
+        subprocess.run(["git", "init", "-q"], cwd=base, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=base, check=True)
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-qm",
+                "base",
+            ],
+            cwd=base,
+            check=True,
+        )
+        cache[fx.batteries] = base
+    work = base_dir / f"fx-{fx.agent}-{fx.kind}-{fx.name}"
+    shutil.copytree(cache[fx.batteries], work)
+    subprocess.run(
+        ["git", "apply", "-"], cwd=work, input=fx.patch, text=True, check=True
+    )
+    diff = subprocess.run(
+        ["git", "diff"], cwd=work, capture_output=True, text=True, check=True
+    ).stdout
+    return work, diff
+
+
 def load_fixtures(root: Path) -> list[Fixture]:
-    """Discover `<root>/<agent>/{bad,good}/*.diff`. A bad fixture without a valid
-    `<slug>.expect.json` (naming the seeded `file`) is skipped here; the well-formedness
-    gate test fails loudly on a malformed fixture rather than relying on a runtime warning."""
+    """Discover rendered-project fixtures (lazy — no render here):
+    `<root>/<agent>/{bad,good}/<case>/{fixture.yaml,change.patch[,expect.json]}`.
+    A bad case missing a valid `expect.json` (naming the seeded `file`) is skipped."""
+    import yaml
+
     fixtures: list[Fixture] = []
     for agent_dir in sorted(p for p in root.glob("*") if p.is_dir()):
         agent = agent_dir.name
         for kind in ("bad", "good"):
-            for diff_path in sorted((agent_dir / kind).glob("*.diff")):
-                try:
-                    diff = diff_path.read_text()
-                except OSError:
+            for case in sorted(p for p in (agent_dir / kind).glob("*") if p.is_dir()):
+                patch_f, spec_f = case / "change.patch", case / "fixture.yaml"
+                if not (patch_f.is_file() and spec_f.is_file()):
                     continue
+                batteries = tuple(
+                    (yaml.safe_load(spec_f.read_text()) or {}).get("batteries", [])
+                )
                 seeded_file: str | None = None
                 if kind == "bad":
-                    sidecar = diff_path.with_suffix(".expect.json")
                     try:
-                        seeded_file = str(json.loads(sidecar.read_text())["file"])
+                        seeded_file = str(
+                            json.loads((case / "expect.json").read_text())["file"]
+                        )
                     except (OSError, json.JSONDecodeError, KeyError, TypeError):
-                        continue  # unscoreable bad fixture
-                fixtures.append(Fixture(agent, kind, diff_path.stem, diff, seeded_file))
+                        continue
+                fixtures.append(
+                    Fixture(
+                        agent,
+                        kind,
+                        case.name,
+                        batteries,
+                        patch_f.read_text(),
+                        seeded_file,
+                    )
+                )
     return fixtures

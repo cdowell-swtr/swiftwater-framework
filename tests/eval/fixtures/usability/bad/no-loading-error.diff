@@ -1,9 +1,0 @@
---- a/frontend/src/Items.tsx
-+++ b/frontend/src/Items.tsx
-@@ -3,4 +3,7 @@ export function Items() {
--  const { data } = useItems();
--  return <ul>{data.map((i) => <li key={i.id}>{i.name}</li>)}</ul>;
-+  const [items, setItems] = useState<Item[]>([]);
-+  useEffect(() => { fetch("/items").then((r) => r.json()).then(setItems); }, []);
-+  return <ul>{items.map((i) => <li key={i.id}>{i.name}</li>)}</ul>;
- }

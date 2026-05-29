@@ -1,9 +1,0 @@
---- a/frontend/src/Items.tsx
-+++ b/frontend/src/Items.tsx
-@@ -10,3 +10,5 @@ export function Items() {
-   return (
-     <ul>{items.map((i) => <li key={i.id}>{i.name}</li>)}</ul>
-   );
-+  // a clickable row with no button semantics / keyboard support
-+  return <div onClick={() => select(i)}>{i.name}</div>;
- }

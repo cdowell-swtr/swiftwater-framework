@@ -1,7 +1,0 @@
---- a/frontend/src/Items.tsx
-+++ b/frontend/src/Items.tsx
-@@ -10,3 +10,4 @@ export function Items() {
-   return (
-     <ul>{items.map((i) => <li key={i.id}><button onClick={() => select(i)}>{i.name}</button></li>)}</ul>
-   );
- }

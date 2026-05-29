@@ -1,6 +1,0 @@
---- a/frontend/src/Logo.tsx
-+++ b/frontend/src/Logo.tsx
-@@ -1,2 +1,3 @@ export function Logo() {
--  return <span>brand</span>;
-+  return <img src="/logo.png" />;
- }

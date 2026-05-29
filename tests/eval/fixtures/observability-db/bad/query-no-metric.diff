@@ -1,9 +1,0 @@
---- a/src/myapp/db/repository.py
-+++ b/src/myapp/db/repository.py
-@@ -10,3 +10,7 @@ def list_items(session: Session) -> list[Item]:
-     return list(session.scalars(select(Item)).all())
-+
-+
-+def search_items(session: Session, term: str) -> list[Item]:
-+    stmt = select(Item).where(Item.name.ilike(f"%{term}%"))
-+    return list(session.scalars(stmt).all())

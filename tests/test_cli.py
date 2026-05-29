@@ -312,11 +312,12 @@ def test_review_aggregate_posts_when_pr_present(tmp_path, monkeypatch):
 
 
 def _make_fixture(tmp_path, agent, kind, slug, diff, seeded_file=None):
-    d = tmp_path / agent / kind
-    d.mkdir(parents=True, exist_ok=True)
-    (d / f"{slug}.diff").write_text(diff)
+    case = tmp_path / agent / kind / slug
+    case.mkdir(parents=True, exist_ok=True)
+    (case / "fixture.yaml").write_text("batteries: []\n")
+    (case / "change.patch").write_text(diff)
     if seeded_file is not None:
-        (d / f"{slug}.expect.json").write_text(_json.dumps({"file": seeded_file}))
+        (case / "expect.json").write_text(_json.dumps({"file": seeded_file}))
 
 
 def test_eval_skips_without_key(monkeypatch):
@@ -333,6 +334,13 @@ def test_eval_require_key_fails_without_key(monkeypatch):
     assert "required" in result.output
 
 
+def _fake_realize_cached(fx, cache, base_dir):
+    """Hermetic stand-in for realize_cached: skips rendering, returns patch as diff."""
+    from pathlib import Path
+
+    return Path(base_dir), fx.patch
+
+
 def test_eval_passes_when_agent_catches_bad_and_clean_on_good(tmp_path, monkeypatch):
     import framework_cli.cli as cli_mod
     from framework_cli.review.findings import Finding
@@ -342,6 +350,7 @@ def test_eval_passes_when_agent_catches_bad_and_clean_on_good(tmp_path, monkeypa
     _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
 
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
     # catch the bad diffs (a high finding on a.py); stay clean on the good diff (marked "# clean")
     monkeypatch.setattr(
         cli_mod,
@@ -363,6 +372,7 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
     _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
 
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
     monkeypatch.setattr(
         cli_mod, "_eval_run", lambda diff, root, spec: []
     )  # never catches anything
@@ -528,6 +538,7 @@ def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
     _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
     _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
 
     calls = {"n": 0}
 
