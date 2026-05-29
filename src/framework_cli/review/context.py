@@ -56,6 +56,25 @@ def generated_project_target(root: Path, active: tuple[str, ...]) -> ReviewTarge
     return ReviewTarget(root=root, active=tuple(active))
 
 
+# The review agents applicable to the framework's OWN CLI/tooling source (a Python
+# Copier-wrapper CLI). App-domain agents (observability*, api-design, contracts,
+# accessibility, usability, data-integrity, privacy, compliance, performance) don't apply.
+FRAMEWORK_AGENTS: tuple[str, ...] = (
+    "application-logic",
+    "architecture",
+    "dependency",
+    "documentation",
+    "security",
+    "test-quality",
+)
+
+
+def framework_target(root: Path) -> ReviewTarget:
+    """The dogfooding target: the framework repo reviews its own source. Every applicable
+    agent runs agentic-for-all (see the CLI's --target framework path)."""
+    return ReviewTarget(root=root, active=FRAMEWORK_AGENTS)
+
+
 def assemble(diff: str, root: Path, policy: ContextPolicy, *, model: str) -> Bundle:
     """Assemble the review bundle for `policy` against the tree at `root`.
 

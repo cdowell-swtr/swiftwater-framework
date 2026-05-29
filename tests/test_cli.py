@@ -128,7 +128,9 @@ def test_review_blocking_finding_exits_1(monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
     monkeypatch.setattr(
-        cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 1, "high", "bad")]
+        cli_mod,
+        "_review_run",
+        lambda diff, spec, force_agentic=False: [Finding("a.py", 1, "high", "bad")],
     )
     result = runner.invoke(app, ["review", "security"])
     assert result.exit_code == 1
@@ -143,7 +145,9 @@ def test_review_low_finding_exits_0(monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
     monkeypatch.setattr(
-        cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 1, "low", "m")]
+        cli_mod,
+        "_review_run",
+        lambda diff, spec, force_agentic=False: [Finding("a.py", 1, "low", "m")],
     )
     result = runner.invoke(app, ["review", "security"])
     assert result.exit_code == 0
@@ -201,7 +205,9 @@ def test_review_dependency_runs_when_dep_file_changed(monkeypatch):
     monkeypatch.setattr(
         cli_mod,
         "_review_run",
-        lambda diff, spec: [Finding("pyproject.toml", 1, "low", "m")],
+        lambda diff, spec, force_agentic=False: [
+            Finding("pyproject.toml", 1, "low", "m")
+        ],
     )
     result = runner.invoke(app, ["review", "dependency"])
     assert result.exit_code == 0  # advisory → neutral, never blocks
@@ -216,7 +222,9 @@ def test_review_findings_out_writes_on_normal_path(tmp_path, monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
     monkeypatch.setattr(
-        cli_mod, "_review_run", lambda diff, spec: [Finding("a.py", 3, "low", "m")]
+        cli_mod,
+        "_review_run",
+        lambda diff, spec, force_agentic=False: [Finding("a.py", 3, "low", "m")],
     )
 
     out = tmp_path / "findings" / "security.json"

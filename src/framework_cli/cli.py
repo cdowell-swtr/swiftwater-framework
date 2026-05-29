@@ -14,7 +14,12 @@ from framework_cli.batteries import resolve as resolve_batteries
 from framework_cli.naming import derive_names
 from framework_cli.review.aggregate import write_findings
 from framework_cli.review.checks import neutral_payload, post_or_skip, to_check_run
-from framework_cli.review.diff import changed_files, matches_globs, pr_diff
+from framework_cli.review.diff import (
+    changed_files,
+    framework_diff,
+    matches_globs,
+    pr_diff,
+)
 from framework_cli.review.registry import active_agents, agent_names, get_agent
 from framework_cli.review.runner import default_client
 from framework_cli.source import (
@@ -267,11 +272,11 @@ def _review_diff() -> str:
     return pr_diff()
 
 
-def _review_run(diff: str, spec: object) -> list:
+def _review_run(diff: str, spec: object, force_agentic: bool = False) -> list:
     from framework_cli.review.context import assemble
     from framework_cli.review.runner import run_agent
 
-    if spec.context.strategy == "agentic":  # type: ignore[attr-defined]
+    if force_agentic or spec.context.strategy == "agentic":  # type: ignore[attr-defined]
         from framework_cli.review.agentic import DEFAULT_MAX_TURNS, run_agent_agentic
 
         turns = spec.context.max_agentic_turns or DEFAULT_MAX_TURNS  # type: ignore[attr-defined]
@@ -327,8 +332,17 @@ def review_agents(
     event: str = typer.Option(
         "", "--event", help="GitHub event name (default: $GITHUB_EVENT_NAME)."
     ),
+    target: str = typer.Option(
+        "project", "--target", help="Review target: 'project' (default) or 'framework'."
+    ),
 ) -> None:
     """Print the JSON array of review agents active for the event (drives the CI matrix)."""
+    if target == "framework":
+        from framework_cli.review.context import FRAMEWORK_AGENTS
+
+        typer.echo(json.dumps(sorted(FRAMEWORK_AGENTS)))
+        return
+
     from framework_cli.source import read_batteries
 
     resolved = event or os.environ.get("GITHUB_EVENT_NAME", "pull_request")
@@ -445,6 +459,9 @@ def review(
         "--findings-out",
         help="Write this agent's findings JSON to this path (for aggregation).",
     ),
+    target: str = typer.Option(
+        "project", "--target", help="Review target: 'project' (default) or 'framework'."
+    ),
 ) -> None:
     """Run a Layer-3 review agent over the PR diff and post a GitHub Check Run."""
     try:
@@ -471,7 +488,7 @@ def review(
         raise typer.Exit(0)
 
     try:
-        diff = _review_diff()
+        diff = framework_diff() if target == "framework" else _review_diff()
         if spec.trigger_globs and not matches_globs(
             changed_files(diff), spec.trigger_globs
         ):
@@ -482,7 +499,7 @@ def review(
             _emit(payload.conclusion, [])
             typer.echo(f"{spec.name}: skipped (not triggered)")
             raise typer.Exit(0)
-        findings = _review_run(diff, spec)
+        findings = _review_run(diff, spec, force_agentic=(target == "framework"))
         payload = to_check_run(spec, findings)
     except typer.Exit:
         raise  # the not-triggered skip (and any Exit) must propagate, not become neutral
