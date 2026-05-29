@@ -23,12 +23,8 @@ def matches_globs(paths: list[str], globs: tuple[str, ...]) -> bool:
     )
 
 
-def pr_diff() -> str:
-    """The unified diff to review, derived from the CI environment.
-
-    On a PR, GITHUB_BASE_REF names the base branch (diff base...HEAD); otherwise diff the
-    last commit (HEAD~1...HEAD).
-    """
+def _diff_range() -> str:
+    """The git range to review, from the CI environment (PR base...HEAD, else HEAD~1...HEAD)."""
     base = os.environ.get("GITHUB_BASE_REF")
     if base:
         subprocess.run(
@@ -36,10 +32,36 @@ def pr_diff() -> str:
             check=False,
             capture_output=True,
         )
-        rng = f"origin/{base}...HEAD"
-    else:
-        rng = "HEAD~1...HEAD"
+        return f"origin/{base}...HEAD"
+    return "HEAD~1...HEAD"
+
+
+def pr_diff() -> str:
+    """The unified diff to review, derived from the CI environment.
+
+    On a PR, GITHUB_BASE_REF names the base branch (diff base...HEAD); otherwise diff the
+    last commit (HEAD~1...HEAD).
+    """
     result = subprocess.run(
-        ["git", "diff", rng], capture_output=True, text=True, check=False
+        ["git", "diff", _diff_range()], capture_output=True, text=True, check=False
+    )
+    return result.stdout
+
+
+def framework_diff() -> str:
+    """Like `pr_diff`, but excludes the template payload — the framework reviews only its
+    own CLI/tooling source; template-payload quality is the product's concern (Slice C)."""
+    result = subprocess.run(
+        [
+            "git",
+            "diff",
+            _diff_range(),
+            "--",
+            ".",
+            ":(exclude)src/framework_cli/template",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     return result.stdout
