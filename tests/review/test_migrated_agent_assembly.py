@@ -56,6 +56,10 @@ _BUNDLE_AGENTS = {
     "performance": [],
     "data-integrity": [],
     "security": [],
+    "compliance": [],
+    "test-quality": [],
+    "documentation": [],
+    "dependency": [],
 }
 
 

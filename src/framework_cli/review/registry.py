@@ -139,7 +139,18 @@ _SPECS: dict[str, AgentSpec] = {
         ),
     ),
     "test-quality": AgentSpec(
-        "review-test-quality", _prompt("test-quality"), "high", "always", DEFAULT_MODEL
+        "review-test-quality",
+        _prompt("test-quality"),
+        "high",
+        "always",
+        DEFAULT_MODEL,
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "tests/**/*.py",
+                "src/*/**/*.py",
+            ),
+        ),
     ),
     "architecture": AgentSpec(
         "review-architecture", _prompt("architecture"), "high", "always", DEFAULT_MODEL
@@ -159,13 +170,37 @@ _SPECS: dict[str, AgentSpec] = {
         ),
     ),
     "compliance": AgentSpec(
-        "review-compliance", _prompt("compliance"), "high", "always", DEFAULT_MODEL
+        "review-compliance",
+        _prompt("compliance"),
+        "high",
+        "always",
+        DEFAULT_MODEL,
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "src/*/routes/*.py",
+                "src/*/middleware/*.py",
+                "src/*/config/*.py",
+            ),
+        ),
     ),
     "privacy": AgentSpec(
         "review-privacy", _prompt("privacy"), "high", "always", DEFAULT_MODEL
     ),
     "documentation": AgentSpec(
-        "review-documentation", _prompt("documentation"), None, "always", DEFAULT_MODEL
+        "review-documentation",
+        _prompt("documentation"),
+        None,
+        "always",
+        DEFAULT_MODEL,
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "README.md",
+                "docs/**/*.md",
+                "src/*/**/*.py",
+            ),
+        ),
     ),
     "dependency": AgentSpec(
         "review-dependency",
@@ -178,6 +213,13 @@ _SPECS: dict[str, AgentSpec] = {
             "uv.lock",
             "package.json",
             "package-lock.json",
+        ),
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "pyproject.toml",
+                "uv.lock",
+            ),
         ),
     ),
     "api-design": AgentSpec(

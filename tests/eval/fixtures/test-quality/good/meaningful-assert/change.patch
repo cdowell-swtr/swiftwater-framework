@@ -1,0 +1,21 @@
+--- a/tests/unit/test_settings.py
++++ b/tests/unit/test_settings.py
+@@ -45,3 +45,18 @@ def test_database_url_env_override(monkeypatch):
+         "APP_DATABASE_URL", "postgresql+psycopg://u:p@db.example:5432/app"
+     )
+     assert Settings().database_url == "postgresql+psycopg://u:p@db.example:5432/app"
++
++
++def test_slo_request_latency_default_is_reasonable():
++    # Meaningful: asserts a concrete behavioural expectation about the default threshold.
++    s = Settings()
++    assert 100 <= s.slo_request_latency_p99_ms <= 5000, (
++        "p99 latency SLO should be set to a realistic threshold"
++    )
++
++
++def test_resolved_log_level_production_is_not_debug():
++    # Meaningful: guards against accidentally running production at DEBUG level,
++    # which would leak sensitive data to logs.
++    s = Settings(environment="production")
++    assert s.resolved_log_level != "DEBUG"

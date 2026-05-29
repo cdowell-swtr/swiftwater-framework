@@ -24,6 +24,10 @@ def test_agentspec_context_defaults_to_diff():
         "performance",
         "data-integrity",
         "security",
+        "compliance",
+        "test-quality",
+        "documentation",
+        "dependency",
     }
     for name in agent_names():
         if name in _MIGRATED_TO_BUNDLE:

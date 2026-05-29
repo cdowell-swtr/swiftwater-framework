@@ -1,0 +1,30 @@
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -1,6 +1,7 @@
+ from typing import Annotated
+
+ from fastapi import APIRouter, Depends
++from fastapi import Query
+ from pydantic import BaseModel, ConfigDict
+ from sqlalchemy.orm import Session
+
+@@ -29,3 +30,19 @@ def get_items(session: SessionDep) -> list[Item]:
+     FastAPI serializes the ORM objects through ItemRead (the response contract).
+     """
+     return list_items(session)
++
++
++@router.post("/items/search", response_model=list[ItemRead])
++def search_items(
++    user_id: int = Query(..., description="Authenticated user id (opaque)"),
++    name_filter: str = Query("", description="Filter items by name prefix"),
++    session: SessionDep = Depends(get_session),
++) -> list[Item]:
++    """Search items.
++
++    Uses an opaque user_id (not email/name) so no PII is logged or stored.
++    """
++    from ..logging_config import get_logger
++
++    get_logger().info("items_searched", user_id=user_id, filter=name_filter)
++    return list_items(session)
