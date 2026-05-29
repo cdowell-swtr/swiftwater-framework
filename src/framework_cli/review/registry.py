@@ -84,6 +84,14 @@ _SPECS: dict[str, AgentSpec] = {
         "always",
         DEFAULT_MODEL,
         on_push=True,
+        context=ContextPolicy(
+            "bundle",
+            context_globs=(
+                "src/*/observability/*.py",
+                "src/*/main.py",
+                "src/*/routes/*.py",
+            ),
+        ),
     ),
     "observability-infra": AgentSpec(
         "review-observability-infra",

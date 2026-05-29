@@ -16,9 +16,14 @@ def test_contextpolicy_defaults_to_diff():
 
 
 def test_agentspec_context_defaults_to_diff():
-    # Every currently-registered agent defaults to the diff strategy until migrated.
+    # Agents not yet migrated to a richer context strategy use the "diff" default.
+    # Update this set as each agent is migrated (Slice A: observability → "bundle").
+    _MIGRATED_TO_BUNDLE = {"observability"}
     for name in agent_names():
-        assert get_agent(name).context.strategy == "diff"
+        if name in _MIGRATED_TO_BUNDLE:
+            assert get_agent(name).context.strategy == "bundle"
+        else:
+            assert get_agent(name).context.strategy == "diff"
 
 
 def test_contextpolicy_bundle_carries_globs():
