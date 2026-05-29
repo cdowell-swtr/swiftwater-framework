@@ -1,6 +1,8 @@
+import pytest
+from dataclasses import FrozenInstanceError
+
 from framework_cli.review.registry import (
     ContextPolicy,
-    AgentSpec,
     get_agent,
     agent_names,
 )
@@ -25,5 +27,12 @@ def test_contextpolicy_bundle_carries_globs():
     assert p.context_globs == ("src/*/observability/*.py",)
 
 
-def test_agentspec_importable():
-    assert AgentSpec.__name__ == "AgentSpec"  # noqa: F401
+def test_contextpolicy_max_context_tokens_roundtrips():
+    p = ContextPolicy("bundle", max_context_tokens=4096)
+    assert p.max_context_tokens == 4096
+
+
+def test_contextpolicy_is_frozen():
+    p = ContextPolicy("diff")
+    with pytest.raises(FrozenInstanceError):
+        p.strategy = "bundle"  # type: ignore[misc]
