@@ -381,6 +381,63 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
     assert "FAIL" in result.output
 
 
+def test_eval_findings_out_writes_per_call_json(tmp_path, monkeypatch):
+    """--findings-out persists each (agent, fixture, repeat)'s findings as JSON
+    so the fp-cluster and partial-recall agents can be diagnosed without re-running."""
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.findings import Finding
+
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
+    monkeypatch.setattr(
+        cli_mod,
+        "_eval_run",
+        lambda diff, root, spec: (
+            []
+            if "clean" in diff
+            else [Finding("a.py", 7, "high", "hardcoded secret", "use env var")]
+        ),
+    )
+    out = tmp_path / "findings"
+    result = runner.invoke(
+        app,
+        [
+            "eval",
+            "security",
+            "--fixtures",
+            str(tmp_path),
+            "--findings-out",
+            str(out),
+            "--repeat",
+            "2",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    bad = out / "security" / "bad" / "b1__r0.json"
+    good = out / "security" / "good" / "g1__r1.json"
+    assert bad.exists() and good.exists()
+    bad_obj = _json.loads(bad.read_text())
+    assert bad_obj["agent"] == "security"
+    assert bad_obj["kind"] == "bad"
+    assert bad_obj["case"] == "b1"
+    assert bad_obj["repeat"] == 0
+    assert bad_obj["seeded_file"] == "a.py"
+    assert bad_obj["findings"] == [
+        {
+            "path": "a.py",
+            "line": 7,
+            "severity": "high",
+            "message": "hardcoded secret",
+            "suggestion": "use env var",
+        }
+    ]
+    assert _json.loads(good.read_text())["findings"] == []
+
+
 def test_eval_aborts_loudly_on_api_error(tmp_path, monkeypatch):
     """An API/credit/rate-limit failure is NOT a non-detection: the eval must abort
     loudly (so a contaminated scorecard is impossible), not silently score 0."""

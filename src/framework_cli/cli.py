@@ -310,6 +310,25 @@ def _eval_run(diff: str, root: object, spec: object) -> list:
     return run_agent(bundle, spec, default_client(EVAL_KEY_ENV))  # type: ignore[arg-type]
 
 
+def _write_findings(out: Path, fx: object, repeat_idx: int, findings: list) -> None:
+    """Persist one (agent, fixture, repeat)'s findings as JSON for diagnosis."""
+    from dataclasses import asdict
+
+    dest = out / fx.agent / fx.kind  # type: ignore[attr-defined]
+    dest.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "agent": fx.agent,  # type: ignore[attr-defined]
+        "kind": fx.kind,  # type: ignore[attr-defined]
+        "case": fx.name,  # type: ignore[attr-defined]
+        "repeat": repeat_idx,
+        "seeded_file": fx.seeded_file,  # type: ignore[attr-defined]
+        "findings": [asdict(f) for f in findings],
+    }
+    (dest / f"{fx.name}__r{repeat_idx}.json").write_text(  # type: ignore[attr-defined]
+        json.dumps(payload, indent=2, sort_keys=True)
+    )
+
+
 @app.command(name="review-aggregate")
 def review_aggregate(
     directory: str = typer.Argument(
@@ -380,6 +399,11 @@ def eval_agents(
         "--require-key",
         help="Fail (not skip) if ANTHROPIC_EVAL_API_KEY is unset.",
     ),
+    findings_out: str = typer.Option(
+        "",
+        "--findings-out",
+        help="Directory to write per-(agent,fixture,repeat) findings JSON for diagnosis.",
+    ),
 ) -> None:
     """Run golden fixtures through the review agents and score recall/precision (spec §20)."""
     from framework_cli.review.evals import (
@@ -439,7 +463,7 @@ def eval_agents(
         for fx in fx_list:
             rroot, rdiff = realize_cached(fx, _combo_cache, _base_dir)
             hits = 0
-            for _ in range(repeat):
+            for i in range(repeat):
                 try:
                     found = _eval_run(rdiff, rroot, spec)
                 except anthropic.APIError as exc:
@@ -454,6 +478,8 @@ def eval_agents(
                         err=True,
                     )
                     raise typer.Exit(3) from exc
+                if findings_out:
+                    _write_findings(Path(findings_out), fx, i, found)
                 blocked = (
                     flags(found, spec, file=fx.seeded_file)
                     if fx.kind == "bad"
