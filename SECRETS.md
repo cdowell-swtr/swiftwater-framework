@@ -26,13 +26,14 @@ Every secret has **two** names:
 ## This repo's secrets
 
 The framework has **two distinct LLM uses**, so — per the `scope` dimension — **two** keys
-(separate audit / rotation / blast-radius). Both map to the `ANTHROPIC_API_KEY` env var in
-their respective workflow.
+(separate audit / rotation / blast-radius). Each maps into its **own scoped env var** (never a
+shared `ANTHROPIC_API_KEY`) in its workflow, so nothing selects behavior by mutating a shared
+slot.
 
 | Purpose | Recommended console label | GitHub secret | Consumed as | Used by |
 |---|---|---|---|---|
-| Review-agent **eval** scoring (golden-fixture recall/precision) | `anthropic_framework_<owner>_ci_gha_eval_<YYYYMMDD>_<rand>` | `ANTHROPIC_FRAMEWORK_CI_EVAL` | `ANTHROPIC_API_KEY` | `.github/workflows/agent-evals.yml` |
-| Review agents at **runtime** (the framework reviewing its own diffs — dogfooding) | `anthropic_framework_<owner>_ci_gha_runtime_<YYYYMMDD>_<rand>` | `ANTHROPIC_FRAMEWORK_CI_RUNTIME` | `ANTHROPIC_API_KEY` | `.github/workflows/review.yml` |
+| Review-agent **eval** scoring (golden-fixture recall/precision) | `anthropic_framework_<owner>_ci_gha_eval_<YYYYMMDD>_<rand>` | `ANTHROPIC_FRAMEWORK_CI_EVAL` | `ANTHROPIC_EVAL_API_KEY` | `.github/workflows/agent-evals.yml` |
+| Review agents at **runtime** (the framework reviewing its own diffs — dogfooding) | `anthropic_framework_<owner>_ci_gha_runtime_<YYYYMMDD>_<rand>` | `ANTHROPIC_FRAMEWORK_CI_RUNTIME` | `ANTHROPIC_RUNTIME_API_KEY` | `.github/workflows/review.yml` |
 | Gitleaks license (full-history scan, if enabled) | n/a (vendor-issued) | `GITLEAKS_LICENSE` | `GITLEAKS_LICENSE` | the generated project's `ci.yml` |
 
 Set them under **Settings → Secrets and variables → Actions**. Both Anthropic keys are
@@ -44,3 +45,26 @@ rather than silently skipping.
 > The eval key (`…_CI_EVAL`) and the runtime key (`…_CI_RUNTIME`) are deliberately **separate**
 > — the convention's `scope` dimension. The runtime key mirrors what a generated project names
 > its review key (`ANTHROPIC_<PKG>_CI_RUNTIME`); the eval key is framework-internal.
+
+## Local development (`env = dev`) — mirrors the CI scope split
+
+Running the agents/eval locally uses **dev-scoped, per-machine** keys, keeping the SAME two
+scopes as CI — `eval` for `framework eval`, `runtime` for `framework review` — so dev mirrors
+CI rather than collapsing the boundary:
+
+```
+anthropic_framework_<owner>_dev_<host>_eval_<YYYYMMDD>_<rand>
+anthropic_framework_<owner>_dev_<host>_runtime_<YYYYMMDD>_<rand>
+```
+
+**Personal and never committed** — not GitHub secrets. Each consumes its own scoped env var,
+so both coexist and nothing is swapped (CI isolates the scopes by separate jobs; dev by separate
+var names):
+
+```bash
+export ANTHROPIC_EVAL_API_KEY=sk-ant-…      # read by: framework eval
+export ANTHROPIC_RUNTIME_API_KEY=sk-ant-…   # read by: framework review (incl. --target framework)
+```
+
+Put them in a gitignored `.env` you source, or your shell profile. Rotate/revoke independently
+of the CI keys; blast-radius is one developer's machine.
