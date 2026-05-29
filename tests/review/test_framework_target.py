@@ -130,4 +130,9 @@ def test_review_workflow_is_valid_and_uses_framework_target():
     text = Path(".github/workflows/review.yml").read_text()
     assert "review-agents --target framework" in text
     assert "review ${{ matrix.agent }} --target framework" in text
-    assert "ANTHROPIC_FRAMEWORK_CI_EVAL" in text
+    # Runtime-scoped reviewer key (review-at-runtime), per the two-tier convention in
+    # the repo-root SECRETS.md — distinct from agent-evals.yml's eval-scoped key.
+    assert "ANTHROPIC_FRAMEWORK_CI_RUNTIME" in text
+    assert (
+        "ANTHROPIC_FRAMEWORK_CI_EVAL" not in text
+    )  # eval key must not leak into the runtime job
