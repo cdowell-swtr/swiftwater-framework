@@ -55,3 +55,8 @@ def test_contextpolicy_is_frozen():
     p = ContextPolicy("diff")
     with pytest.raises(FrozenInstanceError):
         p.strategy = "bundle"  # type: ignore[misc]
+
+
+def test_contextpolicy_max_agentic_turns_defaults_none_and_roundtrips():
+    assert ContextPolicy("agentic").max_agentic_turns is None
+    assert ContextPolicy("agentic", max_agentic_turns=20).max_agentic_turns == 20

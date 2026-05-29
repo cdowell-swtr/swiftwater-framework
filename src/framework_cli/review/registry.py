@@ -21,12 +21,14 @@ class ContextPolicy:
     - "diff": the unified diff only (legacy behavior; the default).
     - "bundle": diff + full content of changed files + files matching `context_globs`.
     - "agentic": a tool-using loop over the project tree (designed in Slice B).
-    `max_context_tokens` overrides the model-window-derived budget when set.
+    `max_context_tokens` overrides the bundle budget; `max_agentic_turns` overrides the
+    agentic loop's turn cap. Both default to the strategy's standard limit when None.
     """
 
     strategy: Literal["diff", "bundle", "agentic"]
     context_globs: tuple[str, ...] = ()
     max_context_tokens: int | None = None
+    max_agentic_turns: int | None = None
 
 
 @dataclass(frozen=True)
