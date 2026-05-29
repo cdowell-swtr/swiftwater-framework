@@ -2,7 +2,7 @@ from pathlib import Path
 
 from framework_cli.review.context import (
     Bundle,
-    ReviewTarget,  # noqa: F401
+    ReviewTarget,
     assemble,
     context_budget_chars,
 )
@@ -93,3 +93,18 @@ def test_bundle_is_frozen_with_defaults():
     assert b.diff == "d"
     assert b.context_files == ()
     assert b.truncated is False
+
+
+def test_bundle_skips_changed_file_missing_on_disk(tmp_path: Path):
+    # A diff may name a path not present at root (e.g. a rename's old side); assemble
+    # silently skips it rather than crashing, and does not mark the bundle truncated.
+    _tree(tmp_path)
+    diff = "--- a/src/demo/gone.py\n+++ b/src/demo/gone.py\n@@ -1 +1,2 @@\n a\n+b\n"
+    b = assemble(diff, tmp_path, ContextPolicy("bundle"), model="claude-sonnet-4-6")
+    assert b.context_files == ()
+    assert b.truncated is False
+
+
+def test_reviewtarget_defaults_active_to_empty(tmp_path: Path):
+    assert ReviewTarget(root=tmp_path).active == ()
+    assert ReviewTarget(root=tmp_path, active=("security",)).active == ("security",)

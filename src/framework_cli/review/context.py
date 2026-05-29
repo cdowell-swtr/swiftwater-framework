@@ -46,7 +46,9 @@ class ReviewTarget:
     """A review target. The ONLY target-specific artifact: the runner/assembler are blind to it."""
 
     root: Path
-    active: tuple[str, ...] = field(default_factory=tuple)
+    active: tuple[str, ...] = field(
+        default_factory=tuple
+    )  # agent names active for this target
 
 
 def assemble(diff: str, root: Path, policy: ContextPolicy, *, model: str) -> Bundle:
