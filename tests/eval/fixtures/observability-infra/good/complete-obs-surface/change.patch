@@ -1,0 +1,106 @@
+--- a/infra/compose/observability.yml
++++ b/infra/compose/observability.yml
+@@ -91,6 +91,15 @@ services:
+       postgres:
+         condition: service_healthy
+
++  redis-exporter:
++    image: oliver006/redis_exporter:v1.62.0
++    environment:
++      REDIS_ADDR: "redis://redis:6379"
++    ports:
++      - "9121:9121"
++    depends_on:
++      - redis
++
+ volumes:
+   promdata: {}
+   lokidata: {}
+--- a/infra/observability/prometheus/prometheus.yml
++++ b/infra/observability/prometheus/prometheus.yml
+@@ -18,6 +18,9 @@ scrape_configs:
+   - job_name: prometheus
+     static_configs:
+       - targets: ["localhost:9090"]
++  - job_name: redis
++    static_configs:
++      - targets: ["redis-exporter:9121"]
+   - job_name: postgres
+     static_configs:
+       - targets: ["postgres-exporter:9187"]
+--- a/infra/observability/prometheus/alerts/postgres_alerts.yml
++++ b/infra/observability/prometheus/alerts/postgres_alerts.yml
+@@ -8,3 +8,12 @@ groups:
+       severity: warning
+     annotations:
+       summary: Postgres exporter target is down (postgres unreachable or exporter crashed) — app-specific default; tune or remove
++- name: redis
++  rules:
++  - alert: RedisDown
++    expr: up{job="redis"} == 0
++    for: 5m
++    labels:
++      severity: warning
++    annotations:
++      summary: Redis exporter target is down — redis unreachable or exporter crashed
+diff --git a/infra/observability/grafana/dashboards/redis.json b/infra/observability/grafana/dashboards/redis.json
+new file mode 100644
+--- /dev/null
++++ b/infra/observability/grafana/dashboards/redis.json
+@@ -0,0 +1,56 @@
++{
++  "uid": "redis",
++  "title": "Redis",
++  "tags": [
++    "redis"
++  ],
++  "schemaVersion": 39,
++  "version": 1,
++  "time": {
++    "from": "now-1h",
++    "to": "now"
++  },
++  "panels": [
++    {
++      "id": 1,
++      "title": "Redis Exporter Up",
++      "type": "stat",
++      "datasource": {
++        "type": "prometheus",
++        "uid": "prometheus"
++      },
++      "gridPos": {
++        "h": 4,
++        "w": 6,
++        "x": 0,
++        "y": 0
++      },
++      "targets": [
++        {
++          "refId": "A",
++          "expr": "up{job=\"redis\"}",
++          "legendFormat": "__auto"
++        }
++      ],
++      "fieldConfig": {
++        "defaults": {
++          "unit": "short",
++          "thresholds": {
++            "mode": "absolute",
++            "steps": [
++              {
++                "color": "red",
++                "value": null
++              },
++              {
++                "color": "green",
++                "value": 1
++              }
++            ]
++          }
++        },
++        "overrides": []
++      }
++    }
++  ]
++}

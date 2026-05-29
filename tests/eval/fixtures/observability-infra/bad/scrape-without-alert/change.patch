@@ -1,0 +1,12 @@
+--- a/infra/observability/prometheus/prometheus.yml
++++ b/infra/observability/prometheus/prometheus.yml
+@@ -18,6 +18,9 @@ scrape_configs:
+   - job_name: prometheus
+     static_configs:
+       - targets: ["localhost:9090"]
++  - job_name: redis
++    static_configs:
++      - targets: ["redis-exporter:9121"]
+   - job_name: postgres
+     static_configs:
+       - targets: ["postgres-exporter:9187"]

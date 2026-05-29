@@ -1,0 +1,18 @@
+--- a/infra/compose/observability.yml
++++ b/infra/compose/observability.yml
+@@ -91,6 +91,15 @@ services:
+       postgres:
+         condition: service_healthy
+
++  redis-exporter:
++    image: oliver006/redis_exporter:v1.62.0
++    environment:
++      REDIS_ADDR: "redis://redis:6379"
++    ports:
++      - "9121:9121"
++    depends_on:
++      - redis
++
+ volumes:
+   promdata: {}
+   lokidata: {}

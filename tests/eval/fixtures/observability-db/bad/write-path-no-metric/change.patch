@@ -1,0 +1,18 @@
+--- a/src/demo/db/repository.py
++++ b/src/demo/db/repository.py
+@@ -14,3 +14,15 @@ def create_item(session: Session, name: str) -> Item:
+     session.commit()
+     session.refresh(item)
+     return item
++
++
++def delete_items_by_prefix(session: Session, prefix: str) -> int:
++    """Delete all items whose name starts with the given prefix.
++
++    No span or metric instrumentation — the data-layer delete is invisible to observability.
++    """
++    rows = list(session.scalars(select(Item).where(Item.name.startswith(prefix))))
++    for item in rows:
++        session.delete(item)
++    session.commit()
++    return len(rows)
