@@ -189,3 +189,42 @@ def test_agentic_loop_runs_tools_then_returns_findings(tmp_path):
         )
         for msg in client.calls[2]["messages"]
     )
+
+
+class _AlwaysToolClient:
+    """Always asks for a tool, until create() is called without a `tools` kwarg (the
+    finalize call), at which point it returns findings."""
+
+    def __init__(self):
+        self.calls = []
+        self.messages = self
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        if "tools" not in kwargs:  # the finalize call
+            return _Resp(
+                [
+                    _TextBlock(
+                        '[{"path": "x.py", "line": 1, "severity": "high", "message": "late"}]'
+                    )
+                ]
+            )
+        return _Resp([_ToolUse(f"t{len(self.calls)}", "glob", {"pattern": "*"})])
+
+
+def test_agentic_loop_finalizes_at_turn_cap(tmp_path):
+    (tmp_path / "x.py").write_text("Y = 1\n")
+    client = _AlwaysToolClient()
+    findings = run_agent_agentic(
+        "--- a/x.py\n+++ b/x.py\n",
+        tmp_path,
+        get_agent("architecture"),
+        client,
+        max_turns=3,
+    )
+    # 3 tool rounds (each WITH tools) + 1 finalize (WITHOUT tools) = 4 calls.
+    assert len(client.calls) == 4
+    assert all("tools" in c for c in client.calls[:3])
+    assert "tools" not in client.calls[3]
+    # Still returns a (partial) findings list, never hangs or raises.
+    assert findings == [Finding("x.py", 1, "high", "late")]
