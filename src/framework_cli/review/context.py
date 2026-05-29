@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field  # noqa: F401
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from framework_cli.review.diff import changed_files
+from framework_cli.review.registry import ContextPolicy
 
 # Model context windows (input+output tokens). Unknown models use the default.
 _MODEL_CONTEXT_TOKENS: dict[str, int] = {
@@ -35,3 +39,54 @@ def context_budget_chars(model: str, *, override_tokens: int | None = None) -> i
     ceiling = window - _OUTPUT_RESERVE_TOKENS - _MARGIN_TOKENS
     tokens = min(override_tokens, ceiling) if override_tokens is not None else ceiling
     return max(tokens, 0) * _CHARS_PER_TOKEN
+
+
+@dataclass(frozen=True)
+class ReviewTarget:
+    """A review target. The ONLY target-specific artifact: the runner/assembler are blind to it."""
+
+    root: Path
+    active: tuple[str, ...] = field(default_factory=tuple)
+
+
+def assemble(diff: str, root: Path, policy: ContextPolicy, *, model: str) -> Bundle:
+    """Assemble the review bundle for `policy` against the tree at `root`.
+
+    Priority order under the budget: the diff (always), then full content of changed
+    files, then files matching `context_globs`. On overflow we stop adding and mark the
+    bundle truncated — the diff is never dropped.
+    """
+    if policy.strategy != "bundle":
+        return Bundle(diff=diff)
+
+    budget = context_budget_chars(model, override_tokens=policy.max_context_tokens)
+    used = len(diff)
+    ordered: list[str] = []
+    seen: set[str] = set()
+
+    def _add(rel: str) -> None:
+        if rel not in seen:
+            seen.add(rel)
+            ordered.append(rel)
+
+    for rel in changed_files(diff):
+        _add(rel)
+    for pattern in policy.context_globs:
+        for path in sorted(root.glob(pattern)):
+            if path.is_file():
+                _add(str(path.relative_to(root)))
+
+    files: list[tuple[str, str]] = []
+    truncated = False
+    for rel in ordered:
+        fp = root / rel
+        if not fp.is_file():
+            continue
+        content = fp.read_text(errors="replace")
+        if used + len(content) > budget:
+            truncated = True
+            break  # respect priority: stop rather than skip-ahead to smaller files
+        files.append((rel, content))
+        used += len(content)
+
+    return Bundle(diff=diff, context_files=tuple(files), truncated=truncated)

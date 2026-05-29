@@ -1,4 +1,73 @@
-from framework_cli.review.context import Bundle, context_budget_chars
+from pathlib import Path
+
+from framework_cli.review.context import (
+    Bundle,
+    ReviewTarget,  # noqa: F401
+    assemble,
+    context_budget_chars,
+)
+from framework_cli.review.registry import ContextPolicy
+
+_DIFF = (
+    "--- a/src/demo/observability/metrics.py\n"
+    "+++ b/src/demo/observability/metrics.py\n"
+    "@@ -1,2 +1,3 @@\n"
+    " import x\n"
+    "+y = 1\n"
+)
+
+
+def _tree(root: Path) -> None:
+    obs = root / "src" / "demo" / "observability"
+    obs.mkdir(parents=True)
+    (obs / "metrics.py").write_text("import x\ny = 1\nFULL_METRICS_FILE = True\n")
+    (obs / "tracing.py").write_text("TRACING = True\n")
+    (root / "src" / "demo" / "main.py").write_text("APP = True\n")
+
+
+def test_diff_strategy_returns_diff_only(tmp_path: Path):
+    _tree(tmp_path)
+    b = assemble(_DIFF, tmp_path, ContextPolicy("diff"), model="claude-sonnet-4-6")
+    assert b.diff == _DIFF
+    assert b.context_files == ()
+    assert b.truncated is False
+
+
+def test_bundle_includes_changed_files_and_glob_subtree(tmp_path: Path):
+    _tree(tmp_path)
+    policy = ContextPolicy("bundle", context_globs=("src/*/observability/*.py",))
+    b = assemble(_DIFF, tmp_path, policy, model="claude-sonnet-4-6")
+    paths = [p for p, _ in b.context_files]
+    assert "src/demo/observability/metrics.py" in paths
+    assert any(
+        "FULL_METRICS_FILE" in c for p, c in b.context_files if p.endswith("metrics.py")
+    )
+    assert "src/demo/observability/tracing.py" in paths
+    assert "src/demo/main.py" not in paths
+
+
+def test_changed_file_appears_once_even_if_glob_also_matches(tmp_path: Path):
+    _tree(tmp_path)
+    policy = ContextPolicy("bundle", context_globs=("src/*/observability/*.py",))
+    b = assemble(_DIFF, tmp_path, policy, model="claude-sonnet-4-6")
+    paths = [p for p, _ in b.context_files]
+    assert paths.count("src/demo/observability/metrics.py") == 1
+
+
+def test_budget_truncates_subtree_keeping_priority(tmp_path: Path):
+    _tree(tmp_path)
+    policy = ContextPolicy(
+        "bundle", context_globs=("src/*/observability/*.py",), max_context_tokens=1
+    )  # 1 token * 4 = 4 chars: nothing but the diff fits
+    b = assemble(_DIFF, tmp_path, policy, model="claude-sonnet-4-6")
+    assert b.truncated is True
+    assert b.context_files == ()
+
+
+def test_bundle_truncated_flag_constructs():
+    from framework_cli.review.context import Bundle
+
+    assert Bundle(diff="d", truncated=True).truncated is True
 
 
 def test_budget_derives_from_model_window_minus_reserve():
