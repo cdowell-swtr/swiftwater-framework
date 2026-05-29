@@ -381,6 +381,31 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
     assert "FAIL" in result.output
 
 
+def test_eval_aborts_loudly_on_api_error(tmp_path, monkeypatch):
+    """An API/credit/rate-limit failure is NOT a non-detection: the eval must abort
+    loudly (so a contaminated scorecard is impossible), not silently score 0."""
+    import anthropic
+    import httpx
+
+    import framework_cli.cli as cli_mod
+
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
+
+    def _credit_wall(diff, root, spec):
+        req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        raise anthropic.APIError("credit balance is too low", req, body=None)
+
+    monkeypatch.setattr(cli_mod, "_eval_run", _credit_wall)
+    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "ABORTED" in result.output
+    assert "review-security" in result.output
+
+
 def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     assert (

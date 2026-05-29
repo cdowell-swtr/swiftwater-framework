@@ -403,6 +403,8 @@ def eval_agents(
 
     import tempfile
 
+    import anthropic
+
     root = Path(fixtures)
     _base_dir = Path(tempfile.mkdtemp(prefix="evalbase-"))
     _combo_cache: dict = {}
@@ -440,8 +442,18 @@ def eval_agents(
             for _ in range(repeat):
                 try:
                     found = _eval_run(rdiff, rroot, spec)
-                except Exception:  # noqa: BLE001 - a failed run counts as a non-detection
-                    found = []
+                except anthropic.APIError as exc:
+                    typer.echo(
+                        f"\neval: ABORTED at {spec.name} — API error "
+                        f"({type(exc).__name__}): {exc}",
+                        err=True,
+                    )
+                    typer.echo(
+                        "An API/credit/rate-limit failure is not a non-detection; "
+                        "scores so far are unreliable. Resolve the API issue and re-run.",
+                        err=True,
+                    )
+                    raise typer.Exit(3) from exc
                 blocked = (
                     flags(found, spec, file=fx.seeded_file)
                     if fx.kind == "bad"
