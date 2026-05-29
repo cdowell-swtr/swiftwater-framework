@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from framework_cli.review.findings import Finding, parse_findings  # noqa: F401
+from framework_cli.review.findings import Finding, parse_findings
 
 DEFAULT_MAX_TURNS = 12
 _MAX_TOKENS = 4096
@@ -147,3 +147,61 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
 ]
+
+_INITIAL_INSTRUCTION = (
+    "Review the change shown in the diff. Use the read_file, grep, and glob tools to "
+    "explore the surrounding repository as needed. When done, reply with ONLY a JSON "
+    "array of findings (no tools)."
+)
+_FINALIZE_INSTRUCTION = "Stop exploring. Return your findings now as a JSON array only. Do not request tools."
+
+
+def _text_of(resp: Any) -> str:
+    return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+
+
+def run_agent_agentic(
+    diff: str, root: Path, spec: Any, client: Any, *, max_turns: int
+) -> list[Finding]:
+    """Drive a tool-use loop letting `spec` explore the tree at `root`; return findings.
+
+    The diff seeds the review (cached system prefix); read_file/grep/glob let the agent
+    pull whatever cross-file context it needs. At `max_turns` tool rounds we force a final
+    answer so the call always terminates with a (possibly partial) findings list.
+    """
+    system = [
+        {
+            "type": "text",
+            "text": f"Review this unified diff:\n\n{diff}",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {"type": "text", "text": spec.prompt},
+    ]
+    messages: list[dict[str, Any]] = [{"role": "user", "content": _INITIAL_INSTRUCTION}]
+    for _turn in range(max_turns):
+        resp = client.messages.create(
+            model=spec.model,
+            max_tokens=_MAX_TOKENS,
+            system=system,
+            tools=TOOL_SCHEMAS,
+            messages=messages,
+        )
+        tool_uses = [b for b in resp.content if getattr(b, "type", None) == "tool_use"]
+        if not tool_uses:
+            return parse_findings(_text_of(resp))
+        messages.append({"role": "assistant", "content": resp.content})
+        results = [
+            {
+                "type": "tool_result",
+                "tool_use_id": tu.id,
+                "content": _run_tool(tu.name, tu.input, root),
+            }
+            for tu in tool_uses
+        ]
+        messages.append({"role": "user", "content": results})
+
+    messages.append({"role": "user", "content": _FINALIZE_INSTRUCTION})
+    resp = client.messages.create(
+        model=spec.model, max_tokens=_MAX_TOKENS, system=system, messages=messages
+    )
+    return parse_findings(_text_of(resp))

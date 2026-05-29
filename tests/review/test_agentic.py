@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from framework_cli.review.agentic import _run_tool
+from framework_cli.review.agentic import _run_tool, run_agent_agentic
+from framework_cli.review.findings import Finding
+from framework_cli.review.registry import get_agent
 
 
 def _tree(root: Path) -> None:
@@ -113,3 +115,77 @@ def test_tools_work_on_a_real_rendered_project(tmp_path):
     assert not any(p == ".git" or p.startswith(".git/") for p in all_paths)
     # And grep does not surface the planted .git/config contents.
     assert ".git/config" not in _run_tool("grep", {"pattern": "core"}, root)
+
+
+class _ToolUse:
+    type = "tool_use"
+
+    def __init__(self, id, name, input):
+        self.id, self.name, self.input = id, name, input
+
+
+class _TextBlock:
+    type = "text"
+
+    def __init__(self, text):
+        self.text = text
+
+
+class _Resp:
+    def __init__(self, content):
+        self.content = content
+
+
+class _ScriptedClient:
+    """Returns the queued responses in order; records each create() kwargs."""
+
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.calls = []
+        self.messages = self
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return self._responses.pop(0)
+
+
+def test_agentic_loop_runs_tools_then_returns_findings(tmp_path):
+    (tmp_path / "x.py").write_text("BAD = 1\n")
+    client = _ScriptedClient(
+        [
+            _Resp([_ToolUse("t1", "glob", {"pattern": "*.py"})]),
+            _Resp([_ToolUse("t2", "read_file", {"path": "x.py"})]),
+            _Resp(
+                [
+                    _TextBlock(
+                        '[{"path": "x.py", "line": 1, "severity": "high", "message": "bad"}]'
+                    )
+                ]
+            ),
+        ]
+    )
+    findings = run_agent_agentic(
+        "--- a/x.py\n+++ b/x.py\n",
+        tmp_path,
+        get_agent("architecture"),
+        client,
+        max_turns=12,
+    )
+    assert findings == [Finding("x.py", 1, "high", "bad")]
+    assert len(client.calls) == 3
+    assert client.calls[0]["system"][0]["text"].startswith("Review this unified diff:")
+    assert client.calls[0]["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert [t["name"] for t in client.calls[0]["tools"]] == [
+        "read_file",
+        "grep",
+        "glob",
+    ]
+    assert any(
+        msg["role"] == "user"
+        and isinstance(msg["content"], list)
+        and any(
+            isinstance(b, dict) and b.get("type") == "tool_result"
+            for b in msg["content"]
+        )
+        for msg in client.calls[2]["messages"]
+    )
