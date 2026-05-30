@@ -6,12 +6,17 @@ You are running `/reviewers:gate`. Your job: evaluate the staged set with the af
 
 **Steps:**
 
-1. **Run eval-prepare**:
+1. **Run gate-prepare** (writes BOTH a stdout manifest AND a split-manifest layout
+   under `/tmp/reviewers-gate-prep-split/` for the Workflow-tool args; the split
+   layout exists because the inline manifest can exceed the ~1.76MB Workflow-args
+   ceiling for large staged sets):
    ```bash
-   uv run framework eval-prepare --mode gate > /tmp/reviewers-gate-prep.json
+   rm -rf /tmp/reviewers-gate-prep-split 2>/dev/null
+   uv run framework gate-prepare --split-to /tmp/reviewers-gate-prep-split > /tmp/reviewers-gate-prep.json
    ```
 
-2. **Read the prep manifest**.
+2. **Read the prep manifest** (from `/tmp/reviewers-gate-prep.json` — the stdout
+   manifest is still the source of truth for branching on `mode`).
 
 3. **Branch on mode**:
 
@@ -41,7 +46,17 @@ You are running `/reviewers:gate`. Your job: evaluate the staged set with the af
    - Print a one-line summary: "Gate: N affected agents (<list>). Dispatching..."
    - If N > 30, confirm with the user.
 
-4. **Invoke the Workflow tool** (`name: "reviewers-gate"`, `args:` the prep manifest).
+4. **Invoke the Workflow tool** (`name: "reviewers-gate"`). Build the `args`
+   object as `{indexPath, itemsDir, meta}` where:
+   - `indexPath` is `"/tmp/reviewers-gate-prep-split/index.json"`
+   - `itemsDir` is `"/tmp/reviewers-gate-prep-split/items"`
+   - `meta` is `{mode, staged_hash, agents_set}` copied from the stdout prep
+     manifest at `/tmp/reviewers-gate-prep.json` (use `jq` or read the JSON
+     directly, e.g. `jq '{mode, staged_hash, agents_set}' /tmp/reviewers-gate-prep.json`).
+
+   The workflow loads the index from disk and dispatches one subagent per item
+   (each subagent reads its own item file). Inline `work_items` is no longer
+   passed — the split-manifest layout keeps the Workflow-args payload tiny.
 
 5. **Write the workflow's `{results, meta}` to a temp file** (`/tmp/reviewers-gate-results.json`).
 

@@ -25,9 +25,9 @@ You are running the `/reviewers:tune` workflow. Your job: dispatch the subagent-
    rm -rf /tmp/reviewers-tune-items/
    ```
 
-4. **Run eval-prepare with `--split-to`** via Bash. The split-manifest write is what makes the full-sweep workflow callable — a full ~132-item manifest is ~1.76MB which is too large to pass inline as `args` to the Workflow tool. With `--split-to`, eval-prepare writes a tiny per-item index + one file per work item; the Workflow takes just the two paths as args.
+4. **Run tune-prepare with `--split-to`** via Bash. The split-manifest write is what makes the full-sweep workflow callable — a full ~132-item manifest is ~1.76MB which is too large to pass inline as `args` to the Workflow tool. With `--split-to`, tune-prepare writes a tiny per-item index + one file per work item; the Workflow takes just the two paths as args.
    ```bash
-   uv run framework eval-prepare --mode tune \
+   uv run framework tune-prepare \
      ${AGENT:+--agent "$AGENT"} \
      --fixtures tests/eval/fixtures \
      --repeat "$REPEAT" \
@@ -35,7 +35,7 @@ You are running the `/reviewers:tune` workflow. Your job: dispatch the subagent-
      --split-to /tmp/reviewers-tune-items/ > /tmp/reviewers-tune-prep.json
    ```
 
-5. **Read the small index** (`/tmp/reviewers-tune-items/index.json`) to count items + print the pre-flight estimate. Do NOT load the full `/tmp/reviewers-tune-prep.json` (it's the bulky manifest; only `eval-prepare` itself needs to write that — the Workflow won't see it).
+5. **Read the small index** (`/tmp/reviewers-tune-items/index.json`) to count items + print the pre-flight estimate. Do NOT load the full `/tmp/reviewers-tune-prep.json` (it's the bulky manifest; only `tune-prepare` itself needs to write that — the Workflow won't see it).
 
 6. **Print a pre-flight estimate** to the user:
    - Number of work items (from `index.items.length`).

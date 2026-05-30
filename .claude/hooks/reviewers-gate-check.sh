@@ -7,7 +7,7 @@
 # On any failure, blocks with a directive Claude reads and acts on.
 #
 # Implementation note: the staged_hash / marker fields are read by shelling
-# out to `framework eval-prepare --mode gate` (for the current hash) and to
+# out to `framework gate-prepare` (for the current hash) and to
 # `python3 -c` reads of the marker JSON (for marker fields). This avoids any
 # sys.path hacking and naturally matches the template-shipped version.
 # We use `python3` (not bare `python`) for portability — many systems
@@ -29,17 +29,17 @@ if [ ! -f "$marker" ]; then
   exit 2
 fi
 
-# Recompute current staged_hash by shelling out to eval-prepare --mode gate
-# and parsing the JSON it emits. This is the same code path /reviewers:gate
-# uses, so the hashes are guaranteed to compare apples-to-apples.
-current_hash=$(uv run framework eval-prepare --mode gate 2>/dev/null | python3 -c "
+# Recompute current staged_hash by shelling out to gate-prepare and parsing
+# the JSON it emits. This is the same code path /reviewers:gate uses, so the
+# hashes are guaranteed to compare apples-to-apples.
+current_hash=$(uv run framework gate-prepare 2>/dev/null | python3 -c "
 import json, sys
 try:
     print(json.load(sys.stdin).get('staged_hash', ''))
 except Exception:
     pass
 ") || {
-  echo "Pre-commit gate: could not compute staged hash (uv run framework eval-prepare failed?). Invoke /reviewers:gate manually, then retry." >&2
+  echo "Pre-commit gate: could not compute staged hash (uv run framework gate-prepare failed?). Invoke /reviewers:gate manually, then retry." >&2
   exit 2
 }
 

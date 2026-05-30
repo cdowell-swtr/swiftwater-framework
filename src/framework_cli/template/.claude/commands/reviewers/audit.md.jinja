@@ -12,14 +12,14 @@ You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent
 
 1. **Parse the user's arguments**. Extract the optional agent name and optional `--target`.
 
-2. **Run eval-prepare** via Bash:
+2. **Run audit-prepare** via Bash:
    ```bash
-   uv run framework eval-prepare --mode audit \
+   uv run framework audit-prepare \
      ${AGENT:+--agent "$AGENT"} \
      ${TARGET:+--target "$TARGET"} \
      --output-dir .framework/audit/latest > /tmp/reviewers-audit-prep.json
    ```
-   If eval-prepare errors with "Could not auto-detect target," inform the user and suggest `--target framework` or `--target project`.
+   If audit-prepare errors with "Could not auto-detect target," inform the user and suggest `--target framework` or `--target project`.
 
 3. **Read the prep manifest** and inspect the work-item count.
 

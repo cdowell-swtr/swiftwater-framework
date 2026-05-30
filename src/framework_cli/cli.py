@@ -593,31 +593,19 @@ def eval_analyze(
         raise typer.Exit(1)
 
 
-@app.command(name="eval-prepare")
-def eval_prepare(
-    mode: str = typer.Option(
-        ...,
-        "--mode",
-        help="'tune' (against fixtures) or 'audit' (against current code).",
-    ),
+@app.command(name="tune-prepare")
+def tune_prepare(
     agent: str = typer.Option(
         "",
         "--agent",
-        help="Single agent to prepare (default: all from registry / target).",
+        help="Single agent to prepare (default: all from registry).",
     ),
     fixtures: str = typer.Option(
         "tests/eval/fixtures",
         "--fixtures",
-        help="Fixtures root (tune mode only).",
+        help="Fixtures root.",
     ),
-    repeat: int = typer.Option(
-        1, "--repeat", help="Repeats per fixture (tune mode only)."
-    ),
-    target: str = typer.Option(
-        "",
-        "--target",
-        help="'framework' or 'project' (audit mode; default: auto-detect).",
-    ),
+    repeat: int = typer.Option(1, "--repeat", help="Repeats per fixture."),
     output_dir: str = typer.Option(
         "",
         "--output-dir",
@@ -630,27 +618,61 @@ def eval_prepare(
             "If set, write a small index.json + per-item items/item-NNNN.json under "
             "DIR (in addition to the stdout manifest). Lets the Workflow tool be "
             "invoked with a tiny args payload instead of a multi-MB inline manifest. "
-            "Idempotent: an existing DIR is cleared first. Tune mode only."
+            "Idempotent: an existing DIR is cleared first."
         ),
     ),
 ) -> None:
-    """Output the complete work-item list for subagent dispatch as JSON to stdout.
+    """Emit the tune-mode work-item manifest (fixtures × agents × repeats).
 
-    Consumed by the slash command, which passes it to a Workflow tool invocation.
+    Output is JSON on stdout; consumed by /reviewers:tune.
     """
-    if mode == "tune":
-        _emit_tune_prep(agent, Path(fixtures), repeat, output_dir, split_to)
-    elif mode == "audit":
-        _emit_audit_prep(agent, target, output_dir)
-    elif mode == "gate":
-        _emit_gate_prep()
-    else:
-        typer.echo(
-            f"eval-prepare: invalid --mode '{mode}' "
-            "(expected 'tune', 'audit', or 'gate')",
-            err=True,
-        )
-        raise typer.Exit(2)
+    _emit_tune_prep(agent, Path(fixtures), repeat, output_dir, split_to)
+
+
+@app.command(name="audit-prepare")
+def audit_prepare(
+    agent: str = typer.Option(
+        "",
+        "--agent",
+        help="Single agent to prepare (default: all active for the target).",
+    ),
+    target: str = typer.Option(
+        "",
+        "--target",
+        help="'framework' or 'project' (default: auto-detect).",
+    ),
+    output_dir: str = typer.Option(
+        "",
+        "--output-dir",
+        help="Output dir for finalize (echoed in the prep manifest).",
+    ),
+) -> None:
+    """Emit the audit-mode work-item manifest (current code, one item per agent).
+
+    Output is JSON on stdout; consumed by /reviewers:audit.
+    """
+    _emit_audit_prep(agent, target, output_dir)
+
+
+@app.command(name="gate-prepare")
+def gate_prepare(
+    split_to: str = typer.Option(
+        "",
+        "--split-to",
+        help=(
+            "If set, write a small index.json + per-item items/item-NNNN.json under "
+            "DIR (in addition to the stdout manifest). Lets the Workflow tool be "
+            "invoked with a tiny args payload instead of a multi-MB inline manifest. "
+            "Idempotent: an existing DIR is cleared first."
+        ),
+    ),
+) -> None:
+    """Emit the gate-mode work-item manifest (affected agents for the staged set).
+
+    Output is JSON on stdout; consumed by /reviewers:gate (and the PreToolUse
+    hook, which uses it to recompute the current staged_hash).
+    """
+    _emit_gate_prep(split_to)
 
 
 def _staged_files() -> list[str]:
@@ -754,47 +776,80 @@ def _staged_hash(staged: list[str]) -> str:
     return "sha256:" + h.hexdigest()
 
 
-def _emit_gate_prep() -> None:
+def _emit_gate_prep(split_to: str = "") -> None:
     """Emit a gate-mode manifest from the current staged set."""
+    import shutil
+
     staged = _staged_files()
     detected_mode, agents = _affected_agents(staged)
+    staged_hash = _staged_hash(staged)
+
     if detected_mode == "noop":
         manifest: dict = {
             "mode": "noop",
             "agents_set": [],
             "work_items": [],
-            "staged_hash": _staged_hash(staged),
+            "staged_hash": staged_hash,
             "output_dir": ".framework/audit/latest",
         }
-        typer.echo(json.dumps(manifest, indent=2))
-        return
-    if detected_mode == "regrade":
+    elif detected_mode == "regrade":
         manifest = {
             "mode": "regrade",
             "agents_set": [],
             "work_items": [],
-            "staged_hash": _staged_hash(staged),
+            "staged_hash": staged_hash,
             "output_dir": ".framework/audit/latest",
         }
-        typer.echo(json.dumps(manifest, indent=2))
-        return
-    # Build work items for each affected agent (same shape as audit-mode items)
-    diff = _review_diff()
-    root = Path.cwd()
-    work_items: list[dict] = []
-    for a in agents:
-        try:
-            spec = get_agent(a)
-        except KeyError:
-            continue
-        work_items.append(_build_audit_work_item(spec, diff, root))
-    manifest = {
-        "mode": "gate",
-        "agents_set": agents,
-        "work_items": work_items,
-        "staged_hash": _staged_hash(staged),
-        "output_dir": ".framework/audit/latest",
-    }
+    else:
+        # Build work items for each affected agent (same shape as audit-mode items)
+        diff = _review_diff()
+        root = Path.cwd()
+        work_items: list[dict] = []
+        for a in agents:
+            try:
+                spec = get_agent(a)
+            except KeyError:
+                continue
+            work_items.append(_build_audit_work_item(spec, diff, root))
+        manifest = {
+            "mode": "gate",
+            "agents_set": agents,
+            "work_items": work_items,
+            "staged_hash": staged_hash,
+            "output_dir": ".framework/audit/latest",
+        }
+
+    # Optional split-manifest write: in addition to the stdout manifest, write a small
+    # index.json + per-item items/item-NNNN.json so the Workflow tool can be invoked with
+    # a tiny args payload ({indexPath, itemsDir}) instead of a multi-MB inline manifest.
+    # Mirrors the tune-prepare split layout but with gate's simpler item shape
+    # (one item per affected agent; no kind/case/repeat dimension).
+    if split_to:
+        split_dir = Path(split_to)
+        if split_dir.exists():
+            shutil.rmtree(split_dir)
+        items_dir = split_dir / "items"
+        items_dir.mkdir(parents=True, exist_ok=True)
+
+        index_items: list[dict] = []
+        for i, wi in enumerate(manifest["work_items"]):
+            (items_dir / f"item-{i:04d}.json").write_text(json.dumps(wi, indent=2))
+            index_items.append(
+                {
+                    "i": i,
+                    "agent": wi["agent"],
+                    "subagent_type": wi["subagent_type"],
+                }
+            )
+        index = {
+            "mode": manifest["mode"],
+            "agents_set": manifest["agents_set"],
+            "staged_hash": staged_hash,
+            "items": index_items,
+            "output_dir": manifest["output_dir"],
+        }
+        (split_dir / "index.json").write_text(json.dumps(index, indent=2))
+
     typer.echo(json.dumps(manifest, indent=2))
 
 
@@ -823,7 +878,7 @@ def _emit_tune_prep(
         try:
             spec = get_agent(a)
         except KeyError:
-            typer.echo(f"eval-prepare: unknown agent '{a}'", err=True)
+            typer.echo(f"tune-prepare: unknown agent '{a}'", err=True)
             raise typer.Exit(1) from None
         for fx in by_agent.get(a, []):
             root, diff = realize_cached(fx, cache, base_dir)
@@ -977,7 +1032,7 @@ def _emit_audit_prep(single_agent: str, target_arg: str, output_dir: str) -> Non
     if single_agent:
         if single_agent not in all_agents:
             typer.echo(
-                f"eval-prepare: agent '{single_agent}' not active for target '{target}'",
+                f"audit-prepare: agent '{single_agent}' not active for target '{target}'",
                 err=True,
             )
             raise typer.Exit(1)

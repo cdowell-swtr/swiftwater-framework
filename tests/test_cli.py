@@ -1163,8 +1163,8 @@ def test_eval_analyze_handles_audit_records_gracefully(tmp_path):
     assert "## Drift check" in result.output
 
 
-def test_eval_prepare_tune_outputs_work_items_for_single_agent(tmp_path, monkeypatch):
-    """eval-prepare --mode tune --agent security outputs a JSON list of work items
+def test_tune_prepare_outputs_work_items_for_single_agent(tmp_path, monkeypatch):
+    """tune-prepare --agent security outputs a JSON list of work items
     with diff + system_blocks + user_message + subagent_type + model per (agent,fixture,repeat)."""
     _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
     _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
@@ -1176,9 +1176,7 @@ def test_eval_prepare_tune_outputs_work_items_for_single_agent(tmp_path, monkeyp
     result = runner.invoke(
         app,
         [
-            "eval-prepare",
-            "--mode",
-            "tune",
+            "tune-prepare",
             "--agent",
             "security",
             "--fixtures",
@@ -1206,7 +1204,7 @@ def test_eval_prepare_tune_outputs_work_items_for_single_agent(tmp_path, monkeyp
     assert item["tools_allowed"] is None  # bundle: no tools
 
 
-def test_eval_prepare_tune_uses_explore_for_agentic_agents(tmp_path, monkeypatch):
+def test_tune_prepare_uses_explore_for_agentic_agents(tmp_path, monkeypatch):
     """Agentic-tier agents (e.g., architecture) get subagent_type='Explore' + tools_allowed."""
     _make_fixture(tmp_path, "architecture", "bad", "b1", "+++ b/a.py\n", "a.py")
 
@@ -1217,9 +1215,7 @@ def test_eval_prepare_tune_uses_explore_for_agentic_agents(tmp_path, monkeypatch
     result = runner.invoke(
         app,
         [
-            "eval-prepare",
-            "--mode",
-            "tune",
+            "tune-prepare",
             "--agent",
             "architecture",
             "--fixtures",
@@ -1237,8 +1233,8 @@ def test_eval_prepare_tune_uses_explore_for_agentic_agents(tmp_path, monkeypatch
     assert "root_dir" in item  # agentic items carry the rendered root for tool access
 
 
-def test_eval_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
-    """eval-prepare --mode tune --split-to DIR writes index.json + items/item-NNNN.json
+def test_tune_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
+    """tune-prepare --split-to DIR writes index.json + items/item-NNNN.json
     in addition to printing the full manifest to stdout (unchanged behavior).
 
     The split layout exists so the Workflow tool can be invoked with a tiny args payload
@@ -1255,9 +1251,7 @@ def test_eval_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
     result = runner.invoke(
         app,
         [
-            "eval-prepare",
-            "--mode",
-            "tune",
+            "tune-prepare",
             "--agent",
             "security",
             "--fixtures",
@@ -1312,7 +1306,7 @@ def test_eval_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
         assert on_disk["diff"] == work_item["diff"]
 
 
-def test_eval_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
+def test_tune_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
     """--split-to is idempotent: a pre-existing target dir is cleared before write
     so stale items from a prior run can't leak into a new sweep's index."""
     _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
@@ -1331,9 +1325,7 @@ def test_eval_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
     result = runner.invoke(
         app,
         [
-            "eval-prepare",
-            "--mode",
-            "tune",
+            "tune-prepare",
             "--agent",
             "security",
             "--fixtures",
@@ -1352,13 +1344,13 @@ def test_eval_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
     assert (split_dir / "items" / "item-0000.json").is_file()
 
 
-def test_eval_prepare_audit_detects_framework_target(tmp_path, monkeypatch):
-    """eval-prepare --mode audit auto-detects 'framework' target when run from the framework repo
+def test_audit_prepare_detects_framework_target(tmp_path, monkeypatch):
+    """audit-prepare auto-detects 'framework' target when run from the framework repo
     (presence of src/framework_cli/ + pyproject.toml [project].name='framework-cli')."""
     import framework_cli.cli as cli_mod
 
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
-    result = runner.invoke(app, ["eval-prepare", "--mode", "audit"])
+    result = runner.invoke(app, ["audit-prepare"])
     assert result.exit_code == 0, result.output
     data = _json.loads(result.output)
     assert data["mode"] == "audit"
@@ -1371,22 +1363,18 @@ def test_eval_prepare_audit_detects_framework_target(tmp_path, monkeypatch):
     assert item["repeat_idx"] == 0
 
 
-def test_eval_prepare_audit_explicit_target_override(tmp_path, monkeypatch):
+def test_audit_prepare_explicit_target_override(tmp_path, monkeypatch):
     """--target flag forces the target regardless of cwd signals."""
     import framework_cli.cli as cli_mod
 
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    result = runner.invoke(
-        app, ["eval-prepare", "--mode", "audit", "--target", "framework"]
-    )
+    result = runner.invoke(app, ["audit-prepare", "--target", "framework"])
     assert result.exit_code == 0, result.output
     data = _json.loads(result.output)
     assert data["target"] == "framework"
 
 
-def test_eval_prepare_audit_tolerates_pyproject_formatting_variations(
-    tmp_path, monkeypatch
-):
+def test_audit_prepare_tolerates_pyproject_formatting_variations(tmp_path, monkeypatch):
     """Whitespace and quote variations in pyproject.toml should still detect framework target."""
     import framework_cli.cli as cli_mod
 
@@ -1400,7 +1388,7 @@ def test_eval_prepare_audit_tolerates_pyproject_formatting_variations(
     )
     monkeypatch.chdir(fake_repo)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    result = runner.invoke(app, ["eval-prepare", "--mode", "audit"])
+    result = runner.invoke(app, ["audit-prepare"])
     # Even with the whitespace, framework auto-detection should fire.
     # If it doesn't (project-target also missing — no .copier-answers.yml),
     # this would error with "Could not auto-detect target".
@@ -1412,7 +1400,7 @@ def test_eval_prepare_audit_tolerates_pyproject_formatting_variations(
     assert data["target"] == "framework"
 
 
-def test_eval_prepare_gate_affected_single_prompt(tmp_path, monkeypatch):
+def test_gate_prepare_affected_single_prompt(tmp_path, monkeypatch):
     """A staged change to one agent's prompt → only that agent in the work items."""
     import framework_cli.cli as cli_mod
 
@@ -1423,7 +1411,7 @@ def test_eval_prepare_gate_affected_single_prompt(tmp_path, monkeypatch):
         lambda: ["src/framework_cli/review/agents/security.md"],
     )
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
-    result = runner.invoke(app, ["eval-prepare", "--mode", "gate"])
+    result = runner.invoke(app, ["gate-prepare"])
     assert result.exit_code == 0, result.output
     data = _json.loads(result.output)
     assert data["mode"] == "gate"
@@ -1433,7 +1421,7 @@ def test_eval_prepare_gate_affected_single_prompt(tmp_path, monkeypatch):
     assert data["staged_hash"].startswith("sha256:")
 
 
-def test_eval_prepare_gate_runner_change_affects_all_bundle(monkeypatch):
+def test_gate_prepare_runner_change_affects_all_bundle(monkeypatch):
     """A staged change to runner.py → all 11 bundle agents."""
     import framework_cli.cli as cli_mod
 
@@ -1443,7 +1431,7 @@ def test_eval_prepare_gate_runner_change_affects_all_bundle(monkeypatch):
         lambda: ["src/framework_cli/review/runner.py"],
     )
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    result = runner.invoke(app, ["eval-prepare", "--mode", "gate"])
+    result = runner.invoke(app, ["gate-prepare"])
     assert result.exit_code == 0, result.output
     data = _json.loads(result.output)
     # 11 bundle agents (everything not agentic) should be the agent set.
@@ -1456,7 +1444,115 @@ def test_eval_prepare_gate_runner_change_affects_all_bundle(monkeypatch):
     assert len(data["work_items"]) == len(expected)
 
 
-def test_eval_prepare_gate_thresholds_only_signals_regrade(monkeypatch):
+def test_gate_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
+    """gate-prepare --split-to DIR writes index.json + items/item-NNNN.json
+    in addition to printing the full manifest to stdout (unchanged behavior).
+
+    The split layout exists so the Workflow tool can be invoked with a tiny args payload
+    ({indexPath, itemsDir}) rather than a multi-MB inline manifest. Mirrors the
+    tune-prepare split-manifest pattern, but with gate's simpler item shape
+    (one item per affected agent; no kind/case/repeat dimension).
+    """
+    import framework_cli.cli as cli_mod
+
+    # Staged change to runner.py → all bundle agents affected.
+    monkeypatch.setattr(
+        cli_mod,
+        "_staged_files",
+        lambda: ["src/framework_cli/review/runner.py"],
+    )
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+
+    split_dir = tmp_path / "split-out"
+    result = runner.invoke(app, ["gate-prepare", "--split-to", str(split_dir)])
+    assert result.exit_code == 0, result.output
+
+    # Stdout still carries the full manifest (backward compat).
+    manifest = _json.loads(result.output)
+    assert manifest["mode"] == "gate"
+    assert len(manifest["work_items"]) >= 1
+    assert "staged_hash" in manifest
+
+    # Index file: small per-item metadata, no system_blocks / no diff.
+    index_path = split_dir / "index.json"
+    assert index_path.is_file(), f"index.json not written under {split_dir}"
+    index = _json.loads(index_path.read_text())
+    assert index["mode"] == "gate"
+    assert "staged_hash" in index
+    assert index["staged_hash"] == manifest["staged_hash"]
+    assert "agents_set" in index
+    assert index["agents_set"] == manifest["agents_set"]
+    assert len(index["items"]) == len(manifest["work_items"])
+    first = index["items"][0]
+    assert set(first.keys()) >= {"i", "agent", "subagent_type"}
+    # Index is intentionally lightweight — must NOT carry the bulky fields.
+    assert "system_blocks" not in first
+    assert "diff" not in first
+    assert "user_message" not in first
+
+    # Per-item files exist with the expected full payload.
+    items_dir = split_dir / "items"
+    assert items_dir.is_dir()
+    for i, work_item in enumerate(manifest["work_items"]):
+        item_path = items_dir / f"item-{i:04d}.json"
+        assert item_path.is_file(), f"missing {item_path}"
+        on_disk = _json.loads(item_path.read_text())
+        assert on_disk["agent"] == work_item["agent"]
+        assert on_disk["system_blocks"] == work_item["system_blocks"]
+        assert on_disk["user_message"] == work_item["user_message"]
+        assert on_disk["subagent_type"] == work_item["subagent_type"]
+
+
+def test_gate_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
+    """--split-to is idempotent: a pre-existing target dir is cleared before write
+    so stale items from a prior staged set can't leak into the new run."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(
+        cli_mod,
+        "_staged_files",
+        lambda: ["src/framework_cli/review/agents/security.md"],
+    )
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+
+    split_dir = tmp_path / "split-out"
+    split_dir.mkdir()
+    (split_dir / "stale.txt").write_text("leftover")
+    (split_dir / "items").mkdir()
+    (split_dir / "items" / "item-9999.json").write_text("{}")
+
+    result = runner.invoke(app, ["gate-prepare", "--split-to", str(split_dir)])
+    assert result.exit_code == 0, result.output
+
+    assert not (split_dir / "stale.txt").exists()
+    assert not (split_dir / "items" / "item-9999.json").exists()
+    assert (split_dir / "index.json").is_file()
+    assert (split_dir / "items" / "item-0000.json").is_file()
+
+
+def test_gate_prepare_split_to_noop_writes_empty_index(tmp_path, monkeypatch):
+    """When mode is noop or regrade, --split-to still writes an index.json
+    (with empty items) so the slash command can uniformly invoke the workflow
+    when desired. The stdout manifest's mode remains the source of truth for
+    branching."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(
+        cli_mod, "_staged_files", lambda: ["tests/eval/fixtures/thresholds.yaml"]
+    )
+
+    split_dir = tmp_path / "split-out"
+    result = runner.invoke(app, ["gate-prepare", "--split-to", str(split_dir)])
+    assert result.exit_code == 0, result.output
+    manifest = _json.loads(result.output)
+    assert manifest["mode"] == "regrade"
+
+    index = _json.loads((split_dir / "index.json").read_text())
+    assert index["mode"] == "regrade"
+    assert index["items"] == []
+
+
+def test_gate_prepare_thresholds_only_signals_regrade(monkeypatch):
     """If the only staged file is tests/eval/fixtures/thresholds.yaml, the manifest
     signals mode='regrade' (no subagent dispatch needed)."""
     import framework_cli.cli as cli_mod
@@ -1464,7 +1560,7 @@ def test_eval_prepare_gate_thresholds_only_signals_regrade(monkeypatch):
     monkeypatch.setattr(
         cli_mod, "_staged_files", lambda: ["tests/eval/fixtures/thresholds.yaml"]
     )
-    result = runner.invoke(app, ["eval-prepare", "--mode", "gate"])
+    result = runner.invoke(app, ["gate-prepare"])
     assert result.exit_code == 0, result.output
     data = _json.loads(result.output)
     assert data["mode"] == "regrade"
