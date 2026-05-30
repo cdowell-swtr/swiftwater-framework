@@ -57,4 +57,4 @@ You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent
 - This command runs entirely on CC subagents (subscription quota), NOT the paid Anthropic API.
 - Output is **ephemeral** — `.framework/audit/latest/` is overwritten each run and gitignored. The path is stable so `/reviewers:gate` (Slice E2) knows where to look.
 - For the rare case where an audit finding warrants preservation as discovery-evidence (caught a real bug being fixed), manually excerpt the relevant snippet from `audit-report.md` into the commit message or PR description.
-- Auto-detection: framework target requires `src/framework_cli/` + `pyproject.toml` with `name = "swiftwater-framework"`. Project target requires `.copier-answers.yml`. Neither matches → error, pass `--target` explicitly.
+- Auto-detection: framework target requires `src/framework_cli/` + `pyproject.toml` with `[project].name = "framework-cli"` (parsed via tomllib, tolerant of whitespace variations). Project target requires `.copier-answers.yml`. Neither matches → error, pass `--target` explicitly.
