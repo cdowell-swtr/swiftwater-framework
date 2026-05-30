@@ -1,17 +1,40 @@
+diff --git a/README.md b/README.md
+index 195b180..9975c44 100644
+--- a/README.md
++++ b/README.md
+@@ -75,3 +75,4 @@ separate, ephemeral Postgres (`postgres-test`, reset every run) for the full E2E
+ - `GET /health` — readiness + SLO status
+ - `GET /metrics` — Prometheus metrics
+ - `GET /items` — example DB-backed listing (seeded data)
++- `GET /items/count` — total items in the catalogue (typed response)
+diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
+index 1b02bdf..0d8f82e 100644
 --- a/src/demo/routes/items.py
 +++ b/src/demo/routes/items.py
-@@ -29,3 +29,14 @@ def get_items(session: SessionDep) -> list[Item]:
+@@ -22,6 +22,12 @@ class ItemRead(BaseModel):
+     name: str
+ 
+ 
++class ItemCount(BaseModel):
++    """Response schema for the items-count endpoint."""
++
++    count: int
++
++
+ @router.get("/items", response_model=list[ItemRead])
+ def get_items(session: SessionDep) -> list[Item]:
+     """List seeded/created items — demonstrates the DB wiring end to end.
+@@ -29,3 +35,13 @@ def get_items(session: SessionDep) -> list[Item]:
      FastAPI serializes the ORM objects through ItemRead (the response contract).
      """
      return list_items(session)
 +
 +
-+@router.get("/items/count")
-+def count_items(session: SessionDep) -> dict:
++@router.get("/items/count", response_model=ItemCount)
++def count_items(session: SessionDep) -> ItemCount:
 +    """Return the total number of items in the catalogue.
 +
-+    Returns a JSON object with a single ``count`` key so the response
-+    schema is extensible without breaking existing consumers.
++    Returns ItemCount so the OpenAPI schema documents the count field
++    explicitly (consumers get a typed contract, not a bare dict).
 +    """
-+    items = list_items(session)
-+    return {"count": len(items)}
++    return ItemCount(count=len(list_items(session)))

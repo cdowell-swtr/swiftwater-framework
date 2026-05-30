@@ -1,21 +1,82 @@
+diff --git a/infra/compose/dev.yml b/infra/compose/dev.yml
+index 950f2a2..e799b01 100644
+--- a/infra/compose/dev.yml
++++ b/infra/compose/dev.yml
+@@ -65,3 +65,12 @@ services:
+ 
+ volumes:
+   pgdata: {}
++
++  redis:
++    image: redis:7
++    profiles: ["dev", "lite"]
++    healthcheck:
++      test: ["CMD", "redis-cli", "ping"]
++      interval: 5s
++      timeout: 3s
++      retries: 10
+diff --git a/infra/compose/observability.yml b/infra/compose/observability.yml
+index 0edac1e..07f4ab1 100644
 --- a/infra/compose/observability.yml
 +++ b/infra/compose/observability.yml
 @@ -91,6 +91,15 @@ services:
        postgres:
          condition: service_healthy
-
+ 
 +  redis-exporter:
 +    image: oliver006/redis_exporter:v1.62.0
-+    environment:
-+      REDIS_ADDR: "redis://redis:6379"
++    command: ["--redis.addr=redis://redis:6379"]
 +    ports:
 +      - "9121:9121"
 +    depends_on:
-+      - redis
++      redis:
++        condition: service_healthy
 +
  volumes:
    promdata: {}
    lokidata: {}
+diff --git a/infra/observability/grafana/dashboards/redis.json b/infra/observability/grafana/dashboards/redis.json
+new file mode 100644
+index 0000000..645c0a2
+--- /dev/null
++++ b/infra/observability/grafana/dashboards/redis.json
+@@ -0,0 +1,18 @@
++{
++  "uid": "redis",
++  "title": "Redis",
++  "tags": ["redis"],
++  "schemaVersion": 39,
++  "version": 1,
++  "time": {"from": "now-1h", "to": "now"},
++  "panels": [
++    {
++      "id": 1,
++      "title": "Redis Exporter Up",
++      "type": "stat",
++      "datasource": {"type": "prometheus", "uid": "prometheus"},
++      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
++      "targets": [{"refId": "A", "expr": "up{job=\"redis\"}"}]
++    }
++  ]
++}
+diff --git a/infra/observability/prometheus/alerts/redis_alerts.yml b/infra/observability/prometheus/alerts/redis_alerts.yml
+new file mode 100644
+index 0000000..7ebad30
+--- /dev/null
++++ b/infra/observability/prometheus/alerts/redis_alerts.yml
+@@ -0,0 +1,10 @@
++groups:
++- name: redis
++  rules:
++  - alert: RedisDown
++    expr: up{job="redis"} == 0
++    for: 5m
++    labels:
++      severity: warning
++    annotations:
++      summary: Redis exporter target is down — redis unreachable or exporter crashed
+diff --git a/infra/observability/prometheus/prometheus.yml b/infra/observability/prometheus/prometheus.yml
+index 8f3328f..983c763 100644
 --- a/infra/observability/prometheus/prometheus.yml
 +++ b/infra/observability/prometheus/prometheus.yml
 @@ -18,6 +18,9 @@ scrape_configs:
@@ -28,79 +89,3 @@
    - job_name: postgres
      static_configs:
        - targets: ["postgres-exporter:9187"]
---- a/infra/observability/prometheus/alerts/postgres_alerts.yml
-+++ b/infra/observability/prometheus/alerts/postgres_alerts.yml
-@@ -8,3 +8,12 @@ groups:
-       severity: warning
-     annotations:
-       summary: Postgres exporter target is down (postgres unreachable or exporter crashed) — app-specific default; tune or remove
-+- name: redis
-+  rules:
-+  - alert: RedisDown
-+    expr: up{job="redis"} == 0
-+    for: 5m
-+    labels:
-+      severity: warning
-+    annotations:
-+      summary: Redis exporter target is down — redis unreachable or exporter crashed
-diff --git a/infra/observability/grafana/dashboards/redis.json b/infra/observability/grafana/dashboards/redis.json
-new file mode 100644
---- /dev/null
-+++ b/infra/observability/grafana/dashboards/redis.json
-@@ -0,0 +1,56 @@
-+{
-+  "uid": "redis",
-+  "title": "Redis",
-+  "tags": [
-+    "redis"
-+  ],
-+  "schemaVersion": 39,
-+  "version": 1,
-+  "time": {
-+    "from": "now-1h",
-+    "to": "now"
-+  },
-+  "panels": [
-+    {
-+      "id": 1,
-+      "title": "Redis Exporter Up",
-+      "type": "stat",
-+      "datasource": {
-+        "type": "prometheus",
-+        "uid": "prometheus"
-+      },
-+      "gridPos": {
-+        "h": 4,
-+        "w": 6,
-+        "x": 0,
-+        "y": 0
-+      },
-+      "targets": [
-+        {
-+          "refId": "A",
-+          "expr": "up{job=\"redis\"}",
-+          "legendFormat": "__auto"
-+        }
-+      ],
-+      "fieldConfig": {
-+        "defaults": {
-+          "unit": "short",
-+          "thresholds": {
-+            "mode": "absolute",
-+            "steps": [
-+              {
-+                "color": "red",
-+                "value": null
-+              },
-+              {
-+                "color": "green",
-+                "value": 1
-+              }
-+            ]
-+          }
-+        },
-+        "overrides": []
-+      }
-+    }
-+  ]
-+}
