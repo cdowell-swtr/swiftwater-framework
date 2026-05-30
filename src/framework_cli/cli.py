@@ -623,13 +623,23 @@ def eval_prepare(
         "--output-dir",
         help="Output dir for finalize (echoed in the prep manifest).",
     ),
+    split_to: str = typer.Option(
+        "",
+        "--split-to",
+        help=(
+            "If set, write a small index.json + per-item items/item-NNNN.json under "
+            "DIR (in addition to the stdout manifest). Lets the Workflow tool be "
+            "invoked with a tiny args payload instead of a multi-MB inline manifest. "
+            "Idempotent: an existing DIR is cleared first. Tune mode only."
+        ),
+    ),
 ) -> None:
     """Output the complete work-item list for subagent dispatch as JSON to stdout.
 
     Consumed by the slash command, which passes it to a Workflow tool invocation.
     """
     if mode == "tune":
-        _emit_tune_prep(agent, Path(fixtures), repeat, output_dir)
+        _emit_tune_prep(agent, Path(fixtures), repeat, output_dir, split_to)
     elif mode == "audit":
         _emit_audit_prep(agent, target, output_dir)
     elif mode == "gate":
@@ -789,8 +799,13 @@ def _emit_gate_prep() -> None:
 
 
 def _emit_tune_prep(
-    single_agent: str, fixtures_root: Path, repeat: int, output_dir: str
+    single_agent: str,
+    fixtures_root: Path,
+    repeat: int,
+    output_dir: str,
+    split_to: str = "",
 ) -> None:
+    import shutil
     import tempfile
 
     from framework_cli.review.evals import load_fixtures
@@ -821,6 +836,40 @@ def _emit_tune_prep(
         "work_items": work_items,
         "output_dir": output_dir or "",
     }
+
+    # Optional split-manifest write: in addition to the stdout manifest, write a small
+    # index.json + per-item items/item-NNNN.json so the Workflow tool can be invoked with
+    # a tiny args payload ({indexPath, itemsDir}) instead of a multi-MB inline manifest.
+    if split_to:
+        split_dir = Path(split_to)
+        if split_dir.exists():
+            shutil.rmtree(split_dir)
+        items_dir = split_dir / "items"
+        items_dir.mkdir(parents=True, exist_ok=True)
+
+        index_items: list[dict] = []
+        for i, wi in enumerate(work_items):
+            (items_dir / f"item-{i:04d}.json").write_text(json.dumps(wi, indent=2))
+            index_items.append(
+                {
+                    "i": i,
+                    "agent": wi["agent"],
+                    "kind": wi["kind"],
+                    "case": wi["case"],
+                    "repeat_idx": wi["repeat_idx"],
+                    "subagent_type": wi["subagent_type"],
+                    "model": wi["model"],
+                    "seeded_file": wi.get("seeded_file"),
+                }
+            )
+        index = {
+            "mode": "tune",
+            "agents_set": targets,
+            "items": index_items,
+            "output_dir": output_dir or "",
+        }
+        (split_dir / "index.json").write_text(json.dumps(index, indent=2))
+
     typer.echo(json.dumps(manifest, indent=2))
 
 

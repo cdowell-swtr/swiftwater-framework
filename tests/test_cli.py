@@ -1237,6 +1237,121 @@ def test_eval_prepare_tune_uses_explore_for_agentic_agents(tmp_path, monkeypatch
     assert "root_dir" in item  # agentic items carry the rendered root for tool access
 
 
+def test_eval_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
+    """eval-prepare --mode tune --split-to DIR writes index.json + items/item-NNNN.json
+    in addition to printing the full manifest to stdout (unchanged behavior).
+
+    The split layout exists so the Workflow tool can be invoked with a tiny args payload
+    ({indexPath, itemsDir}) rather than a multi-MB inline manifest.
+    """
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
+
+    split_dir = tmp_path / "split-out"
+    result = runner.invoke(
+        app,
+        [
+            "eval-prepare",
+            "--mode",
+            "tune",
+            "--agent",
+            "security",
+            "--fixtures",
+            str(tmp_path),
+            "--repeat",
+            "2",
+            "--split-to",
+            str(split_dir),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    # Stdout still carries the full manifest (backward compat).
+    manifest = _json.loads(result.output)
+    assert manifest["mode"] == "tune"
+    assert len(manifest["work_items"]) == 4  # 2 fixtures × 2 repeats
+
+    # Index file: small per-item metadata, no system_blocks / no diff.
+    index_path = split_dir / "index.json"
+    assert index_path.is_file(), f"index.json not written under {split_dir}"
+    index = _json.loads(index_path.read_text())
+    assert index["mode"] == "tune"
+    assert index["agents_set"] == ["security"]
+    assert len(index["items"]) == 4
+    first = index["items"][0]
+    assert set(first.keys()) >= {
+        "i",
+        "agent",
+        "kind",
+        "case",
+        "repeat_idx",
+        "subagent_type",
+        "model",
+        "seeded_file",
+    }
+    # Index is intentionally lightweight — must NOT carry the bulky fields.
+    assert "system_blocks" not in first
+    assert "diff" not in first
+    assert "user_message" not in first
+
+    # Per-item files exist with the expected full payload.
+    items_dir = split_dir / "items"
+    assert items_dir.is_dir()
+    for i, work_item in enumerate(manifest["work_items"]):
+        item_path = items_dir / f"item-{i:04d}.json"
+        assert item_path.is_file(), f"missing {item_path}"
+        on_disk = _json.loads(item_path.read_text())
+        assert on_disk["agent"] == work_item["agent"]
+        assert on_disk["system_blocks"] == work_item["system_blocks"]
+        assert on_disk["user_message"] == work_item["user_message"]
+        assert on_disk["tools_allowed"] == work_item["tools_allowed"]
+        assert on_disk["diff"] == work_item["diff"]
+
+
+def test_eval_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
+    """--split-to is idempotent: a pre-existing target dir is cleared before write
+    so stale items from a prior run can't leak into a new sweep's index."""
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
+
+    split_dir = tmp_path / "split-out"
+    split_dir.mkdir()
+    # Pre-existing stale content that must not survive the rewrite.
+    (split_dir / "stale.txt").write_text("leftover")
+    (split_dir / "items").mkdir()
+    (split_dir / "items" / "item-9999.json").write_text("{}")
+
+    result = runner.invoke(
+        app,
+        [
+            "eval-prepare",
+            "--mode",
+            "tune",
+            "--agent",
+            "security",
+            "--fixtures",
+            str(tmp_path),
+            "--repeat",
+            "1",
+            "--split-to",
+            str(split_dir),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    assert not (split_dir / "stale.txt").exists()
+    assert not (split_dir / "items" / "item-9999.json").exists()
+    assert (split_dir / "index.json").is_file()
+    assert (split_dir / "items" / "item-0000.json").is_file()
+
+
 def test_eval_prepare_audit_detects_framework_target(tmp_path, monkeypatch):
     """eval-prepare --mode audit auto-detects 'framework' target when run from the framework repo
     (presence of src/framework_cli/ + pyproject.toml [project].name='framework-cli')."""
