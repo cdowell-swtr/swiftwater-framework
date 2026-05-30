@@ -10,3 +10,6 @@ build/
 
 # Personal, machine-local Claude Code settings (shared config lives in settings.json)
 .claude/settings.local.json
+
+# Local reviewers (audit + gate) ephemeral outputs
+.framework/audit/
