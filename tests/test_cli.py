@@ -550,7 +550,8 @@ def test_eval_analyze_produces_scorecard_cost_diagnosis_and_thresholds(tmp_path)
     )
 
     result = runner.invoke(app, ["eval-analyze", str(d)])
-    assert result.exit_code == 0, result.output
+    # exit 1 because compliance FAILs its fp threshold (gate semantics)
+    assert result.exit_code == 1, result.output
     out = result.output
     # Scorecard
     assert "## Scorecard" in out
@@ -989,3 +990,105 @@ def test_eval_reads_eval_key_not_runtime(monkeypatch, tmp_path):
     monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")  # wrong scope for eval
     result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
     assert result.exit_code == 0 and "skipped" in result.stdout.lower()
+
+
+def test_drift_check_flags_disallowed_tools(tmp_path):
+    """drift_check returns one record per call that used tools outside the local whitelist."""
+    from framework_cli.review.analyze import Record, drift_check
+
+    records = [
+        Record(
+            agent="architecture",
+            kind="bad",
+            case="b1",
+            repeat=0,
+            seeded_file=None,
+            findings=[],
+            usage={},
+            latency_ms=None,
+            stop_reason=None,
+            raw_text="",
+            turns=3,
+            tool_calls=[
+                {"turn": 1, "tool": "Read", "input": {"path": "x"}},
+                {"turn": 2, "tool": "Bash", "input": {"command": "ls"}},
+                {"turn": 3, "tool": "WebFetch", "input": {"url": "..."}},
+            ],
+        ),
+        Record(
+            agent="security",
+            kind="bad",
+            case="b1",
+            repeat=0,
+            seeded_file=None,
+            findings=[],
+            usage={},
+            latency_ms=None,
+            stop_reason=None,
+            raw_text="",
+            turns=1,
+            tool_calls=[],
+        ),
+    ]
+    drifts = drift_check(records)
+    assert len(drifts) == 1
+    assert drifts[0]["agent"] == "architecture"
+    assert set(drifts[0]["disallowed_tools"]) == {"Bash", "WebFetch"}
+    assert drifts[0]["counts"] == {"Bash": 1, "WebFetch": 1}
+
+
+def test_eval_analyze_strict_exits_2_on_drift(tmp_path):
+    """eval-analyze --strict exits 2 when any drift is detected."""
+    d = tmp_path / "f"
+    _write_record(
+        d,
+        "architecture",
+        "bad",
+        "b1",
+        0,
+        findings=[],
+        turns=2,
+        tool_calls=[{"turn": 1, "tool": "Bash", "input": {"command": "ls"}}],
+    )
+    result = runner.invoke(app, ["eval-analyze", str(d), "--strict"])
+    assert result.exit_code == 2, result.output
+    assert "Drift" in result.output or "drift" in result.output
+
+
+def test_eval_analyze_strict_exits_0_without_drift(tmp_path):
+    """eval-analyze --strict exits 0 when no drift is detected (only Read/Grep/Glob used)."""
+    d = tmp_path / "f"
+    _write_record(
+        d,
+        "architecture",
+        "bad",
+        "b1",
+        0,
+        findings=[],
+        turns=2,
+        tool_calls=[{"turn": 1, "tool": "Read", "input": {"path": "x"}}],
+    )
+    result = runner.invoke(app, ["eval-analyze", str(d), "--strict"])
+    assert result.exit_code == 0, result.output
+
+
+def test_eval_analyze_renders_drift_section(tmp_path):
+    """The analyze report includes a ## Drift check section listing offending calls."""
+    d = tmp_path / "f"
+    _write_record(
+        d,
+        "architecture",
+        "bad",
+        "b1",
+        0,
+        findings=[],
+        turns=2,
+        tool_calls=[{"turn": 1, "tool": "Bash", "input": {"command": "ls"}}],
+    )
+    result = runner.invoke(app, ["eval-analyze", str(d)])
+    assert result.exit_code == 1, (
+        result.output
+    )  # FAIL on agent's score, not exit code 2
+    assert "## Drift check" in result.output
+    assert "architecture" in result.output
+    assert "Bash" in result.output

@@ -244,6 +244,32 @@ def agentic_behavior(
     return out
 
 
+_ALLOWED_LOCAL_TOOLS = frozenset({"Read", "Grep", "Glob"})
+
+
+def drift_check(records: list[Record]) -> list[dict[str, Any]]:
+    """Flag any record whose tool_calls include a tool outside the local whitelist
+    (Read, Grep, Glob — the CC equivalents of the production read_file/grep/glob sandbox)."""
+    out: list[dict[str, Any]] = []
+    for r in records:
+        disallowed_counts: dict[str, int] = {}
+        for tc in r.tool_calls:
+            name = tc.get("tool")
+            if isinstance(name, str) and name not in _ALLOWED_LOCAL_TOOLS:
+                disallowed_counts[name] = disallowed_counts.get(name, 0) + 1
+        if disallowed_counts:
+            out.append(
+                {
+                    "agent": r.agent,
+                    "case": r.case,
+                    "repeat": r.repeat,
+                    "disallowed_tools": sorted(disallowed_counts),
+                    "counts": disallowed_counts,
+                }
+            )
+    return out
+
+
 def propose_thresholds(
     scores: list[AgentScore], *, margin: float = 0.10
 ) -> dict[str, dict[str, float]]:
@@ -353,6 +379,20 @@ def render_markdown(
         if paths:
             lines.append(f"- Top paths/patterns: {paths}")
         lines.append("")
+    lines.append("## Drift check")
+    drifts = drift_check(records)
+    if not drifts:
+        lines.append(
+            "_(no drift detected — all tool calls within the production sandbox)_"
+        )
+    else:
+        for d in drifts:
+            tools = ", ".join(f"{t}×{d['counts'][t]}" for t in d["disallowed_tools"])
+            lines.append(
+                f"- ⚠ `{d['agent']}` / `{d['case']}` r{d['repeat']} — "
+                f"disallowed tools: {tools}"
+            )
+    lines.append("")
     lines.append("## Proposed thresholds.yaml")
     lines.append("```yaml")
     for agent in sorted(proposed):

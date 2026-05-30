@@ -539,6 +539,11 @@ def eval_analyze(
         "--margin",
         help="Margin applied when proposing thresholds (recall_min = recall - margin).",
     ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit code 2 if any drift is detected (used by the gate context).",
+    ),
 ) -> None:
     """Produce scorecard + cost + recall/fp diagnosis + threshold proposal from
     per-call eval records (the artifacts written by `framework eval --findings-out`)."""
@@ -570,6 +575,20 @@ def eval_analyze(
         typer.echo(f"eval-analyze: wrote {out}")
     else:
         typer.echo(md)
+    if strict:
+        drifts = analyze.drift_check(records)
+        if drifts:
+            typer.echo(
+                f"eval-analyze: STRICT failure — {len(drifts)} drifted call(s) "
+                f"(see ## Drift check section above)",
+                err=True,
+            )
+            raise typer.Exit(2)
+        # --strict is purely about drift fidelity; do not also exit on score-FAILs.
+        return
+    # Non-strict: exit 1 if any agent failed its thresholds (so callers can detect).
+    if any(not s.passed for s in scores):
+        raise typer.Exit(1)
 
 
 @app.command()
