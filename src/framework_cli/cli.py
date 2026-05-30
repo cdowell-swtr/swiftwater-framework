@@ -748,10 +748,12 @@ def _detect_audit_target(explicit: str) -> str:
     cwd = Path.cwd()
     if (cwd / "src" / "framework_cli").is_dir() and (cwd / "pyproject.toml").is_file():
         try:
-            content = (cwd / "pyproject.toml").read_text()
-            if 'name = "framework-cli"' in content:
+            import tomllib
+
+            data = tomllib.loads((cwd / "pyproject.toml").read_text())
+            if data.get("project", {}).get("name") == "framework-cli":
                 return "framework"
-        except OSError:
+        except (OSError, tomllib.TOMLDecodeError):
             pass
     if (cwd / ".copier-answers.yml").is_file():
         return "project"

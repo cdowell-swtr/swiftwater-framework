@@ -1239,7 +1239,7 @@ def test_eval_prepare_tune_uses_explore_for_agentic_agents(tmp_path, monkeypatch
 
 def test_eval_prepare_audit_detects_framework_target(tmp_path, monkeypatch):
     """eval-prepare --mode audit auto-detects 'framework' target when run from the framework repo
-    (presence of src/framework_cli/ + pyproject.toml name='swiftwater-framework')."""
+    (presence of src/framework_cli/ + pyproject.toml [project].name='framework-cli')."""
     import framework_cli.cli as cli_mod
 
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
@@ -1266,4 +1266,32 @@ def test_eval_prepare_audit_explicit_target_override(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     data = _json.loads(result.output)
+    assert data["target"] == "framework"
+
+
+def test_eval_prepare_audit_tolerates_pyproject_formatting_variations(
+    tmp_path, monkeypatch
+):
+    """Whitespace and quote variations in pyproject.toml should still detect framework target."""
+    import framework_cli.cli as cli_mod
+
+    # Simulate a different-cwd pyproject with whitespace variation
+    fake_repo = tmp_path / "fake"
+    (fake_repo / "src" / "framework_cli").mkdir(parents=True)
+    (fake_repo / "pyproject.toml").write_text(
+        "[project]\n"
+        'name   =    "framework-cli"\n'  # extra whitespace, quote variation
+        'version = "0.1.0"\n'
+    )
+    monkeypatch.chdir(fake_repo)
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    result = runner.invoke(app, ["eval-prepare", "--mode", "audit"])
+    # Even with the whitespace, framework auto-detection should fire.
+    # If it doesn't (project-target also missing — no .copier-answers.yml),
+    # this would error with "Could not auto-detect target".
+    # We just need to confirm the framework path was matched, not the error path.
+    assert result.exit_code == 0, result.output
+    import json as _j
+
+    data = _j.loads(result.output)
     assert data["target"] == "framework"
