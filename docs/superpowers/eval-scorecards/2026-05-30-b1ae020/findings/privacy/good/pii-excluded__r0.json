@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-excluded",
+  "findings": [
+    {
+      "line": 45,
+      "message": "Misleading docstring: states 'owner_email stored but not returned or logged', but implementation does not store owner_email (not passed to create_item). This docstring-code mismatch could lead developers to incorrectly assume PII retention.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Either: (1) Update docstring to accurately reflect that owner_email is accepted but not stored/persisted, or (2) Update create_item() to accept and store owner_email parameter if the intent is actually to persist it."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"Misleading docstring: states 'owner_email stored but not returned or logged', but implementation does not store owner_email (not passed to create_item). This docstring-code mismatch could lead developers to incorrectly assume PII retention.\",\"suggestion\":\"Either: (1) Update docstring to accurately reflect that owner_email is accepted but not stored/persisted, or (2) Update create_item() to accept and store owner_email parameter if the intent is actually to persist it.\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

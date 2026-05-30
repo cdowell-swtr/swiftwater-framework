@@ -1,0 +1,22 @@
+{
+  "agent": "observability-infra",
+  "case": "scrape-without-alert",
+  "findings": [
+    {
+      "line": 21,
+      "message": "New scrape job 'redis' added (targeting redis-exporter:9121) with no corresponding alert rules or dashboard panels. This creates a production observability gap.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "suggestion": "Add redis alert rules (e.g., redis-down check) to infra/observability/prometheus/alerts/redis_alerts.yml and create a redis.json dashboard in infra/observability/grafana/dashboards/. Also verify redis-exporter service is defined in the appropriate compose file."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"high\",\"message\":\"New scrape job 'redis' added (targeting redis-exporter:9121) with no corresponding alert rules or dashboard panels. This creates a production observability gap.\",\"suggestion\":\"Add redis alert rules (e.g., redis-down check) to infra/observability/prometheus/alerts/redis_alerts.yml and create a redis.json dashboard in infra/observability/grafana/dashboards/. Also verify redis-exporter service is defined in the appropriate compose file.\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/observability/prometheus/prometheus.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

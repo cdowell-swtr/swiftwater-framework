@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New data-access query path 'get_item_by_name' lacks observability instrumentation: no metrics, spans, or error logging with correlation ID. The unbounded query on potentially unindexed column 'Item.name' has no latency or row-count metric.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the database query with timing instrumentation (emit latency metric), add an OpenTelemetry span context, and ensure errors are logged with the current correlation ID. Consider adding a database index on 'Item.name' if performance is critical, and emit a row-count metric to detect slow queries."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New data-access query path 'get_item_by_name' lacks observability instrumentation: no metrics, spans, or error logging with correlation ID. The unbounded query on potentially unindexed column 'Item.name' has no latency or row-count metric.\",\"suggestion\":\"Wrap the database query with timing instrumentation (emit latency metric), add an OpenTelemetry span context, and ensure errors are logged with the current correlation ID. Consider adding a database index on 'Item.name' if performance is critical, and emit a row-count metric to detect slow queries.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

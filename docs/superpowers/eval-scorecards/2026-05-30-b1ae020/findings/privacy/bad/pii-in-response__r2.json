@@ -1,0 +1,36 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "PII field 'owner_email' is included in ItemRead response model and exposed in external API responses. The models.py file explicitly states 'do not include in logs or external responses', but this field is returned to all API callers.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email' from the ItemRead response model. If owner contact is needed for client display, use a separate internal schema or filter the field at the response layer."
+    },
+    {
+      "line": 32,
+      "message": "GET /items endpoint exposes PII via ItemRead response model which includes owner_email. All callers receive email addresses marked as PII in the model definition.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from ItemRead or create a separate response schema without PII fields for external API consumption."
+    },
+    {
+      "line": 41,
+      "message": "POST /items endpoint returns ItemRead response model containing owner_email PII to external callers, despite model definition stating email should not be in external responses.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Use a response schema that excludes PII fields, or implement field filtering to prevent owner_email from being serialized in API responses."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"PII field 'owner_email' is included in ItemRead response model and exposed in external API responses. The models.py file explicitly states 'do not include in logs or external responses', but this field is returned to all API callers.\",\"suggestion\":\"Remove 'owner_email' from the ItemRead response model. If owner contact is needed for client display, use a separate internal schema or filter the field at the response layer.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":32,\"severity\":\"high\",\"message\":\"GET /items endpoint exposes PII via ItemRead response model which includes owner_email. All callers receive email addresses marked as PII in the model definition.\",\"suggestion\":\"Remove owner_email from ItemRead or create a separate response schema without PII fields for external API consumption.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"POST /items endpoint returns ItemRead response model containing owner_email PII to external callers, despite model definition stating email should not be in external responses.\",\"suggestion\":\"Use a response schema that excludes PII fields, or implement field filtering to prevent owner_email from being serialized in API responses.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

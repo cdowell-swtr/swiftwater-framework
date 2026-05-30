@@ -1,0 +1,22 @@
+{
+  "agent": "observability-infra",
+  "case": "complete-obs-surface",
+  "findings": [
+    {
+      "line": 94,
+      "message": "redis-exporter service is defined in observability.yml (merged into all environments) but Redis service only exists in dev.yml (dev/lite profiles). In staging/prod environments, redis-exporter will fail to start due to missing service_healthy dependency.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Either: (1) Add redis service to services.yml for staging/prod if Redis is needed in production, (2) Move redis-exporter to dev.yml with profiles [\"dev\", \"lite\"], or (3) Make redis-exporter conditional with profiles or rely on managed Redis in staging/prod."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"redis-exporter service is defined in observability.yml (merged into all environments) but Redis service only exists in dev.yml (dev/lite profiles). In staging/prod environments, redis-exporter will fail to start due to missing service_healthy dependency.\",\"suggestion\":\"Either: (1) Add redis service to services.yml for staging/prod if Redis is needed in production, (2) Move redis-exporter to dev.yml with profiles [\\\"dev\\\", \\\"lite\\\"], or (3) Make redis-exporter conditional with profiles or rely on managed Redis in staging/prod.\"}]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

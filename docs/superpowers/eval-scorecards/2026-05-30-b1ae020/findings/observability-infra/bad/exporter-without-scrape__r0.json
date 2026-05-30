@@ -1,0 +1,29 @@
+{
+  "agent": "observability-infra",
+  "case": "exporter-without-scrape",
+  "findings": [
+    {
+      "line": 94,
+      "message": "New redis-exporter service added with no corresponding Prometheus scrape job. The exporter exposes metrics on port 9121 but prometheus.yml has no job_name configured to scrape these metrics.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add a scrape_configs entry to infra/observability/prometheus/prometheus.yml to scrape redis-exporter metrics:\n  - job_name: redis\n    static_configs:\n      - targets: [\"redis-exporter:9121\"]"
+    },
+    {
+      "line": 24,
+      "message": "No scrape job defined for redis-exporter service. The redis-exporter was added to observability.yml but no corresponding scrape configuration exists in prometheus.yml to collect its metrics.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "suggestion": "Add redis scrape job configuration to collect metrics from redis-exporter:9121"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"New redis-exporter service added with no corresponding Prometheus scrape job. The exporter exposes metrics on port 9121 but prometheus.yml has no job_name configured to scrape these metrics.\",\"suggestion\":\"Add a scrape_configs entry to infra/observability/prometheus/prometheus.yml to scrape redis-exporter metrics:\\n  - job_name: redis\\n    static_configs:\\n      - targets: [\\\"redis-exporter:9121\\\"]\"},{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":24,\"severity\":\"high\",\"message\":\"No scrape job defined for redis-exporter service. The redis-exporter was added to observability.yml but no corresponding scrape configuration exists in prometheus.yml to collect its metrics.\",\"suggestion\":\"Add redis scrape job configuration to collect metrics from redis-exporter:9121\"}]",
+  "repeat": 0,
+  "seeded_file": "infra/compose/observability.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

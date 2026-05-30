@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 41,
+      "message": "Layering violation: route handler directly instantiates SessionLocal() instead of using dependency-injected SessionDep. This bypasses the FastAPI dependency injection pattern and the repository abstraction layer.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace the route handler with: `def create_item(payload: ItemCreate, session: SessionDep) -> Item: return repository.create_item(session, payload.name)`. Import create_item from the repository layer and inject the session as a dependency like get_items does."
+    },
+    {
+      "line": 39,
+      "message": "Layering violation: route handler directly manages ORM objects and database operations instead of delegating to the repository layer. The repository already provides a create_item() function (db/repository.py:11-16) that should be used here.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Use the repository layer's create_item() function instead of directly creating Item instances and managing sessions in the route handler. This maintains consistent data access patterns across the codebase."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Layering violation: route handler directly instantiates SessionLocal() instead of using dependency-injected SessionDep. This bypasses the FastAPI dependency injection pattern and the repository abstraction layer.\",\"suggestion\":\"Replace the route handler with: `def create_item(payload: ItemCreate, session: SessionDep) -> Item: return repository.create_item(session, payload.name)`. Import create_item from the repository layer and inject the session as a dependency like get_items does.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"high\",\"message\":\"Layering violation: route handler directly manages ORM objects and database operations instead of delegating to the repository layer. The repository already provides a create_item() function (db/repository.py:11-16) that should be used here.\",\"suggestion\":\"Use the repository layer's create_item() function instead of directly creating Item instances and managing sessions in the route handler. This maintains consistent data access patterns across the codebase.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

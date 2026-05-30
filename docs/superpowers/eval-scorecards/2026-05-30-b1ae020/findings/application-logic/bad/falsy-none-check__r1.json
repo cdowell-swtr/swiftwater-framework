@@ -1,0 +1,29 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 38,
+      "message": "The function get_item is missing a return statement. When an item is found, the function falls through the `if not item:` block and implicitly returns None, which will fail FastAPI's response_model validation against ItemRead. Only the 404 path produces a response; the success path produces none.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add `return item` after the HTTPException block so the found item is returned for serialization through ItemRead."
+    },
+    {
+      "line": 38,
+      "message": "Falsy check `if not item:` is incorrect for distinguishing 'not found' from a legitimate object. While SQLAlchemy's session.get returns None when missing, using `if not item` rather than `if item is None` can mask bugs if the ORM object ever defines __bool__/__len__ to be falsy, and is semantically the wrong test for None.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Replace `if not item:` with `if item is None:` to make the 'not found' check explicit and robust."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"high\",\"message\":\"The function get_item is missing a return statement. When an item is found, the function falls through the `if not item:` block and implicitly returns None, which will fail FastAPI's response_model validation against ItemRead. Only the 404 path produces a response; the success path produces none.\",\"suggestion\":\"Add `return item` after the HTTPException block so the found item is returned for serialization through ItemRead.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"medium\",\"message\":\"Falsy check `if not item:` is incorrect for distinguishing 'not found' from a legitimate object. While SQLAlchemy's session.get returns None when missing, using `if not item` rather than `if item is None` can mask bugs if the ORM object ever defines __bool__/__len__ to be falsy, and is semantically the wrong test for None.\",\"suggestion\":\"Replace `if not item:` with `if item is None:` to make the 'not found' check explicit and robust.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

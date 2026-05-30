@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 39,
+      "message": "rename_item endpoint violates derived-field consistency contract. The function directly modifies item.name without recalculating item.slug, causing slug to become stale. The repository has update_item_name() (which correctly keeps slug in sync), but the endpoint bypasses it. This creates a direct path to storing inconsistent derived data.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Import update_item_name from ..db.repository and call it instead of directly mutating item.name. Replace lines 45-51 with: item = update_item_name(session, item_id, payload.name) if item else None; then handle the None case."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"high\",\"message\":\"rename_item endpoint violates derived-field consistency contract. The function directly modifies item.name without recalculating item.slug, causing slug to become stale. The repository has update_item_name() (which correctly keeps slug in sync), but the endpoint bypasses it. This creates a direct path to storing inconsistent derived data.\",\"suggestion\":\"Import update_item_name from ..db.repository and call it instead of directly mutating item.name. Replace lines 45-51 with: item = update_item_name(session, item_id, payload.name) if item else None; then handle the None case.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

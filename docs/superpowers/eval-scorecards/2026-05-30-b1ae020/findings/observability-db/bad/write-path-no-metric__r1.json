@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New data-store write path with no metric or span instrumentation. The delete_items_by_prefix function performs database deletions but has no observability instrumentation (no metrics, spans, or logging), making this write operation invisible to observability systems.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add span instrumentation (e.g., tracer.start_span) or metrics (e.g., counter/histogram) to track this delete operation. At minimum, log the operation with correlation IDs and track the number of rows deleted and operation latency."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New data-store write path with no metric or span instrumentation. The delete_items_by_prefix function performs database deletions but has no observability instrumentation (no metrics, spans, or logging), making this write operation invisible to observability systems.\",\"suggestion\":\"Add span instrumentation (e.g., tracer.start_span) or metrics (e.g., counter/histogram) to track this delete operation. At minimum, log the operation with correlation IDs and track the number of rows deleted and operation latency.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

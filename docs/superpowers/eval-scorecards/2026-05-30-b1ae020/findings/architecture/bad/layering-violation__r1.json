@@ -1,0 +1,36 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 7,
+      "message": "Layering violation: routes module imports SessionLocal from db.engine, exposing internal database engine abstraction to the route layer. Routes should not directly access database connection/session factories.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove SessionLocal from the import. The db.engine module should only export get_session (the FastAPI dependency). Database session management should be abstracted away from routes."
+    },
+    {
+      "line": 39,
+      "message": "Layering violation: create_item endpoint bypasses the repository layer and directly manages a database session, opening its own SessionLocal() context. The repository.create_item() function already exists and should be used instead.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Refactor to follow the existing pattern from get_items: accept a SessionDep parameter, then call repository.create_item(session, payload.name). This preserves the abstraction layers: routes \u2192 repository \u2192 db.engine."
+    },
+    {
+      "line": 41,
+      "message": "Direct session instantiation in request handler: using SessionLocal() directly bypasses dependency injection and the FastAPI request lifecycle management. This breaks the established pattern and circumvents the centralized session management.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Use FastAPI's dependency injection: add session: SessionDep parameter to create_item() and use that session instead of creating SessionLocal(). Then delegate to repository.create_item(session, payload.name)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":7,\"severity\":\"high\",\"message\":\"Layering violation: routes module imports SessionLocal from db.engine, exposing internal database engine abstraction to the route layer. Routes should not directly access database connection/session factories.\",\"suggestion\":\"Remove SessionLocal from the import. The db.engine module should only export get_session (the FastAPI dependency). Database session management should be abstracted away from routes.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"high\",\"message\":\"Layering violation: create_item endpoint bypasses the repository layer and directly manages a database session, opening its own SessionLocal() context. The repository.create_item() function already exists and should be used instead.\",\"suggestion\":\"Refactor to follow the existing pattern from get_items: accept a SessionDep parameter, then call repository.create_item(session, payload.name). This preserves the abstraction layers: routes \u2192 repository \u2192 db.engine.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Direct session instantiation in request handler: using SessionLocal() directly bypasses dependency injection and the FastAPI request lifecycle management. This breaks the established pattern and circumvents the centralized session management.\",\"suggestion\":\"Use FastAPI's dependency injection: add session: SessionDep parameter to create_item() and use that session instead of creating SessionLocal(). Then delegate to repository.create_item(session, payload.name).\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

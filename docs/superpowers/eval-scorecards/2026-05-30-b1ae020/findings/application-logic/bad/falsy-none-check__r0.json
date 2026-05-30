@@ -1,0 +1,29 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 39,
+      "message": "Missing return statement on the success path. get_item() is declared to return Item and has response_model=ItemRead, but when the item is found the function falls off the end and implicitly returns None. FastAPI will then try to serialize None against ItemRead and raise a ResponseValidationError (500), so every successful lookup fails.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add `return item` after the HTTPException branch."
+    },
+    {
+      "line": 38,
+      "message": "Falsy check on the ORM result is the wrong predicate for a 'not found' test. `session.get()` returns either an Item instance or None; using `if not item:` relies on truthiness of the ORM object, which is fragile (and the in-code comment itself flags this). It should be an explicit identity check against None so the 404 path triggers only on a true miss.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Replace `if not item:` with `if item is None:`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"high\",\"message\":\"Missing return statement on the success path. get_item() is declared to return Item and has response_model=ItemRead, but when the item is found the function falls off the end and implicitly returns None. FastAPI will then try to serialize None against ItemRead and raise a ResponseValidationError (500), so every successful lookup fails.\",\"suggestion\":\"Add `return item` after the HTTPException branch.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"medium\",\"message\":\"Falsy check on the ORM result is the wrong predicate for a 'not found' test. `session.get()` returns either an Item instance or None; using `if not item:` relies on truthiness of the ORM object, which is fragile (and the in-code comment itself flags this). It should be an explicit identity check against None so the 404 path triggers only on a true miss.\",\"suggestion\":\"Replace `if not item:` with `if item is None:`.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

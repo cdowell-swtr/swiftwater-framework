@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 47,
+      "message": "PII (owner_email) is logged directly via log.info(). The model explicitly marks owner_email as 'PII: owner email address \u2014 do not include in logs or external responses' (models.py:16), but this is violated by logging it on line 47.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log.info() call. If audit purposes require tracking item creation, log only non-PII fields like item_id, creation timestamp, or item_name."
+    },
+    {
+      "line": 30,
+      "message": "Unnecessary PII collection: owner_email is accepted in ItemCreate schema but never used for the stated purpose (item creation). The create_item() call on line 45 only uses payload.name. Collection of PII without clear purpose violates data minimization principles.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the ItemCreate schema unless there is a legitimate business reason to store it. If auditing requires capturing user identity, use a session context or authentication metadata instead of accepting it as input."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"PII (owner_email) is logged directly via log.info(). The model explicitly marks owner_email as 'PII: owner email address \u2014 do not include in logs or external responses' (models.py:16), but this is violated by logging it on line 47.\",\"suggestion\":\"Remove owner_email from the log.info() call. If audit purposes require tracking item creation, log only non-PII fields like item_id, creation timestamp, or item_name.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":30,\"severity\":\"high\",\"message\":\"Unnecessary PII collection: owner_email is accepted in ItemCreate schema but never used for the stated purpose (item creation). The create_item() call on line 45 only uses payload.name. Collection of PII without clear purpose violates data minimization principles.\",\"suggestion\":\"Remove owner_email from the ItemCreate schema unless there is a legitimate business reason to store it. If auditing requires capturing user identity, use a session context or authentication metadata instead of accepting it as input.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

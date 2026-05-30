@@ -1,0 +1,43 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New public endpoint `count_items` (GET /items/count) has no docstring. The sibling `get_items` documents purpose and serialization behavior; this new public route should similarly explain what it returns and any caveats (e.g. counts via list materialization).",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a docstring describing the endpoint, e.g. \"\"\"Return the total number of items. Convenience counter for the example DB-backed listing.\"\"\""
+    },
+    {
+      "line": 33,
+      "message": "Return type is annotated as bare `dict` with no `response_model`. Unlike `get_items` which declares an `ItemRead` response contract, `count_items` exposes an undocumented ad-hoc shape \u2014 the OpenAPI spec will show an unstructured object and consumers have no contract for the `count` field.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Define a small Pydantic response model (e.g. `class ItemCount(BaseModel): count: int`) and pass it via `response_model=ItemCount`, or at minimum annotate `-> dict[str, int]`."
+    },
+    {
+      "line": 33,
+      "message": "New endpoint `/items/count` is not listed in README.md's Endpoints section, which enumerates `/items` and the health/metrics routes. Public endpoints documented elsewhere should stay in sync.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a bullet `- `GET /items/count` \u2014 item count` under the README Endpoints section."
+    },
+    {
+      "line": 34,
+      "message": "Adding a route requires regenerating the OpenAPI spec (README documents `task openapi:export` and notes CI fails on a stale spec). The diff adds a route but does not show a corresponding `openapi.json` update.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "suggestion": "Run `task openapi:export` and commit the regenerated `openapi.json` alongside this change."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"New public endpoint `count_items` (GET /items/count) has no docstring. The sibling `get_items` documents purpose and serialization behavior; this new public route should similarly explain what it returns and any caveats (e.g. counts via list materialization).\",\"suggestion\":\"Add a docstring describing the endpoint, e.g. \\\"\\\"\\\"Return the total number of items. Convenience counter for the example DB-backed listing.\\\"\\\"\\\"\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"Return type is annotated as bare `dict` with no `response_model`. Unlike `get_items` which declares an `ItemRead` response contract, `count_items` exposes an undocumented ad-hoc shape \u2014 the OpenAPI spec will show an unstructured object and consumers have no contract for the `count` field.\",\"suggestion\":\"Define a small Pydantic response model (e.g. `class ItemCount(BaseModel): count: int`) and pass it via `response_model=ItemCount`, or at minimum annotate `-> dict[str, int]`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"New endpoint `/items/count` is not listed in README.md's Endpoints section, which enumerates `/items` and the health/metrics routes. Public endpoints documented elsewhere should stay in sync.\",\"suggestion\":\"Add a bullet `- `GET /items/count` \u2014 item count` under the README Endpoints section.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"info\",\"message\":\"Adding a route requires regenerating the OpenAPI spec (README documents `task openapi:export` and notes CI fails on a stale spec). The diff adds a route but does not show a corresponding `openapi.json` update.\",\"suggestion\":\"Run `task openapi:export` and commit the regenerated `openapi.json` alongside this change.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

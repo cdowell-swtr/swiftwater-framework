@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 47,
+      "message": "PII (owner_email) is logged directly in the log statement. The model explicitly marks this field as PII that should not be included in logs or external responses.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log.info() call. Log only non-PII fields like item_id if auditing is needed."
+    },
+    {
+      "line": 30,
+      "message": "Unnecessary collection of PII: owner_email is accepted in ItemCreate schema but not used by the endpoint (create_item is called with only payload.name). Collecting PII beyond stated purpose violates privacy principles.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from ItemCreate schema unless it is actually stored and needed. If auditing requires associating email with creation, store it separately (e.g., in an audit log table) rather than in ItemCreate payload."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"PII (owner_email) is logged directly in the log statement. The model explicitly marks this field as PII that should not be included in logs or external responses.\",\"suggestion\":\"Remove owner_email from the log.info() call. Log only non-PII fields like item_id if auditing is needed.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":30,\"severity\":\"high\",\"message\":\"Unnecessary collection of PII: owner_email is accepted in ItemCreate schema but not used by the endpoint (create_item is called with only payload.name). Collecting PII beyond stated purpose violates privacy principles.\",\"suggestion\":\"Remove owner_email from ItemCreate schema unless it is actually stored and needed. If auditing requires associating email with creation, store it separately (e.g., in an audit log table) rather than in ItemCreate payload.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

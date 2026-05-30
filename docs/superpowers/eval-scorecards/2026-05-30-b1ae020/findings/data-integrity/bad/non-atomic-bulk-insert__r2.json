@@ -1,0 +1,36 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 25,
+      "message": "bulk_create_items commits inside the loop, so each insert is its own transaction. If any iteration fails (DB error, constraint violation, connection drop, process crash), rows already committed for earlier names remain persisted while later ones are lost \u2014 a partial-write that breaks the batch's atomicity invariant. Callers reasonably expect 'bulk_create' to be all-or-nothing.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add all items first, then commit once outside the loop (and refresh after commit). For example: for name in names: item = Item(name=name); session.add(item); created.append(item); session.flush(); session.commit(); for item in created: session.refresh(item). On exception, let SQLAlchemy roll back the whole batch so no partial state is persisted."
+    },
+    {
+      "line": 28,
+      "message": "Per-row commit inside the loop also produces N round-trips and N transactions for a 'bulk' operation, which is a performance and lock-churn problem in addition to the atomicity bug \u2014 it defeats the purpose of a bulk API.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "suggestion": "Use a single transaction with session.add_all(items) (or one flush + one commit) so the batch is one round-trip / one transaction."
+    },
+    {
+      "line": 18,
+      "message": "bulk_create_items has no input validation: an empty names list silently returns [] (likely fine, but undocumented), and there is no length cap \u2014 a caller passing a very large list will hold a long-running transaction and can exhaust memory or session identity-map size. Names are also not validated against the Item.name String(255) NOT NULL constraint, so an over-length or None entry will fail mid-batch (compounding the non-atomic-commit bug above).",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "suggestion": "Validate inputs up front (reject empty strings / None, enforce a max length matching the column, and consider a max batch size or chunked commit with an explicit transaction boundary per chunk)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":25,\"severity\":\"high\",\"message\":\"bulk_create_items commits inside the loop, so each insert is its own transaction. If any iteration fails (DB error, constraint violation, connection drop, process crash), rows already committed for earlier names remain persisted while later ones are lost \u2014 a partial-write that breaks the batch's atomicity invariant. Callers reasonably expect 'bulk_create' to be all-or-nothing.\",\"suggestion\":\"Add all items first, then commit once outside the loop (and refresh after commit). For example: for name in names: item = Item(name=name); session.add(item); created.append(item); session.flush(); session.commit(); for item in created: session.refresh(item). On exception, let SQLAlchemy roll back the whole batch so no partial state is persisted.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":28,\"severity\":\"medium\",\"message\":\"Per-row commit inside the loop also produces N round-trips and N transactions for a 'bulk' operation, which is a performance and lock-churn problem in addition to the atomicity bug \u2014 it defeats the purpose of a bulk API.\",\"suggestion\":\"Use a single transaction with session.add_all(items) (or one flush + one commit) so the batch is one round-trip / one transaction.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":18,\"severity\":\"medium\",\"message\":\"bulk_create_items has no input validation: an empty names list silently returns [] (likely fine, but undocumented), and there is no length cap \u2014 a caller passing a very large list will hold a long-running transaction and can exhaust memory or session identity-map size. Names are also not validated against the Item.name String(255) NOT NULL constraint, so an over-length or None entry will fail mid-batch (compounding the non-atomic-commit bug above).\",\"suggestion\":\"Validate inputs up front (reject empty strings / None, enforce a max length matching the column, and consider a max batch size or chunked commit with an explicit transaction boundary per chunk).\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

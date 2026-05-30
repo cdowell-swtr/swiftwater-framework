@@ -1,0 +1,43 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New write endpoint archive_item has no structured logging, no domain-level metric, and no explicit trace span \u2014 it is an uninstrumented code path. The generic ObservabilityMiddleware counts HTTP-level requests, but a state-mutating business operation (archive) has no log line tying the action to a correlation id / request id, no counter (e.g. items_archived_total), and no span attributes (item_id). Operators cannot answer 'how many archives happened, by whom, and which ones failed' from /metrics or logs.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Inject the bound logger (demo.logging_config.get_logger) and log 'item_archived' with item_id and the correlation id at the success path; add an explicit counter for archive operations to the MetricsRegistry (or via recoverability-style module metric) and expose it in /metrics; if OTel is enabled, set span attributes (item.id, action='archive') on the current span."
+    },
+    {
+      "line": 36,
+      "message": "404 error path (item not found) raises HTTPException without logging \u2014 the error is not recorded with the correlation id, so a spike in archive-not-found is invisible in logs and is not surfaced as an error metric (HTTPException 404s are not 5xx and therefore won't increment app_request_errors_total). This violates the 'error paths logged with correlation id' contract.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Before raising, emit a warning-level structured log ('item_archive_not_found', item_id=item_id) using get_logger() so the correlation id is bound; consider a dedicated counter app_item_archive_not_found_total so 4xx business errors are observable independently of the 5xx error_rate_pct SLO."
+    },
+    {
+      "line": 33,
+      "message": "No SLO threshold is defined for this new write endpoint. default_slos() only covers global request_latency_p99_ms and error_rate_pct \u2014 a slow or failing archive will be masked by aggregate latency/error metrics across all routes. Per the spec, new endpoints (especially state-mutating ones) should have a declared SLO.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Either add a per-route SLO (e.g. archive_latency_p99_ms with a PromQL mapping in SLO_PROMQL) or document that this endpoint is intentionally covered by the global SLO; if the former, also wire a route-labeled latency metric so the SLO PromQL has something to evaluate against."
+    },
+    {
+      "line": 37,
+      "message": "Inline `from fastapi import HTTPException` inside the function body \u2014 not an observability finding per se, but it is in the error path and indicates the error branch was added without going through the project's standard error-handling middleware. Confirm register_exception_handlers covers HTTPException with correlation-id logging; if not, the 404 path will bypass the unified error log/trace contract.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Move the import to module top-level and verify middleware/errors.py logs HTTPException with the bound correlation id; if it only logs unhandled exceptions, extend it (or log explicitly at the raise site) so 4xx business errors are not silently dropped from structured logs."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New write endpoint archive_item has no structured logging, no domain-level metric, and no explicit trace span \u2014 it is an uninstrumented code path. The generic ObservabilityMiddleware counts HTTP-level requests, but a state-mutating business operation (archive) has no log line tying the action to a correlation id / request id, no counter (e.g. items_archived_total), and no span attributes (item_id). Operators cannot answer 'how many archives happened, by whom, and which ones failed' from /metrics or logs.\",\"suggestion\":\"Inject the bound logger (demo.logging_config.get_logger) and log 'item_archived' with item_id and the correlation id at the success path; add an explicit counter for archive operations to the MetricsRegistry (or via recoverability-style module metric) and expose it in /metrics; if OTel is enabled, set span attributes (item.id, action='archive') on the current span.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"high\",\"message\":\"404 error path (item not found) raises HTTPException without logging \u2014 the error is not recorded with the correlation id, so a spike in archive-not-found is invisible in logs and is not surfaced as an error metric (HTTPException 404s are not 5xx and therefore won't increment app_request_errors_total). This violates the 'error paths logged with correlation id' contract.\",\"suggestion\":\"Before raising, emit a warning-level structured log ('item_archive_not_found', item_id=item_id) using get_logger() so the correlation id is bound; consider a dedicated counter app_item_archive_not_found_total so 4xx business errors are observable independently of the 5xx error_rate_pct SLO.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"No SLO threshold is defined for this new write endpoint. default_slos() only covers global request_latency_p99_ms and error_rate_pct \u2014 a slow or failing archive will be masked by aggregate latency/error metrics across all routes. Per the spec, new endpoints (especially state-mutating ones) should have a declared SLO.\",\"suggestion\":\"Either add a per-route SLO (e.g. archive_latency_p99_ms with a PromQL mapping in SLO_PROMQL) or document that this endpoint is intentionally covered by the global SLO; if the former, also wire a route-labeled latency metric so the SLO PromQL has something to evaluate against.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"medium\",\"message\":\"Inline `from fastapi import HTTPException` inside the function body \u2014 not an observability finding per se, but it is in the error path and indicates the error branch was added without going through the project's standard error-handling middleware. Confirm register_exception_handlers covers HTTPException with correlation-id logging; if not, the 404 path will bypass the unified error log/trace contract.\",\"suggestion\":\"Move the import to module top-level and verify middleware/errors.py logs HTTPException with the bound correlation id; if it only logs unhandled exceptions, extend it (or log explicitly at the raise site) so 4xx business errors are not silently dropped from structured logs.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

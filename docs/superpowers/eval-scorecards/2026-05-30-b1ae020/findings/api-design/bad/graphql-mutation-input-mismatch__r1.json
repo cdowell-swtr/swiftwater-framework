@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 37,
+      "message": "Mutation accepts 'description' input parameter but does not use it in the resolver implementation. The parameter is silently discarded, creating a data contract mismatch that will confuse clients and lead to unexpected behavior.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Either (1) pass the 'description' parameter to repository.create_item() and update the repository function to accept and store it, or (2) remove 'description' from the mutation signature if it is not intended to be supported."
+    },
+    {
+      "line": 37,
+      "message": "Mutation returns a bare Item scalar instead of a typed mutation payload object. Without a payload wrapper, the mutation cannot return success/error status or validation errors to clients.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "info",
+      "suggestion": "Create a CreateItemPayload type with success/errors fields and return it from the mutation, allowing proper error handling and client feedback."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":37,\"severity\":\"high\",\"message\":\"Mutation accepts 'description' input parameter but does not use it in the resolver implementation. The parameter is silently discarded, creating a data contract mismatch that will confuse clients and lead to unexpected behavior.\",\"suggestion\":\"Either (1) pass the 'description' parameter to repository.create_item() and update the repository function to accept and store it, or (2) remove 'description' from the mutation signature if it is not intended to be supported.\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":37,\"severity\":\"info\",\"message\":\"Mutation returns a bare Item scalar instead of a typed mutation payload object. Without a payload wrapper, the mutation cannot return success/error status or validation errors to clients.\",\"suggestion\":\"Create a CreateItemPayload type with success/errors fields and return it from the mutation, allowing proper error handling and client feedback.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

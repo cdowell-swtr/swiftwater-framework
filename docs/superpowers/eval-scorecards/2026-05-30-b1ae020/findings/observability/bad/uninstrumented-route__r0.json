@@ -1,0 +1,43 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New write endpoint POST /items/{item_id}/archive has no domain-level instrumentation: no structured log with correlation id is emitted for the archive action, no counter is incremented for archives performed, and no span/event is recorded. The app-level ObservabilityMiddleware only captures generic HTTP timing/status \u2014 a state-mutating business operation is otherwise invisible in metrics/logs/traces.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Acquire the project logger (get_logger()) and emit log.info(\"item_archived\", item_id=item_id) on success; consider adding a counter (e.g. app_items_archived_total) to the in-process MetricsRegistry or recoverability module and incrementing it on success so the action is visible on /metrics and in Grafana."
+    },
+    {
+      "line": 37,
+      "message": "The 404 not-found error path raises HTTPException without logging the failure or correlating it to a request id. Error paths must be logged with the correlation id per the observability contract; relying on the middleware to count it as a non-5xx status hides the business-meaningful 'archive of missing item' failure mode.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Before raising HTTPException, emit a structured warning log including item_id and the request's correlation id (e.g. log.warning(\"archive_item_not_found\", item_id=item_id)). Consider also bumping a domain error counter so 404s on this endpoint are observable distinctly from generic 4xx."
+    },
+    {
+      "line": 40,
+      "message": "session.commit() can raise (IntegrityError, OperationalError, etc.) and the exception will surface as an unhandled 500 with no context-rich log at the call site. There is no try/except that logs the failure with the correlation id and item_id before re-raising, so debugging archive failures relies solely on the global handler's generic counter.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Wrap the commit in try/except, log.exception(\"archive_item_commit_failed\", item_id=item_id) (which preserves the correlation id via the structured logger context), then re-raise so the global handler still records the unhandled-exception metric."
+    },
+    {
+      "line": 33,
+      "message": "No explicit tracing span is opened around the archive operation. With APP_OTEL_ENABLED, FastAPI auto-instrumentation produces a request span but no child span describing the archive sub-operation or attributes (item_id, archived=True/False). State-mutating endpoints benefit from explicit span attributes for trace-based debugging.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "If OTel is enabled, obtain a tracer (trace.get_tracer(__name__)) and wrap the archive logic in a span (e.g. with tracer.start_as_current_span(\"archive_item\") as span: span.set_attribute(\"item.id\", item_id)) so the operation is queryable in Tempo by attribute."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New write endpoint POST /items/{item_id}/archive has no domain-level instrumentation: no structured log with correlation id is emitted for the archive action, no counter is incremented for archives performed, and no span/event is recorded. The app-level ObservabilityMiddleware only captures generic HTTP timing/status \u2014 a state-mutating business operation is otherwise invisible in metrics/logs/traces.\",\"suggestion\":\"Acquire the project logger (get_logger()) and emit log.info(\\\"item_archived\\\", item_id=item_id) on success; consider adding a counter (e.g. app_items_archived_total) to the in-process MetricsRegistry or recoverability module and incrementing it on success so the action is visible on /metrics and in Grafana.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"high\",\"message\":\"The 404 not-found error path raises HTTPException without logging the failure or correlating it to a request id. Error paths must be logged with the correlation id per the observability contract; relying on the middleware to count it as a non-5xx status hides the business-meaningful 'archive of missing item' failure mode.\",\"suggestion\":\"Before raising HTTPException, emit a structured warning log including item_id and the request's correlation id (e.g. log.warning(\\\"archive_item_not_found\\\", item_id=item_id)). Consider also bumping a domain error counter so 404s on this endpoint are observable distinctly from generic 4xx.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"medium\",\"message\":\"session.commit() can raise (IntegrityError, OperationalError, etc.) and the exception will surface as an unhandled 500 with no context-rich log at the call site. There is no try/except that logs the failure with the correlation id and item_id before re-raising, so debugging archive failures relies solely on the global handler's generic counter.\",\"suggestion\":\"Wrap the commit in try/except, log.exception(\\\"archive_item_commit_failed\\\", item_id=item_id) (which preserves the correlation id via the structured logger context), then re-raise so the global handler still records the unhandled-exception metric.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"No explicit tracing span is opened around the archive operation. With APP_OTEL_ENABLED, FastAPI auto-instrumentation produces a request span but no child span describing the archive sub-operation or attributes (item_id, archived=True/False). State-mutating endpoints benefit from explicit span attributes for trace-based debugging.\",\"suggestion\":\"If OTel is enabled, obtain a tracer (trace.get_tracer(__name__)) and wrap the archive logic in a span (e.g. with tracer.start_as_current_span(\\\"archive_item\\\") as span: span.set_attribute(\\\"item.id\\\", item_id)) so the operation is queryable in Tempo by attribute.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

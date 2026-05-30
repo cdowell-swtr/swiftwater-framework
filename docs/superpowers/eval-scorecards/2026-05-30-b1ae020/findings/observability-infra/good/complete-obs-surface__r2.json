@@ -1,0 +1,22 @@
+{
+  "agent": "observability-infra",
+  "case": "complete-obs-surface",
+  "findings": [
+    {
+      "line": 94,
+      "message": "redis-exporter service added with hard dependency on redis:6379, but redis service is only defined in dev.yml (profiles: [\"dev\", \"lite\"]). When observability.yml is merged into staging/prod via deploy strategy, redis-exporter will fail to start because redis service does not exist in those environments.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Either (1) add redis to services.yml or prod/staging overlays, (2) move redis-exporter definition to dev.yml only, (3) make redis-exporter conditional on redis service existence, or (4) use environment variable APP_REDIS_ADDR to allow connection to managed Redis instance without local service definition."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"redis-exporter service added with hard dependency on redis:6379, but redis service is only defined in dev.yml (profiles: [\\\"dev\\\", \\\"lite\\\"]). When observability.yml is merged into staging/prod via deploy strategy, redis-exporter will fail to start because redis service does not exist in those environments.\",\"suggestion\":\"Either (1) add redis to services.yml or prod/staging overlays, (2) move redis-exporter definition to dev.yml only, (3) make redis-exporter conditional on redis service existence, or (4) use environment variable APP_REDIS_ADDR to allow connection to managed Redis instance without local service definition.\"}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

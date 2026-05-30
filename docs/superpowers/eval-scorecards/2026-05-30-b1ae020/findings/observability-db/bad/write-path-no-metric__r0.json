@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New data-store write path (delete_items_by_prefix) with no metric or span instrumentation. The function performs a database delete operation without observability instrumentation, making this data-layer operation invisible to monitoring and tracing.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add metric recording and/or span instrumentation around the database write operation. Consider recording the number of deleted rows and request latency metrics, similar to patterns used elsewhere in the observability infrastructure (MetricsRegistry.record_request)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New data-store write path (delete_items_by_prefix) with no metric or span instrumentation. The function performs a database delete operation without observability instrumentation, making this data-layer operation invisible to monitoring and tracing.\",\"suggestion\":\"Add metric recording and/or span instrumentation around the database write operation. Consider recording the number of deleted rows and request latency metrics, similar to patterns used elsewhere in the observability infrastructure (MetricsRegistry.record_request).\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

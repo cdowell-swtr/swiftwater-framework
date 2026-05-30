@@ -1,0 +1,43 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New POST /items/{item_id}/archive endpoint has no route-level instrumentation: no structured log (with correlation id) for the archive action, no custom metric (e.g. an archive counter), and no explicit tracing span around the DB mutation. The generic ObservabilityMiddleware records request count/latency at the HTTP layer, but a state-mutating business operation should be observable on its own (success vs failure, who archived what) \u2014 otherwise this code path is effectively dark beyond aggregate request totals.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Bind a logger (get_logger().bind(item_id=item_id)) and emit an 'item_archived' info log on success and a warn/error on the not-found / commit failure branches; add an archive-specific counter to MetricsRegistry (e.g. app_items_archived_total) or use an OTel span with item_id as an attribute so the action is visible in traces/metrics/logs with the request's correlation id."
+    },
+    {
+      "line": 36,
+      "message": "The 404 error path (item not found) raises HTTPException with no log line \u2014 there is no record of the failed lookup tied to the correlation id. The middleware will see a 4xx response but no business-level context (which item_id, why) is captured, so debugging 'why did archive fail for user X' is impossible from logs.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Before raising HTTPException, log a warning with the correlation id and item_id (e.g. log.warning('archive_item_not_found', item_id=item_id)) so the error is correlatable in Loki/Tempo."
+    },
+    {
+      "line": 39,
+      "message": "session.commit() can raise (constraint/IO/connection errors) and there is no try/except + log around it. An unhandled exception here will be counted as a 5xx by the middleware but will not produce a structured log with the item_id or correlation id at the route layer \u2014 the global handler only sees the exception, not the business context.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Wrap commit() in a try/except, log an error with item_id and correlation id on failure, and re-raise (or convert to a 500 with a logged event). Alternatively, ensure the global exception handler binds enough request context that the failure is debuggable."
+    },
+    {
+      "line": 33,
+      "message": "No SLO threshold is defined for this new write endpoint. The defaults in observability/slo.py cover aggregate request latency and 5xx rate, but a mutation endpoint typically warrants its own latency/error budget (commit() makes it materially slower and more failure-prone than GET /items). Without an explicit SLO, alerts will not fire on archive-specific degradation.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add a write-path SLO (or at minimum a per-route latency panel) \u2014 e.g. a slo_archive_p99_ms in Settings and a corresponding SLO entry + PromQL in observability/provisioning.py."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New POST /items/{item_id}/archive endpoint has no route-level instrumentation: no structured log (with correlation id) for the archive action, no custom metric (e.g. an archive counter), and no explicit tracing span around the DB mutation. The generic ObservabilityMiddleware records request count/latency at the HTTP layer, but a state-mutating business operation should be observable on its own (success vs failure, who archived what) \u2014 otherwise this code path is effectively dark beyond aggregate request totals.\",\"suggestion\":\"Bind a logger (get_logger().bind(item_id=item_id)) and emit an 'item_archived' info log on success and a warn/error on the not-found / commit failure branches; add an archive-specific counter to MetricsRegistry (e.g. app_items_archived_total) or use an OTel span with item_id as an attribute so the action is visible in traces/metrics/logs with the request's correlation id.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"high\",\"message\":\"The 404 error path (item not found) raises HTTPException with no log line \u2014 there is no record of the failed lookup tied to the correlation id. The middleware will see a 4xx response but no business-level context (which item_id, why) is captured, so debugging 'why did archive fail for user X' is impossible from logs.\",\"suggestion\":\"Before raising HTTPException, log a warning with the correlation id and item_id (e.g. log.warning('archive_item_not_found', item_id=item_id)) so the error is correlatable in Loki/Tempo.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"medium\",\"message\":\"session.commit() can raise (constraint/IO/connection errors) and there is no try/except + log around it. An unhandled exception here will be counted as a 5xx by the middleware but will not produce a structured log with the item_id or correlation id at the route layer \u2014 the global handler only sees the exception, not the business context.\",\"suggestion\":\"Wrap commit() in a try/except, log an error with item_id and correlation id on failure, and re-raise (or convert to a 500 with a logged event). Alternatively, ensure the global exception handler binds enough request context that the failure is debuggable.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"No SLO threshold is defined for this new write endpoint. The defaults in observability/slo.py cover aggregate request latency and 5xx rate, but a mutation endpoint typically warrants its own latency/error budget (commit() makes it materially slower and more failure-prone than GET /items). Without an explicit SLO, alerts will not fire on archive-specific degradation.\",\"suggestion\":\"Add a write-path SLO (or at minimum a per-route latency panel) \u2014 e.g. a slo_archive_p99_ms in Settings and a corresponding SLO entry + PromQL in observability/provisioning.py.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

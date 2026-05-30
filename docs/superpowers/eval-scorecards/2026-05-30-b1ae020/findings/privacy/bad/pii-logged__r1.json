@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 47,
+      "message": "PII (owner_email) is being logged in violation of explicit model guidance. Line 16 of models.py states 'do not include in logs or external responses', but this log statement includes owner_email from the request payload.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log statement. Replace 'log.info(\"item_created\", item_id=item.id, owner_email=payload.owner_email)' with 'log.info(\"item_created\", item_id=item.id)' to avoid logging PII."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"PII (owner_email) is being logged in violation of explicit model guidance. Line 16 of models.py states 'do not include in logs or external responses', but this log statement includes owner_email from the request payload.\",\"suggestion\":\"Remove owner_email from the log statement. Replace 'log.info(\\\"item_created\\\", item_id=item.id, owner_email=payload.owner_email)' with 'log.info(\\\"item_created\\\", item_id=item.id)' to avoid logging PII.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

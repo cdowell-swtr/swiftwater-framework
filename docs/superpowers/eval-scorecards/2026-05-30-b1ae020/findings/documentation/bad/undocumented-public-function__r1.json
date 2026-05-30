@@ -1,0 +1,43 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New public endpoint `count_items` (GET /items/count) has no docstring, unlike the sibling `get_items` endpoint and the /health, /heartbeat, /metrics routes which all document purpose and contract. Undocumented public interface.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a docstring explaining what the endpoint returns and when to use it (e.g. \"Return the total number of items in the store. Convenience endpoint for clients that need a count without paginating /items.\")."
+    },
+    {
+      "line": 32,
+      "message": "Return type is annotated as a bare `dict` and no `response_model` is declared, so the response contract (shape `{\"count\": int}`) is undocumented in code and in the generated OpenAPI spec. The sibling route uses an explicit `ItemRead` response_model for exactly this reason.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Define a small response schema (e.g. `class ItemCount(BaseModel): count: int`) and use `@router.get(\"/items/count\", response_model=ItemCount)` with a `-> ItemCount` return annotation so the contract is explicit and the OpenAPI spec is accurate."
+    },
+    {
+      "line": 33,
+      "message": "README's `## Endpoints` section enumerates `/heartbeat`, `/health`, `/metrics`, and `/items` but does not mention the newly added `/items/count` route. The README endpoint list is now stale.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a bullet under `## Endpoints` in README.md: `- `GET /items/count` \u2014 count of items in the store`. Also remember to run `task openapi:export` and commit the regenerated `openapi.json` (the README notes CI fails on a stale spec)."
+    },
+    {
+      "line": 34,
+      "message": "Implementation loads every row via `list_items(session)` just to take `len(...)`. The choice (favouring simplicity over a `SELECT count(*)`) is non-obvious and undocumented; a future reader may assume it is an oversight.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "suggestion": "Either switch to a dedicated `count_items` repository function using `SELECT count(*)` or add a one-line comment/docstring noting the deliberate simplification (and any row-count ceiling under which it is acceptable)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"New public endpoint `count_items` (GET /items/count) has no docstring, unlike the sibling `get_items` endpoint and the /health, /heartbeat, /metrics routes which all document purpose and contract. Undocumented public interface.\",\"suggestion\":\"Add a docstring explaining what the endpoint returns and when to use it (e.g. \\\"Return the total number of items in the store. Convenience endpoint for clients that need a count without paginating /items.\\\").\"},{\"path\":\"src/demo/routes/items.py\",\"line\":32,\"severity\":\"low\",\"message\":\"Return type is annotated as a bare `dict` and no `response_model` is declared, so the response contract (shape `{\\\"count\\\": int}`) is undocumented in code and in the generated OpenAPI spec. The sibling route uses an explicit `ItemRead` response_model for exactly this reason.\",\"suggestion\":\"Define a small response schema (e.g. `class ItemCount(BaseModel): count: int`) and use `@router.get(\\\"/items/count\\\", response_model=ItemCount)` with a `-> ItemCount` return annotation so the contract is explicit and the OpenAPI spec is accurate.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"README's `## Endpoints` section enumerates `/heartbeat`, `/health`, `/metrics`, and `/items` but does not mention the newly added `/items/count` route. The README endpoint list is now stale.\",\"suggestion\":\"Add a bullet under `## Endpoints` in README.md: `- `GET /items/count` \u2014 count of items in the store`. Also remember to run `task openapi:export` and commit the regenerated `openapi.json` (the README notes CI fails on a stale spec).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"info\",\"message\":\"Implementation loads every row via `list_items(session)` just to take `len(...)`. The choice (favouring simplicity over a `SELECT count(*)`) is non-obvious and undocumented; a future reader may assume it is an oversight.\",\"suggestion\":\"Either switch to a dedicated `count_items` repository function using `SELECT count(*)` or add a one-line comment/docstring noting the deliberate simplification (and any row-count ceiling under which it is acceptable).\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

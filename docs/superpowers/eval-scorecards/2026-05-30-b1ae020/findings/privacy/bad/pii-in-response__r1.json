@@ -1,0 +1,36 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 23,
+      "message": "PII field 'owner_email' included in ItemRead response model despite explicit documentation in models.py stating it should not be included in external responses. This violates the stated PII protection requirement.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email' from ItemRead response schema or create a separate response model (e.g., ItemReadPublic) that excludes PII fields."
+    },
+    {
+      "line": 29,
+      "message": "ItemCreate payload accepts 'owner_email' as input, which will be collected but is not needed for the stated purpose of item creation (only 'name' is used). This represents unnecessary PII collection.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email' from ItemCreate schema unless it is actually required for item creation logic."
+    },
+    {
+      "line": 42,
+      "message": "The post_item endpoint returns Item serialized through ItemRead, which exposes owner_email in API responses. The function signature accepts ItemCreate payload (which includes owner_email) but ignores it, creating a data flow inconsistency where PII is collected but not used.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Either (1) ensure owner_email is not exposed in responses by removing it from ItemRead, or (2) remove it from ItemCreate and model inputs entirely if not needed for the endpoint's purpose."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":23,\"severity\":\"high\",\"message\":\"PII field 'owner_email' included in ItemRead response model despite explicit documentation in models.py stating it should not be included in external responses. This violates the stated PII protection requirement.\",\"suggestion\":\"Remove 'owner_email' from ItemRead response schema or create a separate response model (e.g., ItemReadPublic) that excludes PII fields.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":29,\"severity\":\"high\",\"message\":\"ItemCreate payload accepts 'owner_email' as input, which will be collected but is not needed for the stated purpose of item creation (only 'name' is used). This represents unnecessary PII collection.\",\"suggestion\":\"Remove 'owner_email' from ItemCreate schema unless it is actually required for item creation logic.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"The post_item endpoint returns Item serialized through ItemRead, which exposes owner_email in API responses. The function signature accepts ItemCreate payload (which includes owner_email) but ignores it, creating a data flow inconsistency where PII is collected but not used.\",\"suggestion\":\"Either (1) ensure owner_email is not exposed in responses by removing it from ItemRead, or (2) remove it from ItemCreate and model inputs entirely if not needed for the endpoint's purpose.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

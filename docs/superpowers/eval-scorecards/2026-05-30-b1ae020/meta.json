@@ -1,0 +1,11 @@
+{
+  "agent_count": 18,
+  "drift_detected": false,
+  "git_ref": "",
+  "mode": "tune",
+  "model_used": "subagent-dispatch",
+  "repeat": 3,
+  "run_duration_seconds": 0,
+  "slug": "b1ae020",
+  "subagent_call_count": 132
+}

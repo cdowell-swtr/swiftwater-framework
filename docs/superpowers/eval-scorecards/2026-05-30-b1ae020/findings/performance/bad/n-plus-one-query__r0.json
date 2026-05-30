@@ -1,0 +1,36 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 40,
+      "message": "N+1 query pattern: the handler first selects all item ids, then issues a separate `session.get(Item, iid)` per id inside the loop. For N items this executes N+1 round-trips to the database, which scales linearly with table size on an unbounded input and will exhaust connection time / pool capacity under load. This is a clear regression against any 'list endpoint latency' SLO.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Fetch the names in a single query, e.g. `return list(session.scalars(select(Item.name).order_by(Item.id)))`. If you must keep the two-step shape, replace the per-id `session.get` with one `select(Item).where(Item.id.in_(item_ids))` (or use `selectinload`) so the whole result set is materialized in one round-trip."
+    },
+    {
+      "line": 44,
+      "message": "The function is annotated `-> list[str]` and declares `response_model=list[str]`, but never returns `names`. At runtime it returns `None`, which FastAPI will then fail to serialize against the response model \u2014 a correctness bug that also masks the performance issue (the loop's work is discarded).",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add `return names` at the end of the function (and prefer the single-query form above)."
+    },
+    {
+      "line": 35,
+      "message": "`from sqlalchemy import select` is performed inside the request handler. The import is cached after the first call so the cost is negligible, but moving it to module scope keeps the hot path allocation-free and matches the style used elsewhere in the package (e.g. `db/repository.py`).",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Hoist `from sqlalchemy import select` to the top of the module."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"N+1 query pattern: the handler first selects all item ids, then issues a separate `session.get(Item, iid)` per id inside the loop. For N items this executes N+1 round-trips to the database, which scales linearly with table size on an unbounded input and will exhaust connection time / pool capacity under load. This is a clear regression against any 'list endpoint latency' SLO.\",\"suggestion\":\"Fetch the names in a single query, e.g. `return list(session.scalars(select(Item.name).order_by(Item.id)))`. If you must keep the two-step shape, replace the per-id `session.get` with one `select(Item).where(Item.id.in_(item_ids))` (or use `selectinload`) so the whole result set is materialized in one round-trip.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"medium\",\"message\":\"The function is annotated `-> list[str]` and declares `response_model=list[str]`, but never returns `names`. At runtime it returns `None`, which FastAPI will then fail to serialize against the response model \u2014 a correctness bug that also masks the performance issue (the loop's work is discarded).\",\"suggestion\":\"Add `return names` at the end of the function (and prefer the single-query form above).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":35,\"severity\":\"low\",\"message\":\"`from sqlalchemy import select` is performed inside the request handler. The import is cached after the first call so the cost is negligible, but moving it to module scope keeps the hot path allocation-free and matches the style used elsewhere in the package (e.g. `db/repository.py`).\",\"suggestion\":\"Hoist `from sqlalchemy import select` to the top of the module.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

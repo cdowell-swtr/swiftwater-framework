@@ -1,0 +1,22 @@
+{
+  "agent": "usability",
+  "case": "delete-with-confirm",
+  "findings": [
+    {
+      "line": 34,
+      "message": "DeleteButton has no error feedback: if the DELETE fetch rejects or returns a non-2xx response, the catch path is absent and onDeleted() still won't be called, leaving the user with no signal that the action failed. Consider surfacing an error state (e.g., a message or toast) when the request fails.",
+      "path": "frontend/src/Items.tsx",
+      "severity": "info",
+      "suggestion": "Wrap the fetch in try/catch, check response.ok, and render an error message on failure so users get feedback when a delete does not succeed."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":34,\"severity\":\"info\",\"message\":\"DeleteButton has no error feedback: if the DELETE fetch rejects or returns a non-2xx response, the catch path is absent and onDeleted() still won't be called, leaving the user with no signal that the action failed. Consider surfacing an error state (e.g., a message or toast) when the request fails.\",\"suggestion\":\"Wrap the fetch in try/catch, check response.ok, and render an error message on failure so users get feedback when a delete does not succeed.\"}]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

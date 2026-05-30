@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 45,
+      "message": "User-supplied input written to database without required transformation. The post_item() endpoint accepts user input via ItemCreate and writes it directly to the database via create_item() without normalization. The codebase defines create_item_normalized() as the canonical entry-point for user-supplied names that applies required transformations (strip + lowercase), but this endpoint deliberately bypasses it, violating the documented data consistency requirement.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace create_item(session, payload.name) with create_item_normalized(session, payload.name) and update the docstring to reflect that normalization is applied."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"User-supplied input written to database without required transformation. The post_item() endpoint accepts user input via ItemCreate and writes it directly to the database via create_item() without normalization. The codebase defines create_item_normalized() as the canonical entry-point for user-supplied names that applies required transformations (strip + lowercase), but this endpoint deliberately bypasses it, violating the documented data consistency requirement.\",\"suggestion\":\"Replace create_item(session, payload.name) with create_item_normalized(session, payload.name) and update the docstring to reflect that normalization is applied.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

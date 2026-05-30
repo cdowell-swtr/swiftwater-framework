@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 37,
+      "message": "Mutation input parameter 'description' is accepted but never used. The resolver accepts 'description: str' on line 37 but doesn't pass it to repository.create_item(), which only accepts (session, name). This misleads clients into thinking the description will be persisted.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Either (1) remove the 'description' parameter from the mutation signature if it's not needed, (2) add description support to the Item model and repository.create_item(), or (3) explicitly validate and document that description is silently ignored."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":37,\"severity\":\"high\",\"message\":\"Mutation input parameter 'description' is accepted but never used. The resolver accepts 'description: str' on line 37 but doesn't pass it to repository.create_item(), which only accepts (session, name). This misleads clients into thinking the description will be persisted.\",\"suggestion\":\"Either (1) remove the 'description' parameter from the mutation signature if it's not needed, (2) add description support to the Item model and repository.create_item(), or (3) explicitly validate and document that description is silently ignored.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 45,
+      "message": "User-supplied input written to database without normalization. The create_item() function docstring explicitly requires use of create_item_normalized() for user-supplied input, but post_item() calls the bare create_item() instead, storing data with uncontrolled casing and whitespace. This violates the stated data consistency strategy.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace create_item(session, payload.name) with create_item_normalized(session, payload.name) and update the docstring to reflect that normalization is now applied."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"User-supplied input written to database without normalization. The create_item() function docstring explicitly requires use of create_item_normalized() for user-supplied input, but post_item() calls the bare create_item() instead, storing data with uncontrolled casing and whitespace. This violates the stated data consistency strategy.\",\"suggestion\":\"Replace create_item(session, payload.name) with create_item_normalized(session, payload.name) and update the docstring to reflect that normalization is now applied.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

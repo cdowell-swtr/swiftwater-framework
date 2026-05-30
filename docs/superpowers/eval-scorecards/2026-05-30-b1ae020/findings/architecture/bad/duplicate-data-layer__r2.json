@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "duplicate-data-layer",
+  "findings": [
+    {
+      "line": 8,
+      "message": "Duplicate data-access layer: routes import from both `item_service` (add_item, fetch_all_items) and previously used `repository` (list_items, create_item), creating two parallel implementations of the same data operations",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Consolidate all data-access functions into a single module. Either extend `repository.py` with the `item_service` functions or migrate all functions to `item_service.py`, then update imports across the codebase to use the unified layer."
+    },
+    {
+      "line": 42,
+      "message": "Transaction boundary management in route handler: the POST handler directly calls `session.commit()` and `session.refresh(item)` instead of delegating to the data-access layer. The data-access function `add_item()` only performs `flush()`, forcing the route to complete the transaction.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Move transaction finalization into the data-access layer. Either: (1) modify `add_item()` to perform commit and refresh itself, or (2) use the existing `repository.create_item()` function which already handles these operations. Keep transaction boundaries within the data layer, not the route handler."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":8,\"severity\":\"high\",\"message\":\"Duplicate data-access layer: routes import from both `item_service` (add_item, fetch_all_items) and previously used `repository` (list_items, create_item), creating two parallel implementations of the same data operations\",\"suggestion\":\"Consolidate all data-access functions into a single module. Either extend `repository.py` with the `item_service` functions or migrate all functions to `item_service.py`, then update imports across the codebase to use the unified layer.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"Transaction boundary management in route handler: the POST handler directly calls `session.commit()` and `session.refresh(item)` instead of delegating to the data-access layer. The data-access function `add_item()` only performs `flush()`, forcing the route to complete the transaction.\",\"suggestion\":\"Move transaction finalization into the data-access layer. Either: (1) modify `add_item()` to perform commit and refresh itself, or (2) use the existing `repository.create_item()` function which already handles these operations. Keep transaction boundaries within the data layer, not the route handler.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

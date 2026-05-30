@@ -1,0 +1,29 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 25,
+      "message": "bulk_create_items commits inside the loop, so each insert is its own transaction. If any iteration fails (constraint violation, connection drop, etc.), earlier rows are already persisted and later rows are not, leaving a partially-written batch with no rollback path \u2014 a clear atomicity violation for a bulk operation.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add all items first, then commit once outside the loop (e.g. session.add_all([Item(name=n) for n in names]); session.commit(); then refresh each), so the batch is a single atomic transaction that rolls back fully on error."
+    },
+    {
+      "line": 18,
+      "message": "bulk_create_items is declared to return list[Item] but no return statement is present; the function implicitly returns None, breaking the contract callers rely on and masking the partial-write problem (callers cannot tell which rows actually committed).",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "suggestion": "Return the created list at the end of the function (return created) once the commit semantics are fixed."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":25,\"severity\":\"high\",\"message\":\"bulk_create_items commits inside the loop, so each insert is its own transaction. If any iteration fails (constraint violation, connection drop, etc.), earlier rows are already persisted and later rows are not, leaving a partially-written batch with no rollback path \u2014 a clear atomicity violation for a bulk operation.\",\"suggestion\":\"Add all items first, then commit once outside the loop (e.g. session.add_all([Item(name=n) for n in names]); session.commit(); then refresh each), so the batch is a single atomic transaction that rolls back fully on error.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":18,\"severity\":\"medium\",\"message\":\"bulk_create_items is declared to return list[Item] but no return statement is present; the function implicitly returns None, breaking the contract callers rely on and masking the partial-write problem (callers cannot tell which rows actually committed).\",\"suggestion\":\"Return the created list at the end of the function (return created) once the commit semantics are fixed.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

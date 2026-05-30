@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "Query parameter 'include_location=true' added to request, but the committed consumer pact in tests/functional/test_consumer_inventory.py expects GET /inventory/{item_id} with no query parameters. The client's actual request now diverges from the pact contract specification.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Either remove the query parameter from the client code, or regenerate the pact by running the consumer test to capture the new request signature (with query parameter) and any changes to the response body that the provider must now support."
+    },
+    {
+      "line": 18,
+      "message": "Pact file pacts/demo-inventory.json not regenerated after client change. The consumer contract should be re-published to reflect the new query parameter and the optional 'location' field in the response.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "suggestion": "Run the consumer pact test (test_consumer_inventory.py) to regenerate pacts/demo-inventory.json with the updated request (including 'include_location' parameter) and response body."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"high\",\"message\":\"Query parameter 'include_location=true' added to request, but the committed consumer pact in tests/functional/test_consumer_inventory.py expects GET /inventory/{item_id} with no query parameters. The client's actual request now diverges from the pact contract specification.\",\"suggestion\":\"Either remove the query parameter from the client code, or regenerate the pact by running the consumer test to capture the new request signature (with query parameter) and any changes to the response body that the provider must now support.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":18,\"severity\":\"info\",\"message\":\"Pact file pacts/demo-inventory.json not regenerated after client change. The consumer contract should be re-published to reflect the new query parameter and the optional 'location' field in the response.\",\"suggestion\":\"Run the consumer pact test (test_consumer_inventory.py) to regenerate pacts/demo-inventory.json with the updated request (including 'include_location' parameter) and response body.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

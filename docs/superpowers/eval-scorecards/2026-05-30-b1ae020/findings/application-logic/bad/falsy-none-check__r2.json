@@ -1,0 +1,29 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 39,
+      "message": "get_item has no return path when the item is found. After the `if not item:` branch raises, execution falls off the end of the function and returns None, violating the `-> Item` annotation and `response_model=ItemRead` (FastAPI will fail to serialize None against ItemRead, producing a 500 on every successful lookup).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add `return item` after the HTTPException branch so the found Item is actually returned."
+    },
+    {
+      "line": 38,
+      "message": "Using a falsy check (`if not item`) to test for a missing row is incorrect in general. SQLAlchemy ORM instances are normally truthy, but relying on truthiness conflates None with any object whose __bool__ could be False; the intent is strictly 'row not found'. Use an explicit identity check.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Replace `if not item:` with `if item is None:` to express the not-found condition unambiguously."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"high\",\"message\":\"get_item has no return path when the item is found. After the `if not item:` branch raises, execution falls off the end of the function and returns None, violating the `-> Item` annotation and `response_model=ItemRead` (FastAPI will fail to serialize None against ItemRead, producing a 500 on every successful lookup).\",\"suggestion\":\"Add `return item` after the HTTPException branch so the found Item is actually returned.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"medium\",\"message\":\"Using a falsy check (`if not item`) to test for a missing row is incorrect in general. SQLAlchemy ORM instances are normally truthy, but relying on truthiness conflates None with any object whose __bool__ could be False; the intent is strictly 'row not found'. Use an explicit identity check.\",\"suggestion\":\"Replace `if not item:` with `if item is None:` to express the not-found condition unambiguously.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

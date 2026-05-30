@@ -1,0 +1,36 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 18,
+      "message": "The added 'requests' dependency is unpinned (no version constraint), unlike every other entry in this manifest which uses '>=' lower bounds. This breaks the project's pinning convention and makes the dependency graph non-reproducible \u2014 a future resolver run could pull in an incompatible major (e.g., a hypothetical requests 3.x) without warning.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Add a lower bound consistent with the rest of the manifest, e.g. \"requests>=2.32\"."
+    },
+    {
+      "line": 18,
+      "message": "'requests' duplicates capability already provided by an existing transitive/dev dependency: httpx>=0.28 is already in the dev group and is the modern, actively-maintained HTTP client (sync + async, HTTP/2, used by FastAPI's TestClient). Adding 'requests' brings a second HTTP stack into the runtime closure (extra supply-chain surface: urllib3, charset-normalizer, idna, certifi) for functionality httpx already covers. requests is in maintenance mode upstream.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Drop 'requests' and use httpx for outbound HTTP (promote httpx from the dev group to runtime dependencies if it's needed at runtime). If a specific requests-only API is required, justify it in the PR description."
+    },
+    {
+      "line": 18,
+      "message": "No justification is visible in the diff for adding a new outbound-HTTP dependency. For a service that already wires tenacity + pybreaker (retry/circuit-breaker), introducing a new HTTP client typically needs a paired call site \u2014 review whether the consumer code is included and whether it benefits from the existing resilience primitives.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Confirm the call site exists, uses tenacity/pybreaker, and that the choice of HTTP client is intentional rather than reflexive."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"The added 'requests' dependency is unpinned (no version constraint), unlike every other entry in this manifest which uses '>=' lower bounds. This breaks the project's pinning convention and makes the dependency graph non-reproducible \u2014 a future resolver run could pull in an incompatible major (e.g., a hypothetical requests 3.x) without warning.\",\"suggestion\":\"Add a lower bound consistent with the rest of the manifest, e.g. \\\"requests>=2.32\\\".\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"'requests' duplicates capability already provided by an existing transitive/dev dependency: httpx>=0.28 is already in the dev group and is the modern, actively-maintained HTTP client (sync + async, HTTP/2, used by FastAPI's TestClient). Adding 'requests' brings a second HTTP stack into the runtime closure (extra supply-chain surface: urllib3, charset-normalizer, idna, certifi) for functionality httpx already covers. requests is in maintenance mode upstream.\",\"suggestion\":\"Drop 'requests' and use httpx for outbound HTTP (promote httpx from the dev group to runtime dependencies if it's needed at runtime). If a specific requests-only API is required, justify it in the PR description.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"info\",\"message\":\"No justification is visible in the diff for adding a new outbound-HTTP dependency. For a service that already wires tenacity + pybreaker (retry/circuit-breaker), introducing a new HTTP client typically needs a paired call site \u2014 review whether the consumer code is included and whether it benefits from the existing resilience primitives.\",\"suggestion\":\"Confirm the call site exists, uses tenacity/pybreaker, and that the choice of HTTP client is intentional rather than reflexive.\"}]",
+  "repeat": 0,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

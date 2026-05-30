@@ -1,0 +1,36 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 50,
+      "message": "Logging the caller's email address (PII) at INFO level violates GDPR data-minimisation and purpose-limitation principles. Personal data is being persisted to application logs with no retention policy, no pseudonymisation/hashing, no documented lawful basis, and no path for right-to-erasure (Art. 17): once an email lands in log aggregation/backups, it cannot be selectively deleted on a data-subject request. This is also a structured-logging antipattern (raw PII as a log field rather than a correlation id).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log the raw email. Either drop it entirely, or log a stable pseudonymous identifier (e.g. a salted HMAC of the email or an opaque user_id) and keep the email out of the log record. If an audit trail is required for the search action, write it to a dedicated, access-controlled audit store with a defined retention period and an erasure hook, not to the general application log."
+    },
+    {
+      "line": 33,
+      "message": "The /items/search endpoint accepts an email as a query-string parameter. Query strings are routinely captured by access logs, proxies, browser history, and referrer headers, so this leaks PII outside the application. There is also no documented retention, no audit trail of who searched for whom, and no right-to-erasure handling for the email values flowing through this surface.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Move the personalisation identifier out of the query string (use an authenticated session/user id derived from the auth context, or a POST body over TLS), and treat any identifier as PII subject to the project's retention and erasure policies. If an audit record is genuinely required, persist it to a dedicated audit log with a defined retention window and an erasure path."
+    },
+    {
+      "line": 47,
+      "message": "The endpoint is described as a 'sensitive operation' (personalised search keyed by email) but has no real audit log \u2014 only a free-text INFO line in the general application logger. There is no structured, tamper-evident audit record of who searched, what filter was applied, when, and from where, which is what GDPR Art. 30 (records of processing) and typical audit requirements expect for personal-data processing.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Emit a structured audit event (actor pseudonymous id, action, resource, timestamp, correlation id) to a dedicated audit sink with a documented retention period \u2014 separate from operational logging \u2014 and ensure the audit pipeline supports erasure/redaction for data-subject requests."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":50,\"severity\":\"high\",\"message\":\"Logging the caller's email address (PII) at INFO level violates GDPR data-minimisation and purpose-limitation principles. Personal data is being persisted to application logs with no retention policy, no pseudonymisation/hashing, no documented lawful basis, and no path for right-to-erasure (Art. 17): once an email lands in log aggregation/backups, it cannot be selectively deleted on a data-subject request. This is also a structured-logging antipattern (raw PII as a log field rather than a correlation id).\",\"suggestion\":\"Do not log the raw email. Either drop it entirely, or log a stable pseudonymous identifier (e.g. a salted HMAC of the email or an opaque user_id) and keep the email out of the log record. If an audit trail is required for the search action, write it to a dedicated, access-controlled audit store with a defined retention period and an erasure hook, not to the general application log.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"high\",\"message\":\"The /items/search endpoint accepts an email as a query-string parameter. Query strings are routinely captured by access logs, proxies, browser history, and referrer headers, so this leaks PII outside the application. There is also no documented retention, no audit trail of who searched for whom, and no right-to-erasure handling for the email values flowing through this surface.\",\"suggestion\":\"Move the personalisation identifier out of the query string (use an authenticated session/user id derived from the auth context, or a POST body over TLS), and treat any identifier as PII subject to the project's retention and erasure policies. If an audit record is genuinely required, persist it to a dedicated audit log with a defined retention window and an erasure path.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"medium\",\"message\":\"The endpoint is described as a 'sensitive operation' (personalised search keyed by email) but has no real audit log \u2014 only a free-text INFO line in the general application logger. There is no structured, tamper-evident audit record of who searched, what filter was applied, when, and from where, which is what GDPR Art. 30 (records of processing) and typical audit requirements expect for personal-data processing.\",\"suggestion\":\"Emit a structured audit event (actor pseudonymous id, action, resource, timestamp, correlation id) to a dedicated audit sink with a documented retention period \u2014 separate from operational logging \u2014 and ensure the audit pipeline supports erasure/redaction for data-subject requests.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

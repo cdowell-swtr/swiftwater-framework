@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "PII field 'owner_email' exposed in API response. The model explicitly warns (src/demo/db/models.py line 16): 'do not include in logs or external responses', but ItemRead response schema includes this field. Both GET and POST endpoints use ItemRead as response_model, exposing owner_email to external clients.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email' from ItemRead response schema. If owner_email must be stored, create a separate internal schema or use field exclusion strategies (e.g., Pydantic field serialization) to prevent its inclusion in API responses."
+    },
+    {
+      "line": 29,
+      "message": "Unnecessary PII collection in request schema. ItemCreate accepts owner_email, but post_item (line 44) does not use it when creating the item. This accepts PII that is not needed for the stated purpose of item creation and will be echoed back in the response due to the response_model.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email' from ItemCreate schema. If owner email is needed in the future, implement explicit consent and purpose-limited handling before collecting it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"PII field 'owner_email' exposed in API response. The model explicitly warns (src/demo/db/models.py line 16): 'do not include in logs or external responses', but ItemRead response schema includes this field. Both GET and POST endpoints use ItemRead as response_model, exposing owner_email to external clients.\",\"suggestion\":\"Remove 'owner_email' from ItemRead response schema. If owner_email must be stored, create a separate internal schema or use field exclusion strategies (e.g., Pydantic field serialization) to prevent its inclusion in API responses.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":29,\"severity\":\"high\",\"message\":\"Unnecessary PII collection in request schema. ItemCreate accepts owner_email, but post_item (line 44) does not use it when creating the item. This accepts PII that is not needed for the stated purpose of item creation and will be echoed back in the response due to the response_model.\",\"suggestion\":\"Remove 'owner_email' from ItemCreate schema. If owner email is needed in the future, implement explicit consent and purpose-limited handling before collecting it.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

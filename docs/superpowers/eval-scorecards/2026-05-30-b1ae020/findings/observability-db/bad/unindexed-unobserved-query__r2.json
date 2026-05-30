@@ -1,0 +1,29 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New data-store query with no metric or span around it. The get_item_by_name function performs a database query without any observability instrumentation (no metrics, no spans, no logging).",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the database query with observability instrumentation: add metrics for query latency and result count, add a span/trace context, and ensure any errors are logged with correlation id."
+    },
+    {
+      "line": 21,
+      "message": "Unobserved unbounded query on Item.name without latency or row-count metric. The WHERE clause query has no observability to track its performance impact.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Instrument the query to emit latency and row-count metrics. Additionally, add an index on Item.name in the model or migration to prevent full table scans, especially if this query is called frequently in a hot path."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New data-store query with no metric or span around it. The get_item_by_name function performs a database query without any observability instrumentation (no metrics, no spans, no logging).\",\"suggestion\":\"Wrap the database query with observability instrumentation: add metrics for query latency and result count, add a span/trace context, and ensure any errors are logged with correlation id.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":21,\"severity\":\"high\",\"message\":\"Unobserved unbounded query on Item.name without latency or row-count metric. The WHERE clause query has no observability to track its performance impact.\",\"suggestion\":\"Instrument the query to emit latency and row-count metrics. Additionally, add an index on Item.name in the model or migration to prevent full table scans, especially if this query is called frequently in a hot path.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

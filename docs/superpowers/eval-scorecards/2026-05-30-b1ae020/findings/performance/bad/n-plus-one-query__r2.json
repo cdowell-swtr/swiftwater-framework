@@ -1,0 +1,43 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 40,
+      "message": "N+1 query pattern: the endpoint first selects all Item.ids, then issues one session.get(Item, iid) per id inside the loop. For N items this is N+1 round trips to the database, scales linearly with table size on an unbounded input (no pagination/limit), and will exhaust the connection pool / dominate p95 latency under load \u2014 a clear performance regression against any meaningful API-latency SLO.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Fetch all names in a single query: `names = list(session.scalars(select(Item.name).order_by(Item.id)))`. Drop the intermediate id list and the per-id session.get loop entirely. If the dataset can grow unbounded, also add pagination (LIMIT/OFFSET or keyset) so the response size and query cost stay bounded."
+    },
+    {
+      "line": 32,
+      "message": "Unbounded result set: get_item_names selects every row in `items` with no LIMIT / pagination. Even after collapsing the N+1 into a single query, the response and memory footprint grow linearly with table size \u2014 a latent scalability/allocation hazard in a hot HTTP path, and a potential availability risk if the table grows large.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add pagination (e.g. `limit`/`offset` query params or keyset pagination on `Item.id`) and cap the per-request page size. Return a paged envelope rather than `list[str]`."
+    },
+    {
+      "line": 33,
+      "message": "`from sqlalchemy import select` is imported inside the request handler. The import is cached after the first call so the steady-state cost is negligible, but it adds avoidable work on the first request and is inconsistent with the module-level imports used elsewhere (e.g. db/repository.py). Speculative micro-optimisation \u2014 flagged as low.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Move `from sqlalchemy import select` to the module-level imports at the top of routes/items.py."
+    },
+    {
+      "line": 41,
+      "message": "Missing `return names`: the function is annotated `-> list[str]` and declared with `response_model=list[str]`, but it falls off the end and implicitly returns `None`. FastAPI will then attempt to serialize `None` against `list[str]` and raise a ResponseValidationError on every call \u2014 i.e. the endpoint is 100% broken, which is also the worst possible performance outcome (every request is wasted work).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add `return names` (or, per the suggestion above, just `return list(session.scalars(select(Item.name).order_by(Item.id)))`)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"N+1 query pattern: the endpoint first selects all Item.ids, then issues one session.get(Item, iid) per id inside the loop. For N items this is N+1 round trips to the database, scales linearly with table size on an unbounded input (no pagination/limit), and will exhaust the connection pool / dominate p95 latency under load \u2014 a clear performance regression against any meaningful API-latency SLO.\",\"suggestion\":\"Fetch all names in a single query: `names = list(session.scalars(select(Item.name).order_by(Item.id)))`. Drop the intermediate id list and the per-id session.get loop entirely. If the dataset can grow unbounded, also add pagination (LIMIT/OFFSET or keyset) so the response size and query cost stay bounded.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":32,\"severity\":\"medium\",\"message\":\"Unbounded result set: get_item_names selects every row in `items` with no LIMIT / pagination. Even after collapsing the N+1 into a single query, the response and memory footprint grow linearly with table size \u2014 a latent scalability/allocation hazard in a hot HTTP path, and a potential availability risk if the table grows large.\",\"suggestion\":\"Add pagination (e.g. `limit`/`offset` query params or keyset pagination on `Item.id`) and cap the per-request page size. Return a paged envelope rather than `list[str]`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"`from sqlalchemy import select` is imported inside the request handler. The import is cached after the first call so the steady-state cost is negligible, but it adds avoidable work on the first request and is inconsistent with the module-level imports used elsewhere (e.g. db/repository.py). Speculative micro-optimisation \u2014 flagged as low.\",\"suggestion\":\"Move `from sqlalchemy import select` to the module-level imports at the top of routes/items.py.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Missing `return names`: the function is annotated `-> list[str]` and declared with `response_model=list[str]`, but it falls off the end and implicitly returns `None`. FastAPI will then attempt to serialize `None` against `list[str]` and raise a ResponseValidationError on every call \u2014 i.e. the endpoint is 100% broken, which is also the worst possible performance outcome (every request is wasted work).\",\"suggestion\":\"Add `return names` (or, per the suggestion above, just `return list(session.scalars(select(Item.name).order_by(Item.id)))`).\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

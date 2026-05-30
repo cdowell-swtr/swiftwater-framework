@@ -1,0 +1,36 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 48,
+      "message": "Logging the caller's email address (PII) at INFO level violates GDPR data minimisation and purpose-limitation principles. Application logs typically have broad access and long retention without a defined erasure path, which makes right-to-erasure (Art. 17) impractical and creates an unbounded PII store.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log the raw email. Either drop the identifier entirely, pseudonymise it (e.g. salted HMAC/hash), or replace it with an opaque internal user id. If audit is required, write to a dedicated audit log with a documented retention period and deletion hooks tied to erasure requests."
+    },
+    {
+      "line": 35,
+      "message": "Accepting the user's email as a query parameter (and logging it) means PII flows through URLs/access logs/proxies with no retention or deletion policy, and no documented lawful basis or purpose. This is a personalisation feature with no consent, retention schedule, or erasure path.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Derive the user identity from the authenticated session/JWT instead of a query string, document a retention period for any stored personalisation data, and define an erasure path that purges the user's personalisation footprint on Art. 17 request."
+    },
+    {
+      "line": 35,
+      "message": "Sensitive operation (per-user personalised search by email) has no audit log \u2014 only an informal INFO log that mixes PII into the application log. There is no tamper-evident, retention-bounded audit trail recording who searched what and when.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Emit a structured audit event (separate sink from app logs) with a pseudonymous actor id, action, timestamp, and correlation id; define retention and access controls; keep PII out of the audit payload."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":48,\"severity\":\"high\",\"message\":\"Logging the caller's email address (PII) at INFO level violates GDPR data minimisation and purpose-limitation principles. Application logs typically have broad access and long retention without a defined erasure path, which makes right-to-erasure (Art. 17) impractical and creates an unbounded PII store.\",\"suggestion\":\"Do not log the raw email. Either drop the identifier entirely, pseudonymise it (e.g. salted HMAC/hash), or replace it with an opaque internal user id. If audit is required, write to a dedicated audit log with a documented retention period and deletion hooks tied to erasure requests.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":35,\"severity\":\"high\",\"message\":\"Accepting the user's email as a query parameter (and logging it) means PII flows through URLs/access logs/proxies with no retention or deletion policy, and no documented lawful basis or purpose. This is a personalisation feature with no consent, retention schedule, or erasure path.\",\"suggestion\":\"Derive the user identity from the authenticated session/JWT instead of a query string, document a retention period for any stored personalisation data, and define an erasure path that purges the user's personalisation footprint on Art. 17 request.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":35,\"severity\":\"high\",\"message\":\"Sensitive operation (per-user personalised search by email) has no audit log \u2014 only an informal INFO log that mixes PII into the application log. There is no tamper-evident, retention-bounded audit trail recording who searched what and when.\",\"suggestion\":\"Emit a structured audit event (separate sink from app logs) with a pseudonymous actor id, action, timestamp, and correlation id; define retention and access controls; keep PII out of the audit payload.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

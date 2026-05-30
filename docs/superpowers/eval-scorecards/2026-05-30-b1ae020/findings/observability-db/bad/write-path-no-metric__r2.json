@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New data-store write path (delete_items_by_prefix) has no metric or span instrumentation. This write operation is invisible to observability (no latency metric, no row-count metric, no tracing span). The function performs database mutations (session.delete + session.commit) without any observability instrumentation.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add instrumentation around the delete operation: wrap with a span (if tracing is enabled), record a metric for the number of rows deleted, and/or record latency of the database operation. Consider adding a metric like 'db_rows_deleted_total' and/or 'db_delete_latency_ms' to make this operation observable."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New data-store write path (delete_items_by_prefix) has no metric or span instrumentation. This write operation is invisible to observability (no latency metric, no row-count metric, no tracing span). The function performs database mutations (session.delete + session.commit) without any observability instrumentation.\",\"suggestion\":\"Add instrumentation around the delete operation: wrap with a span (if tracing is enabled), record a metric for the number of rows deleted, and/or record latency of the database operation. Consider adding a metric like 'db_rows_deleted_total' and/or 'db_delete_latency_ms' to make this operation observable.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

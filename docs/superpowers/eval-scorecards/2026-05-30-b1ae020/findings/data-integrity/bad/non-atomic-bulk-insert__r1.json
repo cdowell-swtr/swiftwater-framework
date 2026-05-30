@@ -1,0 +1,29 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 25,
+      "message": "bulk_create_items commits inside the for-loop, so the batch is not atomic: if any iteration fails (constraint violation, connection drop, etc.), earlier items remain committed while later ones never persist. This violates the all-or-nothing invariant callers expect from a 'bulk' write and leaves the store in an inconsistent partial state that cannot be rolled back.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add all items first, then commit once outside the loop (e.g. `for name in names: session.add(Item(name=name))` then a single `session.commit()` / `session.flush()` after the loop), or wrap the whole batch in `with session.begin():` so a single transaction covers the entire insert and a failure rolls back every row."
+    },
+    {
+      "line": 28,
+      "message": "Committing per row inside a loop also amplifies write amplification (one transaction + fsync per item) and, combined with `session.refresh(item)`, issues an extra round-trip per row \u2014 turning what should be a single bulk insert into N transactions. Beyond the atomicity bug, this is a correctness-adjacent concern because any retry/idempotency strategy the caller layers on top will see partial state.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "suggestion": "Use a single transaction for the whole batch; if generated PKs/defaults are needed for the return value, rely on `session.flush()` (still in-transaction) rather than committing each row."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":25,\"severity\":\"high\",\"message\":\"bulk_create_items commits inside the for-loop, so the batch is not atomic: if any iteration fails (constraint violation, connection drop, etc.), earlier items remain committed while later ones never persist. This violates the all-or-nothing invariant callers expect from a 'bulk' write and leaves the store in an inconsistent partial state that cannot be rolled back.\",\"suggestion\":\"Add all items first, then commit once outside the loop (e.g. `for name in names: session.add(Item(name=name))` then a single `session.commit()` / `session.flush()` after the loop), or wrap the whole batch in `with session.begin():` so a single transaction covers the entire insert and a failure rolls back every row.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":28,\"severity\":\"medium\",\"message\":\"Committing per row inside a loop also amplifies write amplification (one transaction + fsync per item) and, combined with `session.refresh(item)`, issues an extra round-trip per row \u2014 turning what should be a single bulk insert into N transactions. Beyond the atomicity bug, this is a correctness-adjacent concern because any retry/idempotency strategy the caller layers on top will see partial state.\",\"suggestion\":\"Use a single transaction for the whole batch; if generated PKs/defaults are needed for the return value, rely on `session.flush()` (still in-transaction) rather than committing each row.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

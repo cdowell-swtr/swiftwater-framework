@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 52,
+      "message": "Tautological assertion `assert s is s` \u2014 an object is always identical to itself, so this test passes regardless of any behaviour in `Settings`. It exercises nothing about construction, defaults, or invariants and cannot fail.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Assert a meaningful property of the constructed Settings, e.g. `assert Settings().service_name == \"demo\"` or `assert isinstance(Settings(), Settings) and Settings().environment == \"dev\"` \u2014 something tied to the code under test."
+    },
+    {
+      "line": 58,
+      "message": "Over-mocked / asserts on the mock itself: the test monkeypatches `Settings.resolved_log_level` to return the literal \"MOCKED\" and then asserts that `Settings().resolved_log_level == \"MOCKED\"`. The real `resolved_log_level` implementation is never executed, so this test passes no matter how `resolved_log_level` is (or isn't) implemented \u2014 it cannot fail in response to a real regression.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Drop the patch and drive the property through its real inputs (e.g. set `APP_LOG_LEVEL` via `monkeypatch.setenv` and assert the resolved value, including default and case-normalisation behaviour). Only mock collaborators, not the unit under test."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":52,\"severity\":\"high\",\"message\":\"Tautological assertion `assert s is s` \u2014 an object is always identical to itself, so this test passes regardless of any behaviour in `Settings`. It exercises nothing about construction, defaults, or invariants and cannot fail.\",\"suggestion\":\"Assert a meaningful property of the constructed Settings, e.g. `assert Settings().service_name == \\\"demo\\\"` or `assert isinstance(Settings(), Settings) and Settings().environment == \\\"dev\\\"` \u2014 something tied to the code under test.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":58,\"severity\":\"high\",\"message\":\"Over-mocked / asserts on the mock itself: the test monkeypatches `Settings.resolved_log_level` to return the literal \\\"MOCKED\\\" and then asserts that `Settings().resolved_log_level == \\\"MOCKED\\\"`. The real `resolved_log_level` implementation is never executed, so this test passes no matter how `resolved_log_level` is (or isn't) implemented \u2014 it cannot fail in response to a real regression.\",\"suggestion\":\"Drop the patch and drive the property through its real inputs (e.g. set `APP_LOG_LEVEL` via `monkeypatch.setenv` and assert the resolved value, including default and case-normalisation behaviour). Only mock collaborators, not the unit under test.\"}]",
+  "repeat": 0,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

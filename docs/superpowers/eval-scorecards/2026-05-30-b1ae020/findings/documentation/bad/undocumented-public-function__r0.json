@@ -1,0 +1,43 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "line": 34,
+      "message": "New public endpoint count_items() has no docstring explaining its purpose, response shape, or the relationship to /items. Public route handlers in this file (e.g. get_items) document the contract; this one should too.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a docstring describing the endpoint, e.g. \"Return the total number of items as {\\\"count\\\": <int>} \u2014 convenience counterpart to GET /items.\""
+    },
+    {
+      "line": 33,
+      "message": "The response is typed as a bare `dict` with no response_model, so the OpenAPI contract for /items/count is unspecified (any shape). Sibling endpoint /items uses a typed response_model (ItemRead); this asymmetry will produce a vague OpenAPI spec and may cause the contract diff CI job to under-document the new route.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Define a small response model (e.g. `class ItemCount(BaseModel): count: int`) and either annotate the return type as `ItemCount` or set `response_model=ItemCount` on the route decorator."
+    },
+    {
+      "line": 34,
+      "message": "README.md's Endpoints section lists /items but not the new /items/count endpoint, so the user-facing endpoint documentation is now stale.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "suggestion": "Add a bullet under README.md \"## Endpoints\": `- `GET /items/count` \u2014 item count for the seeded/listed items`."
+    },
+    {
+      "line": 35,
+      "message": "Implementation loads all items into memory just to take len(), which is non-obvious and undocumented. If the intent is a cheap count, a SQL COUNT would be expected; if the intent is deliberately reusing list_items, a one-line comment would make that explicit so future readers don't \"optimize\" it.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "suggestion": "Either add a brief comment (e.g. `# Reuses list_items for parity with GET /items; swap to a COUNT(*) query if the table grows.`) or replace with a repository-level count helper and document it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"low\",\"message\":\"New public endpoint count_items() has no docstring explaining its purpose, response shape, or the relationship to /items. Public route handlers in this file (e.g. get_items) document the contract; this one should too.\",\"suggestion\":\"Add a docstring describing the endpoint, e.g. \\\"Return the total number of items as {\\\\\\\"count\\\\\\\": <int>} \u2014 convenience counterpart to GET /items.\\\"\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"The response is typed as a bare `dict` with no response_model, so the OpenAPI contract for /items/count is unspecified (any shape). Sibling endpoint /items uses a typed response_model (ItemRead); this asymmetry will produce a vague OpenAPI spec and may cause the contract diff CI job to under-document the new route.\",\"suggestion\":\"Define a small response model (e.g. `class ItemCount(BaseModel): count: int`) and either annotate the return type as `ItemCount` or set `response_model=ItemCount` on the route decorator.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"info\",\"message\":\"README.md's Endpoints section lists /items but not the new /items/count endpoint, so the user-facing endpoint documentation is now stale.\",\"suggestion\":\"Add a bullet under README.md \\\"## Endpoints\\\": `- `GET /items/count` \u2014 item count for the seeded/listed items`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":35,\"severity\":\"info\",\"message\":\"Implementation loads all items into memory just to take len(), which is non-obvious and undocumented. If the intent is a cheap count, a SQL COUNT would be expected; if the intent is deliberately reusing list_items, a one-line comment would make that explicit so future readers don't \\\"optimize\\\" it.\",\"suggestion\":\"Either add a brief comment (e.g. `# Reuses list_items for parity with GET /items; swap to a COUNT(*) query if the table grows.`) or replace with a repository-level count helper and document it.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

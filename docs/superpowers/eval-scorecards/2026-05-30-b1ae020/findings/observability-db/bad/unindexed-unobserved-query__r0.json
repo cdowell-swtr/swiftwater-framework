@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New datastore query path `get_item_by_name` has no metric or span instrumentation. The function executes a database query (session.scalars + select) without any observability \u2014 no OpenTelemetry span, no latency metric, and no row-count metric. Datastore access should be instrumented for latency tracking and error correlation.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the query with an OpenTelemetry span (e.g., `with tracer.start_as_current_span('db.item.get_by_name')`) and record query latency/row counts via the MetricsRegistry. Also ensure database errors are logged with correlation_id for debugging."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New datastore query path `get_item_by_name` has no metric or span instrumentation. The function executes a database query (session.scalars + select) without any observability \u2014 no OpenTelemetry span, no latency metric, and no row-count metric. Datastore access should be instrumented for latency tracking and error correlation.\",\"suggestion\":\"Wrap the query with an OpenTelemetry span (e.g., `with tracer.start_as_current_span('db.item.get_by_name')`) and record query latency/row counts via the MetricsRegistry. Also ensure database errors are logged with correlation_id for debugging.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

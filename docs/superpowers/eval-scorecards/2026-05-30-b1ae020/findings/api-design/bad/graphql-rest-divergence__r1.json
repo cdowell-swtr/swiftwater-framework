@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: renamed field 'name' to 'title' without backwards compatibility. This creates API divergence\u2014the REST endpoint (routes/items.py, line 22) still exposes 'name', but GraphQL clients now get 'title'. Clients cannot use both APIs interchangeably.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Either (a) keep 'name' in the GraphQL schema for backwards compatibility and add 'title' as an alias, (b) update the REST API ItemRead schema to also use 'title', or (c) deprecate 'name' in GraphQL with a @deprecated directive and provide a migration period before removal."
+    },
+    {
+      "line": 20,
+      "message": "New 'description' field is added but always hardcoded to None in _to_item (line 28). The database model (db/models.py) has no 'description' column, and the REST API (routes/items.py) does not expose this field. This creates an unexplained nullability difference between APIs.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "info",
+      "suggestion": "Either add a 'description' column to the Item model and populate it in _to_item, or remove the 'description' field from the GraphQL schema to maintain API parity with REST."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: renamed field 'name' to 'title' without backwards compatibility. This creates API divergence\u2014the REST endpoint (routes/items.py, line 22) still exposes 'name', but GraphQL clients now get 'title'. Clients cannot use both APIs interchangeably.\",\"suggestion\":\"Either (a) keep 'name' in the GraphQL schema for backwards compatibility and add 'title' as an alias, (b) update the REST API ItemRead schema to also use 'title', or (c) deprecate 'name' in GraphQL with a @deprecated directive and provide a migration period before removal.\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":20,\"severity\":\"info\",\"message\":\"New 'description' field is added but always hardcoded to None in _to_item (line 28). The database model (db/models.py) has no 'description' column, and the REST API (routes/items.py) does not expose this field. This creates an unexplained nullability difference between APIs.\",\"suggestion\":\"Either add a 'description' column to the Item model and populate it in _to_item, or remove the 'description' field from the GraphQL schema to maintain API parity with REST.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

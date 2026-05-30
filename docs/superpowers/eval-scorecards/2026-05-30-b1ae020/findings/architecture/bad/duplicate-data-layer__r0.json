@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "duplicate-data-layer",
+  "findings": [
+    {
+      "line": 8,
+      "message": "Duplicate data-access layer: importing from item_service (add_item, fetch_all_items) creates a second data-access abstraction layer. The repository module already provides equivalent functions (list_items, create_item). This violates the layering principle and creates maintenance burden with code duplication.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Consolidate to a single data-access layer. Either migrate all code to use repository.py (renaming functions if needed for clarity) or migrate seed.py to use item_service.py. Ensure consistent query patterns and transaction handling across the codebase."
+    },
+    {
+      "line": 42,
+      "message": "Transaction handling split between service layer and route handler: item_service.add_item() only flushes (line 15 of item_service.py), but the route handler calls session.commit() and session.refresh() after. This couples the service layer contract to the caller and creates inconsistent transaction semantics compared to repository.create_item() which handles its own commit.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Have the service layer own the complete transaction: add_item() should handle both flush and commit, returning a fully-persisted object. The route handler should only call the service and return the result, not manage transactions."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":8,\"severity\":\"high\",\"message\":\"Duplicate data-access layer: importing from item_service (add_item, fetch_all_items) creates a second data-access abstraction layer. The repository module already provides equivalent functions (list_items, create_item). This violates the layering principle and creates maintenance burden with code duplication.\",\"suggestion\":\"Consolidate to a single data-access layer. Either migrate all code to use repository.py (renaming functions if needed for clarity) or migrate seed.py to use item_service.py. Ensure consistent query patterns and transaction handling across the codebase.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"Transaction handling split between service layer and route handler: item_service.add_item() only flushes (line 15 of item_service.py), but the route handler calls session.commit() and session.refresh() after. This couples the service layer contract to the caller and creates inconsistent transaction semantics compared to repository.create_item() which handles its own commit.\",\"suggestion\":\"Have the service layer own the complete transaction: add_item() should handle both flush and commit, returning a fully-persisted object. The route handler should only call the service and return the result, not manage transactions.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

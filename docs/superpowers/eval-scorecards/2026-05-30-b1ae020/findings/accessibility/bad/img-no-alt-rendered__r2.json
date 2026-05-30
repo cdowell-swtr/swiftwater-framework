@@ -1,0 +1,22 @@
+{
+  "agent": "accessibility",
+  "case": "img-no-alt-rendered",
+  "findings": [
+    {
+      "line": 30,
+      "message": "The <img src=\"/static/banner.png\" /> in ItemBanner has no alt attribute, so it has no accessible name. Screen readers will either skip it or announce the filename, violating WCAG 2.1 SC 1.1.1 (Non-text Content).",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "suggestion": "Add a descriptive alt attribute, e.g. <img src=\"/static/banner.png\" alt=\"Items catalogue banner\" />. If the image is purely decorative, use alt=\"\" so assistive tech ignores it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":30,\"severity\":\"high\",\"message\":\"The <img src=\\\"/static/banner.png\\\" /> in ItemBanner has no alt attribute, so it has no accessible name. Screen readers will either skip it or announce the filename, violating WCAG 2.1 SC 1.1.1 (Non-text Content).\",\"suggestion\":\"Add a descriptive alt attribute, e.g. <img src=\\\"/static/banner.png\\\" alt=\\\"Items catalogue banner\\\" />. If the image is purely decorative, use alt=\\\"\\\" so assistive tech ignores it.\"}]",
+  "repeat": 2,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

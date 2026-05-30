@@ -1,0 +1,36 @@
+{
+  "agent": "observability-infra",
+  "case": "exporter-without-scrape",
+  "findings": [
+    {
+      "line": 94,
+      "message": "New exporter service 'redis-exporter' added but no corresponding Prometheus scrape job exists in infra/observability/prometheus/prometheus.yml. The exporter will run but metrics will not be scraped.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add a scrape job for redis in prometheus.yml:\n  - job_name: redis\n    static_configs:\n      - targets: [\"redis-exporter:9121\"]"
+    },
+    {
+      "line": 100,
+      "message": "redis-exporter depends on a 'redis' service that does not exist in any compose file. The exporter service will fail to start.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Either: (1) Define a redis service in services.yml or the appropriate compose file, or (2) Remove the redis dependency if redis is managed externally"
+    },
+    {
+      "line": 94,
+      "message": "New prod runtime surface (redis exporter) added to observability.yml without corresponding alert rules and dashboard. Observability coverage is incomplete.",
+      "path": "infra/compose/observability.yml",
+      "severity": "medium",
+      "suggestion": "Add alert rules in infra/observability/prometheus/alerts/redis_alerts.yml (e.g., RedisDown alert) and create a redis dashboard in infra/observability/grafana/dashboards/redis.json"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"New exporter service 'redis-exporter' added but no corresponding Prometheus scrape job exists in infra/observability/prometheus/prometheus.yml. The exporter will run but metrics will not be scraped.\",\"suggestion\":\"Add a scrape job for redis in prometheus.yml:\\n  - job_name: redis\\n    static_configs:\\n      - targets: [\\\"redis-exporter:9121\\\"]\"},{\"path\":\"infra/compose/observability.yml\",\"line\":100,\"severity\":\"high\",\"message\":\"redis-exporter depends on a 'redis' service that does not exist in any compose file. The exporter service will fail to start.\",\"suggestion\":\"Either: (1) Define a redis service in services.yml or the appropriate compose file, or (2) Remove the redis dependency if redis is managed externally\"},{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"medium\",\"message\":\"New prod runtime surface (redis exporter) added to observability.yml without corresponding alert rules and dashboard. Observability coverage is incomplete.\",\"suggestion\":\"Add alert rules in infra/observability/prometheus/alerts/redis_alerts.yml (e.g., RedisDown alert) and create a redis dashboard in infra/observability/grafana/dashboards/redis.json\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/compose/observability.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

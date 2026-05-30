@@ -1,0 +1,36 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 40,
+      "message": "N+1 query pattern: the handler first fetches all item ids in one query, then issues a separate `session.get(Item, iid)` per id inside the loop. For N items this performs N+1 round-trips to the database, which scales linearly with table size on an unbounded endpoint and will exhaust the connection pool / blow request latency well past any reasonable SLO as the items table grows.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Fetch the names in a single query, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))`. That replaces N+1 round-trips with one and removes the need for the per-row `session.get` lookups (and the `# type: ignore[union-attr]`)."
+    },
+    {
+      "line": 37,
+      "message": "Unbounded result set: `/items/names` returns every row in the `items` table with no pagination/limit. Combined with the N+1 above, a moderately sized table turns a single request into thousands of queries and a large JSON payload, risking pool exhaustion and slow responses under concurrent load.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add pagination (e.g. `limit`/`offset` query params with a sane default and hard cap) and apply it in the SQL query itself."
+    },
+    {
+      "line": 41,
+      "message": "Allocation pattern in the hot path: building `names` via repeated `list.append` inside the per-row loop is fine functionally, but together with the per-row `session.get` it materialises N ORM instances into the identity map just to read a single string column. Once the N+1 is fixed by selecting `Item.name` directly, no ORM instances need to be allocated at all.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "After collapsing to a single `select(Item.name)`, drop the intermediate list-and-append entirely and return the `session.scalars(...).all()` (or `list(...)`) result directly."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"N+1 query pattern: the handler first fetches all item ids in one query, then issues a separate `session.get(Item, iid)` per id inside the loop. For N items this performs N+1 round-trips to the database, which scales linearly with table size on an unbounded endpoint and will exhaust the connection pool / blow request latency well past any reasonable SLO as the items table grows.\",\"suggestion\":\"Fetch the names in a single query, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))`. That replaces N+1 round-trips with one and removes the need for the per-row `session.get` lookups (and the `# type: ignore[union-attr]`).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"medium\",\"message\":\"Unbounded result set: `/items/names` returns every row in the `items` table with no pagination/limit. Combined with the N+1 above, a moderately sized table turns a single request into thousands of queries and a large JSON payload, risking pool exhaustion and slow responses under concurrent load.\",\"suggestion\":\"Add pagination (e.g. `limit`/`offset` query params with a sane default and hard cap) and apply it in the SQL query itself.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"low\",\"message\":\"Allocation pattern in the hot path: building `names` via repeated `list.append` inside the per-row loop is fine functionally, but together with the per-row `session.get` it materialises N ORM instances into the identity map just to read a single string column. Once the N+1 is fixed by selecting `Item.name` directly, no ORM instances need to be allocated at all.\",\"suggestion\":\"After collapsing to a single `select(Item.name)`, drop the intermediate list-and-append entirely and return the `session.scalars(...).all()` (or `list(...)`) result directly.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

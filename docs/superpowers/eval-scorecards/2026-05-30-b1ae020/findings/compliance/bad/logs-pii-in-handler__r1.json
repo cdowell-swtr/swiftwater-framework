@@ -1,0 +1,36 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 47,
+      "message": "Email address (personal data under GDPR Art. 4(1)) is logged at INFO level in plaintext. This creates an uncontrolled copy of PII in application logs with no retention policy, no pseudonymisation, and no path for right-to-erasure (Art. 17) \u2014 once an email is in the log stream it will be replicated to log aggregation/backups and cannot be selectively deleted on a data-subject request.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log the raw email. Either drop it entirely, log a stable pseudonymous user_id, or hash/truncate the address (e.g. SHA-256 of normalised email). Document the log-retention period and ensure the same pseudonymisation is applied wherever request fields are logged."
+    },
+    {
+      "line": 32,
+      "message": "search_items accepts an email query parameter (personal data) but there is no audit-log record of the access \u2014 only a free-text INFO log line. Sensitive/personalised operations on personal data must produce a structured audit event (who, what, when, correlation_id, lawful basis) that is retained and queryable for DSAR/erasure purposes, separate from operational logs.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Emit a structured audit event via the project's audit channel (not the generic logger) capturing actor id, action, timestamp, and correlation_id, and ensure the audit store has a documented retention period and erasure procedure. Pair this with a documented lawful basis for processing the email."
+    },
+    {
+      "line": 32,
+      "message": "Passing the user's email as a query-string parameter causes the PII to be captured in URL access logs, reverse-proxy logs, browser history, and referer headers \u2014 none of which have a GDPR-compliant retention/erasure path. Query parameters are an inappropriate transport for personal data.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Move the email out of the query string: either resolve the caller from the authenticated session/JWT (preferred) or accept it in a POST JSON body, and ensure access logs scrub or omit URL parameters that may contain personal data."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"Email address (personal data under GDPR Art. 4(1)) is logged at INFO level in plaintext. This creates an uncontrolled copy of PII in application logs with no retention policy, no pseudonymisation, and no path for right-to-erasure (Art. 17) \u2014 once an email is in the log stream it will be replicated to log aggregation/backups and cannot be selectively deleted on a data-subject request.\",\"suggestion\":\"Do not log the raw email. Either drop it entirely, log a stable pseudonymous user_id, or hash/truncate the address (e.g. SHA-256 of normalised email). Document the log-retention period and ensure the same pseudonymisation is applied wherever request fields are logged.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":32,\"severity\":\"high\",\"message\":\"search_items accepts an email query parameter (personal data) but there is no audit-log record of the access \u2014 only a free-text INFO log line. Sensitive/personalised operations on personal data must produce a structured audit event (who, what, when, correlation_id, lawful basis) that is retained and queryable for DSAR/erasure purposes, separate from operational logs.\",\"suggestion\":\"Emit a structured audit event via the project's audit channel (not the generic logger) capturing actor id, action, timestamp, and correlation_id, and ensure the audit store has a documented retention period and erasure procedure. Pair this with a documented lawful basis for processing the email.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":32,\"severity\":\"high\",\"message\":\"Passing the user's email as a query-string parameter causes the PII to be captured in URL access logs, reverse-proxy logs, browser history, and referer headers \u2014 none of which have a GDPR-compliant retention/erasure path. Query parameters are an inappropriate transport for personal data.\",\"suggestion\":\"Move the email out of the query string: either resolve the caller from the authenticated session/JWT (preferred) or accept it in a POST JSON body, and ensure access logs scrub or omit URL parameters that may contain personal data.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

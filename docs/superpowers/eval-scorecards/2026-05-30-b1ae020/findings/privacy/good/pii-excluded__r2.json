@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-excluded",
+  "findings": [
+    {
+      "line": 46,
+      "message": "post_item function docstring claims 'owner_email stored' but the implementation discards the owner_email from payload. The create_item(session, payload.name) call does not pass payload.owner_email, so user-provided PII is silently dropped.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Either pass owner_email to create_item: return create_item(session, payload.name, payload.owner_email), or remove owner_email from ItemCreate schema and docstring to match the actual behavior."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":46,\"severity\":\"high\",\"message\":\"post_item function docstring claims 'owner_email stored' but the implementation discards the owner_email from payload. The create_item(session, payload.name) call does not pass payload.owner_email, so user-provided PII is silently dropped.\",\"suggestion\":\"Either pass owner_email to create_item: return create_item(session, payload.name, payload.owner_email), or remove owner_email from ItemCreate schema and docstring to match the actual behavior.\"}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

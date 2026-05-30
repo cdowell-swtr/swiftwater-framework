@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 45,
+      "message": "User-supplied input reaches database without required transformation. The post_item() endpoint passes payload.name directly to create_item(), bypassing create_item_normalized(). The repository layer explicitly documents that user input MUST go through normalization (strip + lowercase), but this endpoint violates that contract, allowing untransformed data to persist.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Change line 45 from 'return create_item(session, payload.name)' to 'return create_item_normalized(session, payload.name)' to ensure user input is normalized before storage. Remove or correct the misleading docstring that describes intentionally skipping normalization."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"User-supplied input reaches database without required transformation. The post_item() endpoint passes payload.name directly to create_item(), bypassing create_item_normalized(). The repository layer explicitly documents that user input MUST go through normalization (strip + lowercase), but this endpoint violates that contract, allowing untransformed data to persist.\",\"suggestion\":\"Change line 45 from 'return create_item(session, payload.name)' to 'return create_item_normalized(session, payload.name)' to ensure user input is normalized before storage. Remove or correct the misleading docstring that describes intentionally skipping normalization.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

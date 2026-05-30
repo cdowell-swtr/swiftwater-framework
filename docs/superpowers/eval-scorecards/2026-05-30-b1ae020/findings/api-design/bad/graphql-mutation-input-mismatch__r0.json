@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 37,
+      "message": "Mutation accepts 'description' parameter but never uses it. The parameter is passed to the function signature but not forwarded to repository.create_item(), and the database model does not have a 'description' field. This silently ignores client input.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Either (1) remove the unused 'description' parameter if not needed, (2) update the database model and repository.create_item() to accept and store the description, or (3) add input validation that explicitly rejects the description parameter with a clear error message."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":37,\"severity\":\"high\",\"message\":\"Mutation accepts 'description' parameter but never uses it. The parameter is passed to the function signature but not forwarded to repository.create_item(), and the database model does not have a 'description' field. This silently ignores client input.\",\"suggestion\":\"Either (1) remove the unused 'description' parameter if not needed, (2) update the database model and repository.create_item() to accept and store the description, or (3) add input validation that explicitly rejects the description parameter with a clear error message.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

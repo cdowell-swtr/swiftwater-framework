@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 48,
+      "message": "Stale derived field: rename_item() updates only item.name without recalculating slug. The slug field is documented as 'always derived from name' and 'must stay in sync with name', but this endpoint breaks that invariant by updating name without updating slug. After this patch, a renamed item will have a slug that no longer matches its name.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace the manual update with a call to update_item_name() from the repository module, which handles both fields atomically: 'item = update_item_name(session, item_id, payload.name)'. Alternatively, add 'item.slug = _make_slug(payload.name)' on line 48 before the commit."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":48,\"severity\":\"high\",\"message\":\"Stale derived field: rename_item() updates only item.name without recalculating slug. The slug field is documented as 'always derived from name' and 'must stay in sync with name', but this endpoint breaks that invariant by updating name without updating slug. After this patch, a renamed item will have a slug that no longer matches its name.\",\"suggestion\":\"Replace the manual update with a call to update_item_name() from the repository module, which handles both fields atomically: 'item = update_item_name(session, item_id, payload.name)'. Alternatively, add 'item.slug = _make_slug(payload.name)' on line 48 before the commit.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

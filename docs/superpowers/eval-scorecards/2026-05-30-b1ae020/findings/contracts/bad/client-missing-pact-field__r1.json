@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "line": 19,
+      "message": "Pact contract missing required field: 'reserved_count' field is accessed by the client (src/demo/clients/inventory.py:14) but not declared in the pact interaction. The response body must include 'reserved_count' with a matching rule, and the assertion on line 22 must be updated to match the new dict return type.",
+      "path": "tests/functional/test_consumer_inventory.py",
+      "severity": "high",
+      "suggestion": "Update the pact interaction to include 'reserved_count' in the expected response body: .with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5), \"reserved_count\": match.int(0)}) and update the assertion to expect a dict: assert get_stock(str(srv.url), 1) == {\"in_stock\": 5, \"reserved_count\": 0}"
+    },
+    {
+      "line": 22,
+      "message": "Consumer assertion no longer matches function return type: get_stock() now returns dict[str, int] but the assertion expects int. This will cause the test to fail and the pact not to be regenerated, leaving the contract broken.",
+      "path": "tests/functional/test_consumer_inventory.py",
+      "severity": "high",
+      "suggestion": "Update assertion to match the new return type: assert get_stock(str(srv.url), 1) == {\"in_stock\": 5, \"reserved_count\": <expected_value>}"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/functional/test_consumer_inventory.py\",\"line\":19,\"severity\":\"high\",\"message\":\"Pact contract missing required field: 'reserved_count' field is accessed by the client (src/demo/clients/inventory.py:14) but not declared in the pact interaction. The response body must include 'reserved_count' with a matching rule, and the assertion on line 22 must be updated to match the new dict return type.\",\"suggestion\":\"Update the pact interaction to include 'reserved_count' in the expected response body: .with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5), \\\"reserved_count\\\": match.int(0)}) and update the assertion to expect a dict: assert get_stock(str(srv.url), 1) == {\\\"in_stock\\\": 5, \\\"reserved_count\\\": 0}\"},{\"path\":\"tests/functional/test_consumer_inventory.py\",\"line\":22,\"severity\":\"high\",\"message\":\"Consumer assertion no longer matches function return type: get_stock() now returns dict[str, int] but the assertion expects int. This will cause the test to fail and the pact not to be regenerated, leaving the contract broken.\",\"suggestion\":\"Update assertion to match the new return type: assert get_stock(str(srv.url), 1) == {\\\"in_stock\\\": 5, \\\"reserved_count\\\": <expected_value>}\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

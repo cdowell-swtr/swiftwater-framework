@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "Client now sends a new query parameter 'include_location=true' but the consumer Pact test (tests/functional/test_consumer_inventory.py line 17) does not specify this parameter in the contract. The pact should be regenerated to capture this new request expectation.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "suggestion": "Regenerate and publish the consumer pact by running the test_consumer_inventory test to update pacts/demo-inventory.json with the new query parameter expectation."
+    },
+    {
+      "line": 18,
+      "message": "Pact not regenerated/published after a provider change that alters the response. The client code now accesses data.get('location') to read a location field, but the committed consumer pact (tests/functional/test_consumer_inventory.py line 19) does not include 'location' in the expected response body.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "suggestion": "Regenerate the consumer pact by running test_consumer_inventory to include the 'location' field in the expected response body before merging this change."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"info\",\"message\":\"Client now sends a new query parameter 'include_location=true' but the consumer Pact test (tests/functional/test_consumer_inventory.py line 17) does not specify this parameter in the contract. The pact should be regenerated to capture this new request expectation.\",\"suggestion\":\"Regenerate and publish the consumer pact by running the test_consumer_inventory test to update pacts/demo-inventory.json with the new query parameter expectation.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":18,\"severity\":\"info\",\"message\":\"Pact not regenerated/published after a provider change that alters the response. The client code now accesses data.get('location') to read a location field, but the committed consumer pact (tests/functional/test_consumer_inventory.py line 19) does not include 'location' in the expected response body.\",\"suggestion\":\"Regenerate the consumer pact by running test_consumer_inventory to include the 'location' field in the expected response body before merging this change.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

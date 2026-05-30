@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 48,
+      "message": "Stale derived field: rename_item() updates name without recalculating slug. The slug field is documented in models.py as a derived field that 'must stay in sync with name', but this endpoint only updates name, leaving slug stale and inconsistent. This violates the documented data invariant and could break lookups or filtering by slug.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Use the existing update_item_name() repository helper instead of direct field update: replace lines 45-51 with a call to update_item_name(session, item_id, payload.name). Alternatively, update both fields together: item.slug = _make_slug(payload.name) on line 48."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":48,\"severity\":\"high\",\"message\":\"Stale derived field: rename_item() updates name without recalculating slug. The slug field is documented in models.py as a derived field that 'must stay in sync with name', but this endpoint only updates name, leaving slug stale and inconsistent. This violates the documented data invariant and could break lookups or filtering by slug.\",\"suggestion\":\"Use the existing update_item_name() repository helper instead of direct field update: replace lines 45-51 with a call to update_item_name(session, item_id, payload.name). Alternatively, update both fields together: item.slug = _make_slug(payload.name) on line 48.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

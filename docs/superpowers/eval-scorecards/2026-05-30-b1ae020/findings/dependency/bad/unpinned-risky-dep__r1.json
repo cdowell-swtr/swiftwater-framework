@@ -1,0 +1,29 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 18,
+      "message": "New dependency 'requests' is added without a version constraint, while every other dependency in this manifest uses a lower-bound pin (e.g. '>=...'). An unpinned entry makes the resolved version non-deterministic across environments and weakens supply-chain reproducibility.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Pin a minimum version consistent with the rest of the manifest, e.g. 'requests>=2.32'."
+    },
+    {
+      "line": 18,
+      "message": "'requests' duplicates capability already provided by an existing dependency. The project is async (FastAPI/uvicorn) and ships 'httpx>=0.28' in the dev group; httpx offers a fully-featured sync AND async HTTP client, so adding 'requests' introduces a second HTTP stack (extra transitive deps like urllib3/charset-normalizer, extra audit surface) with no capability gain. 'requests' is also in maintenance-only mode upstream, whereas httpx is actively developed.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Drop the 'requests' addition and use httpx for HTTP calls (promoting it from the dev group to runtime dependencies if it is needed at runtime); this keeps a single HTTP client across sync/async paths."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"New dependency 'requests' is added without a version constraint, while every other dependency in this manifest uses a lower-bound pin (e.g. '>=...'). An unpinned entry makes the resolved version non-deterministic across environments and weakens supply-chain reproducibility.\",\"suggestion\":\"Pin a minimum version consistent with the rest of the manifest, e.g. 'requests>=2.32'.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"'requests' duplicates capability already provided by an existing dependency. The project is async (FastAPI/uvicorn) and ships 'httpx>=0.28' in the dev group; httpx offers a fully-featured sync AND async HTTP client, so adding 'requests' introduces a second HTTP stack (extra transitive deps like urllib3/charset-normalizer, extra audit surface) with no capability gain. 'requests' is also in maintenance-only mode upstream, whereas httpx is actively developed.\",\"suggestion\":\"Drop the 'requests' addition and use httpx for HTTP calls (promoting it from the dev group to runtime dependencies if it is needed at runtime); this keeps a single HTTP client across sync/async paths.\"}]",
+  "repeat": 1,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "line": 14,
+      "message": "Consumer pact not regenerated after response shape change: the function now expects 'reserved_count' field in the response (line 14) and returns a dict instead of int, but the consumer pact test (tests/functional/test_consumer_inventory.py:19) only defines 'in_stock' and expects an int return value (line 22). The committed pact doesn't include the new 'reserved_count' field, creating a contract mismatch.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Regenerate the consumer pact by running the consumer contract test (tests/functional/test_consumer_inventory.py) to update the pact with the new response shape and the new 'reserved_count' field. Update the consumer test assertion to match the new dict return type, then commit the regenerated pact file."
+    },
+    {
+      "line": 22,
+      "message": "Consumer test assertion broken by incompatible change: the test asserts `get_stock(...) == 5` (returns int), but the implementation (src/demo/clients/inventory.py:14) now returns a dict. This assertion will fail at runtime, indicating a weakened consumer contract.",
+      "path": "tests/functional/test_consumer_inventory.py",
+      "severity": "high",
+      "suggestion": "Update the test assertion to match the new return type: `assert get_stock(str(srv.url), 1) == {'item_id': 1, 'in_stock': 5, 'reserved_count': <expected_value>}`. Also ensure the mock response includes the 'reserved_count' field."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":14,\"severity\":\"high\",\"message\":\"Consumer pact not regenerated after response shape change: the function now expects 'reserved_count' field in the response (line 14) and returns a dict instead of int, but the consumer pact test (tests/functional/test_consumer_inventory.py:19) only defines 'in_stock' and expects an int return value (line 22). The committed pact doesn't include the new 'reserved_count' field, creating a contract mismatch.\",\"suggestion\":\"Regenerate the consumer pact by running the consumer contract test (tests/functional/test_consumer_inventory.py) to update the pact with the new response shape and the new 'reserved_count' field. Update the consumer test assertion to match the new dict return type, then commit the regenerated pact file.\"},{\"path\":\"tests/functional/test_consumer_inventory.py\",\"line\":22,\"severity\":\"high\",\"message\":\"Consumer test assertion broken by incompatible change: the test asserts `get_stock(...) == 5` (returns int), but the implementation (src/demo/clients/inventory.py:14) now returns a dict. This assertion will fail at runtime, indicating a weakened consumer contract.\",\"suggestion\":\"Update the test assertion to match the new return type: `assert get_stock(str(srv.url), 1) == {'item_id': 1, 'in_stock': 5, 'reserved_count': <expected_value>}`. Also ensure the mock response includes the 'reserved_count' field.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

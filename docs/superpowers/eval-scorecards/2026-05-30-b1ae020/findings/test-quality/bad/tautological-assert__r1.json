@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 53,
+      "message": "Tautological test: `assert s is s` is always true by Python's identity semantics regardless of any Settings behavior. The test can't fail and exercises nothing about the code under test (Settings construction, defaults, env overrides, log-level resolution, etc.).",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful assertion about Settings, e.g. `assert Settings().environment == \"dev\"` or assert on a specific attribute/behavior that would change if the code under test broke."
+    },
+    {
+      "line": 61,
+      "message": "Over-mocked / asserting on the mock: the test patches `Settings.resolved_log_level` itself (the very property under test) to return \"MOCKED\", then asserts the property returns \"MOCKED\". It passes by construction and can never fail \u2014 it tests `unittest.mock`, not `Settings.resolved_log_level`. The real resolution logic (dev\u2192DEBUG, non-dev\u2192INFO, explicit override wins) is never exercised here.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Drop the patch and assert the real behavior, e.g. `assert Settings(environment=\"dev\").resolved_log_level == \"DEBUG\"` and `assert Settings(environment=\"prod\", log_level=\"WARNING\").resolved_log_level == \"WARNING\"`. (Note these cases are already covered above \u2014 this test is redundant once de-mocked and can simply be deleted.)"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":53,\"severity\":\"high\",\"message\":\"Tautological test: `assert s is s` is always true by Python's identity semantics regardless of any Settings behavior. The test can't fail and exercises nothing about the code under test (Settings construction, defaults, env overrides, log-level resolution, etc.).\",\"suggestion\":\"Replace with a meaningful assertion about Settings, e.g. `assert Settings().environment == \\\"dev\\\"` or assert on a specific attribute/behavior that would change if the code under test broke.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":61,\"severity\":\"high\",\"message\":\"Over-mocked / asserting on the mock: the test patches `Settings.resolved_log_level` itself (the very property under test) to return \\\"MOCKED\\\", then asserts the property returns \\\"MOCKED\\\". It passes by construction and can never fail \u2014 it tests `unittest.mock`, not `Settings.resolved_log_level`. The real resolution logic (dev\u2192DEBUG, non-dev\u2192INFO, explicit override wins) is never exercised here.\",\"suggestion\":\"Drop the patch and assert the real behavior, e.g. `assert Settings(environment=\\\"dev\\\").resolved_log_level == \\\"DEBUG\\\"` and `assert Settings(environment=\\\"prod\\\", log_level=\\\"WARNING\\\").resolved_log_level == \\\"WARNING\\\"`. (Note these cases are already covered above \u2014 this test is redundant once de-mocked and can simply be deleted.)\"}]",
+  "repeat": 1,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

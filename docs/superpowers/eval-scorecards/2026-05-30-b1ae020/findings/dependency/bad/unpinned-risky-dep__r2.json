@@ -1,0 +1,36 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 18,
+      "message": "New dependency 'requests' is added without a version pin/lower bound, unlike every other dependency in this manifest (e.g., 'fastapi>=0.115', 'tenacity>=9.0'). An unpinned dependency means resolution can drift across machines/CI, weakens supply-chain reproducibility, and bypasses the project's established convention.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Pin to a lower bound consistent with the rest of the manifest, e.g. 'requests>=2.32'."
+    },
+    {
+      "line": 18,
+      "message": "'requests' duplicates capability already available via 'httpx' (declared in the dev group and a standard companion to FastAPI/Starlette). httpx supports both sync and async clients with a requests-like API; adding 'requests' introduces a second HTTP stack to maintain, audit, and patch for CVEs.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Prefer 'httpx' (promote it to the main 'dependencies' list if it's needed at runtime) rather than adding 'requests'. If 'requests' is truly required (e.g. a third-party SDK depends on it transitively in a way you must call directly), justify it in a comment."
+    },
+    {
+      "line": 18,
+      "message": "'requests' is in maintenance mode upstream (no active feature development; security-only). For a new dependency in a modern Python 3.12+ FastAPI service, this is worth flagging as a supply-chain/maintenance-health consideration vs. actively-developed alternatives like httpx.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Document the rationale for choosing 'requests' over httpx, or switch to httpx."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"New dependency 'requests' is added without a version pin/lower bound, unlike every other dependency in this manifest (e.g., 'fastapi>=0.115', 'tenacity>=9.0'). An unpinned dependency means resolution can drift across machines/CI, weakens supply-chain reproducibility, and bypasses the project's established convention.\",\"suggestion\":\"Pin to a lower bound consistent with the rest of the manifest, e.g. 'requests>=2.32'.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"'requests' duplicates capability already available via 'httpx' (declared in the dev group and a standard companion to FastAPI/Starlette). httpx supports both sync and async clients with a requests-like API; adding 'requests' introduces a second HTTP stack to maintain, audit, and patch for CVEs.\",\"suggestion\":\"Prefer 'httpx' (promote it to the main 'dependencies' list if it's needed at runtime) rather than adding 'requests'. If 'requests' is truly required (e.g. a third-party SDK depends on it transitively in a way you must call directly), justify it in a comment.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"info\",\"message\":\"'requests' is in maintenance mode upstream (no active feature development; security-only). For a new dependency in a modern Python 3.12+ FastAPI service, this is worth flagging as a supply-chain/maintenance-health consideration vs. actively-developed alternatives like httpx.\",\"suggestion\":\"Document the rationale for choosing 'requests' over httpx, or switch to httpx.\"}]",
+  "repeat": 2,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

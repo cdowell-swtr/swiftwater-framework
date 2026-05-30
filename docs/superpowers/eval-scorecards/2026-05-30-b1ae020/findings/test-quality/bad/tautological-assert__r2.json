@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 52,
+      "message": "Tautological assertion: `assert s is s` is true by Python identity semantics regardless of any code under test. The test cannot fail and exercises no behaviour of Settings \u2014 it provides false coverage and zero signal.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful assertion about Settings, e.g. `assert isinstance(Settings(), Settings)` is still weak; better, assert a real default value (e.g. `assert Settings().app_name == \"app\"` or whatever the actual default is) or remove the test entirely if it duplicates existing coverage."
+    },
+    {
+      "line": 60,
+      "message": "Over-mocked / tests-the-mock: this patches `Settings.resolved_log_level` itself \u2014 the very attribute under test \u2014 to return \"MOCKED\", then asserts it equals \"MOCKED\". The assertion can only verify that `patch.object` works; it will pass regardless of the real `resolved_log_level` implementation (even if the property is deleted or buggy).",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Drop the patch and exercise the real resolution path: set the relevant env var via `monkeypatch.setenv(\"APP_LOG_LEVEL\", \"DEBUG\")` (or whatever input feeds `resolved_log_level`) and assert `Settings().resolved_log_level == \"DEBUG\"`. The test should fail if the resolution logic regresses."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":52,\"severity\":\"high\",\"message\":\"Tautological assertion: `assert s is s` is true by Python identity semantics regardless of any code under test. The test cannot fail and exercises no behaviour of Settings \u2014 it provides false coverage and zero signal.\",\"suggestion\":\"Replace with a meaningful assertion about Settings, e.g. `assert isinstance(Settings(), Settings)` is still weak; better, assert a real default value (e.g. `assert Settings().app_name == \\\"app\\\"` or whatever the actual default is) or remove the test entirely if it duplicates existing coverage.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":60,\"severity\":\"high\",\"message\":\"Over-mocked / tests-the-mock: this patches `Settings.resolved_log_level` itself \u2014 the very attribute under test \u2014 to return \\\"MOCKED\\\", then asserts it equals \\\"MOCKED\\\". The assertion can only verify that `patch.object` works; it will pass regardless of the real `resolved_log_level` implementation (even if the property is deleted or buggy).\",\"suggestion\":\"Drop the patch and exercise the real resolution path: set the relevant env var via `monkeypatch.setenv(\\\"APP_LOG_LEVEL\\\", \\\"DEBUG\\\")` (or whatever input feeds `resolved_log_level`) and assert `Settings().resolved_log_level == \\\"DEBUG\\\"`. The test should fail if the resolution logic regresses.\"}]",
+  "repeat": 2,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "New query parameter 'include_location' added to request, but consumer Pact test was not regenerated to reflect this change. The committed Pact contract in tests/functional/test_consumer_inventory.py still defines the request as GET /inventory/1 without query parameters, creating a client-pact divergence.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Regenerate and republish the Pact after updating tests/functional/test_consumer_inventory.py to expect the new query parameter in the request."
+    },
+    {
+      "line": 18,
+      "message": "New response field 'location' is now accessed from the response, but the committed Pact contract does not include this field in the response body specification. The Pact test needs to be updated to document this new expected field.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "suggestion": "Update tests/functional/test_consumer_inventory.py to add 'location' field to the response body, then regenerate and publish the updated Pact."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"high\",\"message\":\"New query parameter 'include_location' added to request, but consumer Pact test was not regenerated to reflect this change. The committed Pact contract in tests/functional/test_consumer_inventory.py still defines the request as GET /inventory/1 without query parameters, creating a client-pact divergence.\",\"suggestion\":\"Regenerate and republish the Pact after updating tests/functional/test_consumer_inventory.py to expect the new query parameter in the request.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":18,\"severity\":\"info\",\"message\":\"New response field 'location' is now accessed from the response, but the committed Pact contract does not include this field in the response body specification. The Pact test needs to be updated to document this new expected field.\",\"suggestion\":\"Update tests/functional/test_consumer_inventory.py to add 'location' field to the response body, then regenerate and publish the updated Pact.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: field 'name' renamed to 'title' without backwards compatibility. Existing GraphQL clients querying the 'name' field will break.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Provide backwards compatibility by keeping 'name' as a deprecated alias to 'title', or implement a migration path for clients using the old field name."
+    },
+    {
+      "line": 18,
+      "message": "GraphQL-REST API divergence: the GraphQL schema exposes this field as 'title', while the REST API (src/demo/routes/items.py) exposes it as 'name'. This inconsistency can confuse clients.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Align the field names across both APIs. Either rename the REST response field to 'title' or keep the GraphQL field as 'name' to match the REST contract."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: field 'name' renamed to 'title' without backwards compatibility. Existing GraphQL clients querying the 'name' field will break.\",\"suggestion\":\"Provide backwards compatibility by keeping 'name' as a deprecated alias to 'title', or implement a migration path for clients using the old field name.\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"GraphQL-REST API divergence: the GraphQL schema exposes this field as 'title', while the REST API (src/demo/routes/items.py) exposes it as 'name'. This inconsistency can confuse clients.\",\"suggestion\":\"Align the field names across both APIs. Either rename the REST response field to 'title' or keep the GraphQL field as 'name' to match the REST contract.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

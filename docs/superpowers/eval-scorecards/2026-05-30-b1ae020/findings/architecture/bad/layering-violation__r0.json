@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 7,
+      "message": "Layering violation: SessionLocal imported directly into routes layer. Routes should use dependency injection (get_session) for session management, not direct engine access.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove SessionLocal from the import. Use the SessionDep dependency injection pattern (already established with get_session on line 13) for all database access."
+    },
+    {
+      "line": 41,
+      "message": "Layering violation: Route handler opens its own database session (SessionLocal()) and performs ORM operations directly. This bypasses the repository layer abstraction and couples the route to database implementation details. A create_item repository function already exists for this purpose.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Inject a session via dependency (SessionDep) and delegate to the repository layer's create_item(session, name) function instead of directly manipulating ORM objects."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":7,\"severity\":\"high\",\"message\":\"Layering violation: SessionLocal imported directly into routes layer. Routes should use dependency injection (get_session) for session management, not direct engine access.\",\"suggestion\":\"Remove SessionLocal from the import. Use the SessionDep dependency injection pattern (already established with get_session on line 13) for all database access.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Layering violation: Route handler opens its own database session (SessionLocal()) and performs ORM operations directly. This bypasses the repository layer abstraction and couples the route to database implementation details. A create_item repository function already exists for this purpose.\",\"suggestion\":\"Inject a session via dependency (SessionDep) and delegate to the repository layer's create_item(session, name) function instead of directly manipulating ORM objects.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}
