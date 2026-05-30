@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 37,
+      "message": "Mutation parameter 'description' is accepted but never passed to repository.create_item(). The mutation signature advertises that it accepts a description input, but the implementation on line 40 ignores it, passing only 'name'. This creates a contract violation where clients cannot actually set item descriptions despite the API schema promising this capability.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Pass the 'description' parameter to repository.create_item(): change line 40 to `return _to_item(repository.create_item(session, name, description))` and verify that repository.create_item() signature accepts description as a parameter."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":37,\"severity\":\"high\",\"message\":\"Mutation parameter 'description' is accepted but never passed to repository.create_item(). The mutation signature advertises that it accepts a description input, but the implementation on line 40 ignores it, passing only 'name'. This creates a contract violation where clients cannot actually set item descriptions despite the API schema promising this capability.\",\"suggestion\":\"Pass the 'description' parameter to repository.create_item(): change line 40 to `return _to_item(repository.create_item(session, name, description))` and verify that repository.create_item() signature accepts description as a parameter.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

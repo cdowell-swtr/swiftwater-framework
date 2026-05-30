@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 48,
+      "message": "Stale derived field: rename_item() updates only item.name without recalculating item.slug, violating the consistency strategy documented in models.py lines 16-17. The slug field is defined as a derived field that 'must stay in sync with name \u2014 update both together via repository helpers', but this endpoint bypasses the update_item_name() helper in repository.py that enforces this invariant.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace the direct update (lines 45-50) with a call to repository.update_item_name(session, item_id, payload.name). Alternatively, add slug = _make_slug(payload.name) immediately after setting item.name to maintain the consistency contract."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":48,\"severity\":\"high\",\"message\":\"Stale derived field: rename_item() updates only item.name without recalculating item.slug, violating the consistency strategy documented in models.py lines 16-17. The slug field is defined as a derived field that 'must stay in sync with name \u2014 update both together via repository helpers', but this endpoint bypasses the update_item_name() helper in repository.py that enforces this invariant.\",\"suggestion\":\"Replace the direct update (lines 45-50) with a call to repository.update_item_name(session, item_id, payload.name). Alternatively, add slug = _make_slug(payload.name) immediately after setting item.name to maintain the consistency contract.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

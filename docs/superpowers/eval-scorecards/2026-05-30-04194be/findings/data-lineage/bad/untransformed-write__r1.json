@@ -1,0 +1,29 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 45,
+      "message": "User-supplied input written to database without transformation. post_item() calls create_item() directly, bypassing the documented normalization requirement (strip + lowercase). The codebase defines create_item_normalized() with explicit guidance that 'Callers that accept user input MUST go through this function', but this endpoint skips that requirement.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Change line 45 from 'return create_item(session, payload.name)' to 'return create_item_normalized(session, payload.name)' to enforce consistent data transformation for all user-supplied input."
+    },
+    {
+      "line": 12,
+      "message": "Documentation in create_item() docstring warns against direct use with user input, but the function remains public and is called unsafely from routes/items.py post_item() endpoint. The documented safety mechanism (create_item_normalized) is defined but not enforced at the call site.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "suggestion": "Either make create_item() private (rename to _create_item) to prevent unsafe usage, or add a runtime guard that detects untransformed input and raises an error."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"User-supplied input written to database without transformation. post_item() calls create_item() directly, bypassing the documented normalization requirement (strip + lowercase). The codebase defines create_item_normalized() with explicit guidance that 'Callers that accept user input MUST go through this function', but this endpoint skips that requirement.\",\"suggestion\":\"Change line 45 from 'return create_item(session, payload.name)' to 'return create_item_normalized(session, payload.name)' to enforce consistent data transformation for all user-supplied input.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":12,\"severity\":\"medium\",\"message\":\"Documentation in create_item() docstring warns against direct use with user input, but the function remains public and is called unsafely from routes/items.py post_item() endpoint. The documented safety mechanism (create_item_normalized) is defined but not enforced at the call site.\",\"suggestion\":\"Either make create_item() private (rename to _create_item) to prevent unsafe usage, or add a runtime guard that detects untransformed input and raises an error.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

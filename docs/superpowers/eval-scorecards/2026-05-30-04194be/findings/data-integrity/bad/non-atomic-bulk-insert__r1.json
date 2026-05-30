@@ -1,0 +1,22 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 24,
+      "message": "bulk_create_items commits inside the loop, so each insert is its own transaction. If any iteration fails (DB error, integrity violation, network blip, process kill), prior items remain persisted while later ones do not \u2014 the 'batch' has no atomicity and callers can observe partially-applied bulk operations. This violates the all-or-nothing invariant expected of a bulk write and makes safe retry impossible (a retry will re-insert rows that already committed, potentially duplicating data).",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add all items first, then commit once at the end (and refresh after the single commit). E.g.: `for name in names: item = Item(name=name); session.add(item); created.append(item)` then `session.commit()` outside the loop, and refresh each item afterward. Wrap in `try/except` with `session.rollback()` to guarantee no partial writes on failure. For large batches, prefer `session.execute(insert(Item), [{\"name\": n} for n in names])` inside a single transaction."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":24,\"severity\":\"high\",\"message\":\"bulk_create_items commits inside the loop, so each insert is its own transaction. If any iteration fails (DB error, integrity violation, network blip, process kill), prior items remain persisted while later ones do not \u2014 the 'batch' has no atomicity and callers can observe partially-applied bulk operations. This violates the all-or-nothing invariant expected of a bulk write and makes safe retry impossible (a retry will re-insert rows that already committed, potentially duplicating data).\",\"suggestion\":\"Add all items first, then commit once at the end (and refresh after the single commit). E.g.: `for name in names: item = Item(name=name); session.add(item); created.append(item)` then `session.commit()` outside the loop, and refresh each item afterward. Wrap in `try/except` with `session.rollback()` to guarantee no partial writes on failure. For large batches, prefer `session.execute(insert(Item), [{\\\"name\\\": n} for n in names])` inside a single transaction.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

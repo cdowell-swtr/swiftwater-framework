@@ -1,0 +1,22 @@
+{
+  "agent": "observability-infra",
+  "case": "exporter-without-scrape",
+  "findings": [
+    {
+      "line": 94,
+      "message": "New redis-exporter service added with no corresponding Prometheus scrape job, alert rules, or Grafana dashboard. The exporter is deployed but not integrated into the observability stack.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add a scrape job for redis-exporter to prometheus.yml targeting port 9121, create redis alert rules, and add a redis dashboard to maintain consistency with other exporters (postgres-exporter has all three)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"New redis-exporter service added with no corresponding Prometheus scrape job, alert rules, or Grafana dashboard. The exporter is deployed but not integrated into the observability stack.\",\"suggestion\":\"Add a scrape job for redis-exporter to prometheus.yml targeting port 9121, create redis alert rules, and add a redis dashboard to maintain consistency with other exporters (postgres-exporter has all three).\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/compose/observability.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "PII field 'owner_email' exposed in external API response. The database model explicitly marks this field as 'PII: owner email address \u2014 do not include in logs or external responses' (models.py:16), but ItemRead schema includes it in the response contract, violating this requirement. Both GET and POST endpoints will expose this PII to all API clients.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email' from the ItemRead response schema. Create a separate internal schema (e.g., ItemReadInternal) if owner_email needs to be used internally, but the public API contract should not expose PII fields."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"PII field 'owner_email' exposed in external API response. The database model explicitly marks this field as 'PII: owner email address \u2014 do not include in logs or external responses' (models.py:16), but ItemRead schema includes it in the response contract, violating this requirement. Both GET and POST endpoints will expose this PII to all API clients.\",\"suggestion\":\"Remove 'owner_email' from the ItemRead response schema. Create a separate internal schema (e.g., ItemReadInternal) if owner_email needs to be used internally, but the public API contract should not expose PII fields.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

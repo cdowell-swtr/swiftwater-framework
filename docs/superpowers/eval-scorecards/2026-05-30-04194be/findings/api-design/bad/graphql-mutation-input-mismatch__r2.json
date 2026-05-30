@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 37,
+      "message": "Mutation parameter 'description' is accepted but not used in the implementation. The mutation signature declares 'description: str' but the call to repository.create_item() only passes 'name', ignoring the description parameter entirely. This breaks the contract between the GraphQL schema and its resolver.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Either remove the 'description' parameter from the mutation signature if it should not be supported, or pass the 'description' argument to repository.create_item() if it should be persisted. Update repository.create_item() to accept and handle the description parameter accordingly."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":37,\"severity\":\"high\",\"message\":\"Mutation parameter 'description' is accepted but not used in the implementation. The mutation signature declares 'description: str' but the call to repository.create_item() only passes 'name', ignoring the description parameter entirely. This breaks the contract between the GraphQL schema and its resolver.\",\"suggestion\":\"Either remove the 'description' parameter from the mutation signature if it should not be supported, or pass the 'description' argument to repository.create_item() if it should be persisted. Update repository.create_item() to accept and handle the description parameter accordingly.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

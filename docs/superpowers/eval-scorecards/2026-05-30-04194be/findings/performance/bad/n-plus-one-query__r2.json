@@ -1,0 +1,36 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 40,
+      "message": "N+1 query pattern: this endpoint first executes one query to fetch all item ids, then issues one additional SELECT per id via session.get(Item, iid) in the loop. For N items this is N+1 round-trips to the database, which scales linearly with table size on an unbounded input (no pagination/limit) and is a clear regression against any latency SLO for /items/names.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Fetch the names in a single query, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))` and return that list. This collapses the N+1 to a single SELECT and avoids the per-row session.get() lookups (and the union-attr None handling)."
+    },
+    {
+      "line": 33,
+      "message": "Unbounded result set: get_item_names returns every row in the items table with no pagination, limit, or streaming. Combined with the N+1 above, request latency and memory grow linearly with table size and can exhaust the connection (the session holds it for the duration of N sequential queries), risking pool exhaustion under concurrency.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add pagination (e.g. limit/offset or keyset) and/or a hard server-side cap on the number of rows returned; at minimum bound the query with `.limit(...)` so latency stays within SLO as the table grows."
+    },
+    {
+      "line": 44,
+      "message": "The function is annotated to return list[str] but has no explicit `return names` statement, so it implicitly returns None. FastAPI's response_model coercion will then fail at runtime \u2014 independent of the N+1, this makes the endpoint non-functional.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add `return names` at the end of the function (or, preferably, replace the whole body with the single-query form suggested above and return its result)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"N+1 query pattern: this endpoint first executes one query to fetch all item ids, then issues one additional SELECT per id via session.get(Item, iid) in the loop. For N items this is N+1 round-trips to the database, which scales linearly with table size on an unbounded input (no pagination/limit) and is a clear regression against any latency SLO for /items/names.\",\"suggestion\":\"Fetch the names in a single query, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))` and return that list. This collapses the N+1 to a single SELECT and avoids the per-row session.get() lookups (and the union-attr None handling).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"Unbounded result set: get_item_names returns every row in the items table with no pagination, limit, or streaming. Combined with the N+1 above, request latency and memory grow linearly with table size and can exhaust the connection (the session holds it for the duration of N sequential queries), risking pool exhaustion under concurrency.\",\"suggestion\":\"Add pagination (e.g. limit/offset or keyset) and/or a hard server-side cap on the number of rows returned; at minimum bound the query with `.limit(...)` so latency stays within SLO as the table grows.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"low\",\"message\":\"The function is annotated to return list[str] but has no explicit `return names` statement, so it implicitly returns None. FastAPI's response_model coercion will then fail at runtime \u2014 independent of the N+1, this makes the endpoint non-functional.\",\"suggestion\":\"Add `return names` at the end of the function (or, preferably, replace the whole body with the single-query form suggested above and return its result).\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

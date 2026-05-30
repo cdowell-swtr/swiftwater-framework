@@ -1,0 +1,29 @@
+{
+  "agent": "data-lineage",
+  "case": "normalized-write",
+  "findings": [
+    {
+      "line": 27,
+      "message": "Data normalization (strip/lowercase) in create_item_normalized() performs lossy transformation on user input without recording original value. If the original user-supplied data is ever needed for audit, support, or GDPR requests, it will be unrecoverable.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "suggestion": "Consider logging the original input before normalization, or storing both original and normalized values if recovery may be needed in the future."
+    },
+    {
+      "line": 11,
+      "message": "create_item() accepts raw user input without validation or normalization. Although docstring recommends using create_item_normalized() for user-supplied input, there is no enforcement mechanism to prevent misuse (e.g., no private marker or runtime check). Other code paths could inadvertently use the unvalidated function.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "suggestion": "Rename create_item() to _create_item() to mark it as internal-only, or add a runtime assertion in the public API layer to ensure all user input routes through the normalized path."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":27,\"severity\":\"medium\",\"message\":\"Data normalization (strip/lowercase) in create_item_normalized() performs lossy transformation on user input without recording original value. If the original user-supplied data is ever needed for audit, support, or GDPR requests, it will be unrecoverable.\",\"suggestion\":\"Consider logging the original input before normalization, or storing both original and normalized values if recovery may be needed in the future.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":11,\"severity\":\"medium\",\"message\":\"create_item() accepts raw user input without validation or normalization. Although docstring recommends using create_item_normalized() for user-supplied input, there is no enforcement mechanism to prevent misuse (e.g., no private marker or runtime check). Other code paths could inadvertently use the unvalidated function.\",\"suggestion\":\"Rename create_item() to _create_item() to mark it as internal-only, or add a runtime assertion in the public API layer to ensure all user input routes through the normalized path.\"}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

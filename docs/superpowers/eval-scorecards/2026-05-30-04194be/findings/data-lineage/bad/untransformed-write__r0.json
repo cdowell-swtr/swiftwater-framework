@@ -1,0 +1,29 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 45,
+      "message": "User-supplied input passed to untransformed create_item() instead of create_item_normalized(). Repository explicitly requires normalized input: 'Callers that accept user input MUST go through this function, not the bare create_item().' This breaks the data lineage contract and stores unvalidated user data.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace create_item(session, payload.name) with create_item_normalized(session, payload.name) on line 45 to ensure consistent data transformation and comply with the documented contract."
+    },
+    {
+      "line": 42,
+      "message": "Docstring explicitly acknowledges the data lineage violation: 'the normalisation step (strip + lowercase) is skipped so names are stored with whatever casing and whitespace the caller sends.' This documents a data consistency issue rather than fixing it.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove the acknowledgment of the skipped transformation and instead implement the required normalization step. Update docstring to describe the actual normalized behavior after fix."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"User-supplied input passed to untransformed create_item() instead of create_item_normalized(). Repository explicitly requires normalized input: 'Callers that accept user input MUST go through this function, not the bare create_item().' This breaks the data lineage contract and stores unvalidated user data.\",\"suggestion\":\"Replace create_item(session, payload.name) with create_item_normalized(session, payload.name) on line 45 to ensure consistent data transformation and comply with the documented contract.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"Docstring explicitly acknowledges the data lineage violation: 'the normalisation step (strip + lowercase) is skipped so names are stored with whatever casing and whitespace the caller sends.' This documents a data consistency issue rather than fixing it.\",\"suggestion\":\"Remove the acknowledgment of the skipped transformation and instead implement the required normalization step. Update docstring to describe the actual normalized behavior after fix.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

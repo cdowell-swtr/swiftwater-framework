@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New database query function get_item_by_name() has no observability instrumentation (no metrics, spans, or correlation ID logging). The query filters by Item.name which lacks a database index, making it an unbounded scan with no latency or row-count monitoring.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add OpenTelemetry span tracing around the query execution, record query latency metrics, log with correlation ID context, and add index=True to the Item.name column in models.py to avoid full table scans."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New database query function get_item_by_name() has no observability instrumentation (no metrics, spans, or correlation ID logging). The query filters by Item.name which lacks a database index, making it an unbounded scan with no latency or row-count monitoring.\",\"suggestion\":\"Add OpenTelemetry span tracing around the query execution, record query latency metrics, log with correlation ID context, and add index=True to the Item.name column in models.py to avoid full table scans.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

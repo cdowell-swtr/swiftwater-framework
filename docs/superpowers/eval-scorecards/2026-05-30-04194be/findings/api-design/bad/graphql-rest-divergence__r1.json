@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: field 'name' renamed to 'title' without a deprecation path. Existing GraphQL clients will break. Additionally, this creates API divergence\u2014the REST API ItemRead schema still uses 'name', leading to inconsistency between REST and GraphQL protocols.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Either: (1) Use @strawberry.field with deprecation_reason on the old 'name' field and keep both fields for one release cycle, or (2) align the REST API ItemRead schema to also use 'title' to maintain consistency across all API protocols, or (3) revert to 'name' in GraphQL to match REST."
+    },
+    {
+      "line": 20,
+      "message": "New optional field 'description' added. This is a backwards-compatible additive change and is acceptable.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "info",
+      "suggestion": null
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: field 'name' renamed to 'title' without a deprecation path. Existing GraphQL clients will break. Additionally, this creates API divergence\u2014the REST API ItemRead schema still uses 'name', leading to inconsistency between REST and GraphQL protocols.\",\"suggestion\":\"Either: (1) Use @strawberry.field with deprecation_reason on the old 'name' field and keep both fields for one release cycle, or (2) align the REST API ItemRead schema to also use 'title' to maintain consistency across all API protocols, or (3) revert to 'name' in GraphQL to match REST.\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":20,\"severity\":\"info\",\"message\":\"New optional field 'description' added. This is a backwards-compatible additive change and is acceptable.\",\"suggestion\":null}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

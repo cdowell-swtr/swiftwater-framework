@@ -1,0 +1,54 @@
+accessibility:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+api-design:
+  recall_min: 0.73  # observed 0.83
+  fp_max: 0.10  # observed 0.00
+application-logic:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+architecture:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+compliance:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+contracts:
+  recall_min: 0.57  # observed 0.67
+  fp_max: 0.10  # observed 0.00
+data-integrity:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+data-lineage:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+dependency:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+documentation:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+observability:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+observability-db:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+observability-infra:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.43  # observed 0.33
+performance:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+privacy:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+security:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+test-quality:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+usability:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00

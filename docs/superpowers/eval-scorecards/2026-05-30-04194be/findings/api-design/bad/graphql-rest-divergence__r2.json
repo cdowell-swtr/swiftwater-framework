@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: field 'name' renamed to 'title' without a compatible migration path. Existing GraphQL clients querying 'Item { name }' will break.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Maintain backwards compatibility by either: (1) adding a deprecated 'name' field as an alias that returns the same value as 'title', or (2) using a schema federation/versioning strategy. Alternatively, if breaking changes are acceptable, ensure all clients are updated in lockstep."
+    },
+    {
+      "line": 18,
+      "message": "GraphQL-REST API divergence: GraphQL exposes the field as 'title' while the REST API (routes/items.py:22) exposes it as 'name'. This inconsistency breaks contract parity between the two APIs.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Align the field names across GraphQL and REST APIs. Either rename both to 'title' (and update the REST schema and all clients), or keep both as 'name' and avoid the breaking change in GraphQL."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: field 'name' renamed to 'title' without a compatible migration path. Existing GraphQL clients querying 'Item { name }' will break.\",\"suggestion\":\"Maintain backwards compatibility by either: (1) adding a deprecated 'name' field as an alias that returns the same value as 'title', or (2) using a schema federation/versioning strategy. Alternatively, if breaking changes are acceptable, ensure all clients are updated in lockstep.\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"GraphQL-REST API divergence: GraphQL exposes the field as 'title' while the REST API (routes/items.py:22) exposes it as 'name'. This inconsistency breaks contract parity between the two APIs.\",\"suggestion\":\"Align the field names across GraphQL and REST APIs. Either rename both to 'title' (and update the REST schema and all clients), or keep both as 'name' and avoid the breaking change in GraphQL.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

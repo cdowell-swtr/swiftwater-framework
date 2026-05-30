@@ -1,0 +1,22 @@
+{
+  "agent": "observability-infra",
+  "case": "complete-obs-surface",
+  "findings": [
+    {
+      "line": 21,
+      "message": "New scrape job 'redis' added with no corresponding alert rule in infra/observability/prometheus/alerts/",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "medium",
+      "suggestion": "Create an alert rule file (e.g., redis.yml) in infra/observability/prometheus/alerts/ to monitor Redis health and performance metrics (e.g., redis_up, redis_connected_clients, redis_memory_usage_bytes)"
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"medium\",\"message\":\"New scrape job 'redis' added with no corresponding alert rule in infra/observability/prometheus/alerts/\",\"suggestion\":\"Create an alert rule file (e.g., redis.yml) in infra/observability/prometheus/alerts/ to monitor Redis health and performance metrics (e.g., redis_up, redis_connected_clients, redis_memory_usage_bytes)\"}]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

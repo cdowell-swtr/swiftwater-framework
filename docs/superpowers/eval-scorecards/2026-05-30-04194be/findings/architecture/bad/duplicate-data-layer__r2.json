@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "duplicate-data-layer",
+  "findings": [
+    {
+      "line": 8,
+      "message": "Duplicate data-access layer: both 'repository.py' and 'item_service.py' provide similar data operations (list_items/fetch_all_items, create_item/add_item). This violates separation of concerns and creates maintenance burden. The codebase now has two parallel data abstractions.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Consolidate to a single data-access layer. Choose one (repository or item_service) and remove the duplicate. Update all imports consistently across routes, seed.py, and other modules."
+    },
+    {
+      "line": 42,
+      "message": "Route handler directly manages session lifecycle (session.commit(), session.refresh(item)). This business logic should be encapsulated in the data-access layer, not exposed in the route handler.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Move session commit/refresh into the data-access layer function. The route handler should only call add_item() and return the result. Consider using repository.create_item() which already handles this, or modify item_service.add_item() to match that behavior."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":8,\"severity\":\"high\",\"message\":\"Duplicate data-access layer: both 'repository.py' and 'item_service.py' provide similar data operations (list_items/fetch_all_items, create_item/add_item). This violates separation of concerns and creates maintenance burden. The codebase now has two parallel data abstractions.\",\"suggestion\":\"Consolidate to a single data-access layer. Choose one (repository or item_service) and remove the duplicate. Update all imports consistently across routes, seed.py, and other modules.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"Route handler directly manages session lifecycle (session.commit(), session.refresh(item)). This business logic should be encapsulated in the data-access layer, not exposed in the route handler.\",\"suggestion\":\"Move session commit/refresh into the data-access layer function. The route handler should only call add_item() and return the result. Consider using repository.create_item() which already handles this, or modify item_service.add_item() to match that behavior.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

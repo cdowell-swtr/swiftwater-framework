@@ -1,0 +1,36 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New public endpoint `count_items` (GET /items/count) lacks a docstring. All sibling public route handlers in this codebase (e.g. `get_items`, `heartbeat`, `health`, `metrics`) document purpose and contract; this one is undocumented.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a docstring describing what the endpoint returns and its intended use, e.g. \"\"\"Return the total count of items as {\\\"count\\\": int}. Convenience for clients that only need the size.\"\"\""
+    },
+    {
+      "line": 33,
+      "message": "New endpoint `GET /items/count` is not listed in README.md's `## Endpoints` section, which enumerates the other public endpoints (`/heartbeat`, `/health`, `/metrics`, `/items`). The README will become stale on merge.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a bullet under README.md `## Endpoints`: `- `GET /items/count` \u2014 count of items in the store`."
+    },
+    {
+      "line": 34,
+      "message": "`count_items` returns an untyped `dict` and declares no `response_model`, unlike the sibling `get_items` which uses `response_model=list[ItemRead]`. The OpenAPI schema will lack a documented response shape for this endpoint, and `openapi.json` (committed per README's CI/CD section) will need regeneration.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Define a small response schema (e.g. `class ItemCount(BaseModel): count: int`) and annotate `-> ItemCount` with `@router.get(\"/items/count\", response_model=ItemCount)`, then run `task openapi:export` and commit the refreshed `openapi.json`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"New public endpoint `count_items` (GET /items/count) lacks a docstring. All sibling public route handlers in this codebase (e.g. `get_items`, `heartbeat`, `health`, `metrics`) document purpose and contract; this one is undocumented.\",\"suggestion\":\"Add a docstring describing what the endpoint returns and its intended use, e.g. \\\"\\\"\\\"Return the total count of items as {\\\\\\\"count\\\\\\\": int}. Convenience for clients that only need the size.\\\"\\\"\\\"\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"New endpoint `GET /items/count` is not listed in README.md's `## Endpoints` section, which enumerates the other public endpoints (`/heartbeat`, `/health`, `/metrics`, `/items`). The README will become stale on merge.\",\"suggestion\":\"Add a bullet under README.md `## Endpoints`: `- `GET /items/count` \u2014 count of items in the store`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"low\",\"message\":\"`count_items` returns an untyped `dict` and declares no `response_model`, unlike the sibling `get_items` which uses `response_model=list[ItemRead]`. The OpenAPI schema will lack a documented response shape for this endpoint, and `openapi.json` (committed per README's CI/CD section) will need regeneration.\",\"suggestion\":\"Define a small response schema (e.g. `class ItemCount(BaseModel): count: int`) and annotate `-> ItemCount` with `@router.get(\\\"/items/count\\\", response_model=ItemCount)`, then run `task openapi:export` and commit the refreshed `openapi.json`.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

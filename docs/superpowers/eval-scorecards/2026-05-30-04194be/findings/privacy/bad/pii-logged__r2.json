@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 47,
+      "message": "PII (owner_email) logged to logger. The Item model explicitly marks owner_email as PII with comment 'do not include in logs or external responses', but post_item() logs it via log.info()",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log.info() call. Log only non-sensitive fields like item_id. Change line 47 to: log.info(\"item_created\", item_id=item.id)"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"PII (owner_email) logged to logger. The Item model explicitly marks owner_email as PII with comment 'do not include in logs or external responses', but post_item() logs it via log.info()\",\"suggestion\":\"Remove owner_email from the log.info() call. Log only non-sensitive fields like item_id. Change line 47 to: log.info(\\\"item_created\\\", item_id=item.id)\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

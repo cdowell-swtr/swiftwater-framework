@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 46,
+      "message": "PII (owner_email) logged directly. The corresponding model field in src/demo/db/models.py explicitly marks owner_email as PII with comment 'do not include in logs or external responses', but log.info() at line 46 includes owner_email=payload.owner_email.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log.info() call. If audit logging is required, log only the item_id: log.info(\"item_created\", item_id=item.id)"
+    },
+    {
+      "line": 28,
+      "message": "PII (owner_email) collected in ItemCreate schema but not used. The owner_email is accepted from the client but never passed to create_item(), and is only used for logging PII. This represents unnecessary collection of PII.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Either remove owner_email from ItemCreate if it's not needed for item creation, or if the field is legitimately needed, store it properly without logging it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":46,\"severity\":\"high\",\"message\":\"PII (owner_email) logged directly. The corresponding model field in src/demo/db/models.py explicitly marks owner_email as PII with comment 'do not include in logs or external responses', but log.info() at line 46 includes owner_email=payload.owner_email.\",\"suggestion\":\"Remove owner_email from the log.info() call. If audit logging is required, log only the item_id: log.info(\\\"item_created\\\", item_id=item.id)\"},{\"path\":\"src/demo/routes/items.py\",\"line\":28,\"severity\":\"high\",\"message\":\"PII (owner_email) collected in ItemCreate schema but not used. The owner_email is accepted from the client but never passed to create_item(), and is only used for logging PII. This represents unnecessary collection of PII.\",\"suggestion\":\"Either remove owner_email from ItemCreate if it's not needed for item creation, or if the field is legitimately needed, store it properly without logging it.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

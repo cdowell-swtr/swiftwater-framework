@@ -1,0 +1,36 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New database query path has no observability: no metric recording, span, or logging around the query. The database query `session.scalars(select(Item).where(Item.name == name)).first()` executes without latency instrumentation or error correlation context.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the database query with observability instrumentation. Add a tracer span, record query latency metrics, and ensure errors are logged with correlation ID. Consider using a decorator or context manager to instrument all repository functions consistently."
+    },
+    {
+      "line": 19,
+      "message": "Unbounded query without row-count or latency metric: `session.scalars()` can return a large result set. No metric is recorded for query latency or rows examined before `.first()` terminates the scan.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add instrumentation to record query latency and estimated row count. For production queries on unindexed columns, add metrics that would alert if query performance degrades."
+    },
+    {
+      "line": 19,
+      "message": "Query on non-indexed column `Item.name`: the migration does not create an index on the `name` column, but `get_item_by_name` queries by name. This will result in full table scans.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Create a database migration to add an index on `Item.name`, or add observability metrics to detect when this query performs poorly. If the index cannot be added, add a metric to warn when the query scans more than a threshold number of rows."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New database query path has no observability: no metric recording, span, or logging around the query. The database query `session.scalars(select(Item).where(Item.name == name)).first()` executes without latency instrumentation or error correlation context.\",\"suggestion\":\"Wrap the database query with observability instrumentation. Add a tracer span, record query latency metrics, and ensure errors are logged with correlation ID. Consider using a decorator or context manager to instrument all repository functions consistently.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"Unbounded query without row-count or latency metric: `session.scalars()` can return a large result set. No metric is recorded for query latency or rows examined before `.first()` terminates the scan.\",\"suggestion\":\"Add instrumentation to record query latency and estimated row count. For production queries on unindexed columns, add metrics that would alert if query performance degrades.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"Query on non-indexed column `Item.name`: the migration does not create an index on the `name` column, but `get_item_by_name` queries by name. This will result in full table scans.\",\"suggestion\":\"Create a database migration to add an index on `Item.name`, or add observability metrics to detect when this query performs poorly. If the index cannot be added, add a metric to warn when the query scans more than a threshold number of rows.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

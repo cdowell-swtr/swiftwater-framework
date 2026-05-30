@@ -1,0 +1,43 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New mutating route `archive_item` (POST /items/{item_id}/archive) has no domain-level instrumentation: no structured log of the archive action, no metric/counter for archive attempts vs. successes/failures, and no custom trace span/attributes. Request-level middleware captures latency/status counters but the business event (archiving an item) is invisible to logs, metrics, and traces \u2014 a new untraced/unmetered code path.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Inject a logger (e.g. `from demo.logging_config import get_logger`) and emit a structured log on success (`log.info('item_archived', item_id=item_id)`); add a counter for archive operations to MetricsRegistry (or recoverability) and/or annotate the current span with `item_id` and outcome via OpenTelemetry."
+    },
+    {
+      "line": 36,
+      "message": "The 404 error path (`item is None` -> HTTPException) is raised without any structured log carrying the correlation/request id. Operators cannot correlate 'item not found' failures back to a specific request, and the event never reaches logs at all (HTTPException is handled by FastAPI's default handler, not the recoverability path).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Log the not-found path with the correlation id before raising, e.g. `log.warning('archive_item_not_found', item_id=item_id)` (the logging config / middleware should bind the correlation id automatically), so 404s on this route are observable."
+    },
+    {
+      "line": 39,
+      "message": "State mutation (`session.commit()` on an item rename) is performed with no audit/info log and no metric. For a mutating endpoint this leaves no trail of what was archived and when \u2014 a context-propagation/observability gap for write operations.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Emit an info log after the successful commit including item_id and (optionally) the prior name, and bump a domain metric (e.g. `app_items_archived_total`) so archive throughput is visible on the dashboard."
+    },
+    {
+      "line": 34,
+      "message": "`HTTPException` is imported inside the function body, which prevents linters/import-time hooks (and any future tracing instrumentation that wraps imports) from seeing the dependency and slightly fragments the error-handling story for this route.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Move `from fastapi import HTTPException` to the module-level import block alongside `APIRouter`/`Depends`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New mutating route `archive_item` (POST /items/{item_id}/archive) has no domain-level instrumentation: no structured log of the archive action, no metric/counter for archive attempts vs. successes/failures, and no custom trace span/attributes. Request-level middleware captures latency/status counters but the business event (archiving an item) is invisible to logs, metrics, and traces \u2014 a new untraced/unmetered code path.\",\"suggestion\":\"Inject a logger (e.g. `from demo.logging_config import get_logger`) and emit a structured log on success (`log.info('item_archived', item_id=item_id)`); add a counter for archive operations to MetricsRegistry (or recoverability) and/or annotate the current span with `item_id` and outcome via OpenTelemetry.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"high\",\"message\":\"The 404 error path (`item is None` -> HTTPException) is raised without any structured log carrying the correlation/request id. Operators cannot correlate 'item not found' failures back to a specific request, and the event never reaches logs at all (HTTPException is handled by FastAPI's default handler, not the recoverability path).\",\"suggestion\":\"Log the not-found path with the correlation id before raising, e.g. `log.warning('archive_item_not_found', item_id=item_id)` (the logging config / middleware should bind the correlation id automatically), so 404s on this route are observable.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"medium\",\"message\":\"State mutation (`session.commit()` on an item rename) is performed with no audit/info log and no metric. For a mutating endpoint this leaves no trail of what was archived and when \u2014 a context-propagation/observability gap for write operations.\",\"suggestion\":\"Emit an info log after the successful commit including item_id and (optionally) the prior name, and bump a domain metric (e.g. `app_items_archived_total`) so archive throughput is visible on the dashboard.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"low\",\"message\":\"`HTTPException` is imported inside the function body, which prevents linters/import-time hooks (and any future tracing instrumentation that wraps imports) from seeing the dependency and slightly fragments the error-handling story for this route.\",\"suggestion\":\"Move `from fastapi import HTTPException` to the module-level import block alongside `APIRouter`/`Depends`.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

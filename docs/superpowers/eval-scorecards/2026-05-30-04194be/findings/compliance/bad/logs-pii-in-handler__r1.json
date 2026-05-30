@@ -1,0 +1,36 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 47,
+      "message": "Logging the user's email address (PII) at INFO level is a GDPR violation: personal data is written into application logs with no retention/deletion path, no pseudonymisation, and no lawful-basis audit trail. Logs typically have long retention and are exported to multiple sinks, putting this PII outside the reach of erasure (Art. 17) and minimisation (Art. 5(1)(c)) obligations.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log raw email. Either omit the identifier, hash/pseudonymise it (e.g. HMAC-SHA256 with a rotated key), or log only an opaque internal user id. If the call genuinely needs an audit record, route it through a dedicated audit log with documented retention, access controls, and an erasure hook \u2014 not the general application logger."
+    },
+    {
+      "line": 34,
+      "message": "Accepting an `email` query parameter as the personalisation key creates a personal-data processing surface with no documented lawful basis, no retention policy, and no right-to-erasure path. Passing email in the URL also causes it to be captured by access logs, proxies, and browser history.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Identify the caller via an authenticated session/user id rather than an email query parameter; if email truly must be accepted, send it in the request body over POST, scrub it from access logs, and tie it to a documented retention + erasure workflow."
+    },
+    {
+      "line": 33,
+      "message": "`search_items` is a sensitive operation (user-identified personalisation lookup) but has no audit log entry \u2014 only an INFO application log that conflates audit with operational logging. There is no tamper-resistant record of who searched what, which is required for accountability under GDPR Art. 5(2) and common audit regimes.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Emit a structured audit event via a dedicated audit sink (separate from application logs) recording actor (pseudonymised id), action, resource, timestamp, and correlation id; define retention for the audit log distinct from app logs."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"Logging the user's email address (PII) at INFO level is a GDPR violation: personal data is written into application logs with no retention/deletion path, no pseudonymisation, and no lawful-basis audit trail. Logs typically have long retention and are exported to multiple sinks, putting this PII outside the reach of erasure (Art. 17) and minimisation (Art. 5(1)(c)) obligations.\",\"suggestion\":\"Do not log raw email. Either omit the identifier, hash/pseudonymise it (e.g. HMAC-SHA256 with a rotated key), or log only an opaque internal user id. If the call genuinely needs an audit record, route it through a dedicated audit log with documented retention, access controls, and an erasure hook \u2014 not the general application logger.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"high\",\"message\":\"Accepting an `email` query parameter as the personalisation key creates a personal-data processing surface with no documented lawful basis, no retention policy, and no right-to-erasure path. Passing email in the URL also causes it to be captured by access logs, proxies, and browser history.\",\"suggestion\":\"Identify the caller via an authenticated session/user id rather than an email query parameter; if email truly must be accepted, send it in the request body over POST, scrub it from access logs, and tie it to a documented retention + erasure workflow.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"`search_items` is a sensitive operation (user-identified personalisation lookup) but has no audit log entry \u2014 only an INFO application log that conflates audit with operational logging. There is no tamper-resistant record of who searched what, which is required for accountability under GDPR Art. 5(2) and common audit regimes.\",\"suggestion\":\"Emit a structured audit event via a dedicated audit sink (separate from application logs) recording actor (pseudonymised id), action, resource, timestamp, and correlation id; define retention for the audit log distinct from app logs.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

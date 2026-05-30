@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 48,
+      "message": "Stale derived field: slug is not recalculated when name is updated. The rename_item function updates only item.name (line 48) but does not update item.slug, violating the documented contract in models.py (lines 16-18) that 'slug must stay in sync with name \u2014 update both together via repository helpers.' This causes slug to diverge from name, breaking the derived-field invariant.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Use the repository.update_item_name() helper (which correctly syncs both fields via _make_slug) instead of directly modifying item.name, or explicitly update item.slug = _make_slug(payload.name) before committing."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":48,\"severity\":\"high\",\"message\":\"Stale derived field: slug is not recalculated when name is updated. The rename_item function updates only item.name (line 48) but does not update item.slug, violating the documented contract in models.py (lines 16-18) that 'slug must stay in sync with name \u2014 update both together via repository helpers.' This causes slug to diverge from name, breaking the derived-field invariant.\",\"suggestion\":\"Use the repository.update_item_name() helper (which correctly syncs both fields via _make_slug) instead of directly modifying item.name, or explicitly update item.slug = _make_slug(payload.name) before committing.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

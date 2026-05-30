@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 51,
+      "message": "Tautological assertion `assert s is s` can never fail \u2014 it asserts an object is identical to itself and tests nothing about Settings' behaviour. This test passes regardless of any change to the code under test.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful assertion about Settings, e.g. assert a known field has its expected default (`assert Settings().log_level == 'INFO'`) or remove the test entirely."
+    },
+    {
+      "line": 58,
+      "message": "Over-mocked: the test monkeypatches `Settings.resolved_log_level` (the very property under test) to return 'MOCKED', then asserts it equals 'MOCKED'. It only verifies that `unittest.mock.patch` works \u2014 it cannot fail regardless of the real `resolved_log_level` implementation.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Drive the real property via its inputs (e.g. set APP_LOG_LEVEL via monkeypatch.setenv or construct Settings with explicit fields) and assert the resolved value the production code computes, without patching the property itself."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":51,\"severity\":\"high\",\"message\":\"Tautological assertion `assert s is s` can never fail \u2014 it asserts an object is identical to itself and tests nothing about Settings' behaviour. This test passes regardless of any change to the code under test.\",\"suggestion\":\"Replace with a meaningful assertion about Settings, e.g. assert a known field has its expected default (`assert Settings().log_level == 'INFO'`) or remove the test entirely.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":58,\"severity\":\"high\",\"message\":\"Over-mocked: the test monkeypatches `Settings.resolved_log_level` (the very property under test) to return 'MOCKED', then asserts it equals 'MOCKED'. It only verifies that `unittest.mock.patch` works \u2014 it cannot fail regardless of the real `resolved_log_level` implementation.\",\"suggestion\":\"Drive the real property via its inputs (e.g. set APP_LOG_LEVEL via monkeypatch.setenv or construct Settings with explicit fields) and assert the resolved value the production code computes, without patching the property itself.\"}]",
+  "repeat": 2,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 7,
+      "message": "Route handler imports SessionLocal from db.engine, a low-level infrastructure detail. This enables direct session management in the routes layer, violating the layering between routes and persistence.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove SessionLocal from imports. Use the repository layer (db.repository.create_item) instead of direct session management."
+    },
+    {
+      "line": 38,
+      "message": "Route handler opens its own database session and performs ORM operations directly (session.add, session.refresh), bypassing the repository layer. This is a layering violation that duplicates logic already present in db.repository.create_item().",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Refactor to inject a session via FastAPI dependency (like get_items does with SessionDep) and call db.repository.create_item(session, payload.name) instead of opening a new session and performing ORM operations directly."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":7,\"severity\":\"high\",\"message\":\"Route handler imports SessionLocal from db.engine, a low-level infrastructure detail. This enables direct session management in the routes layer, violating the layering between routes and persistence.\",\"suggestion\":\"Remove SessionLocal from imports. Use the repository layer (db.repository.create_item) instead of direct session management.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"high\",\"message\":\"Route handler opens its own database session and performs ORM operations directly (session.add, session.refresh), bypassing the repository layer. This is a layering violation that duplicates logic already present in db.repository.create_item().\",\"suggestion\":\"Refactor to inject a session via FastAPI dependency (like get_items does with SessionDep) and call db.repository.create_item(session, payload.name) instead of opening a new session and performing ORM operations directly.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

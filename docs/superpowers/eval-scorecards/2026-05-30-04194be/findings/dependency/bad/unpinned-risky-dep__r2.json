@@ -1,0 +1,36 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 18,
+      "message": "The newly added `requests` dependency is unpinned (no version specifier), violating the convention used by every other dependency in this manifest (all use `>=` minimum bounds, e.g. `fastapi>=0.115`, `tenacity>=9.0`). An unpinned dep accepts any version, including future majors with breaking changes, hurting build reproducibility and supply-chain risk posture.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Pin a minimum version, e.g. `requests>=2.32`."
+    },
+    {
+      "line": 18,
+      "message": "The `requests` library is likely redundant in this project. The runtime already depends on `httpx>=0.28` (in the dev group, but commonly used as the FastAPI/async HTTP client), and `httpx` provides a `requests`-compatible synchronous API. Adding `requests` introduces a second HTTP client with overlapping responsibility, extra transitive deps (urllib3, charset-normalizer, certifi, idna), and no async support \u2014 a poor fit for a FastAPI/OTel-instrumented service where `httpx` is already instrumented by `opentelemetry-instrumentation-httpx`. Justification for the addition is not evident from the diff.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Use the existing `httpx` (move to runtime deps if needed) for outbound HTTP calls instead of adding `requests`; `httpx.Client()` offers a near drop-in sync API and integrates with the project's OTel stack."
+    },
+    {
+      "line": 18,
+      "message": "Maintenance/supply-chain note: `requests` is widely used and actively maintained, but it is in a long-term maintenance mode with no async support and historically slow release cadence. For a project already standardized on the modern async stack (FastAPI, OTel, SQLAlchemy 2.x, psycopg 3), prefer `httpx` for consistency and better observability integration.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Document the justification for `requests` if it must stay (e.g. a third-party SDK requires it), otherwise drop in favor of `httpx`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"The newly added `requests` dependency is unpinned (no version specifier), violating the convention used by every other dependency in this manifest (all use `>=` minimum bounds, e.g. `fastapi>=0.115`, `tenacity>=9.0`). An unpinned dep accepts any version, including future majors with breaking changes, hurting build reproducibility and supply-chain risk posture.\",\"suggestion\":\"Pin a minimum version, e.g. `requests>=2.32`.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"The `requests` library is likely redundant in this project. The runtime already depends on `httpx>=0.28` (in the dev group, but commonly used as the FastAPI/async HTTP client), and `httpx` provides a `requests`-compatible synchronous API. Adding `requests` introduces a second HTTP client with overlapping responsibility, extra transitive deps (urllib3, charset-normalizer, certifi, idna), and no async support \u2014 a poor fit for a FastAPI/OTel-instrumented service where `httpx` is already instrumented by `opentelemetry-instrumentation-httpx`. Justification for the addition is not evident from the diff.\",\"suggestion\":\"Use the existing `httpx` (move to runtime deps if needed) for outbound HTTP calls instead of adding `requests`; `httpx.Client()` offers a near drop-in sync API and integrates with the project's OTel stack.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"info\",\"message\":\"Maintenance/supply-chain note: `requests` is widely used and actively maintained, but it is in a long-term maintenance mode with no async support and historically slow release cadence. For a project already standardized on the modern async stack (FastAPI, OTel, SQLAlchemy 2.x, psycopg 3), prefer `httpx` for consistency and better observability integration.\",\"suggestion\":\"Document the justification for `requests` if it must stay (e.g. a third-party SDK requires it), otherwise drop in favor of `httpx`.\"}]",
+  "repeat": 2,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

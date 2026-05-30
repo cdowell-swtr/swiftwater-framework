@@ -1,0 +1,36 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 39,
+      "message": "Missing return statement on the success path: when the item is found, the function falls through and implicitly returns None. With response_model=ItemRead and return type Item, FastAPI will raise a ResponseValidationError for every successful lookup, so valid GET /items/{item_id} requests fail with 500 instead of returning the item.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add `return item` after the 404 guard:\n    if item is None:\n        raise HTTPException(status_code=404, detail=\"Item not found\")\n    return item"
+    },
+    {
+      "line": 38,
+      "message": "`if not item:` is a truthiness check on the ORM instance rather than an identity check against None. SQLAlchemy's Session.get() returns either an Item instance or None, so the correct, intent-revealing test is `if item is None:`. The current form relies on implicit bool(Item), which is fragile if __bool__/__len__ are ever defined on the model, and is the kind of subtle conditional bug this reviewer is meant to flag (the in-code comment about item_id=0 is a misdirection \u2014 the issue is the predicate's domain, not the id value).",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Replace `if not item:` with `if item is None:`."
+    },
+    {
+      "line": 36,
+      "message": "`from fastapi import HTTPException` is performed inside the request handler. This import runs on every request (cheap but unnecessary) and hides the dependency from module-level static analysis; move it to the top-level imports with the other fastapi import.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "At the top of the file, change `from fastapi import APIRouter, Depends` to `from fastapi import APIRouter, Depends, HTTPException` and remove the in-function import."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"high\",\"message\":\"Missing return statement on the success path: when the item is found, the function falls through and implicitly returns None. With response_model=ItemRead and return type Item, FastAPI will raise a ResponseValidationError for every successful lookup, so valid GET /items/{item_id} requests fail with 500 instead of returning the item.\",\"suggestion\":\"Add `return item` after the 404 guard:\\n    if item is None:\\n        raise HTTPException(status_code=404, detail=\\\"Item not found\\\")\\n    return item\"},{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"medium\",\"message\":\"`if not item:` is a truthiness check on the ORM instance rather than an identity check against None. SQLAlchemy's Session.get() returns either an Item instance or None, so the correct, intent-revealing test is `if item is None:`. The current form relies on implicit bool(Item), which is fragile if __bool__/__len__ are ever defined on the model, and is the kind of subtle conditional bug this reviewer is meant to flag (the in-code comment about item_id=0 is a misdirection \u2014 the issue is the predicate's domain, not the id value).\",\"suggestion\":\"Replace `if not item:` with `if item is None:`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"low\",\"message\":\"`from fastapi import HTTPException` is performed inside the request handler. This import runs on every request (cheap but unnecessary) and hides the dependency from module-level static analysis; move it to the top-level imports with the other fastapi import.\",\"suggestion\":\"At the top of the file, change `from fastapi import APIRouter, Depends` to `from fastapi import APIRouter, Depends, HTTPException` and remove the in-function import.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

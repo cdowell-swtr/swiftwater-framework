@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "line": 4,
+      "message": "Return type changed from int to dict[str, int], altering the response shape incompatibly. This breaks any consumer code expecting get_stock() to return an int.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Either maintain backwards compatibility by introducing a new function (e.g., get_stock_with_reserved) or update the committed pact and all consumers simultaneously to accept the new response shape."
+    },
+    {
+      "line": 14,
+      "message": "The code extracts and returns 'reserved_count' which is not declared in the committed pact interaction (as indicated by the inline comment). This creates a contract mismatch \u2014 the client is now depending on a field not covered by the consumer pact contract.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Regenerate and publish the consumer pact to include the 'reserved_count' field in the expected response interaction before deploying this change, or remove the reserved_count extraction if it's not contractually committed."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":4,\"severity\":\"high\",\"message\":\"Return type changed from int to dict[str, int], altering the response shape incompatibly. This breaks any consumer code expecting get_stock() to return an int.\",\"suggestion\":\"Either maintain backwards compatibility by introducing a new function (e.g., get_stock_with_reserved) or update the committed pact and all consumers simultaneously to accept the new response shape.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":14,\"severity\":\"high\",\"message\":\"The code extracts and returns 'reserved_count' which is not declared in the committed pact interaction (as indicated by the inline comment). This creates a contract mismatch \u2014 the client is now depending on a field not covered by the consumer pact contract.\",\"suggestion\":\"Regenerate and publish the consumer pact to include the 'reserved_count' field in the expected response interaction before deploying this change, or remove the reserved_count extraction if it's not contractually committed.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

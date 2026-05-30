@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 7,
+      "message": "Direct import of SessionLocal into routes layer exposes database engine implementation. Routes should not depend directly on database internals.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove SessionLocal from this import. All database access should route through the repository layer (db.repository module)."
+    },
+    {
+      "line": 38,
+      "message": "Layering violation: create_item handler opens its own session and directly manipulates the database, bypassing the repository layer. The repository module already provides a create_item function that should be used.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Refactor to call the repository's create_item(session, payload.name) function instead of directly instantiating Item and calling session methods. Remove SessionLocal import. Import create_item from ..db.repository."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":7,\"severity\":\"high\",\"message\":\"Direct import of SessionLocal into routes layer exposes database engine implementation. Routes should not depend directly on database internals.\",\"suggestion\":\"Remove SessionLocal from this import. All database access should route through the repository layer (db.repository module).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"high\",\"message\":\"Layering violation: create_item handler opens its own session and directly manipulates the database, bypassing the repository layer. The repository module already provides a create_item function that should be used.\",\"suggestion\":\"Refactor to call the repository's create_item(session, payload.name) function instead of directly instantiating Item and calling session methods. Remove SessionLocal import. Import create_item from ..db.repository.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

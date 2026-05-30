@@ -1,0 +1,14 @@
+{
+  "agent": "documentation",
+  "case": "documented-public-function",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New data-store write path with no metric or span instrumentation. The delete_items_by_prefix function performs a database write operation (delete) without any observability instrumentation, making this operation invisible to observability systems.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add metric and/or span instrumentation around the delete operation. Consider wrapping the session operations with OpenTelemetry spans and recording metrics (e.g., row count, latency) similar to how create_item or list_items should be instrumented for observability."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New data-store write path with no metric or span instrumentation. The delete_items_by_prefix function performs a database write operation (delete) without any observability instrumentation, making this operation invisible to observability systems.\",\"suggestion\":\"Add metric and/or span instrumentation around the delete operation. Consider wrapping the session operations with OpenTelemetry spans and recording metrics (e.g., row count, latency) similar to how create_item or list_items should be instrumented for observability.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 47,
+      "message": "PII (owner_email) is logged via log.info(). The models.py file explicitly marks owner_email as PII with comment 'do not include in logs or external responses', yet this log statement directly violates that directive by including owner_email in structured logs.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log.info() call. Log only non-sensitive information such as item_id. If email auditing is required, implement a separate audit trail with restricted access controls and redaction logic."
+    },
+    {
+      "line": 30,
+      "message": "ItemCreate schema unnecessarily collects owner_email from the API request, but the create_item() function in repository.py only accepts and uses the name parameter. This represents unnecessary PII collection that is not needed for the stated purpose (item creation).",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Remove owner_email field from ItemCreate schema if it is not being used. If email is required for auditing, consider a separate, more restricted endpoint or mechanism with proper consent and retention policies."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"PII (owner_email) is logged via log.info(). The models.py file explicitly marks owner_email as PII with comment 'do not include in logs or external responses', yet this log statement directly violates that directive by including owner_email in structured logs.\",\"suggestion\":\"Remove owner_email from the log.info() call. Log only non-sensitive information such as item_id. If email auditing is required, implement a separate audit trail with restricted access controls and redaction logic.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":30,\"severity\":\"medium\",\"message\":\"ItemCreate schema unnecessarily collects owner_email from the API request, but the create_item() function in repository.py only accepts and uses the name parameter. This represents unnecessary PII collection that is not needed for the stated purpose (item creation).\",\"suggestion\":\"Remove owner_email field from ItemCreate schema if it is not being used. If email is required for auditing, consider a separate, more restricted endpoint or mechanism with proper consent and retention policies.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

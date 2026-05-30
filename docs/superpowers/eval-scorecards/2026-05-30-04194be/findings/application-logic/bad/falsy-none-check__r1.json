@@ -1,0 +1,36 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 42,
+      "message": "Missing return statement on the success path: get_item() is annotated to return Item, but when the item IS found the function falls through without returning it. FastAPI will serialize None against response_model=ItemRead and raise a validation error (or return null), so every successful lookup is broken.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add `return item` after the `if not item: raise HTTPException(...)` block."
+    },
+    {
+      "line": 41,
+      "message": "Falsy check on an ORM result is the wrong idiom for None-detection: `if not item` conflates 'object not found' with 'object is falsy'. Use an explicit identity check against None so the intent is unambiguous and robust to any future __bool__/__len__ on the model.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Replace `if not item:` with `if item is None:`."
+    },
+    {
+      "line": 37,
+      "message": "`from fastapi import HTTPException` is imported inside the function body. This works but defers the import error to request time and is inconsistent with the module-level imports already in this file; move it to the top of the module so import failures surface at startup.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Hoist `HTTPException` into the existing top-level `from fastapi import APIRouter, Depends` line."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"Missing return statement on the success path: get_item() is annotated to return Item, but when the item IS found the function falls through without returning it. FastAPI will serialize None against response_model=ItemRead and raise a validation error (or return null), so every successful lookup is broken.\",\"suggestion\":\"Add `return item` after the `if not item: raise HTTPException(...)` block.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"medium\",\"message\":\"Falsy check on an ORM result is the wrong idiom for None-detection: `if not item` conflates 'object not found' with 'object is falsy'. Use an explicit identity check against None so the intent is unambiguous and robust to any future __bool__/__len__ on the model.\",\"suggestion\":\"Replace `if not item:` with `if item is None:`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"low\",\"message\":\"`from fastapi import HTTPException` is imported inside the function body. This works but defers the import error to request time and is inconsistent with the module-level imports already in this file; move it to the top of the module so import failures surface at startup.\",\"suggestion\":\"Hoist `HTTPException` into the existing top-level `from fastapi import APIRouter, Depends` line.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

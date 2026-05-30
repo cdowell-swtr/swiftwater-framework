@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: field 'name' renamed to 'title' without backwards-compatible deprecation or alias. Existing GraphQL clients querying for 'name' will break.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Provide a deprecation path: keep 'name' as a deprecated field (using @strawberry.field with deprecation_reason), or add an alias to maintain backwards compatibility. Alternatively, use 'title' internally but provide a stable external field name."
+    },
+    {
+      "line": 43,
+      "message": "API divergence: mutation input parameter is 'name' but the output Item type now has 'title'. This creates an inconsistency between input and output schema, confusing GraphQL and REST API consumers.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Align the mutation input parameter with the renamed field. Change the parameter from 'name' to 'title' to maintain consistency with the output Item type."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: field 'name' renamed to 'title' without backwards-compatible deprecation or alias. Existing GraphQL clients querying for 'name' will break.\",\"suggestion\":\"Provide a deprecation path: keep 'name' as a deprecated field (using @strawberry.field with deprecation_reason), or add an alias to maintain backwards compatibility. Alternatively, use 'title' internally but provide a stable external field name.\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":43,\"severity\":\"high\",\"message\":\"API divergence: mutation input parameter is 'name' but the output Item type now has 'title'. This creates an inconsistency between input and output schema, confusing GraphQL and REST API consumers.\",\"suggestion\":\"Align the mutation input parameter with the renamed field. Change the parameter from 'name' to 'title' to maintain consistency with the output Item type.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

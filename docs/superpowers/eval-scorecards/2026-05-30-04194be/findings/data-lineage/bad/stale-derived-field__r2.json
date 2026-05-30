@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 48,
+      "message": "Derived field 'slug' not recalculated when 'name' is updated. The rename_item() function updates item.name directly without syncing the slug field. This violates the invariant documented in models.py that 'slug must stay in sync with name'. The code even acknowledges this in its docstring (line 43). A separate repository helper update_item_name() exists that correctly keeps both fields in sync (repository.py:24-33), but the API endpoint does not use it.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Import update_item_name from repository and use it instead of directly modifying item.name: replace lines 45-51 with: item = update_item_name(session, item_id, payload.name); if item is None: raise HTTPException(status_code=404, detail='Item not found'); return item"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":48,\"severity\":\"high\",\"message\":\"Derived field 'slug' not recalculated when 'name' is updated. The rename_item() function updates item.name directly without syncing the slug field. This violates the invariant documented in models.py that 'slug must stay in sync with name'. The code even acknowledges this in its docstring (line 43). A separate repository helper update_item_name() exists that correctly keeps both fields in sync (repository.py:24-33), but the API endpoint does not use it.\",\"suggestion\":\"Import update_item_name from repository and use it instead of directly modifying item.name: replace lines 45-51 with: item = update_item_name(session, item_id, payload.name); if item is None: raise HTTPException(status_code=404, detail='Item not found'); return item\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

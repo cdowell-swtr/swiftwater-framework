@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "duplicate-data-layer",
+  "findings": [
+    {
+      "line": 42,
+      "message": "Route handler directly calls session.commit() and session.refresh() \u2014 violates separation of concerns. The data-access layer (item_service.add_item) should fully own transaction management, not leave it to the caller.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Move session.commit() and session.refresh() logic into item_service.add_item() to ensure the data layer is fully responsible for transaction boundaries. The route handler should only call add_item() and return the result."
+    },
+    {
+      "line": 8,
+      "message": "Duplicate data-access layers detected: both 'repository' (list_items) and 'item_service' (fetch_all_items) provide overlapping functionality. Inconsistent use of these two modules violates single responsibility and creates maintenance burden.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Consolidate data-access logic into a single module. Remove either repository.py or item_service.py and use only one data-access layer consistently. Ensure consistency in patterns (e.g., commit handling, error handling)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"Route handler directly calls session.commit() and session.refresh() \u2014 violates separation of concerns. The data-access layer (item_service.add_item) should fully own transaction management, not leave it to the caller.\",\"suggestion\":\"Move session.commit() and session.refresh() logic into item_service.add_item() to ensure the data layer is fully responsible for transaction boundaries. The route handler should only call add_item() and return the result.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":8,\"severity\":\"high\",\"message\":\"Duplicate data-access layers detected: both 'repository' (list_items) and 'item_service' (fetch_all_items) provide overlapping functionality. Inconsistent use of these two modules violates single responsibility and creates maintenance burden.\",\"suggestion\":\"Consolidate data-access logic into a single module. Remove either repository.py or item_service.py and use only one data-access layer consistently. Ensure consistency in patterns (e.g., commit handling, error handling).\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

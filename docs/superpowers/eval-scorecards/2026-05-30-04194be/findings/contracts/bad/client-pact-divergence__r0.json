@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "Client adds query parameter 'include_location' that is not defined in the committed consumer pact. The pact test (test_consumer_inventory.py line 17) expects GET /inventory/1 with no query parameters, but the client now sends GET /inventory/1?include_location=true. This breaks the consumer-driven contract: either the provider cannot fulfill the new parameter requirement, or the pact contract is stale and does not reflect the actual client request.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Regenerate the consumer pact by running test_consumer_inventory.py to include the new 'include_location' query parameter in the interaction expectations, then publish the updated pact."
+    },
+    {
+      "line": 18,
+      "message": "Client now depends on 'location' field from the response (via data.get('location')), but this field is not asserted in the consumer pact contract. The pact test only validates 'item_id' and 'in_stock' fields. This weakens the contract: the client has an undeclared dependency on a response field that is not part of the verified interaction.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Update the consumer pact test to include 'location' in the expected response body with an appropriate matcher (e.g., match.str() or a concrete value), then regenerate and publish the pact."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"high\",\"message\":\"Client adds query parameter 'include_location' that is not defined in the committed consumer pact. The pact test (test_consumer_inventory.py line 17) expects GET /inventory/1 with no query parameters, but the client now sends GET /inventory/1?include_location=true. This breaks the consumer-driven contract: either the provider cannot fulfill the new parameter requirement, or the pact contract is stale and does not reflect the actual client request.\",\"suggestion\":\"Regenerate the consumer pact by running test_consumer_inventory.py to include the new 'include_location' query parameter in the interaction expectations, then publish the updated pact.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Client now depends on 'location' field from the response (via data.get('location')), but this field is not asserted in the consumer pact contract. The pact test only validates 'item_id' and 'in_stock' fields. This weakens the contract: the client has an undeclared dependency on a response field that is not part of the verified interaction.\",\"suggestion\":\"Update the consumer pact test to include 'location' in the expected response body with an appropriate matcher (e.g., match.str() or a concrete value), then regenerate and publish the pact.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

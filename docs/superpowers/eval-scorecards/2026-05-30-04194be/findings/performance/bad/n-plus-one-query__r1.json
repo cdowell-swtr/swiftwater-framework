@@ -1,0 +1,36 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 40,
+      "message": "N+1 query pattern: the endpoint first fetches all item IDs and then issues a separate session.get(Item, iid) per id to read its name. On a table with N items this performs N+1 round-trips to the database, which is a clear performance regression and an unbounded-input hot path (the items table grows over time). Latency scales linearly with row count and will exhaust the connection pool / blow request-latency SLOs under modest load.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Fetch all names in a single query, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))` and return it directly. This is O(1) round-trips and removes the per-row session.get."
+    },
+    {
+      "line": 44,
+      "message": "Unbounded result set: `select(Item.id)` (and the resulting per-row loads) has no LIMIT/pagination. Memory and query count both grow with the size of the items table, so a large table turns this endpoint into a slow, allocation-heavy hot path that can starve the request pool.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add pagination (limit/offset or keyset) to the query and document a maximum page size, e.g. `select(Item.name).order_by(Item.id).limit(limit).offset(offset)`."
+    },
+    {
+      "line": 41,
+      "message": "The function is annotated `-> list[str]` but never returns `names`; it implicitly returns `None`, which FastAPI will then try to serialize against `response_model=list[str]`. Beyond being a correctness bug, it also means the endpoint will currently 500 on every call after performing all the N+1 work \u2014 wasted DB load per request.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add `return names` at the end of the function (and once the N+1 is fixed, return the single-query result directly)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"N+1 query pattern: the endpoint first fetches all item IDs and then issues a separate session.get(Item, iid) per id to read its name. On a table with N items this performs N+1 round-trips to the database, which is a clear performance regression and an unbounded-input hot path (the items table grows over time). Latency scales linearly with row count and will exhaust the connection pool / blow request-latency SLOs under modest load.\",\"suggestion\":\"Fetch all names in a single query, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))` and return it directly. This is O(1) round-trips and removes the per-row session.get.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"high\",\"message\":\"Unbounded result set: `select(Item.id)` (and the resulting per-row loads) has no LIMIT/pagination. Memory and query count both grow with the size of the items table, so a large table turns this endpoint into a slow, allocation-heavy hot path that can starve the request pool.\",\"suggestion\":\"Add pagination (limit/offset or keyset) to the query and document a maximum page size, e.g. `select(Item.name).order_by(Item.id).limit(limit).offset(offset)`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"medium\",\"message\":\"The function is annotated `-> list[str]` but never returns `names`; it implicitly returns `None`, which FastAPI will then try to serialize against `response_model=list[str]`. Beyond being a correctness bug, it also means the endpoint will currently 500 on every call after performing all the N+1 work \u2014 wasted DB load per request.\",\"suggestion\":\"Add `return names` at the end of the function (and once the N+1 is fixed, return the single-query result directly).\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

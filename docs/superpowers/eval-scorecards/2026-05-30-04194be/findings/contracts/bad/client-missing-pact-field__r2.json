@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "line": 14,
+      "message": "Client now expects 'reserved_count' field in response, but this field is not declared in the committed pact interaction (test_consumer_inventory.py:19). The response body contract only includes 'item_id' and 'in_stock'. This breaks the consumer-provider contract and will cause the pact mock to return an undefined field.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Either: (1) Add 'reserved_count' field to the pact interaction in test_consumer_inventory.py and regenerate the pact, or (2) Make the client code handle the optional 'reserved_count' gracefully (e.g., use .get('reserved_count') with a default), or (3) Revert to expecting only 'in_stock' until the provider contract is updated."
+    },
+    {
+      "line": 4,
+      "message": "Return type changed from 'int' to 'dict[str, int]', but the consumer pact test (test_consumer_inventory.py:22) expects the function to return an integer (assert get_stock(...) == 5). This incompatible change will cause the contract test to fail.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Update the consumer pact test assertion to expect the new dictionary return type, and ensure the pact interaction includes all fields the client now expects in the response."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":14,\"severity\":\"high\",\"message\":\"Client now expects 'reserved_count' field in response, but this field is not declared in the committed pact interaction (test_consumer_inventory.py:19). The response body contract only includes 'item_id' and 'in_stock'. This breaks the consumer-provider contract and will cause the pact mock to return an undefined field.\",\"suggestion\":\"Either: (1) Add 'reserved_count' field to the pact interaction in test_consumer_inventory.py and regenerate the pact, or (2) Make the client code handle the optional 'reserved_count' gracefully (e.g., use .get('reserved_count') with a default), or (3) Revert to expecting only 'in_stock' until the provider contract is updated.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":4,\"severity\":\"high\",\"message\":\"Return type changed from 'int' to 'dict[str, int]', but the consumer pact test (test_consumer_inventory.py:22) expects the function to return an integer (assert get_stock(...) == 5). This incompatible change will cause the contract test to fail.\",\"suggestion\":\"Update the consumer pact test assertion to expect the new dictionary return type, and ensure the pact interaction includes all fields the client now expects in the response.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

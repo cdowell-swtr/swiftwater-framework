@@ -1,0 +1,29 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 25,
+      "message": "bulk_create_items commits inside the per-item loop, so a failure partway through the batch leaves the database with a partial subset of items inserted \u2014 there is no atomicity across the batch. This violates the all-or-nothing invariant callers reasonably expect of a 'bulk' insert and can produce inconsistent state (e.g., the first N names persisted while later ones are lost, with no rollback).",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add all items first, then commit once outside the loop so the batch is atomic. For example:\n\n    def bulk_create_items(session: Session, names: list[str]) -> list[Item]:\n        items = [Item(name=name) for name in names]\n        session.add_all(items)\n        session.commit()\n        for item in items:\n            session.refresh(item)\n        return items\n\nOptionally wrap in `with session.begin():` to make the transactional boundary explicit and ensure rollback on error."
+    },
+    {
+      "line": 28,
+      "message": "The function is annotated to return `list[Item]` but has no `return` statement, so it implicitly returns `None`. Callers relying on the documented return value will get `None` and fail (AttributeError on iteration / type-checker violation), and any partially-committed rows from the loop above will silently be discarded from the caller's perspective \u2014 compounding the partial-write data-integrity risk.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Return the accumulated list: add `return created` (or `return items` after the suggested atomic refactor) as the final statement of the function."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":25,\"severity\":\"high\",\"message\":\"bulk_create_items commits inside the per-item loop, so a failure partway through the batch leaves the database with a partial subset of items inserted \u2014 there is no atomicity across the batch. This violates the all-or-nothing invariant callers reasonably expect of a 'bulk' insert and can produce inconsistent state (e.g., the first N names persisted while later ones are lost, with no rollback).\",\"suggestion\":\"Add all items first, then commit once outside the loop so the batch is atomic. For example:\\n\\n    def bulk_create_items(session: Session, names: list[str]) -> list[Item]:\\n        items = [Item(name=name) for name in names]\\n        session.add_all(items)\\n        session.commit()\\n        for item in items:\\n            session.refresh(item)\\n        return items\\n\\nOptionally wrap in `with session.begin():` to make the transactional boundary explicit and ensure rollback on error.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":28,\"severity\":\"high\",\"message\":\"The function is annotated to return `list[Item]` but has no `return` statement, so it implicitly returns `None`. Callers relying on the documented return value will get `None` and fail (AttributeError on iteration / type-checker violation), and any partially-committed rows from the loop above will silently be discarded from the caller's perspective \u2014 compounding the partial-write data-integrity risk.\",\"suggestion\":\"Return the accumulated list: add `return created` (or `return items` after the suggested atomic refactor) as the final statement of the function.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

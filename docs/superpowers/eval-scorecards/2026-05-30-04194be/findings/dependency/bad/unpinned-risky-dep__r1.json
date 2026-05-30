@@ -1,0 +1,36 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 18,
+      "message": "New dependency `requests` is added unpinned (no version constraint), unlike every other dependency in this manifest which uses a lower bound (e.g. `>=2.x`). Unpinned deps make resolution non-reproducible and can silently introduce major-version breakage.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Pin to a supported lower bound, e.g. `requests>=2.32`."
+    },
+    {
+      "line": 18,
+      "message": "`requests` duplicates capability already available via `httpx` (listed in dev deps and a transitive of the FastAPI/Starlette stack). `httpx` is actively developed, supports sync and async, HTTP/2, and integrates with this project's async FastAPI runtime; `requests` is in maintenance-only mode and is sync-only, which can block the event loop if called from async handlers.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Drop `requests` and use `httpx` (promote it from dev to runtime deps if needed) for outbound HTTP calls."
+    },
+    {
+      "line": 18,
+      "message": "Supply-chain note: adding a runtime HTTP client expands the attack surface. `requests` is widely used and reasonably maintained, but if kept, ensure `pip-audit` (already in dev deps) is run in CI to catch CVEs against its transitive chain (urllib3, charset-normalizer, certifi).",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Confirm `pip-audit` runs in the project's CI workflow and pin `requests` so audit results are reproducible."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"New dependency `requests` is added unpinned (no version constraint), unlike every other dependency in this manifest which uses a lower bound (e.g. `>=2.x`). Unpinned deps make resolution non-reproducible and can silently introduce major-version breakage.\",\"suggestion\":\"Pin to a supported lower bound, e.g. `requests>=2.32`.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"`requests` duplicates capability already available via `httpx` (listed in dev deps and a transitive of the FastAPI/Starlette stack). `httpx` is actively developed, supports sync and async, HTTP/2, and integrates with this project's async FastAPI runtime; `requests` is in maintenance-only mode and is sync-only, which can block the event loop if called from async handlers.\",\"suggestion\":\"Drop `requests` and use `httpx` (promote it from dev to runtime deps if needed) for outbound HTTP calls.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"info\",\"message\":\"Supply-chain note: adding a runtime HTTP client expands the attack surface. `requests` is widely used and reasonably maintained, but if kept, ensure `pip-audit` (already in dev deps) is run in CI to catch CVEs against its transitive chain (urllib3, charset-normalizer, certifi).\",\"suggestion\":\"Confirm `pip-audit` runs in the project's CI workflow and pin `requests` so audit results are reproducible.\"}]",
+  "repeat": 1,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

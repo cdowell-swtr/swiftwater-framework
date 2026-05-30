@@ -1,0 +1,36 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 40,
+      "message": "N+1 query pattern: the endpoint first fetches all item ids, then issues one SELECT per id via session.get(Item, iid) inside the loop. On a table with N rows this performs N+1 round-trips to the database, scaling linearly with row count on an unbounded input (no pagination/limit). Under concurrent load this also amplifies connection-pool pressure and tail latency.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Fetch the names in a single query, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))`, and drop the id-then-get loop entirely. Also add pagination (limit/offset or keyset) since the result set is unbounded."
+    },
+    {
+      "line": 41,
+      "message": "Unbounded result set: get_item_names returns every row's name with no LIMIT/pagination. As the items table grows this becomes a latent O(N) memory + payload regression and a denial-of-service amplifier independent of the N+1 issue.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add a `limit`/`offset` (or keyset cursor) query parameter with a sane default cap, and apply it to the SELECT."
+    },
+    {
+      "line": 43,
+      "message": "Function falls off the end without `return names`, so it implicitly returns None and FastAPI's `response_model=list[str]` validation will fail at request time. Not strictly a performance finding, but it means the hot path is currently broken before the N+1 cost is even paid.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add `return names` (or, better, return the result of the single-query rewrite above)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"N+1 query pattern: the endpoint first fetches all item ids, then issues one SELECT per id via session.get(Item, iid) inside the loop. On a table with N rows this performs N+1 round-trips to the database, scaling linearly with row count on an unbounded input (no pagination/limit). Under concurrent load this also amplifies connection-pool pressure and tail latency.\",\"suggestion\":\"Fetch the names in a single query, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))`, and drop the id-then-get loop entirely. Also add pagination (limit/offset or keyset) since the result set is unbounded.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"medium\",\"message\":\"Unbounded result set: get_item_names returns every row's name with no LIMIT/pagination. As the items table grows this becomes a latent O(N) memory + payload regression and a denial-of-service amplifier independent of the N+1 issue.\",\"suggestion\":\"Add a `limit`/`offset` (or keyset cursor) query parameter with a sane default cap, and apply it to the SELECT.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"low\",\"message\":\"Function falls off the end without `return names`, so it implicitly returns None and FastAPI's `response_model=list[str]` validation will fail at request time. Not strictly a performance finding, but it means the hot path is currently broken before the N+1 cost is even paid.\",\"suggestion\":\"Add `return names` (or, better, return the result of the single-query rewrite above).\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

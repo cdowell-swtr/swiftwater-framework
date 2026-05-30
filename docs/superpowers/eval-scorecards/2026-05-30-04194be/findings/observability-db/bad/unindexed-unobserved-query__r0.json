@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New datastore query path 'get_item_by_name()' has no observability (no metric or span). The query is unbounded and could be expensive if Item.name is unindexed.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the query with observability: add a span around the query, record query latency as a metric, and ensure the index on Item.name is documented. Consider adding a metric like 'db_query_latency_ms' labeled with the query type."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New datastore query path 'get_item_by_name()' has no observability (no metric or span). The query is unbounded and could be expensive if Item.name is unindexed.\",\"suggestion\":\"Wrap the query with observability: add a span around the query, record query latency as a metric, and ensure the index on Item.name is documented. Consider adding a metric like 'db_query_latency_ms' labeled with the query type.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

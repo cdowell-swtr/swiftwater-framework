@@ -1,0 +1,43 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 47,
+      "message": "Email address (personal data under GDPR) is logged at INFO level in plaintext, with no retention bound, no pseudonymisation/hashing, and no documented deletion/erasure path. Application logs typically have far longer retention than is justified for an ad-hoc personalisation parameter, putting the service in breach of GDPR data-minimisation (Art. 5(1)(c)) and storage-limitation (Art. 5(1)(e)) principles, and making right-to-erasure (Art. 17) requests impractical because PII is scattered across log aggregation.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log the raw email. If a per-user signal is genuinely needed for debugging, log a salted hash or an opaque user_id instead, and document the retention window. Better: drop the email from the log line entirely."
+    },
+    {
+      "line": 35,
+      "message": "Email is accepted as a query-string parameter on a POST endpoint. Query strings are routinely captured by intermediaries (access logs, proxies, CDNs, browser history, referer headers) \u2014 this multiplies the PII surface area beyond the application and outside the controller's retention/erasure controls. There is no lawful-basis/consent check and no record-of-processing for the personalisation use.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Move the email (and any other personal data) into the JSON request body, document the lawful basis, and ensure upstream proxies are configured not to log request bodies. Prefer an authenticated user identity (session/JWT) over a client-supplied email."
+    },
+    {
+      "line": 36,
+      "message": "Sensitive operation (a personalised search keyed on an identifiable user) is performed with no audit log: no record of who searched, when, with what filter, or under what lawful basis. This blocks GDPR accountability (Art. 5(2)) and breach-notification forensics, and prevents responding to Art. 15 access requests.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Emit a structured audit event to a dedicated, access-controlled audit sink (separate from the app INFO log) with: pseudonymised subject id, timestamp, action, filter, correlation id. Define and document its retention period."
+    },
+    {
+      "line": 36,
+      "message": "No retention or deletion path is defined for the personal data introduced by this endpoint. The email flows into application logs (and potentially proxy/access logs) with the service's default log retention, which is not a GDPR retention policy and offers no right-to-erasure mechanism \u2014 an Art. 17 request cannot be satisfied without scrubbing logs.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Either avoid persisting/logging the email at all, or define a documented retention window and an erasure procedure (e.g. tokenise the email at the edge so logs only contain a reversible-by-controller token that can be invalidated on erasure)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"Email address (personal data under GDPR) is logged at INFO level in plaintext, with no retention bound, no pseudonymisation/hashing, and no documented deletion/erasure path. Application logs typically have far longer retention than is justified for an ad-hoc personalisation parameter, putting the service in breach of GDPR data-minimisation (Art. 5(1)(c)) and storage-limitation (Art. 5(1)(e)) principles, and making right-to-erasure (Art. 17) requests impractical because PII is scattered across log aggregation.\",\"suggestion\":\"Do not log the raw email. If a per-user signal is genuinely needed for debugging, log a salted hash or an opaque user_id instead, and document the retention window. Better: drop the email from the log line entirely.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":35,\"severity\":\"high\",\"message\":\"Email is accepted as a query-string parameter on a POST endpoint. Query strings are routinely captured by intermediaries (access logs, proxies, CDNs, browser history, referer headers) \u2014 this multiplies the PII surface area beyond the application and outside the controller's retention/erasure controls. There is no lawful-basis/consent check and no record-of-processing for the personalisation use.\",\"suggestion\":\"Move the email (and any other personal data) into the JSON request body, document the lawful basis, and ensure upstream proxies are configured not to log request bodies. Prefer an authenticated user identity (session/JWT) over a client-supplied email.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"high\",\"message\":\"Sensitive operation (a personalised search keyed on an identifiable user) is performed with no audit log: no record of who searched, when, with what filter, or under what lawful basis. This blocks GDPR accountability (Art. 5(2)) and breach-notification forensics, and prevents responding to Art. 15 access requests.\",\"suggestion\":\"Emit a structured audit event to a dedicated, access-controlled audit sink (separate from the app INFO log) with: pseudonymised subject id, timestamp, action, filter, correlation id. Define and document its retention period.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"high\",\"message\":\"No retention or deletion path is defined for the personal data introduced by this endpoint. The email flows into application logs (and potentially proxy/access logs) with the service's default log retention, which is not a GDPR retention policy and offers no right-to-erasure mechanism \u2014 an Art. 17 request cannot be satisfied without scrubbing logs.\",\"suggestion\":\"Either avoid persisting/logging the email at all, or define a documented retention window and an erasure procedure (e.g. tokenise the email at the edge so logs only contain a reversible-by-controller token that can be invalidated on erasure).\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

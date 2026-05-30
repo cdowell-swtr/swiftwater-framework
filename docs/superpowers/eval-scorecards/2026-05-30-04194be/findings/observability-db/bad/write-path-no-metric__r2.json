@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New data-store write path with no span or metric instrumentation. The delete_items_by_prefix function performs a database delete operation but lacks observability (metrics, spans, or traces). Data-layer deletes are invisible to observability, making it impossible to monitor latency, error rates, or operation success.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the database operation with OpenTelemetry span instrumentation and emit a metric to record the number of rows deleted. For example: use `trace.get_tracer(__name__).start_as_current_span()` and call `app.state.metrics.record_db_operation()` to track the operation latency and outcome."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New data-store write path with no span or metric instrumentation. The delete_items_by_prefix function performs a database delete operation but lacks observability (metrics, spans, or traces). Data-layer deletes are invisible to observability, making it impossible to monitor latency, error rates, or operation success.\",\"suggestion\":\"Wrap the database operation with OpenTelemetry span instrumentation and emit a metric to record the number of rows deleted. For example: use `trace.get_tracer(__name__).start_as_current_span()` and call `app.state.metrics.record_db_operation()` to track the operation latency and outcome.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

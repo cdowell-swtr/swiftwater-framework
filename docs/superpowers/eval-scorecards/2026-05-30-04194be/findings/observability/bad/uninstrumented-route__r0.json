@@ -1,0 +1,36 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New write endpoint `archive_item` has no observability beyond the generic request middleware: no structured log entry, no domain metric, and no explicit span/event for a state-mutating operation. Mutations (commit) should emit an audit log with the correlation id and a domain metric so the archive flow is observable separately from generic HTTP counters.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "After the successful commit, emit `get_logger().info(\"item_archived\", item_id=item_id)` (correlation id is bound by the logging/middleware context) and add a domain counter (e.g. `app_items_archived_total`) incremented via the metrics registry or a dedicated counter."
+    },
+    {
+      "line": 37,
+      "message": "The 404 error path raises HTTPException without logging \u2014 the not-found event is silently dropped from app logs, so it carries no correlation id and is invisible to log-based dashboards/alerts. Per the observability contract, error paths must be logged with the correlation id before raising.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Log before raising, e.g. `get_logger().warning(\"item_archive_not_found\", item_id=item_id)` then raise HTTPException(404, ...)."
+    },
+    {
+      "line": 33,
+      "message": "No SLO is defined or referenced for this new write/mutation endpoint. The existing SLOs (`request_latency_p99_ms`, `error_rate_pct`) are app-global; a mutating endpoint that touches the DB deserves its own latency/error threshold (or at minimum a documented decision to fold it into the global SLO).",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Either confirm this endpoint is covered by the global SLOs (and note it) or add a per-route SLO threshold (e.g. write_latency_p99_ms) in `observability/slo.py` and wire PromQL in `observability/provisioning.py`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New write endpoint `archive_item` has no observability beyond the generic request middleware: no structured log entry, no domain metric, and no explicit span/event for a state-mutating operation. Mutations (commit) should emit an audit log with the correlation id and a domain metric so the archive flow is observable separately from generic HTTP counters.\",\"suggestion\":\"After the successful commit, emit `get_logger().info(\\\"item_archived\\\", item_id=item_id)` (correlation id is bound by the logging/middleware context) and add a domain counter (e.g. `app_items_archived_total`) incremented via the metrics registry or a dedicated counter.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"high\",\"message\":\"The 404 error path raises HTTPException without logging \u2014 the not-found event is silently dropped from app logs, so it carries no correlation id and is invisible to log-based dashboards/alerts. Per the observability contract, error paths must be logged with the correlation id before raising.\",\"suggestion\":\"Log before raising, e.g. `get_logger().warning(\\\"item_archive_not_found\\\", item_id=item_id)` then raise HTTPException(404, ...).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"No SLO is defined or referenced for this new write/mutation endpoint. The existing SLOs (`request_latency_p99_ms`, `error_rate_pct`) are app-global; a mutating endpoint that touches the DB deserves its own latency/error threshold (or at minimum a documented decision to fold it into the global SLO).\",\"suggestion\":\"Either confirm this endpoint is covered by the global SLOs (and note it) or add a per-route SLO threshold (e.g. write_latency_p99_ms) in `observability/slo.py` and wire PromQL in `observability/provisioning.py`.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

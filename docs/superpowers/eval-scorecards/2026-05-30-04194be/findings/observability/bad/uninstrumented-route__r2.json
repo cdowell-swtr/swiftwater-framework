@@ -1,0 +1,50 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New POST /items/{item_id}/archive endpoint adds a state-mutating code path with no explicit log, span, or domain metric. Only the generic ObservabilityMiddleware counters apply; the archive action itself (a write committed to the DB) is invisible in logs/traces, so failures or unexpected archives cannot be diagnosed via the correlation id.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Acquire the logger (get_logger()) and emit an info log on successful archive including item_id and the correlation id; if tracing is enabled, wrap the DB read+commit in an explicit span (e.g. tracer.start_as_current_span('archive_item'))."
+    },
+    {
+      "line": 36,
+      "message": "The 404 error path raises HTTPException without any log line carrying the correlation id, so missing-item lookups are not observable. The diff's error branch is silent in logs and metrics (middleware only records status code at response time, not the domain reason).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Log the not-found event with structured fields (item_id, correlation id) before raising HTTPException, e.g. log.warning('archive_item_not_found', item_id=item_id)."
+    },
+    {
+      "line": 39,
+      "message": "session.commit() is performed without an explicit log/span; any commit failure surfaces only as a 500 via the global handler with no breadcrumb identifying this code path or the affected item_id, weakening incident triage for this mutating endpoint.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Wrap the mutation+commit in a try/except that logs and re-raises (log.error('archive_item_commit_failed', item_id=item_id, exc_info=True)), and/or instrument with a tracing span around the commit."
+    },
+    {
+      "line": 33,
+      "message": "No SLO threshold is defined for this new mutating endpoint. default_slos() only covers global request_latency_p99_ms and error_rate_pct; a write endpoint typically warrants its own latency/error SLO (or at minimum an explicit acknowledgement that the global SLOs cover it) so alerts in provisioning.py can target archive-specific regressions.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Either confirm via comment that the global SLOs cover this endpoint, or add an endpoint-specific SLO key (e.g. archive_latency_p99_ms) in observability/slo.py and a PromQL mapping in observability/provisioning.py."
+    },
+    {
+      "line": 37,
+      "message": "Local `from fastapi import HTTPException` inside the function body is harmless but obscures observability review tooling that scans imports; more importantly, the function lacks any structured context (logger binding) so correlation-id propagation into the error path is not established here.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Hoist the HTTPException import to module scope and bind a request-scoped logger at the top of the handler so all branches (success + 404 + commit error) share the same correlation id."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New POST /items/{item_id}/archive endpoint adds a state-mutating code path with no explicit log, span, or domain metric. Only the generic ObservabilityMiddleware counters apply; the archive action itself (a write committed to the DB) is invisible in logs/traces, so failures or unexpected archives cannot be diagnosed via the correlation id.\",\"suggestion\":\"Acquire the logger (get_logger()) and emit an info log on successful archive including item_id and the correlation id; if tracing is enabled, wrap the DB read+commit in an explicit span (e.g. tracer.start_as_current_span('archive_item')).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"high\",\"message\":\"The 404 error path raises HTTPException without any log line carrying the correlation id, so missing-item lookups are not observable. The diff's error branch is silent in logs and metrics (middleware only records status code at response time, not the domain reason).\",\"suggestion\":\"Log the not-found event with structured fields (item_id, correlation id) before raising HTTPException, e.g. log.warning('archive_item_not_found', item_id=item_id).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"medium\",\"message\":\"session.commit() is performed without an explicit log/span; any commit failure surfaces only as a 500 via the global handler with no breadcrumb identifying this code path or the affected item_id, weakening incident triage for this mutating endpoint.\",\"suggestion\":\"Wrap the mutation+commit in a try/except that logs and re-raises (log.error('archive_item_commit_failed', item_id=item_id, exc_info=True)), and/or instrument with a tracing span around the commit.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"No SLO threshold is defined for this new mutating endpoint. default_slos() only covers global request_latency_p99_ms and error_rate_pct; a write endpoint typically warrants its own latency/error SLO (or at minimum an explicit acknowledgement that the global SLOs cover it) so alerts in provisioning.py can target archive-specific regressions.\",\"suggestion\":\"Either confirm via comment that the global SLOs cover this endpoint, or add an endpoint-specific SLO key (e.g. archive_latency_p99_ms) in observability/slo.py and a PromQL mapping in observability/provisioning.py.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"low\",\"message\":\"Local `from fastapi import HTTPException` inside the function body is harmless but obscures observability review tooling that scans imports; more importantly, the function lacks any structured context (logger binding) so correlation-id propagation into the error path is not established here.\",\"suggestion\":\"Hoist the HTTPException import to module scope and bind a request-scoped logger at the top of the handler so all branches (success + 404 + commit error) share the same correlation id.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

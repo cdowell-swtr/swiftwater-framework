@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 37,
+      "message": "Mutation input 'description' is accepted but not used in the resolver implementation (line 40 calls repository.create_item with only 'name'). This creates a broken API contract where clients cannot actually provide a description.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "info",
+      "suggestion": "Either remove the 'description' parameter from the mutation signature, or pass it to the repository layer and persist it. If the Item model needs a description field, add it to the database schema first, then update the repository function to accept and store it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":37,\"severity\":\"info\",\"message\":\"Mutation input 'description' is accepted but not used in the resolver implementation (line 40 calls repository.create_item with only 'name'). This creates a broken API contract where clients cannot actually provide a description.\",\"suggestion\":\"Either remove the 'description' parameter from the mutation signature, or pass it to the repository layer and persist it. If the Item model needs a description field, add it to the database schema first, then update the repository function to accept and store it.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

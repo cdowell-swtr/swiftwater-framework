@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 7,
+      "message": "Routes layer imports SessionLocal directly, bypassing the dependency injection pattern. SessionLocal should never be imported in route handlers.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove SessionLocal from the import; use the get_session dependency injection pattern (SessionDep) instead, as demonstrated in the get_items handler."
+    },
+    {
+      "line": 41,
+      "message": "Layering violation: create_item handler directly opens a session and manipulates the database, bypassing the repository layer. The repository module already provides a create_item function for this purpose.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Inject a session via SessionDep dependency and call the existing repository.create_item(session, payload.name) function, mirroring the pattern used in get_items."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":7,\"severity\":\"high\",\"message\":\"Routes layer imports SessionLocal directly, bypassing the dependency injection pattern. SessionLocal should never be imported in route handlers.\",\"suggestion\":\"Remove SessionLocal from the import; use the get_session dependency injection pattern (SessionDep) instead, as demonstrated in the get_items handler.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Layering violation: create_item handler directly opens a session and manipulates the database, bypassing the repository layer. The repository module already provides a create_item function for this purpose.\",\"suggestion\":\"Inject a session via SessionDep dependency and call the existing repository.create_item(session, payload.name) function, mirroring the pattern used in get_items.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

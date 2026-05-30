@@ -1,0 +1,36 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 18,
+      "message": "New `requests` dependency is unpinned \u2014 no version specifier means resolution drifts across installs and any future breaking release lands unreviewed. Every other dependency in this manifest uses a `>=X.Y` floor; this one should too.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Add a lower bound, e.g. `\"requests>=2.32\"`, and let the lockfile / `pip-audit` (already a dev dep) own the upper bound."
+    },
+    {
+      "line": 18,
+      "message": "`requests` duplicates capability already covered by existing dependencies. The project ships FastAPI + an async stack, and `httpx` is already in the dev group (used by the test client); `httpx` is a drop-in for `requests` with sync AND async support, HTTP/2, and active maintenance, whereas `requests` is in maintenance-only mode upstream. Adding a second HTTP client increases supply-chain surface (urllib3, charset-normalizer, idna, certifi) for no new capability.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Drop `requests` and use `httpx` (promote it from dev to runtime if a runtime HTTP client is actually needed). If `requests` is genuinely required by a third-party SDK, justify it in a comment on the dependency line."
+    },
+    {
+      "line": 18,
+      "message": "Dependency addition lacks a stated justification. Manifest changes that add a runtime HTTP client to a service that already has one are worth a one-line rationale (e.g. which call site needs it) so reviewers can confirm the need rather than infer it.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Either reference the introducing call site in the PR description, or remove the dep if it was added speculatively."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"New `requests` dependency is unpinned \u2014 no version specifier means resolution drifts across installs and any future breaking release lands unreviewed. Every other dependency in this manifest uses a `>=X.Y` floor; this one should too.\",\"suggestion\":\"Add a lower bound, e.g. `\\\"requests>=2.32\\\"`, and let the lockfile / `pip-audit` (already a dev dep) own the upper bound.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"`requests` duplicates capability already covered by existing dependencies. The project ships FastAPI + an async stack, and `httpx` is already in the dev group (used by the test client); `httpx` is a drop-in for `requests` with sync AND async support, HTTP/2, and active maintenance, whereas `requests` is in maintenance-only mode upstream. Adding a second HTTP client increases supply-chain surface (urllib3, charset-normalizer, idna, certifi) for no new capability.\",\"suggestion\":\"Drop `requests` and use `httpx` (promote it from dev to runtime if a runtime HTTP client is actually needed). If `requests` is genuinely required by a third-party SDK, justify it in a comment on the dependency line.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"info\",\"message\":\"Dependency addition lacks a stated justification. Manifest changes that add a runtime HTTP client to a service that already has one are worth a one-line rationale (e.g. which call site needs it) so reviewers can confirm the need rather than infer it.\",\"suggestion\":\"Either reference the introducing call site in the PR description, or remove the dep if it was added speculatively.\"}]",
+  "repeat": 0,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 45,
+      "message": "User-supplied input bypasses required normalization. The post_item() endpoint accepts user input via payload.name and writes it directly via create_item(), but the codebase defines create_item_normalized() as the canonical entry-point for user-supplied names. The docstring in create_item_normalized() explicitly states: 'Callers that accept user input MUST go through this function, not the bare create_item().' This violates the data lineage contract for normalization (strip + lowercase).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Change line 45 to use create_item_normalized() instead of create_item(), and update the import on line 9 to import create_item_normalized from ..db.repository."
+    },
+    {
+      "line": 9,
+      "message": "Import uses bare create_item() which is documented as unsuitable for user-supplied input. The repository module provides create_item_normalized() as the required function for this use case, but only create_item is imported.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Import create_item_normalized from ..db.repository instead of (or in addition to) create_item."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"User-supplied input bypasses required normalization. The post_item() endpoint accepts user input via payload.name and writes it directly via create_item(), but the codebase defines create_item_normalized() as the canonical entry-point for user-supplied names. The docstring in create_item_normalized() explicitly states: 'Callers that accept user input MUST go through this function, not the bare create_item().' This violates the data lineage contract for normalization (strip + lowercase).\",\"suggestion\":\"Change line 45 to use create_item_normalized() instead of create_item(), and update the import on line 9 to import create_item_normalized from ..db.repository.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":9,\"severity\":\"high\",\"message\":\"Import uses bare create_item() which is documented as unsuitable for user-supplied input. The repository module provides create_item_normalized() as the required function for this use case, but only create_item is imported.\",\"suggestion\":\"Import create_item_normalized from ..db.repository instead of (or in addition to) create_item.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

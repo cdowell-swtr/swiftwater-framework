@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "PII field 'owner_email' included in response model ItemRead, which exposes it in external API responses. This directly violates the documented requirement in models.py (line 16) that states 'do not include in logs or external responses.'",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email' from ItemRead response model, or if client display is required, implement explicit filtering/anonymization before exposing it in API responses."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"PII field 'owner_email' included in response model ItemRead, which exposes it in external API responses. This directly violates the documented requirement in models.py (line 16) that states 'do not include in logs or external responses.'\",\"suggestion\":\"Remove 'owner_email' from ItemRead response model, or if client display is required, implement explicit filtering/anonymization before exposing it in API responses.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

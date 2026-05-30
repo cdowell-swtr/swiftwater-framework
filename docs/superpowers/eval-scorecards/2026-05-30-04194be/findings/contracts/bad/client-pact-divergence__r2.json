@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "Client now requests 'include_location' query parameter, but the consumer Pact test (tests/functional/test_consumer_inventory.py line 17) does not define this parameter in its request expectations. The Pact will need to be regenerated and republished after this change.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "suggestion": "Update the consumer pact test to include the 'include_location' parameter in the request expectation, then regenerate and publish the pact. If the provider cannot supply 'location' yet, consider making the parameter conditional or reverting this change until the provider is ready."
+    },
+    {
+      "line": 17,
+      "message": "Pact test expects request to '/inventory/1' with no query parameters, but the client code (src/demo/clients/inventory.py) now sends 'include_location=true'. The pact contract and test are out of sync.",
+      "path": "tests/functional/test_consumer_inventory.py",
+      "severity": "info",
+      "suggestion": "Update the pact expectation to include 'params={\"include_location\": \"true\"}' in the request definition, and optionally add 'location' to the expected response body."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"info\",\"message\":\"Client now requests 'include_location' query parameter, but the consumer Pact test (tests/functional/test_consumer_inventory.py line 17) does not define this parameter in its request expectations. The Pact will need to be regenerated and republished after this change.\",\"suggestion\":\"Update the consumer pact test to include the 'include_location' parameter in the request expectation, then regenerate and publish the pact. If the provider cannot supply 'location' yet, consider making the parameter conditional or reverting this change until the provider is ready.\"},{\"path\":\"tests/functional/test_consumer_inventory.py\",\"line\":17,\"severity\":\"info\",\"message\":\"Pact test expects request to '/inventory/1' with no query parameters, but the client code (src/demo/clients/inventory.py) now sends 'include_location=true'. The pact contract and test are out of sync.\",\"suggestion\":\"Update the pact expectation to include 'params={\\\"include_location\\\": \\\"true\\\"}' in the request definition, and optionally add 'location' to the expected response body.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

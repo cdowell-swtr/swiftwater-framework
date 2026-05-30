@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 51,
+      "message": "Tautological assertion: `assert s is s` will pass for any object regardless of Settings' behaviour. This test cannot fail and provides zero coverage of the code under test.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful assertion about Settings' actual behaviour (e.g., assert a default attribute value like `assert Settings().environment == 'dev'`), or remove the test entirely."
+    },
+    {
+      "line": 58,
+      "message": "Over-mocked / tautology: the test patches `Settings.resolved_log_level` to return 'MOCKED' and then asserts the patched value equals 'MOCKED'. This asserts on the mock itself \u2014 the real `resolved_log_level` property is never exercised, so the test will pass even if the production logic is broken or deleted.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Remove the patch and test the real property by varying inputs (e.g., `assert Settings(environment='prod').resolved_log_level == 'INFO'`) so the assertion exercises actual code behaviour."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":51,\"severity\":\"high\",\"message\":\"Tautological assertion: `assert s is s` will pass for any object regardless of Settings' behaviour. This test cannot fail and provides zero coverage of the code under test.\",\"suggestion\":\"Replace with a meaningful assertion about Settings' actual behaviour (e.g., assert a default attribute value like `assert Settings().environment == 'dev'`), or remove the test entirely.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":58,\"severity\":\"high\",\"message\":\"Over-mocked / tautology: the test patches `Settings.resolved_log_level` to return 'MOCKED' and then asserts the patched value equals 'MOCKED'. This asserts on the mock itself \u2014 the real `resolved_log_level` property is never exercised, so the test will pass even if the production logic is broken or deleted.\",\"suggestion\":\"Remove the patch and test the real property by varying inputs (e.g., `assert Settings(environment='prod').resolved_log_level == 'INFO'`) so the assertion exercises actual code behaviour.\"}]",
+  "repeat": 0,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

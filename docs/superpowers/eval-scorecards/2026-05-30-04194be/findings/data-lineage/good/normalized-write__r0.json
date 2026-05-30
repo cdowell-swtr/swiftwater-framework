@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "normalized-write",
+  "findings": [
+    {
+      "line": 11,
+      "message": "The create_item() function can still be called directly, bypassing the normalization enforced by create_item_normalized(). While a docstring warning exists, Python does not prevent internal code paths or tests from using the raw function, potentially storing un-normalized names and breaking consistency guarantees.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "suggestion": "Consider raising an exception in create_item() or marking it with @deprecated decorator to enforce the use of create_item_normalized(). Alternatively, refactor to make name normalization mandatory at the model layer or add a pre-commit hook to detect direct create_item() calls."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":11,\"severity\":\"medium\",\"message\":\"The create_item() function can still be called directly, bypassing the normalization enforced by create_item_normalized(). While a docstring warning exists, Python does not prevent internal code paths or tests from using the raw function, potentially storing un-normalized names and breaking consistency guarantees.\",\"suggestion\":\"Consider raising an exception in create_item() or marking it with @deprecated decorator to enforce the use of create_item_normalized(). Alternatively, refactor to make name normalization mandatory at the model layer or add a pre-commit hook to detect direct create_item() calls.\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

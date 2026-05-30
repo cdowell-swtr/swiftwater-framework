@@ -1,0 +1,22 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "line": 14,
+      "message": "Consumer code extracts 'reserved_count' from response (line 14) but this field is not declared in the pact interaction (see comment on line 13). This creates a contract gap: the provider has no contractual obligation to include this field, so the code will fail at runtime with a KeyError if the provider omits it.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Regenerate and publish the consumer pact to include 'reserved_count' in the expected response body with appropriate matchers, then commit the updated pact. The pact test must assert on this field to create a contractual obligation for the provider to include it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":14,\"severity\":\"high\",\"message\":\"Consumer code extracts 'reserved_count' from response (line 14) but this field is not declared in the pact interaction (see comment on line 13). This creates a contract gap: the provider has no contractual obligation to include this field, so the code will fail at runtime with a KeyError if the provider omits it.\",\"suggestion\":\"Regenerate and publish the consumer pact to include 'reserved_count' in the expected response body with appropriate matchers, then commit the updated pact. The pact test must assert on this field to create a contractual obligation for the provider to include it.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

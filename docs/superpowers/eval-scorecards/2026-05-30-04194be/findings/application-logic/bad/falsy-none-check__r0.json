@@ -1,0 +1,29 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 42,
+      "message": "Missing return statement on the happy path: when `item` is found, the function falls through and implicitly returns None, which violates the declared `-> Item` return type and will fail FastAPI's `response_model=ItemRead` serialization (raises a ResponseValidationError on every successful lookup). The endpoint is only correct for the not-found path.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add `return item` after the `raise HTTPException(...)` block so the function returns the fetched Item when it exists."
+    },
+    {
+      "line": 41,
+      "message": "Use an explicit `is None` check instead of a truthiness check. `if not item:` relies on the object's `__bool__`; for SQLAlchemy ORM instances this is fine today but is fragile (a model with `__len__`/`__bool__` would mis-trigger 404 on a real row). The idiomatic null check for `Session.get(...)` is `if item is None`.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Change `if not item:` to `if item is None:`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"Missing return statement on the happy path: when `item` is found, the function falls through and implicitly returns None, which violates the declared `-> Item` return type and will fail FastAPI's `response_model=ItemRead` serialization (raises a ResponseValidationError on every successful lookup). The endpoint is only correct for the not-found path.\",\"suggestion\":\"Add `return item` after the `raise HTTPException(...)` block so the function returns the fetched Item when it exists.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"medium\",\"message\":\"Use an explicit `is None` check instead of a truthiness check. `if not item:` relies on the object's `__bool__`; for SQLAlchemy ORM instances this is fine today but is fragile (a model with `__len__`/`__bool__` would mis-trigger 404 on a real row). The idiomatic null check for `Session.get(...)` is `if item is None`.\",\"suggestion\":\"Change `if not item:` to `if item is None:`.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,36 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "line": 34,
+      "message": "New public route handler `count_items` exposes a public endpoint (`GET /items/count`) but has no docstring explaining its purpose, response shape, or relationship to `/items`. The sibling `get_items` is documented; this regresses the module's documentation convention for public interfaces.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a docstring to `count_items` describing what it returns (e.g. `{\"count\": <int>}`) and noting it's a convenience companion to `GET /items`. Consider also typing the return as `dict[str, int]` so the contract is self-documenting."
+    },
+    {
+      "line": 33,
+      "message": "The new `/items/count` endpoint is not reflected in the README's `## Endpoints` section, which currently lists `/heartbeat`, `/health`, `/metrics`, and `/items`. The user-facing API documentation is now stale relative to the shipped routes.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a bullet under README.md `## Endpoints` such as `- `GET /items/count` \u2014 count of seeded/created items` so the documented surface matches the implemented routes."
+    },
+    {
+      "line": 33,
+      "message": "The new route adds a public API surface but does not declare a `response_model` (unlike `get_items`, which uses `response_model=list[ItemRead]`). Without an explicit response model the OpenAPI schema for `/items/count` will be inferred from the `dict` return annotation as a generic object, which weakens the published contract and is likely to surface as a noisy or breaking entry in `task openapi:export` / the contract diff CI job.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "suggestion": "Define a small `ItemCountRead` Pydantic model (e.g. `count: int`) and decorate as `@router.get(\"/items/count\", response_model=ItemCountRead)`; annotate the handler return as `ItemCountRead` (or `dict[str, int]` at minimum) so the OpenAPI spec stays precise."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"low\",\"message\":\"New public route handler `count_items` exposes a public endpoint (`GET /items/count`) but has no docstring explaining its purpose, response shape, or relationship to `/items`. The sibling `get_items` is documented; this regresses the module's documentation convention for public interfaces.\",\"suggestion\":\"Add a docstring to `count_items` describing what it returns (e.g. `{\\\"count\\\": <int>}`) and noting it's a convenience companion to `GET /items`. Consider also typing the return as `dict[str, int]` so the contract is self-documenting.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"The new `/items/count` endpoint is not reflected in the README's `## Endpoints` section, which currently lists `/heartbeat`, `/health`, `/metrics`, and `/items`. The user-facing API documentation is now stale relative to the shipped routes.\",\"suggestion\":\"Add a bullet under README.md `## Endpoints` such as `- `GET /items/count` \u2014 count of seeded/created items` so the documented surface matches the implemented routes.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"info\",\"message\":\"The new route adds a public API surface but does not declare a `response_model` (unlike `get_items`, which uses `response_model=list[ItemRead]`). Without an explicit response model the OpenAPI schema for `/items/count` will be inferred from the `dict` return annotation as a generic object, which weakens the published contract and is likely to surface as a noisy or breaking entry in `task openapi:export` / the contract diff CI job.\",\"suggestion\":\"Define a small `ItemCountRead` Pydantic model (e.g. `count: int`) and decorate as `@router.get(\\\"/items/count\\\", response_model=ItemCountRead)`; annotate the handler return as `ItemCountRead` (or `dict[str, int]` at minimum) so the OpenAPI spec stays precise.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

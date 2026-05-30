@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "Client now sends query parameter 'include_location=true' but the committed pact test (tests/functional/test_consumer_inventory.py) does not specify this parameter in its request expectation (.with_request('GET', '/inventory/1')). The pact should be regenerated and republished after this client change.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "suggestion": "Update tests/functional/test_consumer_inventory.py to include the 'include_location' parameter in the mock request expectation, then regenerate and publish the pact."
+    },
+    {
+      "line": 18,
+      "message": "Client now expects a 'location' field in the response body, but the committed pact test does not include this field in its expected response body (.with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5)})). The pact should be regenerated and republished after this client change.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "suggestion": "Update tests/functional/test_consumer_inventory.py to expect the 'location' field in the mock response body, then regenerate and publish the pact."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"info\",\"message\":\"Client now sends query parameter 'include_location=true' but the committed pact test (tests/functional/test_consumer_inventory.py) does not specify this parameter in its request expectation (.with_request('GET', '/inventory/1')). The pact should be regenerated and republished after this client change.\",\"suggestion\":\"Update tests/functional/test_consumer_inventory.py to include the 'include_location' parameter in the mock request expectation, then regenerate and publish the pact.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":18,\"severity\":\"info\",\"message\":\"Client now expects a 'location' field in the response body, but the committed pact test does not include this field in its expected response body (.with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5)})). The pact should be regenerated and republished after this client change.\",\"suggestion\":\"Update tests/functional/test_consumer_inventory.py to expect the 'location' field in the mock response body, then regenerate and publish the pact.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

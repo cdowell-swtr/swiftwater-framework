@@ -1,0 +1,22 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 25,
+      "message": "bulk_create_items commits inside the per-item loop, so the batch is not atomic: if any insert after the first fails (constraint violation, connection error, etc.), earlier items remain persisted while later ones are lost \u2014 a partial-write that callers expecting bulk semantics cannot detect or roll back. This violates the all-or-nothing invariant typically expected of a bulk-create API and makes retries unsafe (re-running may double-insert the items that already succeeded).",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add all items, then commit once outside the loop (and let the caller's transaction scope or an explicit try/except trigger session.rollback() on failure). For example:\n\n    def bulk_create_items(session: Session, names: list[str]) -> list[Item]:\n        items = [Item(name=name) for name in names]\n        session.add_all(items)\n        try:\n            session.commit()\n        except Exception:\n            session.rollback()\n            raise\n        for item in items:\n            session.refresh(item)\n        return items\n\nThis makes the batch atomic and keeps retries idempotent at the transaction boundary."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":25,\"severity\":\"high\",\"message\":\"bulk_create_items commits inside the per-item loop, so the batch is not atomic: if any insert after the first fails (constraint violation, connection error, etc.), earlier items remain persisted while later ones are lost \u2014 a partial-write that callers expecting bulk semantics cannot detect or roll back. This violates the all-or-nothing invariant typically expected of a bulk-create API and makes retries unsafe (re-running may double-insert the items that already succeeded).\",\"suggestion\":\"Add all items, then commit once outside the loop (and let the caller's transaction scope or an explicit try/except trigger session.rollback() on failure). For example:\\n\\n    def bulk_create_items(session: Session, names: list[str]) -> list[Item]:\\n        items = [Item(name=name) for name in names]\\n        session.add_all(items)\\n        try:\\n            session.commit()\\n        except Exception:\\n            session.rollback()\\n            raise\\n        for item in items:\\n            session.refresh(item)\\n        return items\\n\\nThis makes the batch atomic and keeps retries idempotent at the transaction boundary.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

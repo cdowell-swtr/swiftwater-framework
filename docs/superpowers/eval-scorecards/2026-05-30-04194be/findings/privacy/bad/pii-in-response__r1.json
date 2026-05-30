@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "PII field 'owner_email' included in ItemRead response schema contradicts explicit model warning (src/demo/db/models.py:16) that states 'do not include in logs or external responses'. This exposes user PII in API responses.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email: str | None = None' from ItemRead response schema. Keep it only in ItemCreate if needed for internal processing, but exclude from external responses."
+    },
+    {
+      "line": 23,
+      "message": "Comment 'Include owner contact for client display' contradicts the model's explicit PII protection directive. PII should not be exposed in external responses per the model warning.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove this comment and the owner_email field from the response schema. PII should be handled internally only, never exposed to clients."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"PII field 'owner_email' included in ItemRead response schema contradicts explicit model warning (src/demo/db/models.py:16) that states 'do not include in logs or external responses'. This exposes user PII in API responses.\",\"suggestion\":\"Remove 'owner_email: str | None = None' from ItemRead response schema. Keep it only in ItemCreate if needed for internal processing, but exclude from external responses.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":23,\"severity\":\"high\",\"message\":\"Comment 'Include owner contact for client display' contradicts the model's explicit PII protection directive. PII should not be exposed in external responses per the model warning.\",\"suggestion\":\"Remove this comment and the owner_email field from the response schema. PII should be handled internally only, never exposed to clients.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

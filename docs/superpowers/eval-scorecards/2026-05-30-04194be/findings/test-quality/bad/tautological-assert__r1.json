@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 51,
+      "message": "Tautological assertion: `assert s is s` is always True regardless of Settings' behaviour. This test cannot fail and provides no coverage of Settings construction or invariants.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful assertion about Settings \u2014 e.g., assert default field values (`s.database_url == EXPECTED_DEFAULT`, `s.log_level == 'INFO'`) or assert type/identity of distinct instances (`Settings() is not Settings()`)."
+    },
+    {
+      "line": 58,
+      "message": "Over-mocked / asserts on its own mock: the test patches `Settings.resolved_log_level` to return 'MOCKED' and then asserts it equals 'MOCKED'. This exercises the mock, not the real method under test, and would pass even if `resolved_log_level`'s real implementation were broken or removed.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Drop the patch of `resolved_log_level` itself. Instead, drive the real property by configuring its inputs (e.g., set `APP_LOG_LEVEL` via monkeypatch or construct `Settings(log_level=...)`) and assert the resolved value the real code returns."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":51,\"severity\":\"high\",\"message\":\"Tautological assertion: `assert s is s` is always True regardless of Settings' behaviour. This test cannot fail and provides no coverage of Settings construction or invariants.\",\"suggestion\":\"Replace with a meaningful assertion about Settings \u2014 e.g., assert default field values (`s.database_url == EXPECTED_DEFAULT`, `s.log_level == 'INFO'`) or assert type/identity of distinct instances (`Settings() is not Settings()`).\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":58,\"severity\":\"high\",\"message\":\"Over-mocked / asserts on its own mock: the test patches `Settings.resolved_log_level` to return 'MOCKED' and then asserts it equals 'MOCKED'. This exercises the mock, not the real method under test, and would pass even if `resolved_log_level`'s real implementation were broken or removed.\",\"suggestion\":\"Drop the patch of `resolved_log_level` itself. Instead, drive the real property by configuring its inputs (e.g., set `APP_LOG_LEVEL` via monkeypatch or construct `Settings(log_level=...)`) and assert the resolved value the real code returns.\"}]",
+  "repeat": 1,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}
