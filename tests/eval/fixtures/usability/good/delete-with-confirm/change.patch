@@ -1,3 +1,5 @@
+diff --git a/frontend/src/Items.tsx b/frontend/src/Items.tsx
+index f94b2c6..0fca443 100644
 --- a/frontend/src/Items.tsx
 +++ b/frontend/src/Items.tsx
 @@ -1,4 +1,4 @@
@@ -6,30 +8,41 @@
  
  import { fetchItems, type Item } from "./api";
  
-@@ -23,3 +23,22 @@ export function Items() {
+@@ -23,3 +23,37 @@ export function Items() {
      </ul>
    );
  }
 +
-+// Good: DeleteButton asks for confirmation before the destructive action and
-+// shows a loading state while the request is in flight.
++// Good: DeleteButton asks for confirmation before the destructive action,
++// shows a loading state while the request is in flight, and surfaces errors
++// to the user instead of failing silently.
 +export function DeleteButton({ itemId, onDeleted }: { itemId: number; onDeleted: () => void }) {
 +  const [pending, setPending] = useState(false);
++  const [error, setError] = useState<string | null>(null);
 +
 +  const handleDelete = useCallback(async () => {
 +    if (!window.confirm("Delete this item? This cannot be undone.")) return;
 +    setPending(true);
++    setError(null);
 +    try {
-+      await fetch(`/items/${itemId}`, { method: "DELETE" });
++      const res = await fetch(`/items/${itemId}`, { method: "DELETE" });
++      if (!res.ok) {
++        throw new Error(`Delete failed (HTTP ${res.status})`);
++      }
 +      onDeleted();
++    } catch (e) {
++      setError(e instanceof Error ? e.message : "Delete failed. Please try again.");
 +    } finally {
 +      setPending(false);
 +    }
 +  }, [itemId, onDeleted]);
 +
 +  return (
-+    <button onClick={handleDelete} disabled={pending} aria-busy={pending}>
-+      {pending ? "Deleting…" : "Delete"}
-+    </button>
++    <>
++      <button onClick={handleDelete} disabled={pending} aria-busy={pending}>
++        {pending ? "Deleting…" : "Delete"}
++      </button>
++      {error && <p role="alert" style={{ color: "crimson" }}>{error}</p>}
++    </>
 +  );
 +}

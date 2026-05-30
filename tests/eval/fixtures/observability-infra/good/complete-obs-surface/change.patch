@@ -35,6 +35,29 @@ index 0edac1e..07f4ab1 100644
  volumes:
    promdata: {}
    lokidata: {}
+diff --git a/infra/compose/services.yml b/infra/compose/services.yml
+index 70bbdf6..2c28de9 100644
+--- a/infra/compose/services.yml
++++ b/infra/compose/services.yml
+@@ -3,3 +3,18 @@
+ # the battery data stores + worker/beat for prod/staging (dev keeps its own build-based, profiled
+ # copies in dev.yml). Managed alternative: point APP_MONGO_URL / APP_REDIS_URL / APP_CELERY_* at a
+ # managed instance and omit the data-store services here (worker/beat stay self-hosted).
++
++services:
++  redis:
++    image: redis:7
++    restart: unless-stopped
++    volumes:
++      - redisdata:/data
++    healthcheck:
++      test: ["CMD", "redis-cli", "ping"]
++      interval: 10s
++      timeout: 3s
++      retries: 10
++
++volumes:
++  redisdata: {}
 diff --git a/infra/observability/grafana/dashboards/redis.json b/infra/observability/grafana/dashboards/redis.json
 new file mode 100644
 index 0000000..645c0a2
