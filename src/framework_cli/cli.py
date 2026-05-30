@@ -591,6 +591,157 @@ def eval_analyze(
         raise typer.Exit(1)
 
 
+@app.command(name="eval-prepare")
+def eval_prepare(
+    mode: str = typer.Option(
+        ...,
+        "--mode",
+        help="'tune' (against fixtures) or 'audit' (against current code).",
+    ),
+    agent: str = typer.Option(
+        "",
+        "--agent",
+        help="Single agent to prepare (default: all from registry / target).",
+    ),
+    fixtures: str = typer.Option(
+        "tests/eval/fixtures",
+        "--fixtures",
+        help="Fixtures root (tune mode only).",
+    ),
+    repeat: int = typer.Option(
+        1, "--repeat", help="Repeats per fixture (tune mode only)."
+    ),
+    target: str = typer.Option(
+        "",
+        "--target",
+        help="'framework' or 'project' (audit mode; default: auto-detect).",
+    ),
+    output_dir: str = typer.Option(
+        "",
+        "--output-dir",
+        help="Output dir for finalize (echoed in the prep manifest).",
+    ),
+) -> None:
+    """Output the complete work-item list for subagent dispatch as JSON to stdout.
+
+    Consumed by the slash command, which passes it to a Workflow tool invocation.
+    """
+    if mode == "tune":
+        _emit_tune_prep(agent, Path(fixtures), repeat, output_dir)
+    elif mode == "audit":
+        _emit_audit_prep(agent, target, output_dir)
+    else:
+        typer.echo(
+            f"eval-prepare: invalid --mode '{mode}' (expected 'tune' or 'audit')",
+            err=True,
+        )
+        raise typer.Exit(2)
+
+
+def _emit_tune_prep(
+    single_agent: str, fixtures_root: Path, repeat: int, output_dir: str
+) -> None:
+    import tempfile
+
+    from framework_cli.review.evals import load_fixtures
+
+    targets = [single_agent] if single_agent else agent_names()
+    base_dir = Path(tempfile.mkdtemp(prefix="evalprep-"))
+    cache: dict = {}
+
+    by_agent: dict[str, list] = {}
+    for fx in load_fixtures(fixtures_root):
+        by_agent.setdefault(fx.agent, []).append(fx)
+
+    work_items: list[dict] = []
+    for a in targets:
+        try:
+            spec = get_agent(a)
+        except KeyError:
+            typer.echo(f"eval-prepare: unknown agent '{a}'", err=True)
+            raise typer.Exit(1) from None
+        for fx in by_agent.get(a, []):
+            root, diff = realize_cached(fx, cache, base_dir)
+            for i in range(repeat):
+                work_items.append(_build_work_item(spec, fx, i, diff, root))
+
+    manifest = {
+        "mode": "tune",
+        "agents_set": targets,
+        "work_items": work_items,
+        "output_dir": output_dir or "",
+    }
+    typer.echo(json.dumps(manifest, indent=2))
+
+
+def _build_work_item(
+    spec: object, fx: object, repeat_idx: int, diff: str, root: Path
+) -> dict:
+    """Build one work item: subagent_type + model + assembled prompt + diff + root."""
+    from framework_cli.review.context import assemble
+
+    is_agentic = spec.context.strategy == "agentic"  # type: ignore[attr-defined]
+    if is_agentic:
+        # Agentic: pass diff + agent prompt + tool-use instruction.
+        system_blocks = [
+            {"text": f"Review this unified diff:\n\n{diff}"},
+            {"text": spec.prompt},  # type: ignore[attr-defined]
+        ]
+        user_message = (
+            f"You are reviewing the codebase rooted at: {root}\n\n"
+            "Use the Read, Grep, and Glob tools (these only — do NOT use Bash, "
+            "WebFetch, WebSearch, or any other tool) to explore the surrounding "
+            "code as needed. Use absolute paths starting with the root above for "
+            "all tool calls.\n\n"
+            "When done, reply with ONLY a JSON array of findings:\n"
+            '  [{"path": "...", "line": N, "severity": "...", "message": "...", '
+            '"suggestion": "..."}]'
+        )
+        return {
+            "agent": fx.agent,  # type: ignore[attr-defined]
+            "kind": fx.kind,  # type: ignore[attr-defined]
+            "case": fx.name,  # type: ignore[attr-defined]
+            "repeat_idx": repeat_idx,
+            "seeded_file": fx.seeded_file,  # type: ignore[attr-defined]
+            "subagent_type": "Explore",
+            "model": spec.model,  # type: ignore[attr-defined]
+            "system_blocks": system_blocks,
+            "user_message": user_message,
+            "tools_allowed": ["Read", "Grep", "Glob"],
+            "root_dir": str(root),
+            "diff": diff,
+        }
+    # Bundle tier: assemble with context_files, single text completion.
+    bundle = assemble(diff, root, spec.context, model=spec.model)  # type: ignore[attr-defined]
+    system_blocks = [{"text": f"Review this unified diff:\n\n{bundle.diff}"}]
+    if bundle.context_files:
+        joined = "\n\n".join(f"=== {p} ===\n{c}" for p, c in bundle.context_files)
+        note = "\n\n[context truncated to fit the budget]" if bundle.truncated else ""
+        system_blocks.append(
+            {"text": f"Relevant repository files for context:\n\n{joined}{note}"}
+        )
+    system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
+    return {
+        "agent": fx.agent,  # type: ignore[attr-defined]
+        "kind": fx.kind,  # type: ignore[attr-defined]
+        "case": fx.name,  # type: ignore[attr-defined]
+        "repeat_idx": repeat_idx,
+        "seeded_file": fx.seeded_file,  # type: ignore[attr-defined]
+        "subagent_type": "general-purpose",
+        "model": spec.model,  # type: ignore[attr-defined]
+        "system_blocks": system_blocks,
+        "user_message": "Return your findings as a JSON array only.",
+        "tools_allowed": None,
+        "root_dir": str(root),
+        "diff": diff,
+    }
+
+
+def _emit_audit_prep(single_agent: str, target_arg: str, output_dir: str) -> None:
+    # Implemented in Task 4
+    raise NotImplementedError("eval-prepare --mode audit lands in Task 4")
+
+
 @app.command()
 def review(
     agent: str = typer.Argument(..., help="Review agent name, e.g. 'security'."),

@@ -1161,3 +1161,77 @@ def test_eval_analyze_handles_audit_records_gracefully(tmp_path):
     assert result.exit_code in (0, 1), result.output  # 1 if score FAIL, 0 if PASS
     assert "review-security" in result.output
     assert "## Drift check" in result.output
+
+
+def test_eval_prepare_tune_outputs_work_items_for_single_agent(tmp_path, monkeypatch):
+    """eval-prepare --mode tune --agent security outputs a JSON list of work items
+    with diff + system_blocks + user_message + subagent_type + model per (agent,fixture,repeat)."""
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
+
+    result = runner.invoke(
+        app,
+        [
+            "eval-prepare",
+            "--mode",
+            "tune",
+            "--agent",
+            "security",
+            "--fixtures",
+            str(tmp_path),
+            "--repeat",
+            "2",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    data = _json.loads(result.output)
+    assert data["mode"] == "tune"
+    assert data["agents_set"] == ["security"]
+    # 2 fixtures × 2 repeats = 4 items
+    assert len(data["work_items"]) == 4
+    item = data["work_items"][0]
+    assert item["agent"] == "security"
+    assert item["kind"] in ("bad", "good")
+    assert item["case"] in ("b1", "g1")
+    assert item["repeat_idx"] in (0, 1)
+    assert item["subagent_type"] == "general-purpose"  # security is bundle tier
+    assert item["model"] == "claude-sonnet-4-6"
+    assert "system_blocks" in item and len(item["system_blocks"]) >= 2
+    assert "user_message" in item
+    assert "diff" in item
+    assert item["tools_allowed"] is None  # bundle: no tools
+
+
+def test_eval_prepare_tune_uses_explore_for_agentic_agents(tmp_path, monkeypatch):
+    """Agentic-tier agents (e.g., architecture) get subagent_type='Explore' + tools_allowed."""
+    _make_fixture(tmp_path, "architecture", "bad", "b1", "+++ b/a.py\n", "a.py")
+
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
+
+    result = runner.invoke(
+        app,
+        [
+            "eval-prepare",
+            "--mode",
+            "tune",
+            "--agent",
+            "architecture",
+            "--fixtures",
+            str(tmp_path),
+            "--repeat",
+            "1",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    data = _json.loads(result.output)
+    item = data["work_items"][0]
+    assert item["subagent_type"] == "Explore"
+    assert item["model"] == "claude-opus-4-8"
+    assert item["tools_allowed"] == ["Read", "Grep", "Glob"]
+    assert "root_dir" in item  # agentic items carry the rendered root for tool access
