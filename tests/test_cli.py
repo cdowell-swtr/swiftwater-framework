@@ -1297,6 +1297,65 @@ def test_eval_prepare_audit_tolerates_pyproject_formatting_variations(
     assert data["target"] == "framework"
 
 
+def test_eval_prepare_gate_affected_single_prompt(tmp_path, monkeypatch):
+    """A staged change to one agent's prompt → only that agent in the work items."""
+    import framework_cli.cli as cli_mod
+
+    # Simulate: only src/framework_cli/review/agents/security.md is staged.
+    monkeypatch.setattr(
+        cli_mod,
+        "_staged_files",
+        lambda: ["src/framework_cli/review/agents/security.md"],
+    )
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+    result = runner.invoke(app, ["eval-prepare", "--mode", "gate"])
+    assert result.exit_code == 0, result.output
+    data = _json.loads(result.output)
+    assert data["mode"] == "gate"
+    assert data["agents_set"] == ["security"]
+    assert len(data["work_items"]) == 1
+    assert "staged_hash" in data
+    assert data["staged_hash"].startswith("sha256:")
+
+
+def test_eval_prepare_gate_runner_change_affects_all_bundle(monkeypatch):
+    """A staged change to runner.py → all 11 bundle agents."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(
+        cli_mod,
+        "_staged_files",
+        lambda: ["src/framework_cli/review/runner.py"],
+    )
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    result = runner.invoke(app, ["eval-prepare", "--mode", "gate"])
+    assert result.exit_code == 0, result.output
+    data = _json.loads(result.output)
+    # 11 bundle agents (everything not agentic) should be the agent set.
+    from framework_cli.review.registry import agent_names, get_agent
+
+    expected = sorted(
+        a for a in agent_names() if get_agent(a).context.strategy != "agentic"
+    )
+    assert sorted(data["agents_set"]) == expected
+    assert len(data["work_items"]) == len(expected)
+
+
+def test_eval_prepare_gate_thresholds_only_signals_regrade(monkeypatch):
+    """If the only staged file is tests/eval/fixtures/thresholds.yaml, the manifest
+    signals mode='regrade' (no subagent dispatch needed)."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(
+        cli_mod, "_staged_files", lambda: ["tests/eval/fixtures/thresholds.yaml"]
+    )
+    result = runner.invoke(app, ["eval-prepare", "--mode", "gate"])
+    assert result.exit_code == 0, result.output
+    data = _json.loads(result.output)
+    assert data["mode"] == "regrade"
+    assert data["work_items"] == []
+
+
 def test_eval_finalize_writes_records_runs_analyze_writes_meta(tmp_path):
     """eval-finalize: given workflow results, writes per-call JSON records and a scorecard."""
     out = tmp_path / "scorecard"

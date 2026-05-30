@@ -1,5 +1,7 @@
+import hashlib
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -630,12 +632,160 @@ def eval_prepare(
         _emit_tune_prep(agent, Path(fixtures), repeat, output_dir)
     elif mode == "audit":
         _emit_audit_prep(agent, target, output_dir)
+    elif mode == "gate":
+        _emit_gate_prep()
     else:
         typer.echo(
-            f"eval-prepare: invalid --mode '{mode}' (expected 'tune' or 'audit')",
+            f"eval-prepare: invalid --mode '{mode}' "
+            "(expected 'tune', 'audit', or 'gate')",
             err=True,
         )
         raise typer.Exit(2)
+
+
+def _staged_files() -> list[str]:
+    """Return the list of files in the staged set (git diff --cached --name-only)."""
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def _is_review_relevant(path: str) -> bool:
+    """True if `path` is one of the review-relevant paths the gate cares about."""
+    if path.startswith("src/framework_cli/review/"):
+        return True
+    if path.startswith("src/framework_cli/template/"):
+        return True
+    if path.startswith("tests/eval/fixtures/"):
+        return True
+    return False
+
+
+def _affected_agents(staged: list[str]) -> tuple[str, list[str]]:
+    """Return (mode, agents_set). mode is 'gate', 'regrade', or 'noop'."""
+    if not staged:
+        return ("noop", [])
+    # Thresholds-only → regrade
+    review_relevant = {p for p in staged if _is_review_relevant(p)}
+    if review_relevant == {"tests/eval/fixtures/thresholds.yaml"}:
+        return ("regrade", [])
+    if not review_relevant:
+        return ("noop", [])
+
+    all_agents = agent_names()
+    bundle_agents = [
+        a for a in all_agents if get_agent(a).context.strategy != "agentic"
+    ]
+    agentic_agents = [
+        a for a in all_agents if get_agent(a).context.strategy == "agentic"
+    ]
+    affected: set[str] = set()
+    for path in review_relevant:
+        # Per-agent prompt
+        if path.startswith("src/framework_cli/review/agents/") and path.endswith(".md"):
+            name = Path(path).stem
+            if name in all_agents:
+                affected.add(name)
+            continue
+        # Per-agent fixture
+        if path.startswith("tests/eval/fixtures/"):
+            parts = Path(path).parts
+            if len(parts) >= 4:  # tests/eval/fixtures/<agent>/<kind>/<case>/<file>
+                name = parts[3]
+                if name in all_agents:
+                    affected.add(name)
+            continue
+        # runner.py → all bundle
+        if path == "src/framework_cli/review/runner.py":
+            affected.update(bundle_agents)
+            continue
+        # agentic.py → all agentic
+        if path == "src/framework_cli/review/agentic.py":
+            affected.update(agentic_agents)
+            continue
+        # context.py / findings.py / registry.py → all
+        if path in (
+            "src/framework_cli/review/context.py",
+            "src/framework_cli/review/findings.py",
+            "src/framework_cli/review/registry.py",
+        ):
+            affected.update(all_agents)
+            continue
+        # template/** → all (fixtures render from template)
+        if path.startswith("src/framework_cli/template/"):
+            affected.update(all_agents)
+            continue
+    return ("gate", sorted(affected))
+
+
+def _staged_hash(staged: list[str]) -> str:
+    """sha256 of concatenated staged review-relevant file contents (sorted by path)."""
+    h = hashlib.sha256()
+    for p in sorted(staged):
+        if not _is_review_relevant(p):
+            continue
+        try:
+            content = subprocess.run(
+                ["git", "show", f":{p}"],  # the staged blob's content
+                capture_output=True,
+                text=True,
+                check=False,
+            ).stdout
+        except Exception:
+            content = ""
+        h.update(p.encode())
+        h.update(b"\x00")
+        h.update(content.encode())
+        h.update(b"\x00")
+    return "sha256:" + h.hexdigest()
+
+
+def _emit_gate_prep() -> None:
+    """Emit a gate-mode manifest from the current staged set."""
+    staged = _staged_files()
+    detected_mode, agents = _affected_agents(staged)
+    if detected_mode == "noop":
+        manifest: dict = {
+            "mode": "noop",
+            "agents_set": [],
+            "work_items": [],
+            "staged_hash": _staged_hash(staged),
+            "output_dir": ".framework/audit/latest",
+        }
+        typer.echo(json.dumps(manifest, indent=2))
+        return
+    if detected_mode == "regrade":
+        manifest = {
+            "mode": "regrade",
+            "agents_set": [],
+            "work_items": [],
+            "staged_hash": _staged_hash(staged),
+            "output_dir": ".framework/audit/latest",
+        }
+        typer.echo(json.dumps(manifest, indent=2))
+        return
+    # Build work items for each affected agent (same shape as audit-mode items)
+    diff = _review_diff()
+    root = Path.cwd()
+    work_items: list[dict] = []
+    for a in agents:
+        try:
+            spec = get_agent(a)
+        except KeyError:
+            continue
+        work_items.append(_build_audit_work_item(spec, diff, root))
+    manifest = {
+        "mode": "gate",
+        "agents_set": agents,
+        "work_items": work_items,
+        "staged_hash": _staged_hash(staged),
+        "output_dir": ".framework/audit/latest",
+    }
+    typer.echo(json.dumps(manifest, indent=2))
 
 
 def _emit_tune_prep(
