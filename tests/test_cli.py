@@ -1092,3 +1092,72 @@ def test_eval_analyze_renders_drift_section(tmp_path):
     assert "## Drift check" in result.output
     assert "architecture" in result.output
     assert "Bash" in result.output
+
+
+def test_load_records_tolerates_missing_audit_dimensions(tmp_path):
+    """Records without kind/case/repeat (audit shape) load with sensible defaults."""
+    from framework_cli.review.analyze import load_records
+
+    d = tmp_path / "f"
+    (d / "security").mkdir(parents=True)
+    # Audit-shape record: just agent + findings + telemetry, no kind/case/repeat.
+    (d / "security" / "security.json").write_text(
+        _json.dumps(
+            {
+                "agent": "security",
+                "findings": [
+                    {"path": "a.py", "line": 1, "severity": "high", "message": "x"}
+                ],
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 10,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                },
+                "latency_ms": 200,
+                "stop_reason": "end_turn",
+                "raw_text": "[]",
+                "turns": 1,
+                "tool_calls": [],
+            }
+        )
+    )
+    records = load_records(d)
+    assert len(records) == 1
+    r = records[0]
+    assert r.agent == "security"
+    assert r.kind == "current"  # default for audit
+    assert r.case == "security"  # default = agent name
+    assert r.repeat == 0
+
+
+def test_eval_analyze_handles_audit_records_gracefully(tmp_path):
+    """eval-analyze on an audit-shape dir produces useful output without crashing
+    on the absent fixture dimensions (no recall/fp diagnosis sections)."""
+    d = tmp_path / "f"
+    (d / "security").mkdir(parents=True)
+    (d / "security" / "security.json").write_text(
+        _json.dumps(
+            {
+                "agent": "security",
+                "findings": [
+                    {"path": "a.py", "line": 1, "severity": "high", "message": "x"}
+                ],
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 10,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                },
+                "latency_ms": 200,
+                "stop_reason": "end_turn",
+                "raw_text": "[]",
+                "turns": 1,
+                "tool_calls": [],
+            }
+        )
+    )
+    result = runner.invoke(app, ["eval-analyze", str(d)])
+    assert result.exit_code in (0, 1), result.output  # 1 if score FAIL, 0 if PASS
+    assert "review-security" in result.output
+    assert "## Drift check" in result.output

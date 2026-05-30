@@ -64,11 +64,13 @@ class Record:
     tool_calls: list[dict[str, Any]]
 
 
-_REQUIRED = ("agent", "kind", "case", "repeat", "findings")
+_REQUIRED = ("agent", "findings")  # kind/case/repeat are optional (audit shape)
 
 
 def load_records(root: Path) -> list[Record]:
-    """Load all per-call JSON records under `root`. Skips files missing required keys."""
+    """Load all per-call JSON records under `root`. Skips files missing required keys.
+    Tolerant of audit-shape records (no kind/case/repeat dimensions): kind defaults to
+    'current', case defaults to the agent name, repeat defaults to 0."""
     records: list[Record] = []
     for f in sorted(root.rglob("*.json")):
         try:
@@ -80,9 +82,9 @@ def load_records(root: Path) -> list[Record]:
         records.append(
             Record(
                 agent=d["agent"],
-                kind=d["kind"],
-                case=d["case"],
-                repeat=int(d["repeat"]),
+                kind=d.get("kind", "current"),
+                case=d.get("case", d["agent"]),
+                repeat=int(d.get("repeat", 0)),
                 seeded_file=d.get("seeded_file"),
                 findings=list(d.get("findings", [])),
                 usage=dict(d.get("usage", {})),
@@ -112,7 +114,8 @@ def _findings(rec: Record) -> list[Finding]:
 def scorecard(
     records: list[Record], thresholds: dict[str, Thresholds]
 ) -> list[AgentScore]:
-    """Re-derive recall/fp per agent from records by re-running `flags()` per call."""
+    """Re-derive recall/fp per agent from records by re-running `flags()` per call.
+    Skips audit-shape records (kind=='current') — they have no ground-truth dimension."""
     by_agent: dict[str, list[Record]] = {}
     for r in records:
         by_agent.setdefault(r.agent, []).append(r)
@@ -125,6 +128,8 @@ def scorecard(
         bad_by_case: dict[str, list[int]] = {}
         good_by_case: dict[str, list[int]] = {}
         for r in by_agent[agent]:
+            if r.kind not in ("bad", "good"):
+                continue  # audit-shape record — no fixture dimension to score
             f = _findings(r)
             blocked = (
                 flags(f, spec, file=r.seeded_file)
@@ -133,6 +138,8 @@ def scorecard(
             )
             bucket = bad_by_case if r.kind == "bad" else good_by_case
             bucket.setdefault(r.case, []).append(1 if blocked else 0)
+        if not bad_by_case and not good_by_case:
+            continue  # agent had only audit-shape data — no scorecard line
         bad_rates = [sum(hits) / len(hits) for hits in bad_by_case.values()]
         good_rates = [sum(hits) / len(hits) for hits in good_by_case.values()]
         thr = thresholds.get(agent, DEFAULT_THRESHOLDS)
@@ -177,10 +184,11 @@ def cost_report(
 
 
 def recall_diagnosis(records: list[Record]) -> dict[str, list[dict[str, Any]]]:
-    """For each bad record: did it catch the seeded defect, and what else did it flag?"""
+    """For each bad record: did it catch the seeded defect, and what else did it flag?
+    Skips audit-shape records (kind=='current' or no seeded_file)."""
     out: dict[str, list[dict[str, Any]]] = {}
     for r in records:
-        if r.kind != "bad":
+        if r.kind != "bad" or r.seeded_file is None:
             continue
         seeded_hits = [f for f in r.findings if f.get("path") == r.seeded_file]
         other = [f for f in r.findings if f.get("path") != r.seeded_file]
@@ -198,7 +206,8 @@ def recall_diagnosis(records: list[Record]) -> dict[str, list[dict[str, Any]]]:
 
 
 def fp_diagnosis(records: list[Record]) -> dict[str, list[dict[str, Any]]]:
-    """For each good record that flagged something: the actual findings (= the fp surface)."""
+    """For each good record that flagged something: the actual findings (= the fp surface).
+    Skips audit-shape records (kind=='current')."""
     out: dict[str, list[dict[str, Any]]] = {}
     for r in records:
         if r.kind != "good" or not r.findings:
