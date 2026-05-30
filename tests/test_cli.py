@@ -1235,3 +1235,35 @@ def test_eval_prepare_tune_uses_explore_for_agentic_agents(tmp_path, monkeypatch
     assert item["model"] == "claude-opus-4-8"
     assert item["tools_allowed"] == ["Read", "Grep", "Glob"]
     assert "root_dir" in item  # agentic items carry the rendered root for tool access
+
+
+def test_eval_prepare_audit_detects_framework_target(tmp_path, monkeypatch):
+    """eval-prepare --mode audit auto-detects 'framework' target when run from the framework repo
+    (presence of src/framework_cli/ + pyproject.toml name='swiftwater-framework')."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+    result = runner.invoke(app, ["eval-prepare", "--mode", "audit"])
+    assert result.exit_code == 0, result.output
+    data = _json.loads(result.output)
+    assert data["mode"] == "audit"
+    assert data["target"] == "framework"
+    # FRAMEWORK_AGENTS: architecture, security, dependency, test-quality, documentation, application-logic
+    assert set(data["agents_set"]) >= {"security", "architecture"}
+    assert len(data["work_items"]) == len(data["agents_set"])
+    item = data["work_items"][0]
+    assert item["kind"] == "current"
+    assert item["repeat_idx"] == 0
+
+
+def test_eval_prepare_audit_explicit_target_override(tmp_path, monkeypatch):
+    """--target flag forces the target regardless of cwd signals."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    result = runner.invoke(
+        app, ["eval-prepare", "--mode", "audit", "--target", "framework"]
+    )
+    assert result.exit_code == 0, result.output
+    data = _json.loads(result.output)
+    assert data["target"] == "framework"

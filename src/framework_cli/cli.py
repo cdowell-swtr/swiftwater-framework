@@ -737,9 +737,127 @@ def _build_work_item(
     }
 
 
+def _detect_audit_target(explicit: str) -> str:
+    """Return 'framework' or 'project'. Errors loudly if neither matches and no explicit override."""
+    if explicit in ("framework", "project"):
+        return explicit
+    if explicit:
+        raise typer.BadParameter(
+            f"--target must be 'framework' or 'project' (got '{explicit}')"
+        )
+    cwd = Path.cwd()
+    if (cwd / "src" / "framework_cli").is_dir() and (cwd / "pyproject.toml").is_file():
+        try:
+            content = (cwd / "pyproject.toml").read_text()
+            if 'name = "framework-cli"' in content:
+                return "framework"
+        except OSError:
+            pass
+    if (cwd / ".copier-answers.yml").is_file():
+        return "project"
+    raise typer.BadParameter(
+        "Could not auto-detect target. Pass --target framework or --target project."
+    )
+
+
 def _emit_audit_prep(single_agent: str, target_arg: str, output_dir: str) -> None:
-    # Implemented in Task 4
-    raise NotImplementedError("eval-prepare --mode audit lands in Task 4")
+    from framework_cli.review.context import FRAMEWORK_AGENTS
+    from framework_cli.source import read_batteries
+
+    target = _detect_audit_target(target_arg)
+    if target == "framework":
+        all_agents = sorted(FRAMEWORK_AGENTS)
+    else:
+        all_agents = active_agents("pull_request", read_batteries(Path(".")))
+    if single_agent:
+        if single_agent not in all_agents:
+            typer.echo(
+                f"eval-prepare: agent '{single_agent}' not active for target '{target}'",
+                err=True,
+            )
+            raise typer.Exit(1)
+        agents_set = [single_agent]
+    else:
+        agents_set = all_agents
+
+    diff = _review_diff()
+    root = Path.cwd()
+    work_items: list[dict] = []
+    for a in agents_set:
+        try:
+            spec = get_agent(a)
+        except KeyError:
+            continue
+        work_items.append(_build_audit_work_item(spec, diff, root))
+
+    manifest = {
+        "mode": "audit",
+        "target": target,
+        "agents_set": agents_set,
+        "work_items": work_items,
+        "output_dir": output_dir or ".framework/audit/latest",
+    }
+    typer.echo(json.dumps(manifest, indent=2))
+
+
+def _build_audit_work_item(spec: object, diff: str, root: Path) -> dict:
+    """Audit shape: one item per agent (no kind/case/repeat dimension)."""
+    is_agentic = spec.context.strategy == "agentic"  # type: ignore[attr-defined]
+    if is_agentic:
+        system_blocks = [
+            {"text": f"Review this unified diff:\n\n{diff}"},
+            {"text": spec.prompt},  # type: ignore[attr-defined]
+        ]
+        user_message = (
+            f"You are reviewing the codebase rooted at: {root}\n\n"
+            "Use the Read, Grep, and Glob tools (these only — do NOT use Bash, "
+            "WebFetch, WebSearch, or any other tool) to explore the code as "
+            "needed. Use absolute paths starting with the root above.\n\n"
+            "When done, reply with ONLY a JSON array of findings:\n"
+            '  [{"path": "...", "line": N, "severity": "...", "message": "...", '
+            '"suggestion": "..."}]'
+        )
+        short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
+        return {
+            "agent": short,
+            "kind": "current",
+            "case": short,
+            "repeat_idx": 0,
+            "seeded_file": None,
+            "subagent_type": "Explore",
+            "model": spec.model,  # type: ignore[attr-defined]
+            "system_blocks": system_blocks,
+            "user_message": user_message,
+            "tools_allowed": ["Read", "Grep", "Glob"],
+            "root_dir": str(root),
+            "diff": diff,
+        }
+    from framework_cli.review.context import assemble
+
+    bundle = assemble(diff, root, spec.context, model=spec.model)  # type: ignore[attr-defined]
+    system_blocks = [{"text": f"Review this unified diff:\n\n{bundle.diff}"}]
+    if bundle.context_files:
+        joined = "\n\n".join(f"=== {p} ===\n{c}" for p, c in bundle.context_files)
+        note = "\n\n[context truncated to fit the budget]" if bundle.truncated else ""
+        system_blocks.append(
+            {"text": f"Relevant repository files for context:\n\n{joined}{note}"}
+        )
+    system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
+    short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
+    return {
+        "agent": short,
+        "kind": "current",
+        "case": short,
+        "repeat_idx": 0,
+        "seeded_file": None,
+        "subagent_type": "general-purpose",
+        "model": spec.model,  # type: ignore[attr-defined]
+        "system_blocks": system_blocks,
+        "user_message": "Return your findings as a JSON array only.",
+        "tools_allowed": None,
+        "root_dir": str(root),
+        "diff": diff,
+    }
 
 
 @app.command()
