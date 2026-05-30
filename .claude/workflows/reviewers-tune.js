@@ -8,7 +8,11 @@ export const meta = {
 
 phase('Tune')
 
-const items = args.work_items
+// The Workflow tool delivers `args` as either a parsed object or a JSON string,
+// depending on the caller. Normalize to an object so the rest of the script is
+// invariant to how the slash command (or a direct invocation) passed args.
+const ARGS = typeof args === 'string' ? JSON.parse(args) : args
+const items = ARGS.work_items
 if (!Array.isArray(items) || items.length === 0) {
   throw new Error('reviewers-tune: args.work_items must be a non-empty array')
 }
@@ -67,4 +71,4 @@ const results = await parallel(items.map((item, idx) => async () => {
   }
 }))
 
-return { results: results.filter(Boolean), meta: args.meta || {} }
+return { results: results.filter(Boolean), meta: ARGS.meta || {} }
