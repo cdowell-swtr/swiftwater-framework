@@ -862,6 +862,190 @@ def _build_audit_work_item(spec: object, diff: str, root: Path) -> dict:
     }
 
 
+@app.command(name="eval-finalize")
+def eval_finalize(
+    mode: str = typer.Option(..., "--mode", help="'tune' or 'audit'."),
+    results: str = typer.Option(
+        ..., "--results", help="Path to JSON file from the workflow."
+    ),
+    out_dir: str = typer.Option(
+        ..., "--out-dir", help="Output dir to write artifacts."
+    ),
+) -> None:
+    """Take the workflow's results, write per-call JSON records + scorecard/audit-report
+    + apply.md (tune) + meta.json."""
+    payload = json.loads(Path(results).read_text())
+    records = payload["results"]
+    meta_in = payload.get("meta", {})
+    out = Path(out_dir)
+    findings_dir = out / "findings"
+    findings_dir.mkdir(parents=True, exist_ok=True)
+
+    if mode == "tune":
+        _finalize_tune(records, findings_dir, out, meta_in)
+    elif mode == "audit":
+        _finalize_audit(records, findings_dir, out, meta_in)
+    else:
+        typer.echo(f"eval-finalize: invalid --mode '{mode}'", err=True)
+        raise typer.Exit(2)
+
+
+def _finalize_tune(records: list, findings_dir: Path, out: Path, meta_in: dict) -> None:
+    from framework_cli.review import analyze
+    from framework_cli.review.evals import load_thresholds
+
+    for r in records:
+        agent_dir = findings_dir / r["agent"] / r["kind"]
+        agent_dir.mkdir(parents=True, exist_ok=True)
+        case = r["case"]
+        i = r["repeat_idx"]
+        record = {
+            "agent": r["agent"],
+            "kind": r["kind"],
+            "case": case,
+            "repeat": i,
+            "seeded_file": r.get("seeded_file"),
+            "findings": r.get("findings", []),
+            "usage": r.get("usage", {}),
+            "latency_ms": r.get("latency_ms"),
+            "stop_reason": r.get("stop_reason"),
+            "raw_text": r.get("raw_text", ""),
+            "turns": r.get("turns", 1),
+            "tool_calls": r.get("tool_calls", []),
+        }
+        (agent_dir / f"{case}__r{i}.json").write_text(
+            json.dumps(record, indent=2, sort_keys=True)
+        )
+
+    # Generate scorecard.md via analyze
+    loaded = analyze.load_records(findings_dir)
+    thr = load_thresholds(Path("tests/eval/fixtures/thresholds.yaml"))
+    scores = analyze.scorecard(loaded, thr)
+    model_map: dict[str, str] = {}
+    for r in loaded:
+        try:
+            model_map[r.agent] = get_agent(r.agent).model
+        except KeyError:
+            pass
+    costs = analyze.cost_report(loaded, model_map)
+    recall_diag = analyze.recall_diagnosis(loaded)
+    fp_diag = analyze.fp_diagnosis(loaded)
+    agentic = analyze.agentic_behavior(loaded)
+    proposed = analyze.propose_thresholds(scores)
+    md = analyze.render_markdown(
+        loaded, scores, costs, recall_diag, fp_diag, agentic, proposed
+    )
+    (out / "scorecard.md").write_text(md)
+
+    # Extract thresholds proposal yaml block
+    in_block = False
+    yaml_lines: list[str] = []
+    for line in md.splitlines():
+        if line.startswith("```yaml") and not in_block:
+            in_block = True
+            continue
+        if in_block and line.startswith("```"):
+            break
+        if in_block:
+            yaml_lines.append(line)
+    (out / "thresholds.proposal.yaml").write_text("\n".join(yaml_lines) + "\n")
+
+    # apply.md
+    (out / "apply.md").write_text(_apply_md_content())
+
+    # meta.json
+    drift_detected = len(analyze.drift_check(loaded)) > 0
+    meta = {
+        "mode": "tune",
+        "slug": meta_in.get("slug", ""),
+        "repeat": meta_in.get("repeat", 1),
+        "agent_count": len({r["agent"] for r in records}),
+        "subagent_call_count": len(records),
+        "drift_detected": drift_detected,
+        "git_ref": meta_in.get("git_ref", ""),
+        "model_used": meta_in.get("model_used", ""),
+        "run_duration_seconds": meta_in.get("run_duration_seconds", 0),
+    }
+    (out / "meta.json").write_text(json.dumps(meta, indent=2, sort_keys=True))
+    typer.echo(f"eval-finalize: wrote {out}")
+
+
+def _finalize_audit(
+    records: list, findings_dir: Path, out: Path, meta_in: dict
+) -> None:
+    from framework_cli.review import analyze
+
+    for r in records:
+        record = {
+            "agent": r["agent"],
+            "findings": r.get("findings", []),
+            "usage": r.get("usage", {}),
+            "latency_ms": r.get("latency_ms"),
+            "stop_reason": r.get("stop_reason"),
+            "raw_text": r.get("raw_text", ""),
+            "turns": r.get("turns", 1),
+            "tool_calls": r.get("tool_calls", []),
+        }
+        (findings_dir / f"{r['agent']}.json").write_text(
+            json.dumps(record, indent=2, sort_keys=True)
+        )
+    loaded = analyze.load_records(findings_dir)
+    model_map: dict[str, str] = {}
+    for r in loaded:
+        try:
+            model_map[r.agent] = get_agent(r.agent).model
+        except KeyError:
+            pass
+    costs = analyze.cost_report(loaded, model_map)
+    analyze.agentic_behavior(loaded)
+    md_lines = ["# Audit report", "", "## Cost (subagent-dispatched, ~$0)", ""]
+    md_lines.append("| Agent | Calls | In tok | Out tok |")
+    md_lines.append("|---|---|---|---|")
+    for agent in sorted(costs):
+        c = costs[agent]
+        md_lines.append(
+            f"| review-{agent} | {c['calls']} | {c['input_tokens']} | {c['output_tokens']} |"
+        )
+    md_lines.append("")
+    md_lines.append("## Findings")
+    for r in loaded:
+        md_lines.append(f"### review-{r.agent}")
+        if not r.findings:
+            md_lines.append("_(no findings)_")
+        else:
+            for f in r.findings:
+                md_lines.append(
+                    f"- `{f.get('path')}:{f.get('line')}` "
+                    f"**{f.get('severity')}** — {f.get('message')}"
+                )
+        md_lines.append("")
+    md_lines.append("## Drift check")
+    drifts = analyze.drift_check(loaded)
+    if not drifts:
+        md_lines.append("_(no drift detected)_")
+    else:
+        for d in drifts:
+            tools = ", ".join(f"{t}×{d['counts'][t]}" for t in d["disallowed_tools"])
+            md_lines.append(f"- ⚠ `{d['agent']}` — disallowed tools: {tools}")
+    md_lines.append("")
+    (out / "audit-report.md").write_text("\n".join(md_lines) + "\n")
+    typer.echo(f"eval-finalize: wrote {out}")
+
+
+def _apply_md_content() -> str:
+    return (
+        "# Applying these threshold updates\n\n"
+        "To apply the proposed values from `thresholds.proposal.yaml`:\n\n"
+        "1. Diff `tests/eval/fixtures/thresholds.yaml` against `thresholds.proposal.yaml`.\n"
+        "2. For each changed agent, sanity-check the new values against the observed\n"
+        "   `recall` / `fp` columns in `scorecard.md`. If a number looks borderline,\n"
+        "   prefer the more conservative side (lower recall_min, higher fp_max).\n"
+        "3. Copy approved entries into `tests/eval/fixtures/thresholds.yaml`.\n"
+        "4. Commit referencing this scorecard dir.\n\n"
+        "See `scorecard.md` for the source observations and `findings/` for raw records.\n"
+    )
+
+
 @app.command()
 def review(
     agent: str = typer.Argument(..., help="Review agent name, e.g. 'security'."),

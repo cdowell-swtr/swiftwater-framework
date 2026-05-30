@@ -1295,3 +1295,136 @@ def test_eval_prepare_audit_tolerates_pyproject_formatting_variations(
 
     data = _j.loads(result.output)
     assert data["target"] == "framework"
+
+
+def test_eval_finalize_writes_records_runs_analyze_writes_meta(tmp_path):
+    """eval-finalize: given workflow results, writes per-call JSON records and a scorecard."""
+    out = tmp_path / "scorecard"
+    out.mkdir()
+
+    # Simulated workflow result: list of per-call records.
+    results = [
+        {
+            "agent": "security",
+            "kind": "bad",
+            "case": "b1",
+            "repeat_idx": 0,
+            "seeded_file": "a.py",
+            "findings": [
+                {
+                    "path": "a.py",
+                    "line": 1,
+                    "severity": "high",
+                    "message": "x",
+                    "suggestion": None,
+                }
+            ],
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
+            "latency_ms": 200,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+        {
+            "agent": "security",
+            "kind": "good",
+            "case": "g1",
+            "repeat_idx": 0,
+            "seeded_file": None,
+            "findings": [],
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
+            "latency_ms": 150,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+    ]
+    results_file = tmp_path / "results.json"
+    results_file.write_text(
+        _json.dumps({"results": results, "meta": {"slug": "test", "repeat": 1}})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "eval-finalize",
+            "--mode",
+            "tune",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    # Per-call records written under findings/
+    assert (out / "findings" / "security" / "bad" / "b1__r0.json").is_file()
+    assert (out / "findings" / "security" / "good" / "g1__r0.json").is_file()
+    # Scorecard generated
+    assert (out / "scorecard.md").is_file()
+    sc = (out / "scorecard.md").read_text()
+    assert "review-security" in sc
+    # Thresholds proposal extracted
+    assert (out / "thresholds.proposal.yaml").is_file()
+    # Apply.md generated
+    assert (out / "apply.md").is_file()
+    # Meta.json with run metadata
+    assert (out / "meta.json").is_file()
+    meta = _json.loads((out / "meta.json").read_text())
+    assert meta["slug"] == "test"
+    assert meta["mode"] == "tune"
+
+
+def test_eval_finalize_audit_mode_writes_audit_report(tmp_path):
+    """In audit mode, eval-finalize writes findings/<agent>.json and audit-report.md."""
+    out = tmp_path / "audit"
+    out.mkdir()
+    results = [
+        {
+            "agent": "security",
+            "findings": [],
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
+            "latency_ms": 150,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+    ]
+    results_file = tmp_path / "results.json"
+    results_file.write_text(
+        _json.dumps({"results": results, "meta": {"target": "framework"}})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "eval-finalize",
+            "--mode",
+            "audit",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert (out / "findings" / "security.json").is_file()
+    assert (out / "audit-report.md").is_file()
