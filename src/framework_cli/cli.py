@@ -894,7 +894,11 @@ def _build_work_item(
             "all tool calls.\n\n"
             "When done, reply with ONLY a JSON array of findings:\n"
             '  [{"path": "...", "line": N, "severity": "...", "message": "...", '
-            '"suggestion": "..."}]'
+            '"suggestion": "..."}]\n\n'
+            "IMPORTANT: in each finding, the `path` MUST be a path RELATIVE to "
+            f"the project root above (e.g. 'src/demo/foo.py'), NOT the absolute "
+            "path you used for the tool call. The scoring layer matches on "
+            "relative paths; absolute paths register as misses."
         )
         return {
             "agent": fx.agent,  # type: ignore[attr-defined]
@@ -1016,7 +1020,11 @@ def _build_audit_work_item(spec: object, diff: str, root: Path) -> dict:
             "needed. Use absolute paths starting with the root above.\n\n"
             "When done, reply with ONLY a JSON array of findings:\n"
             '  [{"path": "...", "line": N, "severity": "...", "message": "...", '
-            '"suggestion": "..."}]'
+            '"suggestion": "..."}]\n\n'
+            "IMPORTANT: in each finding, the `path` MUST be a path RELATIVE to "
+            f"the project root above (e.g. 'src/demo/foo.py'), NOT the absolute "
+            "path you used for the tool call. The scoring layer matches on "
+            "relative paths; absolute paths register as misses."
         )
         short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
         return {
