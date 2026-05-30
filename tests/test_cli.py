@@ -1489,6 +1489,195 @@ def test_eval_finalize_audit_mode_writes_audit_report(tmp_path):
     assert (out / "audit-report.md").is_file()
 
 
+def test_eval_finalize_gate_writes_marker_pass(tmp_path):
+    """gate-mode finalize writes marker.json with verdict=PASS when no high+ findings."""
+    out = tmp_path / "audit"
+    out.mkdir()
+    results = [
+        {
+            "agent": "security",
+            "findings": [],
+            "usage": {},
+            "latency_ms": None,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+    ]
+    payload = {
+        "results": results,
+        "meta": {
+            "mode": "gate",
+            "staged_hash": "sha256:abc",
+            "agents_set": ["security"],
+        },
+    }
+    results_file = tmp_path / "results.json"
+    results_file.write_text(_json.dumps(payload))
+    result = runner.invoke(
+        app,
+        [
+            "eval-finalize",
+            "--mode",
+            "gate",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    marker_path = out.parent / "marker.json"
+    assert marker_path.is_file()
+    marker = _json.loads(marker_path.read_text())
+    assert marker["verdict"] == "PASS"
+    assert marker["staged_hash"] == "sha256:abc"
+    assert marker["agents_run"] == ["security"]
+    assert marker["drift_detected"] is False
+
+
+def test_eval_finalize_gate_writes_marker_fail_on_high_finding(tmp_path):
+    """A high-severity finding on security (block_threshold='high') → verdict=FAIL."""
+    out = tmp_path / "audit"
+    out.mkdir()
+    results = [
+        {
+            "agent": "security",
+            "findings": [
+                {
+                    "path": "a.py",
+                    "line": 1,
+                    "severity": "high",
+                    "message": "secret",
+                    "suggestion": None,
+                },
+            ],
+            "usage": {},
+            "latency_ms": None,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+    ]
+    payload = {
+        "results": results,
+        "meta": {
+            "mode": "gate",
+            "staged_hash": "sha256:abc",
+            "agents_set": ["security"],
+        },
+    }
+    results_file = tmp_path / "results.json"
+    results_file.write_text(_json.dumps(payload))
+    result = runner.invoke(
+        app,
+        [
+            "eval-finalize",
+            "--mode",
+            "gate",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output  # finalize itself succeeds
+    marker_path = out.parent / "marker.json"
+    marker = _json.loads(marker_path.read_text())
+    assert marker["verdict"] == "FAIL"
+
+
+def test_eval_finalize_gate_marks_drift_detected(tmp_path):
+    """A tool_calls entry using a disallowed tool → drift_detected: true in marker."""
+    out = tmp_path / "audit"
+    out.mkdir()
+    results = [
+        {
+            "agent": "architecture",
+            "findings": [],
+            "usage": {},
+            "latency_ms": None,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 2,
+            "tool_calls": [{"turn": 1, "tool": "Bash", "input": {"command": "ls"}}],
+        },
+    ]
+    payload = {
+        "results": results,
+        "meta": {
+            "mode": "gate",
+            "staged_hash": "sha256:abc",
+            "agents_set": ["architecture"],
+        },
+    }
+    results_file = tmp_path / "results.json"
+    results_file.write_text(_json.dumps(payload))
+    result = runner.invoke(
+        app,
+        [
+            "eval-finalize",
+            "--mode",
+            "gate",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    marker_path = out.parent / "marker.json"
+    marker = _json.loads(marker_path.read_text())
+    assert marker["drift_detected"] is True
+    assert marker["verdict"] == "FAIL"
+
+
+def test_eval_finalize_gate_regrade_skips_dispatch(tmp_path):
+    """A regrade-mode payload re-flags existing findings against current thresholds
+    without invoking subagents."""
+    out = tmp_path / "audit"
+    out.mkdir()
+    (out / "findings").mkdir()
+    (out / "findings" / "security.json").write_text(
+        _json.dumps(
+            {
+                "agent": "security",
+                "findings": [],
+                "usage": {},
+                "latency_ms": None,
+                "stop_reason": "end_turn",
+                "raw_text": "[]",
+                "turns": 1,
+                "tool_calls": [],
+            }
+        )
+    )
+    payload = {
+        "results": [],
+        "meta": {"mode": "regrade", "staged_hash": "sha256:abc"},
+    }
+    results_file = tmp_path / "results.json"
+    results_file.write_text(_json.dumps(payload))
+    result = runner.invoke(
+        app,
+        [
+            "eval-finalize",
+            "--mode",
+            "gate",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    marker_path = out.parent / "marker.json"
+    marker = _json.loads(marker_path.read_text())
+    assert marker["verdict"] == "PASS"  # empty findings → PASS
+
+
 def test_eval_finalize_fails_loudly_on_missing_results_file(tmp_path):
     """A missing --results file produces a friendly error, not a Python traceback."""
     out = tmp_path / "scorecard"

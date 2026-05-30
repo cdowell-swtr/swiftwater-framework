@@ -1014,7 +1014,7 @@ def _build_audit_work_item(spec: object, diff: str, root: Path) -> dict:
 
 @app.command(name="eval-finalize")
 def eval_finalize(
-    mode: str = typer.Option(..., "--mode", help="'tune' or 'audit'."),
+    mode: str = typer.Option(..., "--mode", help="'tune', 'audit', or 'gate'."),
     results: str = typer.Option(
         ..., "--results", help="Path to JSON file from the workflow."
     ),
@@ -1044,6 +1044,8 @@ def eval_finalize(
         _finalize_tune(records, findings_dir, out, meta_in)
     elif mode == "audit":
         _finalize_audit(records, findings_dir, out, meta_in)
+    elif mode == "gate":
+        _finalize_gate(records, findings_dir, out, meta_in)
     else:
         typer.echo(f"eval-finalize: invalid --mode '{mode}'", err=True)
         raise typer.Exit(2)
@@ -1189,6 +1191,81 @@ def _finalize_audit(
     md_lines.append("")
     (out / "audit-report.md").write_text("\n".join(md_lines) + "\n")
     typer.echo(f"eval-finalize: wrote {out}")
+
+
+def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) -> None:
+    """Write records (if any), compute verdict, write marker.json."""
+    from datetime import datetime, timezone
+
+    from framework_cli.review import analyze
+    from framework_cli.review.evals import flags
+    from framework_cli.review.findings import Finding
+
+    actual_mode = meta_in.get("mode", "gate")
+    staged_hash = meta_in.get("staged_hash", "")
+    agents_run = meta_in.get("agents_set", [])
+
+    # In gate mode (non-regrade), write per-agent records first.
+    if actual_mode == "gate":
+        for r in records:
+            record = {
+                "agent": r["agent"],
+                "findings": r.get("findings", []),
+                "usage": r.get("usage", {}),
+                "latency_ms": r.get("latency_ms"),
+                "stop_reason": r.get("stop_reason"),
+                "raw_text": r.get("raw_text", ""),
+                "turns": r.get("turns", 1),
+                "tool_calls": r.get("tool_calls", []),
+            }
+            (findings_dir / f"{r['agent']}.json").write_text(
+                json.dumps(record, indent=2, sort_keys=True)
+            )
+
+    # Load all records under findings_dir (works for regrade too).
+    loaded = analyze.load_records(findings_dir)
+
+    # Compute verdict: any agent's findings include a finding at/above its block_threshold?
+    failing = False
+    summary_parts: list[str] = []
+    for r in loaded:
+        try:
+            spec = get_agent(r.agent)
+        except KeyError:
+            continue
+        findings_objs = [
+            Finding(
+                f["path"],
+                int(f["line"]),
+                f["severity"],
+                f["message"],
+                f.get("suggestion"),
+            )
+            for f in r.findings
+        ]
+        if flags(findings_objs, spec):
+            failing = True
+            summary_parts.append(f"{r.agent}:{len(findings_objs)}")
+    drifts = analyze.drift_check(loaded)
+    drift_detected = bool(drifts)
+    verdict = "FAIL" if failing or drift_detected else "PASS"
+    if drift_detected and not failing:
+        summary_parts.append("drift")
+
+    # marker.json lives at .framework/audit/marker.json (sibling to latest/)
+    marker_path = out.parent / "marker.json"
+    marker = {
+        "staged_hash": staged_hash,
+        "agents_run": agents_run,
+        "verdict": verdict,
+        "drift_detected": drift_detected,
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "summary": "; ".join(summary_parts)
+        or f"{len(agents_run)} agents · 0 findings above block threshold",
+    }
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    marker_path.write_text(json.dumps(marker, indent=2, sort_keys=True))
+    typer.echo(f"eval-finalize: verdict={verdict}, marker={marker_path}")
 
 
 def _apply_md_content() -> str:
