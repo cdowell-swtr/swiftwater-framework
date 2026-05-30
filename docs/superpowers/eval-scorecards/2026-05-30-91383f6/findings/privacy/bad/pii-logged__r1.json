@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 47,
+      "message": "PII logged: owner_email is marked as PII in models.py with comment 'do not include in logs or external responses' but is being logged in the item_created event.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log statement. Log only non-PII fields like item_id: log.info(\"item_created\", item_id=item.id)"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"PII logged: owner_email is marked as PII in models.py with comment 'do not include in logs or external responses' but is being logged in the item_created event.\",\"suggestion\":\"Remove owner_email from the log statement. Log only non-PII fields like item_id: log.info(\\\"item_created\\\", item_id=item.id)\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

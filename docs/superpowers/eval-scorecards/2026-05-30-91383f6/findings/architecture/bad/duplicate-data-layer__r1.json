@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "duplicate-data-layer",
+  "findings": [
+    {
+      "line": 8,
+      "message": "Duplicate data-access layer: importing from item_service instead of the existing repository module. Both modules provide equivalent functions (fetch_all_items vs list_items, add_item vs create_item), creating unnecessary duplication and maintenance burden.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Use the existing repository module (repository.list_items and repository.create_item) which already encapsulates data-access logic. Remove item_service imports and consolidate on a single data layer."
+    },
+    {
+      "line": 42,
+      "message": "Layering violation: route handler directly calls session.commit() and session.refresh(). This puts transaction management into the request handler, violating separation of concerns. The data layer should encapsulate these operations completely.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Move commit() and refresh() into item_service.add_item() or use repository.create_item() which already handles these operations (see repository.py:14-15). The route should only orchestrate, not manage transactions."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":8,\"severity\":\"high\",\"message\":\"Duplicate data-access layer: importing from item_service instead of the existing repository module. Both modules provide equivalent functions (fetch_all_items vs list_items, add_item vs create_item), creating unnecessary duplication and maintenance burden.\",\"suggestion\":\"Use the existing repository module (repository.list_items and repository.create_item) which already encapsulates data-access logic. Remove item_service imports and consolidate on a single data layer.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"Layering violation: route handler directly calls session.commit() and session.refresh(). This puts transaction management into the request handler, violating separation of concerns. The data layer should encapsulate these operations completely.\",\"suggestion\":\"Move commit() and refresh() into item_service.add_item() or use repository.create_item() which already handles these operations (see repository.py:14-15). The route should only orchestrate, not manage transactions.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

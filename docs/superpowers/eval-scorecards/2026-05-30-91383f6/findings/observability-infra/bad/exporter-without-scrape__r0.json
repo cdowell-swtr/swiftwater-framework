@@ -1,0 +1,22 @@
+{
+  "agent": "observability-infra",
+  "case": "exporter-without-scrape",
+  "findings": [
+    {
+      "line": 94,
+      "message": "redis-exporter service added but no corresponding Prometheus scrape job configured in infra/observability/prometheus/prometheus.yml. Metrics will not be collected.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add a scrape job for redis-exporter in prometheus.yml: '- job_name: redis\\n  static_configs:\\n    - targets: [\"redis-exporter:9121\"]'"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"redis-exporter service added but no corresponding Prometheus scrape job configured in infra/observability/prometheus/prometheus.yml. Metrics will not be collected.\",\"suggestion\":\"Add a scrape job for redis-exporter in prometheus.yml: '- job_name: redis\\\\n  static_configs:\\\\n    - targets: [\\\"redis-exporter:9121\\\"]'\"}]",
+  "repeat": 0,
+  "seeded_file": "infra/compose/observability.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

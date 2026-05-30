@@ -1,0 +1,36 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "line": 22,
+      "message": "Consumer pact assertion is no longer valid: get_stock() now returns dict[str, int] but test asserts equality with integer 5. The assertion will fail because the function now returns {\"in_stock\": 5, \"reserved_count\": ...} instead of 5.",
+      "path": "/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-missing-pact-field/tests/functional/test_consumer_inventory.py",
+      "severity": "high",
+      "suggestion": "Update the assertion to verify the structure returned by get_stock(), e.g., assert get_stock(str(srv.url), 1)[\"in_stock\"] == 5. Additionally, ensure reserved_count is declared in the pact at line 19."
+    },
+    {
+      "line": 19,
+      "message": "Pact interaction missing required field: The response body in the pact does not include 'reserved_count', but the client implementation at inventory.py:13 expects and accesses this field. This breaks the contract between consumer expectations and provider response.",
+      "path": "/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-missing-pact-field/tests/functional/test_consumer_inventory.py",
+      "severity": "high",
+      "suggestion": "Add 'reserved_count' to the pact response body definition, e.g., .with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5), \"reserved_count\": match.int(...)})"
+    },
+    {
+      "line": 13,
+      "message": "Client code accesses 'reserved_count' field that is not declared in the consumer pact. The pact interaction at test_consumer_inventory.py:19 only specifies 'in_stock', making this field access incompatible with the committed contract.",
+      "path": "/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-missing-pact-field/src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Regenerate and republish the pact after adding 'reserved_count' to the pact definition, or remove the reserved_count access if it is not part of the contracted interface."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-missing-pact-field/tests/functional/test_consumer_inventory.py\",\"line\":22,\"severity\":\"high\",\"message\":\"Consumer pact assertion is no longer valid: get_stock() now returns dict[str, int] but test asserts equality with integer 5. The assertion will fail because the function now returns {\\\"in_stock\\\": 5, \\\"reserved_count\\\": ...} instead of 5.\",\"suggestion\":\"Update the assertion to verify the structure returned by get_stock(), e.g., assert get_stock(str(srv.url), 1)[\\\"in_stock\\\"] == 5. Additionally, ensure reserved_count is declared in the pact at line 19.\"},{\"path\":\"/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-missing-pact-field/tests/functional/test_consumer_inventory.py\",\"line\":19,\"severity\":\"high\",\"message\":\"Pact interaction missing required field: The response body in the pact does not include 'reserved_count', but the client implementation at inventory.py:13 expects and accesses this field. This breaks the contract between consumer expectations and provider response.\",\"suggestion\":\"Add 'reserved_count' to the pact response body definition, e.g., .with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5), \\\"reserved_count\\\": match.int(...)})\"},{\"path\":\"/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-missing-pact-field/src/demo/clients/inventory.py\",\"line\":13,\"severity\":\"high\",\"message\":\"Client code accesses 'reserved_count' field that is not declared in the consumer pact. The pact interaction at test_consumer_inventory.py:19 only specifies 'in_stock', making this field access incompatible with the committed contract.\",\"suggestion\":\"Regenerate and republish the pact after adding 'reserved_count' to the pact definition, or remove the reserved_count access if it is not part of the contracted interface.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

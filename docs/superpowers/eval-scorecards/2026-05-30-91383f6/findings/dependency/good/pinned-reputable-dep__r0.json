@@ -1,0 +1,22 @@
+{
+  "agent": "dependency",
+  "case": "pinned-reputable-dep",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Adding httpx>=0.27,<1.0 as a production dependency is justified: httpx is a reputable, actively maintained async-capable HTTP client (Encode, the FastAPI/Starlette maintainers), aligns with the FastAPI/Pydantic stack already in use, and is correctly constrained with a sane upper bound to guard against a future 1.0 breaking change. Note: httpx is also listed in the dev group (>=0.28) where FastAPI's TestClient pulls it in transitively; promoting it to production is appropriate now that it's used at runtime, but consider aligning the floors (dev >=0.28 vs prod >=0.27) so dev and prod resolve to the same major/minor band.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Optional: bump the production floor to >=0.28 to match the dev group and avoid resolver divergence between environments."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"info\",\"message\":\"Adding httpx>=0.27,<1.0 as a production dependency is justified: httpx is a reputable, actively maintained async-capable HTTP client (Encode, the FastAPI/Starlette maintainers), aligns with the FastAPI/Pydantic stack already in use, and is correctly constrained with a sane upper bound to guard against a future 1.0 breaking change. Note: httpx is also listed in the dev group (>=0.28) where FastAPI's TestClient pulls it in transitively; promoting it to production is appropriate now that it's used at runtime, but consider aligning the floors (dev >=0.28 vs prod >=0.27) so dev and prod resolve to the same major/minor band.\",\"suggestion\":\"Optional: bump the production floor to >=0.28 to match the dev group and avoid resolver divergence between environments.\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

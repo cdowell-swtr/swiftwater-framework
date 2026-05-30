@@ -1,0 +1,22 @@
+{
+  "agent": "accessibility",
+  "case": "img-no-alt-rendered",
+  "findings": [
+    {
+      "line": 30,
+      "message": "The <img> element has no alt attribute, so it has no accessible name. Screen readers cannot describe the banner image, violating WCAG 2.1 SC 1.1.1 (Non-text Content).",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "suggestion": "Add an alt attribute describing the image (e.g. alt=\"Items catalogue banner\"), or alt=\"\" if the image is purely decorative so assistive tech can skip it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":30,\"severity\":\"high\",\"message\":\"The <img> element has no alt attribute, so it has no accessible name. Screen readers cannot describe the banner image, violating WCAG 2.1 SC 1.1.1 (Non-text Content).\",\"suggestion\":\"Add an alt attribute describing the image (e.g. alt=\\\"Items catalogue banner\\\"), or alt=\\\"\\\" if the image is purely decorative so assistive tech can skip it.\"}]",
+  "repeat": 1,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

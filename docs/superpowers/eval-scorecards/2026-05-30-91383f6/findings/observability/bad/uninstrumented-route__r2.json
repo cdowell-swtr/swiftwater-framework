@@ -1,0 +1,43 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New POST /items/{item_id}/archive route adds a mutating code path with no explicit instrumentation: no structured log of the archive action (a state-changing operation should emit an audit log with item_id and the correlation id), no tracing span attributes added (item_id is a useful span attribute for the OTel-instrumented endpoint), and no metric for archive operations. Relying solely on the ObservabilityMiddleware's generic request counter loses the per-operation visibility needed for a write endpoint.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Inject the structured logger (get_logger()) and emit an info log on success and a warn/error log on the 404 path, including item_id and the request correlation id. Optionally add span attributes via opentelemetry.trace.get_current_span().set_attribute('item.id', item_id) and a dedicated counter (e.g., app_items_archived_total) in MetricsRegistry."
+    },
+    {
+      "line": 36,
+      "message": "Error path (item not found -> HTTPException 404) is raised without a structured log carrying the correlation id. The reviewer prompt explicitly calls out error paths not logged with the correlation id as a finding; here the 404 is silent from the application's perspective (only the access log will record it).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Before raising HTTPException, emit a structured warn-level log: get_logger().warning('archive_item_not_found', item_id=item_id) so the correlation-id-bound logger ties this 4xx to the request trace."
+    },
+    {
+      "line": 39,
+      "message": "session.commit() is called without any exception handling or logging. If the commit fails (e.g., DB connectivity, integrity error), the unhandled exception will be caught by the global handler and counted as 5xx, but the specific failure context (which item, which operation) is lost \u2014 no error log with correlation id is emitted at the call site.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Wrap the mutation in try/except SQLAlchemyError, log with get_logger().error('archive_item_commit_failed', item_id=item_id, exc_info=True) and re-raise (or convert to a 500 HTTPException) so the failure is correlated to the request id."
+    },
+    {
+      "line": 33,
+      "message": "No SLO is defined or considered for this new write endpoint. The default SLOs in observability/slo.py cover only request_latency_p99_ms and error_rate_pct globally; a mutating route warrants either explicit inclusion in the existing global SLO budget review or a route-specific threshold. New endpoints should be evaluated against the SLO contract before merge.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Either confirm the global p99/error-rate SLOs cover this route or add a write-path-specific SLO (e.g., write_latency_p99_ms) in observability/slo.py and SLO_PROMQL, and a panel in the Grafana dashboard."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New POST /items/{item_id}/archive route adds a mutating code path with no explicit instrumentation: no structured log of the archive action (a state-changing operation should emit an audit log with item_id and the correlation id), no tracing span attributes added (item_id is a useful span attribute for the OTel-instrumented endpoint), and no metric for archive operations. Relying solely on the ObservabilityMiddleware's generic request counter loses the per-operation visibility needed for a write endpoint.\",\"suggestion\":\"Inject the structured logger (get_logger()) and emit an info log on success and a warn/error log on the 404 path, including item_id and the request correlation id. Optionally add span attributes via opentelemetry.trace.get_current_span().set_attribute('item.id', item_id) and a dedicated counter (e.g., app_items_archived_total) in MetricsRegistry.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"high\",\"message\":\"Error path (item not found -> HTTPException 404) is raised without a structured log carrying the correlation id. The reviewer prompt explicitly calls out error paths not logged with the correlation id as a finding; here the 404 is silent from the application's perspective (only the access log will record it).\",\"suggestion\":\"Before raising HTTPException, emit a structured warn-level log: get_logger().warning('archive_item_not_found', item_id=item_id) so the correlation-id-bound logger ties this 4xx to the request trace.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"medium\",\"message\":\"session.commit() is called without any exception handling or logging. If the commit fails (e.g., DB connectivity, integrity error), the unhandled exception will be caught by the global handler and counted as 5xx, but the specific failure context (which item, which operation) is lost \u2014 no error log with correlation id is emitted at the call site.\",\"suggestion\":\"Wrap the mutation in try/except SQLAlchemyError, log with get_logger().error('archive_item_commit_failed', item_id=item_id, exc_info=True) and re-raise (or convert to a 500 HTTPException) so the failure is correlated to the request id.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"No SLO is defined or considered for this new write endpoint. The default SLOs in observability/slo.py cover only request_latency_p99_ms and error_rate_pct globally; a mutating route warrants either explicit inclusion in the existing global SLO budget review or a route-specific threshold. New endpoints should be evaluated against the SLO contract before merge.\",\"suggestion\":\"Either confirm the global p99/error-rate SLOs cover this route or add a write-path-specific SLO (e.g., write_latency_p99_ms) in observability/slo.py and SLO_PROMQL, and a panel in the Grafana dashboard.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

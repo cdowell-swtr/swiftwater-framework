@@ -1,0 +1,36 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: field 'name' renamed to 'title' without a compatible migration path. Existing GraphQL clients querying 'Item.name' will break.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "To maintain backwards compatibility, keep both 'name' and 'title' fields temporarily, with 'name' being a deprecated alias, OR provide a schema versioning/pagination strategy that allows clients to opt into the new API version."
+    },
+    {
+      "line": 43,
+      "message": "Inconsistency: mutation 'create_item' parameter is named 'name' but the returned Item type now uses 'title'. This creates a mismatch between input and output schema.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Update the mutation parameter to accept 'title' instead of 'name', or provide both for transition. Ensure input/output field names are consistent and semantically aligned."
+    },
+    {
+      "line": 28,
+      "message": "The 'description' field is typed as optional but always returns None. This suggests incomplete implementation or missing data population from the ItemModel.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "info",
+      "suggestion": "Either populate 'description' from ItemModel (if the field exists there), or clarify the intent. If description is not yet implemented, consider using a separate query or adding the field to ItemModel and _to_item mapping."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: field 'name' renamed to 'title' without a compatible migration path. Existing GraphQL clients querying 'Item.name' will break.\",\"suggestion\":\"To maintain backwards compatibility, keep both 'name' and 'title' fields temporarily, with 'name' being a deprecated alias, OR provide a schema versioning/pagination strategy that allows clients to opt into the new API version.\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":43,\"severity\":\"high\",\"message\":\"Inconsistency: mutation 'create_item' parameter is named 'name' but the returned Item type now uses 'title'. This creates a mismatch between input and output schema.\",\"suggestion\":\"Update the mutation parameter to accept 'title' instead of 'name', or provide both for transition. Ensure input/output field names are consistent and semantically aligned.\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":28,\"severity\":\"info\",\"message\":\"The 'description' field is typed as optional but always returns None. This suggests incomplete implementation or missing data population from the ItemModel.\",\"suggestion\":\"Either populate 'description' from ItemModel (if the field exists there), or clarify the intent. If description is not yet implemented, consider using a separate query or adding the field to ItemModel and _to_item mapping.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

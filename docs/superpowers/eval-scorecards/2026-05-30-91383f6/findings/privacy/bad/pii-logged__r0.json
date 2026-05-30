@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 47,
+      "message": "PII (owner_email) is logged in structured logs. The model comment on line 16 of src/demo/db/models.py explicitly marks owner_email as PII that should 'not include in logs or external responses', but line 47 logs owner_email=payload.owner_email to the structured logger.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log statement. Use only non-sensitive fields like item_id for auditing: log.info(\"item_created\", item_id=item.id)"
+    },
+    {
+      "line": 17,
+      "message": "Collection of owner_email PII without clear retention purpose. The field is collected but the primary usage (logging on line 47 of items.py) violates the stated PII protection policy. The necessity of collecting and storing owner_email is not evident from the current codebase structure.",
+      "path": "src/demo/db/models.py",
+      "severity": "high",
+      "suggestion": "Either: (1) remove the owner_email field if not needed for core functionality, or (2) if audit requirements mandate logging user identity, implement a separate audit log with encryption and access controls rather than standard application logs."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"PII (owner_email) is logged in structured logs. The model comment on line 16 of src/demo/db/models.py explicitly marks owner_email as PII that should 'not include in logs or external responses', but line 47 logs owner_email=payload.owner_email to the structured logger.\",\"suggestion\":\"Remove owner_email from the log statement. Use only non-sensitive fields like item_id for auditing: log.info(\\\"item_created\\\", item_id=item.id)\"},{\"path\":\"src/demo/db/models.py\",\"line\":17,\"severity\":\"high\",\"message\":\"Collection of owner_email PII without clear retention purpose. The field is collected but the primary usage (logging on line 47 of items.py) violates the stated PII protection policy. The necessity of collecting and storing owner_email is not evident from the current codebase structure.\",\"suggestion\":\"Either: (1) remove the owner_email field if not needed for core functionality, or (2) if audit requirements mandate logging user identity, implement a separate audit log with encryption and access controls rather than standard application logs.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

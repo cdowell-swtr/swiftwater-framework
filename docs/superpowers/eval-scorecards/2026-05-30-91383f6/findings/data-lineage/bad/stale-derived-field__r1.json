@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 40,
+      "message": "rename_item() bypasses the repository pattern and breaks the documented data invariant: slug must stay in sync with name. The function updates only item.name without recalculating slug (line 48), causing divergence from the derived field's canonical derivation rule (name.strip().lower().replace(\" \", \"-\")). This violates the explicit contract in models.py lines 16-17 that states 'It must stay in sync with name \u2014 update both together via repository helpers.'",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Use the update_item_name() repository helper instead of direct mutation. Replace lines 45-51 with: result = update_item_name(session, item_id, payload.name); if result is None: raise HTTPException(status_code=404, detail='Item not found'); return result"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"rename_item() bypasses the repository pattern and breaks the documented data invariant: slug must stay in sync with name. The function updates only item.name without recalculating slug (line 48), causing divergence from the derived field's canonical derivation rule (name.strip().lower().replace(\\\" \\\", \\\"-\\\")). This violates the explicit contract in models.py lines 16-17 that states 'It must stay in sync with name \u2014 update both together via repository helpers.'\",\"suggestion\":\"Use the update_item_name() repository helper instead of direct mutation. Replace lines 45-51 with: result = update_item_name(session, item_id, payload.name); if result is None: raise HTTPException(status_code=404, detail='Item not found'); return result\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 45,
+      "message": "User-supplied input from API payload is written to database without transformation. The name field from ItemCreate payload is passed directly to create_item() which persists it as-is. However, create_item_normalized() exists in the codebase specifically to normalize user input (strip whitespace and lowercase) and the function contract requires callers accepting user input to use create_item_normalized(), not bare create_item().",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Change line 45 from 'return create_item(session, payload.name)' to 'return create_item_normalized(session, payload.name)' and update the import on line 9 to include create_item_normalized."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"User-supplied input from API payload is written to database without transformation. The name field from ItemCreate payload is passed directly to create_item() which persists it as-is. However, create_item_normalized() exists in the codebase specifically to normalize user input (strip whitespace and lowercase) and the function contract requires callers accepting user input to use create_item_normalized(), not bare create_item().\",\"suggestion\":\"Change line 45 from 'return create_item(session, payload.name)' to 'return create_item_normalized(session, payload.name)' and update the import on line 9 to include create_item_normalized.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

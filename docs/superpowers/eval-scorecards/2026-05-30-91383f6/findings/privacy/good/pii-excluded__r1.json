@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-excluded",
+  "findings": [
+    {
+      "line": 43,
+      "message": "Post endpoint accepts owner_email in ItemCreate schema but does not store it - unnecessary PII collection violates data minimization principle",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Either remove owner_email from ItemCreate schema if it should not be collected, or modify create_item() to accept and store the email address when provided"
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"medium\",\"message\":\"Post endpoint accepts owner_email in ItemCreate schema but does not store it - unnecessary PII collection violates data minimization principle\",\"suggestion\":\"Either remove owner_email from ItemCreate schema if it should not be collected, or modify create_item() to accept and store the email address when provided\"}]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

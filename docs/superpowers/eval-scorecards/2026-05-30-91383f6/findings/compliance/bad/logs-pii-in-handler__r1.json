@@ -1,0 +1,29 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 47,
+      "message": "Logging the caller's email address (PII / GDPR personal data) at INFO level is a clear regulatory violation. Application logs typically have broad retention and access, no purpose-limitation, no pseudonymisation, and no documented deletion / right-to-erasure path \u2014 so emitting raw emails into them creates personal data with no lawful retention or erasure mechanism.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log the raw email. Either drop it entirely, or log a stable pseudonymous identifier (e.g. HMAC/hash of the email with a server-side secret) so the log line is not personal data. If the email truly must be logged for an auditable reason, route it through a dedicated audit log with documented retention, access controls, and an erasure procedure \u2014 not the generic application logger."
+    },
+    {
+      "line": 37,
+      "message": "`search_items` is a personalised lookup keyed by a user email (personal data) but has no audit log of WHO accessed WHAT and WHEN (actor, subject email, filter, timestamp, correlation id) \u2014 only an INFO line via the app logger, which is not an audit trail. GDPR Art. 30/32 expects auditable records of processing for personalised access to personal data, and there is no retention/erasure path for the email captured here.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Treat personalised search as a sensitive operation: write a structured audit-log entry to a dedicated, access-controlled audit sink (separate from app logs) recording actor, hashed/pseudonymised subject identifier, action, timestamp, and correlation id, with a defined retention policy and an erasure hook tied to the subject's right-to-erasure workflow. Also avoid passing identifying email as a query-string parameter (it lands in access logs / proxies) \u2014 accept the subject from an authenticated session/token instead."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"Logging the caller's email address (PII / GDPR personal data) at INFO level is a clear regulatory violation. Application logs typically have broad retention and access, no purpose-limitation, no pseudonymisation, and no documented deletion / right-to-erasure path \u2014 so emitting raw emails into them creates personal data with no lawful retention or erasure mechanism.\",\"suggestion\":\"Do not log the raw email. Either drop it entirely, or log a stable pseudonymous identifier (e.g. HMAC/hash of the email with a server-side secret) so the log line is not personal data. If the email truly must be logged for an auditable reason, route it through a dedicated audit log with documented retention, access controls, and an erasure procedure \u2014 not the generic application logger.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"high\",\"message\":\"`search_items` is a personalised lookup keyed by a user email (personal data) but has no audit log of WHO accessed WHAT and WHEN (actor, subject email, filter, timestamp, correlation id) \u2014 only an INFO line via the app logger, which is not an audit trail. GDPR Art. 30/32 expects auditable records of processing for personalised access to personal data, and there is no retention/erasure path for the email captured here.\",\"suggestion\":\"Treat personalised search as a sensitive operation: write a structured audit-log entry to a dedicated, access-controlled audit sink (separate from app logs) recording actor, hashed/pseudonymised subject identifier, action, timestamp, and correlation id, with a defined retention policy and an erasure hook tied to the subject's right-to-erasure workflow. Also avoid passing identifying email as a query-string parameter (it lands in access logs / proxies) \u2014 accept the subject from an authenticated session/token instead.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

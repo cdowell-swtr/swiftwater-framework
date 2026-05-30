@@ -1,0 +1,36 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 18,
+      "message": "New runtime dependency 'requests' is added without any version constraint. Unpinned/unbounded dependencies make builds non-reproducible and expose the project to silently-shipping a future breaking or compromised release. All sibling deps in this manifest use lower bounds (e.g. 'tenacity>=9.0', 'pybreaker>=1.2').",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Pin a lower bound consistent with the rest of the manifest, e.g. 'requests>=2.32'."
+    },
+    {
+      "line": 18,
+      "message": "'requests' duplicates capability already covered by the existing toolchain. The project ships FastAPI/Starlette and uses 'httpx' (declared in dev deps for the test client); httpx is the modern, async-capable HTTP client that pairs naturally with the async FastAPI/OpenTelemetry stack here. Adding 'requests' introduces a second HTTP client surface, doubles the supply-chain footprint, and 'requests' is in maintenance-only mode upstream.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Drop 'requests' and use 'httpx' (promote it from dev to runtime deps if needed); it works in both sync and async contexts and is already instrumented well by OpenTelemetry."
+    },
+    {
+      "line": 18,
+      "message": "Justification for the new dependency is not visible in the diff. Adding a runtime HTTP client is a notable surface-area / supply-chain change; the change should be accompanied by a clear use-case (which call site needs it) so reviewers can confirm an existing dep (httpx, urllib) doesn't already cover it.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "In the PR description, cite the concrete call site that requires 'requests' and why httpx/urllib aren't sufficient."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"New runtime dependency 'requests' is added without any version constraint. Unpinned/unbounded dependencies make builds non-reproducible and expose the project to silently-shipping a future breaking or compromised release. All sibling deps in this manifest use lower bounds (e.g. 'tenacity>=9.0', 'pybreaker>=1.2').\",\"suggestion\":\"Pin a lower bound consistent with the rest of the manifest, e.g. 'requests>=2.32'.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"'requests' duplicates capability already covered by the existing toolchain. The project ships FastAPI/Starlette and uses 'httpx' (declared in dev deps for the test client); httpx is the modern, async-capable HTTP client that pairs naturally with the async FastAPI/OpenTelemetry stack here. Adding 'requests' introduces a second HTTP client surface, doubles the supply-chain footprint, and 'requests' is in maintenance-only mode upstream.\",\"suggestion\":\"Drop 'requests' and use 'httpx' (promote it from dev to runtime deps if needed); it works in both sync and async contexts and is already instrumented well by OpenTelemetry.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"info\",\"message\":\"Justification for the new dependency is not visible in the diff. Adding a runtime HTTP client is a notable surface-area / supply-chain change; the change should be accompanied by a clear use-case (which call site needs it) so reviewers can confirm an existing dep (httpx, urllib) doesn't already cover it.\",\"suggestion\":\"In the PR description, cite the concrete call site that requires 'requests' and why httpx/urllib aren't sufficient.\"}]",
+  "repeat": 0,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

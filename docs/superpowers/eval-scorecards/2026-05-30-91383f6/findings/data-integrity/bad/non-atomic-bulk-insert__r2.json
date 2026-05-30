@@ -1,0 +1,22 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 24,
+      "message": "bulk_create_items commits inside the loop, so each Item is its own transaction. If any insert in the batch fails (constraint violation, network blip, etc.), all previously committed items remain persisted while the rest are dropped \u2014 a partial-write that violates batch atomicity and leaves the store in an inconsistent state from the caller's perspective. Callers cannot roll back the batch.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add all items first, then commit once outside the loop (and let the caller's transaction scope/handler roll back on error): e.g. `for name in names: session.add(Item(name=name))` then a single `session.commit()` after the loop, followed by refreshes \u2014 or use `session.add_all(...)` / `session.execute(insert(Item), [...])`. Wrap in a `try/except` that `session.rollback()`s on failure so the batch is all-or-nothing."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":24,\"severity\":\"high\",\"message\":\"bulk_create_items commits inside the loop, so each Item is its own transaction. If any insert in the batch fails (constraint violation, network blip, etc.), all previously committed items remain persisted while the rest are dropped \u2014 a partial-write that violates batch atomicity and leaves the store in an inconsistent state from the caller's perspective. Callers cannot roll back the batch.\",\"suggestion\":\"Add all items first, then commit once outside the loop (and let the caller's transaction scope/handler roll back on error): e.g. `for name in names: session.add(Item(name=name))` then a single `session.commit()` after the loop, followed by refreshes \u2014 or use `session.add_all(...)` / `session.execute(insert(Item), [...])`. Wrap in a `try/except` that `session.rollback()`s on failure so the batch is all-or-nothing.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

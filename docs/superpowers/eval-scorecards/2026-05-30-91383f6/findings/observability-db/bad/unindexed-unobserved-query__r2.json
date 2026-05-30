@@ -1,0 +1,29 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New datastore query path with no observability instrumentation. The get_item_by_name() function performs a database query without any metrics, spans, or logging. Codebase establishes patterns for OpenTelemetry tracing, structured logging with correlation IDs, and metrics recording, but this query path lacks all of them.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add observability instrumentation: wrap the query with span creation via OpenTelemetry, record query latency metrics if metrics_registry is available, and log errors with correlation ID context. Consider extracting database instrumentation into a decorator or context manager to avoid duplication across repository functions."
+    },
+    {
+      "line": 21,
+      "message": "Unbounded query (no LIMIT/pagination) without row-count or latency metrics. The scalars().first() pattern executes a full table scan for the WHERE clause without any instrumentation to detect slow queries or count returned rows.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add query latency monitoring and row-count metrics around this query execution to detect performance regressions. Consider indexing the 'name' column if not already indexed, and log query execution details within the correlation context."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New datastore query path with no observability instrumentation. The get_item_by_name() function performs a database query without any metrics, spans, or logging. Codebase establishes patterns for OpenTelemetry tracing, structured logging with correlation IDs, and metrics recording, but this query path lacks all of them.\",\"suggestion\":\"Add observability instrumentation: wrap the query with span creation via OpenTelemetry, record query latency metrics if metrics_registry is available, and log errors with correlation ID context. Consider extracting database instrumentation into a decorator or context manager to avoid duplication across repository functions.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":21,\"severity\":\"high\",\"message\":\"Unbounded query (no LIMIT/pagination) without row-count or latency metrics. The scalars().first() pattern executes a full table scan for the WHERE clause without any instrumentation to detect slow queries or count returned rows.\",\"suggestion\":\"Add query latency monitoring and row-count metrics around this query execution to detect performance regressions. Consider indexing the 'name' column if not already indexed, and log query execution details within the correlation context.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

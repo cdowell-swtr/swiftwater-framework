@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 53,
+      "message": "Tautological assertion: `assert s is s` is always true regardless of the code under test. This test can't fail \u2014 it exercises nothing about Settings behaviour.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful behavioural assertion on Settings (e.g., assert specific default field values, or that two Settings() instances compare equal on a chosen attribute)."
+    },
+    {
+      "line": 61,
+      "message": "Over-mocked / asserting on the mock: the test patches `Settings.resolved_log_level` itself and then asserts the patched value, so it verifies only that mock.patch works \u2014 not the real resolution logic. The test passes regardless of how `resolved_log_level` actually behaves.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Remove the patch and exercise the real property by constructing Settings(environment=...) for each branch (dev/staging/prod/etc.) and asserting the actual resolved level returned by the implementation."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":53,\"severity\":\"high\",\"message\":\"Tautological assertion: `assert s is s` is always true regardless of the code under test. This test can't fail \u2014 it exercises nothing about Settings behaviour.\",\"suggestion\":\"Replace with a meaningful behavioural assertion on Settings (e.g., assert specific default field values, or that two Settings() instances compare equal on a chosen attribute).\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":61,\"severity\":\"high\",\"message\":\"Over-mocked / asserting on the mock: the test patches `Settings.resolved_log_level` itself and then asserts the patched value, so it verifies only that mock.patch works \u2014 not the real resolution logic. The test passes regardless of how `resolved_log_level` actually behaves.\",\"suggestion\":\"Remove the patch and exercise the real property by constructing Settings(environment=...) for each branch (dev/staging/prod/etc.) and asserting the actual resolved level returned by the implementation.\"}]",
+  "repeat": 2,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

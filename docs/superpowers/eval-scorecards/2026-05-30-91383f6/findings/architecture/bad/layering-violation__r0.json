@@ -1,0 +1,22 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 41,
+      "message": "Layering violation: route handler directly opens a database session via SessionLocal() instead of using the repository layer. The equivalent create_item(session, name) function already exists in ../db/repository.py but is bypassed. This couples the route directly to the database engine, defeats dependency injection, and inconsistently handles session lifecycle (doesn't commit, unlike the repository version).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Use FastAPI dependency injection: change the handler to accept 'session: SessionDep' and call 'create_item(session, payload.name)' from the repository layer instead of managing SessionLocal() directly. This matches the pattern used in get_items and ensures consistent session management across the application."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Layering violation: route handler directly opens a database session via SessionLocal() instead of using the repository layer. The equivalent create_item(session, name) function already exists in ../db/repository.py but is bypassed. This couples the route directly to the database engine, defeats dependency injection, and inconsistently handles session lifecycle (doesn't commit, unlike the repository version).\",\"suggestion\":\"Use FastAPI dependency injection: change the handler to accept 'session: SessionDep' and call 'create_item(session, payload.name)' from the repository layer instead of managing SessionLocal() directly. This matches the pattern used in get_items and ensures consistent session management across the application.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

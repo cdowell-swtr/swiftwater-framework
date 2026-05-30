@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 53,
+      "message": "Tautological assertion: `assert s is s` is true for any object and cannot fail. The test exercises no behaviour of `Settings` and would pass even if `Settings` were entirely broken.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful assertion about Settings' behaviour, e.g. `assert isinstance(Settings(), Settings)` plus assertions on at least one attribute (defaults, environment, etc.), or delete the test."
+    },
+    {
+      "line": 61,
+      "message": "Test asserts on its own mock: it monkeypatches `Settings.resolved_log_level` to return 'MOCKED' and then asserts it equals 'MOCKED'. This tests the mocking library, not the production property, and would pass regardless of the real `resolved_log_level` implementation (including if it were deleted).",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Drive `resolved_log_level` through real inputs (e.g. `Settings(environment='prod').resolved_log_level == 'INFO'` / `'dev'` \u2192 `'DEBUG'`) without patching the SUT. If a dependency truly needs isolation, mock the dependency, not the method under test."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":53,\"severity\":\"high\",\"message\":\"Tautological assertion: `assert s is s` is true for any object and cannot fail. The test exercises no behaviour of `Settings` and would pass even if `Settings` were entirely broken.\",\"suggestion\":\"Replace with a meaningful assertion about Settings' behaviour, e.g. `assert isinstance(Settings(), Settings)` plus assertions on at least one attribute (defaults, environment, etc.), or delete the test.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":61,\"severity\":\"high\",\"message\":\"Test asserts on its own mock: it monkeypatches `Settings.resolved_log_level` to return 'MOCKED' and then asserts it equals 'MOCKED'. This tests the mocking library, not the production property, and would pass regardless of the real `resolved_log_level` implementation (including if it were deleted).\",\"suggestion\":\"Drive `resolved_log_level` through real inputs (e.g. `Settings(environment='prod').resolved_log_level == 'INFO'` / `'dev'` \u2192 `'DEBUG'`) without patching the SUT. If a dependency truly needs isolation, mock the dependency, not the method under test.\"}]",
+  "repeat": 0,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

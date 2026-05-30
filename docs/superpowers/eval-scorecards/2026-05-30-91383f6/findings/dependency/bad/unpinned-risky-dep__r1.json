@@ -1,0 +1,29 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Added `requests` is unpinned (no version constraint), unlike every other dependency in this manifest which uses a `>=` floor. Unpinned deps make resolves non-reproducible and let a future major break the build silently. Also: `httpx>=0.28` is already in the dev group and `fastapi`'s stack ships `httpx`/`anyio`-based clients \u2014 for new runtime HTTP needs, prefer the async `httpx` already used in this project rather than introducing the synchronous `requests` library as a second HTTP client.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Either drop `requests` and use `httpx` (already present, async-native, integrates with the FastAPI/OTel stack) or, if `requests` is truly needed, pin a floor: `\"requests>=2.32\"`."
+    },
+    {
+      "line": 18,
+      "message": "`requests` is in maintenance mode (low feature velocity) and is synchronous-only, which can block the FastAPI event loop if called from request handlers. The project already standardizes on async (FastAPI + OTel async instrumentation); adding a sync HTTP client risks subtle latency/throughput regressions and a second OTel instrumentation surface to wire up.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Standardize on `httpx` for outbound HTTP (sync or async API available, supported by `opentelemetry-instrumentation-httpx`)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"Added `requests` is unpinned (no version constraint), unlike every other dependency in this manifest which uses a `>=` floor. Unpinned deps make resolves non-reproducible and let a future major break the build silently. Also: `httpx>=0.28` is already in the dev group and `fastapi`'s stack ships `httpx`/`anyio`-based clients \u2014 for new runtime HTTP needs, prefer the async `httpx` already used in this project rather than introducing the synchronous `requests` library as a second HTTP client.\",\"suggestion\":\"Either drop `requests` and use `httpx` (already present, async-native, integrates with the FastAPI/OTel stack) or, if `requests` is truly needed, pin a floor: `\\\"requests>=2.32\\\"`.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"info\",\"message\":\"`requests` is in maintenance mode (low feature velocity) and is synchronous-only, which can block the FastAPI event loop if called from request handlers. The project already standardizes on async (FastAPI + OTel async instrumentation); adding a sync HTTP client risks subtle latency/throughput regressions and a second OTel instrumentation surface to wire up.\",\"suggestion\":\"Standardize on `httpx` for outbound HTTP (sync or async API available, supported by `opentelemetry-instrumentation-httpx`).\"}]",
+  "repeat": 1,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

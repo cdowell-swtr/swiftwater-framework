@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: renamed 'name' field to 'title' without backwards compatibility. Existing clients querying Item.name will fail.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "To maintain backwards compatibility, keep the 'name' field as a deprecated alias to 'title', or add a deprecation directive with a migration period. Example: add @strawberry.field with a deprecation_reason parameter, or alias 'name' to 'title' with @strawberry.field(name='name')."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: renamed 'name' field to 'title' without backwards compatibility. Existing clients querying Item.name will fail.\",\"suggestion\":\"To maintain backwards compatibility, keep the 'name' field as a deprecated alias to 'title', or add a deprecation directive with a migration period. Example: add @strawberry.field with a deprecation_reason parameter, or alias 'name' to 'title' with @strawberry.field(name='name').\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

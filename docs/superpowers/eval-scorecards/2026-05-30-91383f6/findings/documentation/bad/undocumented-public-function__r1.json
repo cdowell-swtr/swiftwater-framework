@@ -1,0 +1,43 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New public endpoint `count_items` (GET /items/count) lacks a docstring. Other public route handlers in this file (e.g. `get_items`) document their behavior; this one should too.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a docstring describing the endpoint's purpose, e.g. \"\"\"Return the total count of items as {\\\"count\\\": N} \u2014 convenience endpoint for clients that only need the size, not the list.\"\"\""
+    },
+    {
+      "line": 33,
+      "message": "Return type annotation is the bare `dict` (untyped contents). Public route return types elsewhere use a precise response model (e.g. `list[Item]` + `response_model=list[ItemRead]`). Documenting the contract via a Pydantic response_model (or at minimum `dict[str, int]`) makes the API contract explicit and keeps the OpenAPI spec accurate.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Define a small `ItemCount(BaseModel): count: int` and use `@router.get(\"/items/count\", response_model=ItemCount)` returning `ItemCount(count=len(items))`, or annotate as `dict[str, int]` at minimum."
+    },
+    {
+      "line": 60,
+      "message": "The README's `## Endpoints` section enumerates `/items` but the diff adds a new public endpoint `/items/count` without updating it. The user-facing endpoint list is now stale.",
+      "path": "README.md",
+      "severity": "low",
+      "suggestion": "Add a bullet under `## Endpoints`: `- `GET /items/count` \u2014 count of items (convenience endpoint)`."
+    },
+    {
+      "line": 34,
+      "message": "`count_items` loads every row into memory just to take `len(...)`. Not a documentation issue per se, but the docstring (when added) should call this out as intentional for the demo, or the implementation should switch to a `SELECT count(*)` so docs and behavior stay aligned.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "suggestion": "Either document the in-memory count as deliberate for the demo, or replace with `session.scalar(select(func.count()).select_from(Item))` and document the constant-memory behavior."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"New public endpoint `count_items` (GET /items/count) lacks a docstring. Other public route handlers in this file (e.g. `get_items`) document their behavior; this one should too.\",\"suggestion\":\"Add a docstring describing the endpoint's purpose, e.g. \\\"\\\"\\\"Return the total count of items as {\\\\\\\"count\\\\\\\": N} \u2014 convenience endpoint for clients that only need the size, not the list.\\\"\\\"\\\"\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"Return type annotation is the bare `dict` (untyped contents). Public route return types elsewhere use a precise response model (e.g. `list[Item]` + `response_model=list[ItemRead]`). Documenting the contract via a Pydantic response_model (or at minimum `dict[str, int]`) makes the API contract explicit and keeps the OpenAPI spec accurate.\",\"suggestion\":\"Define a small `ItemCount(BaseModel): count: int` and use `@router.get(\\\"/items/count\\\", response_model=ItemCount)` returning `ItemCount(count=len(items))`, or annotate as `dict[str, int]` at minimum.\"},{\"path\":\"README.md\",\"line\":60,\"severity\":\"low\",\"message\":\"The README's `## Endpoints` section enumerates `/items` but the diff adds a new public endpoint `/items/count` without updating it. The user-facing endpoint list is now stale.\",\"suggestion\":\"Add a bullet under `## Endpoints`: `- `GET /items/count` \u2014 count of items (convenience endpoint)`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"info\",\"message\":\"`count_items` loads every row into memory just to take `len(...)`. Not a documentation issue per se, but the docstring (when added) should call this out as intentional for the demo, or the implementation should switch to a `SELECT count(*)` so docs and behavior stay aligned.\",\"suggestion\":\"Either document the in-memory count as deliberate for the demo, or replace with `session.scalar(select(func.count()).select_from(Item))` and document the constant-memory behavior.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

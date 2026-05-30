@@ -1,0 +1,36 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "line": 22,
+      "message": "Consumer pact test assertion is incompatible with the new get_stock() return type. The test asserts get_stock() == 5 (int), but the function now returns dict[str, int]. This weakens the consumer contract and breaks the contract-testable guarantee.",
+      "path": "tests/functional/test_consumer_inventory.py",
+      "severity": "high",
+      "suggestion": "Update the assertion to verify both fields: assert get_stock(str(srv.url), 1) == {\"in_stock\": 5, \"reserved_count\": ...} and update the pact interaction to include the reserved_count field with an appropriate matcher."
+    },
+    {
+      "line": 19,
+      "message": "Pact interaction does not declare reserved_count field that the provider is now expected to return. The client code at src/demo/clients/inventory.py:14 requires reserved_count from the response, but the pact mock only provides item_id and in_stock. The pact interaction must be regenerated to include this field.",
+      "path": "tests/functional/test_consumer_inventory.py",
+      "severity": "high",
+      "suggestion": "Update the pact interaction to include reserved_count: .with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5), \"reserved_count\": match.int(...)})"
+    },
+    {
+      "line": 13,
+      "message": "Client code comment acknowledges reserved_count is not declared in the pact interaction, indicating a known but unresolved contract mismatch. This violates the contract-driven testing principle and will cause provider verification to fail.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Do not access fields (reserved_count) that are not explicitly declared in the pact interaction. Either update the pact interaction first, or remove the reserved_count usage until the pact is updated."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/functional/test_consumer_inventory.py\",\"line\":22,\"severity\":\"high\",\"message\":\"Consumer pact test assertion is incompatible with the new get_stock() return type. The test asserts get_stock() == 5 (int), but the function now returns dict[str, int]. This weakens the consumer contract and breaks the contract-testable guarantee.\",\"suggestion\":\"Update the assertion to verify both fields: assert get_stock(str(srv.url), 1) == {\\\"in_stock\\\": 5, \\\"reserved_count\\\": ...} and update the pact interaction to include the reserved_count field with an appropriate matcher.\"},{\"path\":\"tests/functional/test_consumer_inventory.py\",\"line\":19,\"severity\":\"high\",\"message\":\"Pact interaction does not declare reserved_count field that the provider is now expected to return. The client code at src/demo/clients/inventory.py:14 requires reserved_count from the response, but the pact mock only provides item_id and in_stock. The pact interaction must be regenerated to include this field.\",\"suggestion\":\"Update the pact interaction to include reserved_count: .with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5), \\\"reserved_count\\\": match.int(...)})\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":13,\"severity\":\"high\",\"message\":\"Client code comment acknowledges reserved_count is not declared in the pact interaction, indicating a known but unresolved contract mismatch. This violates the contract-driven testing principle and will cause provider verification to fail.\",\"suggestion\":\"Do not access fields (reserved_count) that are not explicitly declared in the pact interaction. Either update the pact interaction first, or remove the reserved_count usage until the pact is updated.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

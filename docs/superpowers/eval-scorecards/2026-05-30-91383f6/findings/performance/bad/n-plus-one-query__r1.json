@@ -1,0 +1,43 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 40,
+      "message": "N+1 query pattern: get_item_names first SELECTs all Item.id values, then issues one session.get(Item, iid) per id to fetch each row's name. For N items this executes N+1 SQL round trips on an unbounded (table-sized) input \u2014 a clear performance regression that scales linearly with row count and will exhaust the connection pool / blow request latency SLOs under load.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Fetch only the name column in a single query: `return list(session.scalars(select(Item.name).order_by(Item.id)))`. This is one round trip, returns only the bytes needed, and removes the N+1 entirely. If full ORM objects are needed for other reasons, batch with `select(Item).where(Item.id.in_(item_ids))` instead of per-id session.get."
+    },
+    {
+      "line": 36,
+      "message": "Endpoint /items/names has no pagination or LIMIT and iterates the entire items table. As the table grows this becomes an unbounded scan + unbounded per-row round trip \u2014 accidentally O(N) work (and O(N) DB round trips with the N+1 above) on an input the client cannot constrain. A single request can monopolize a pool connection long enough to starve concurrent requests.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add pagination (limit/offset or cursor) to the endpoint signature and apply `.limit(...)` in the query; document a maximum page size. This bounds both the query cost and the response size."
+    },
+    {
+      "line": 44,
+      "message": "Function body falls off the end without `return names`, so the endpoint will always return None and FastAPI will fail response_model validation (list[str]). While primarily a correctness issue, from a performance angle it means every call still performs all N+1 queries before failing \u2014 wasted DB work on every request.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add `return names` (or, better, return the single-query result per the N+1 fix above)."
+    },
+    {
+      "line": 35,
+      "message": "`from sqlalchemy import select` is performed inside the request handler. Import is cached after first call, but moving it to module top-level removes the per-call dict lookup and matches the style of the rest of the file.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Hoist `from sqlalchemy import select` to the module-level imports."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"N+1 query pattern: get_item_names first SELECTs all Item.id values, then issues one session.get(Item, iid) per id to fetch each row's name. For N items this executes N+1 SQL round trips on an unbounded (table-sized) input \u2014 a clear performance regression that scales linearly with row count and will exhaust the connection pool / blow request latency SLOs under load.\",\"suggestion\":\"Fetch only the name column in a single query: `return list(session.scalars(select(Item.name).order_by(Item.id)))`. This is one round trip, returns only the bytes needed, and removes the N+1 entirely. If full ORM objects are needed for other reasons, batch with `select(Item).where(Item.id.in_(item_ids))` instead of per-id session.get.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"medium\",\"message\":\"Endpoint /items/names has no pagination or LIMIT and iterates the entire items table. As the table grows this becomes an unbounded scan + unbounded per-row round trip \u2014 accidentally O(N) work (and O(N) DB round trips with the N+1 above) on an input the client cannot constrain. A single request can monopolize a pool connection long enough to starve concurrent requests.\",\"suggestion\":\"Add pagination (limit/offset or cursor) to the endpoint signature and apply `.limit(...)` in the query; document a maximum page size. This bounds both the query cost and the response size.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"medium\",\"message\":\"Function body falls off the end without `return names`, so the endpoint will always return None and FastAPI will fail response_model validation (list[str]). While primarily a correctness issue, from a performance angle it means every call still performs all N+1 queries before failing \u2014 wasted DB work on every request.\",\"suggestion\":\"Add `return names` (or, better, return the single-query result per the N+1 fix above).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":35,\"severity\":\"low\",\"message\":\"`from sqlalchemy import select` is performed inside the request handler. Import is cached after first call, but moving it to module top-level removes the per-call dict lookup and matches the style of the rest of the file.\",\"suggestion\":\"Hoist `from sqlalchemy import select` to the module-level imports.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

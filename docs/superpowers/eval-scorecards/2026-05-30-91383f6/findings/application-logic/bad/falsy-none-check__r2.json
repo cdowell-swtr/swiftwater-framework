@@ -1,0 +1,29 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 41,
+      "message": "Missing return statement: get_item only raises HTTPException on the not-found branch and implicitly returns None when the item is found. Because the route declares `-> Item` with `response_model=ItemRead`, every successful lookup will yield None to FastAPI's serializer and produce a 500 response-validation error instead of the item.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add `return item` after the 404 guard so the found item is returned to the caller."
+    },
+    {
+      "line": 40,
+      "message": "Falsy check `if not item:` on the result of `session.get(...)` is incorrect intent: the proper sentinel for 'row not found' is `None`, and using truthiness conflates 'not found' with any object whose `__bool__` is False. Use an explicit `is None` comparison to make the intent and behavior unambiguous (and to avoid relying on ORM instances always being truthy).",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Replace `if not item:` with `if item is None:`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Missing return statement: get_item only raises HTTPException on the not-found branch and implicitly returns None when the item is found. Because the route declares `-> Item` with `response_model=ItemRead`, every successful lookup will yield None to FastAPI's serializer and produce a 500 response-validation error instead of the item.\",\"suggestion\":\"Add `return item` after the 404 guard so the found item is returned to the caller.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"medium\",\"message\":\"Falsy check `if not item:` on the result of `session.get(...)` is incorrect intent: the proper sentinel for 'row not found' is `None`, and using truthiness conflates 'not found' with any object whose `__bool__` is False. Use an explicit `is None` comparison to make the intent and behavior unambiguous (and to avoid relying on ORM instances always being truthy).\",\"suggestion\":\"Replace `if not item:` with `if item is None:`.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

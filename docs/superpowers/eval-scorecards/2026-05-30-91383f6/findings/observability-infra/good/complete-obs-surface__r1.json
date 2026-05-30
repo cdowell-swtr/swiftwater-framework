@@ -1,0 +1,22 @@
+{
+  "agent": "observability-infra",
+  "case": "complete-obs-surface",
+  "findings": [
+    {
+      "line": 11,
+      "message": "Redis alert rule is defined in 'postgres_alerts.yml' which is named after a different service. While the wildcard loading in prometheus.yml will find this, consider moving the redis alert rule to a dedicated 'redis_alerts.yml' file for clarity and maintainability.",
+      "path": "infra/observability/prometheus/alerts/postgres_alerts.yml",
+      "severity": "info",
+      "suggestion": "Rename or split the file to 'redis_alerts.yml' or create a separate alert file and move the redis alert rule there"
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/observability/prometheus/alerts/postgres_alerts.yml\",\"line\":11,\"severity\":\"info\",\"message\":\"Redis alert rule is defined in 'postgres_alerts.yml' which is named after a different service. While the wildcard loading in prometheus.yml will find this, consider moving the redis alert rule to a dedicated 'redis_alerts.yml' file for clarity and maintainability.\",\"suggestion\":\"Rename or split the file to 'redis_alerts.yml' or create a separate alert file and move the redis alert rule there\"}]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

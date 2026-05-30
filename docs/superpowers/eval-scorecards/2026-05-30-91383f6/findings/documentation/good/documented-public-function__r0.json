@@ -1,0 +1,29 @@
+{
+  "agent": "documentation",
+  "case": "documented-public-function",
+  "findings": [
+    {
+      "line": 64,
+      "message": "New public endpoint GET /items/count is added but the README's 'Endpoints' section is not updated to list it, leaving user-facing docs incomplete.",
+      "path": "README.md",
+      "severity": "low",
+      "suggestion": "Add a bullet for `GET /items/count` under the Endpoints section of README.md alongside the existing `/items` entry."
+    },
+    {
+      "line": 32,
+      "message": "The new route changes the API surface; per README, `openapi.json` must be regenerated after route changes (CI fails on a stale spec). The diff does not include a regenerated `openapi.json`, which will likely render the committed API spec stale.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Run `task openapi:export` and commit the updated `openapi.json` alongside this route change."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"README.md\",\"line\":64,\"severity\":\"low\",\"message\":\"New public endpoint GET /items/count is added but the README's 'Endpoints' section is not updated to list it, leaving user-facing docs incomplete.\",\"suggestion\":\"Add a bullet for `GET /items/count` under the Endpoints section of README.md alongside the existing `/items` entry.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":32,\"severity\":\"low\",\"message\":\"The new route changes the API surface; per README, `openapi.json` must be regenerated after route changes (CI fails on a stale spec). The diff does not include a regenerated `openapi.json`, which will likely render the committed API spec stale.\",\"suggestion\":\"Run `task openapi:export` and commit the updated `openapi.json` alongside this route change.\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

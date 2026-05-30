@@ -1,0 +1,36 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 49,
+      "message": "PII logged in plaintext: the caller's email address is written to the application log at INFO level on every /items/search request. Under GDPR, email is personal data; logging it like this creates an unbounded personal-data store inside log files/aggregators that has no retention policy, no right-to-erasure path (logs are append-only and typically shipped to external sinks), and no documented lawful basis for the secondary processing.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log raw emails. Either remove the email from the log statement entirely, or replace it with a stable pseudonymous identifier (e.g. a salted hash / user_id) so the log line is no longer personal data. If the email truly must be retained for audit, route it to a dedicated, access-controlled audit store with a defined retention period and an erasure hook, not the general application log."
+    },
+    {
+      "line": 36,
+      "message": "Personal data (email) is accepted as a query parameter and processed with no audit trail and no retention/deletion path. Query strings are commonly captured by access logs, proxies, and APM tooling, which copies the email into systems outside any data-subject lifecycle. This is a structural GDPR gap: there is no recorded purpose, no retention window, and no mechanism to honour an erasure request for the email values that will accumulate downstream.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Move the email out of the query string (POST body, or better: derive the user identity from the authenticated session/JWT rather than passing it from the client). Pair the endpoint with a structured audit-log entry to a dedicated audit sink (actor id, action, timestamp, correlation id) that has a documented retention period and an erasure procedure."
+    },
+    {
+      "line": 32,
+      "message": "Sensitive operation (personalised search keyed on a user identifier) is exposed with no authentication/authorisation check and no audit record of who performed it. Anyone can submit any email and trigger the personalised search + PII log entry on that subject's behalf, which both undermines accountability (an audit-log requirement under GDPR Art. 5(2) / Art. 30) and enables third-party enumeration of email addresses via the log.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Require authentication and derive the user identity server-side instead of trusting a client-supplied email. Emit a structured audit event (actor, subject, action, timestamp, correlation id) to a dedicated audit sink with a retention policy, rather than a free-form INFO log line."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":49,\"severity\":\"high\",\"message\":\"PII logged in plaintext: the caller's email address is written to the application log at INFO level on every /items/search request. Under GDPR, email is personal data; logging it like this creates an unbounded personal-data store inside log files/aggregators that has no retention policy, no right-to-erasure path (logs are append-only and typically shipped to external sinks), and no documented lawful basis for the secondary processing.\",\"suggestion\":\"Do not log raw emails. Either remove the email from the log statement entirely, or replace it with a stable pseudonymous identifier (e.g. a salted hash / user_id) so the log line is no longer personal data. If the email truly must be retained for audit, route it to a dedicated, access-controlled audit store with a defined retention period and an erasure hook, not the general application log.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"high\",\"message\":\"Personal data (email) is accepted as a query parameter and processed with no audit trail and no retention/deletion path. Query strings are commonly captured by access logs, proxies, and APM tooling, which copies the email into systems outside any data-subject lifecycle. This is a structural GDPR gap: there is no recorded purpose, no retention window, and no mechanism to honour an erasure request for the email values that will accumulate downstream.\",\"suggestion\":\"Move the email out of the query string (POST body, or better: derive the user identity from the authenticated session/JWT rather than passing it from the client). Pair the endpoint with a structured audit-log entry to a dedicated audit sink (actor id, action, timestamp, correlation id) that has a documented retention period and an erasure procedure.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":32,\"severity\":\"medium\",\"message\":\"Sensitive operation (personalised search keyed on a user identifier) is exposed with no authentication/authorisation check and no audit record of who performed it. Anyone can submit any email and trigger the personalised search + PII log entry on that subject's behalf, which both undermines accountability (an audit-log requirement under GDPR Art. 5(2) / Art. 30) and enables third-party enumeration of email addresses via the log.\",\"suggestion\":\"Require authentication and derive the user identity server-side instead of trusting a client-supplied email. Emit a structured audit event (actor, subject, action, timestamp, correlation id) to a dedicated audit sink with a retention policy, rather than a free-form INFO log line.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

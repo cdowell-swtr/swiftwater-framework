@@ -1,0 +1,29 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 41,
+      "message": "Missing return statement on the happy path: when `item` is found (truthy), the function falls off the end and implicitly returns None. FastAPI will then fail to serialize None against `response_model=ItemRead`, producing a 500 (ResponseValidationError) for every valid lookup. Only the 404 branch ever returns a value (via raise).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add `return item` after the `if not item:` block so a successful lookup actually returns the ORM object."
+    },
+    {
+      "line": 40,
+      "message": "Using `if not item:` is the wrong null-check idiom for an ORM result. `session.get()` returns either the instance or None; an explicit `is None` check is correct and self-documents intent. While SQLAlchemy ORM instances aren't generally falsy, code review and future model __bool__/__len__ overrides can make `not item` unsafe \u2014 the in-code comment already flags this as a bug.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Replace `if not item:` with `if item is None:` to make the None-check explicit and robust against any future `__bool__`/`__len__` on the model."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Missing return statement on the happy path: when `item` is found (truthy), the function falls off the end and implicitly returns None. FastAPI will then fail to serialize None against `response_model=ItemRead`, producing a 500 (ResponseValidationError) for every valid lookup. Only the 404 branch ever returns a value (via raise).\",\"suggestion\":\"Add `return item` after the `if not item:` block so a successful lookup actually returns the ORM object.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"medium\",\"message\":\"Using `if not item:` is the wrong null-check idiom for an ORM result. `session.get()` returns either the instance or None; an explicit `is None` check is correct and self-documents intent. While SQLAlchemy ORM instances aren't generally falsy, code review and future model __bool__/__len__ overrides can make `not item` unsafe \u2014 the in-code comment already flags this as a bug.\",\"suggestion\":\"Replace `if not item:` with `if item is None:` to make the None-check explicit and robust against any future `__bool__`/`__len__` on the model.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

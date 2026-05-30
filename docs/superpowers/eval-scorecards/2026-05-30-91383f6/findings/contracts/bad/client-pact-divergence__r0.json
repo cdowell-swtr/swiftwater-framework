@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "Client sends query parameter 'include_location=true' that is not defined in the committed consumer pact (test_consumer_inventory.py line 17 specifies .with_request('GET', '/inventory/1') with no query parameters). The published pact must be regenerated to reflect this change.",
+      "path": "/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-pact-divergence/src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Update test_consumer_inventory.py to include the include_location parameter in the pact definition (pact.with_request(...).with_query_param('include_location', 'true')), then regenerate and publish the pact."
+    },
+    {
+      "line": 18,
+      "message": "Client attempts to access 'location' field from response (data.get('location')) which is not defined in the committed consumer pact (test_consumer_inventory.py line 19 specifies response body contains only 'item_id' and 'in_stock' fields). The pact must be regenerated to include this field expectation.",
+      "path": "/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-pact-divergence/src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Update test_consumer_inventory.py to include the location field in the expected response body (.with_body({...,'location': match.string(...)})), then regenerate and publish the pact."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-pact-divergence/src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"high\",\"message\":\"Client sends query parameter 'include_location=true' that is not defined in the committed consumer pact (test_consumer_inventory.py line 17 specifies .with_request('GET', '/inventory/1') with no query parameters). The published pact must be regenerated to reflect this change.\",\"suggestion\":\"Update test_consumer_inventory.py to include the include_location parameter in the pact definition (pact.with_request(...).with_query_param('include_location', 'true')), then regenerate and publish the pact.\"},{\"path\":\"/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-pact-divergence/src/demo/clients/inventory.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Client attempts to access 'location' field from response (data.get('location')) which is not defined in the committed consumer pact (test_consumer_inventory.py line 19 specifies response body contains only 'item_id' and 'in_stock' fields). The pact must be regenerated to include this field expectation.\",\"suggestion\":\"Update test_consumer_inventory.py to include the location field in the expected response body (.with_body({...,'location': match.string(...)})), then regenerate and publish the pact.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

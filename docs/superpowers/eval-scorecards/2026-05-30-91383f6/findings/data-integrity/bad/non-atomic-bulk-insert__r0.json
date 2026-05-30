@@ -1,0 +1,35 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 24,
+      "message": "bulk_create_items commits inside the loop, so each item is its own transaction. If any insert fails partway through the batch (DB error, unique violation, network drop, process kill), earlier rows are already persisted while later ones are not, leaving the store in a partial/inconsistent state with no atomic rollback. The batch is not all-or-nothing.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add all items first, then commit once at the end of the batch so the whole insert is a single atomic transaction:\n\n    def bulk_create_items(session: Session, names: list[str]) -> list[Item]:\n        items = [Item(name=name) for name in names]\n        session.add_all(items)\n        session.commit()\n        for item in items:\n            session.refresh(item)\n        return items\n\nLet exceptions propagate (or wrap in try/except with session.rollback()) so a failure aborts the entire batch."
+    },
+    {
+      "line": 28,
+      "message": "Committing per-row inside the loop also breaks the function's implicit return contract: on a mid-batch failure, the partially-populated `created` list is discarded by the raised exception, but the rows already committed remain in the database \u2014 callers have no way to know which names succeeded vs. failed. This is an inconsistent-write hazard for any downstream system that reads `items` and expects the batch to have landed atomically (or not at all).",
+      "path": "src/demo/db/repository.py",
+      "severity": "high"
+    },
+    {
+      "line": 16,
+      "message": "bulk_create_items is declared to return list[Item] but has no explicit return statement, so it implicitly returns None. Callers relying on the annotated return type will receive None and fail at runtime. Fix alongside the atomicity change by returning the collected items list.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "suggestion": "End the function with `return created` (or `return items` in the refactor above)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":24,\"severity\":\"high\",\"message\":\"bulk_create_items commits inside the loop, so each item is its own transaction. If any insert fails partway through the batch (DB error, unique violation, network drop, process kill), earlier rows are already persisted while later ones are not, leaving the store in a partial/inconsistent state with no atomic rollback. The batch is not all-or-nothing.\",\"suggestion\":\"Add all items first, then commit once at the end of the batch so the whole insert is a single atomic transaction:\\n\\n    def bulk_create_items(session: Session, names: list[str]) -> list[Item]:\\n        items = [Item(name=name) for name in names]\\n        session.add_all(items)\\n        session.commit()\\n        for item in items:\\n            session.refresh(item)\\n        return items\\n\\nLet exceptions propagate (or wrap in try/except with session.rollback()) so a failure aborts the entire batch.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":28,\"severity\":\"high\",\"message\":\"Committing per-row inside the loop also breaks the function's implicit return contract: on a mid-batch failure, the partially-populated `created` list is discarded by the raised exception, but the rows already committed remain in the database \u2014 callers have no way to know which names succeeded vs. failed. This is an inconsistent-write hazard for any downstream system that reads `items` and expects the batch to have landed atomically (or not at all).\"},{\"path\":\"src/demo/db/repository.py\",\"line\":16,\"severity\":\"medium\",\"message\":\"bulk_create_items is declared to return list[Item] but has no explicit return statement, so it implicitly returns None. Callers relying on the annotated return type will receive None and fail at runtime. Fix alongside the atomicity change by returning the collected items list.\",\"suggestion\":\"End the function with `return created` (or `return items` in the refactor above).\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

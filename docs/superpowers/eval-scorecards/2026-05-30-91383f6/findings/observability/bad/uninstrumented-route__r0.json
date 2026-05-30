@@ -1,0 +1,50 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New mutating endpoint archive_item is added with no business-event observability: no structured log on archive, no metric or span attribute identifying the archive operation, and no trace context propagation beyond what the global middleware happens to provide. A state-changing route should emit an info-level structured log (with correlation id and item_id) and/or a dedicated counter so the archive action is observable independently of generic request metrics.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Inject the project logger (e.g. demo.logging_config.get_logger) and emit log.info(\"item_archived\", item_id=item_id, correlation_id=<from request>) after session.commit(); optionally bump a dedicated counter (e.g. app_items_archived_total) on the metrics registry."
+    },
+    {
+      "line": 36,
+      "message": "The 404 error path (item not found) raises HTTPException without logging it with the request's correlation id. Error paths must be logged with the correlation id so the not-found rate on this endpoint is observable and traceable.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Before raising HTTPException, log a warn-level structured event, e.g. log.warning(\"archive_item_not_found\", item_id=item_id, correlation_id=<from request>)."
+    },
+    {
+      "line": 33,
+      "message": "No SLO threshold is defined or referenced for this new write endpoint. The existing SLOs (request_latency_p99_ms, error_rate_pct in observability/slo.py) are global; a state-mutating archive endpoint should have an explicit per-endpoint SLO (latency and/or success-rate) and a corresponding alert/dashboard panel, otherwise regressions on /items/{item_id}/archive go unnoticed.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add a per-route SLO (e.g. archive_item_latency_p99_ms / archive_item_error_rate_pct) to default_slos and map its PromQL in observability/provisioning.py so the generated Prometheus alert rules and Grafana dashboard cover it."
+    },
+    {
+      "line": 38,
+      "message": "The mutation (item.name update + session.commit) is performed without a dedicated span or span attributes (e.g. setting item_id on the current span). With only the FastAPI auto-instrumentation, the trace shows a generic POST span but not the archived item id, hurting traceability when investigating user reports.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Acquire the current span (opentelemetry.trace.get_current_span()) and call set_attribute(\"item.id\", item_id) / set_attribute(\"app.operation\", \"archive_item\"), or create an explicit child span around the commit."
+    },
+    {
+      "line": 37,
+      "message": "Importing HTTPException lazily inside the function body (from fastapi import HTTPException) is unusual and obscures the error path from static analysis and from any import-time observability wiring; prefer a module-level import alongside APIRouter/Depends.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Move `from fastapi import HTTPException` to the top-level imports."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New mutating endpoint archive_item is added with no business-event observability: no structured log on archive, no metric or span attribute identifying the archive operation, and no trace context propagation beyond what the global middleware happens to provide. A state-changing route should emit an info-level structured log (with correlation id and item_id) and/or a dedicated counter so the archive action is observable independently of generic request metrics.\",\"suggestion\":\"Inject the project logger (e.g. demo.logging_config.get_logger) and emit log.info(\\\"item_archived\\\", item_id=item_id, correlation_id=<from request>) after session.commit(); optionally bump a dedicated counter (e.g. app_items_archived_total) on the metrics registry.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"high\",\"message\":\"The 404 error path (item not found) raises HTTPException without logging it with the request's correlation id. Error paths must be logged with the correlation id so the not-found rate on this endpoint is observable and traceable.\",\"suggestion\":\"Before raising HTTPException, log a warn-level structured event, e.g. log.warning(\\\"archive_item_not_found\\\", item_id=item_id, correlation_id=<from request>).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"No SLO threshold is defined or referenced for this new write endpoint. The existing SLOs (request_latency_p99_ms, error_rate_pct in observability/slo.py) are global; a state-mutating archive endpoint should have an explicit per-endpoint SLO (latency and/or success-rate) and a corresponding alert/dashboard panel, otherwise regressions on /items/{item_id}/archive go unnoticed.\",\"suggestion\":\"Add a per-route SLO (e.g. archive_item_latency_p99_ms / archive_item_error_rate_pct) to default_slos and map its PromQL in observability/provisioning.py so the generated Prometheus alert rules and Grafana dashboard cover it.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"medium\",\"message\":\"The mutation (item.name update + session.commit) is performed without a dedicated span or span attributes (e.g. setting item_id on the current span). With only the FastAPI auto-instrumentation, the trace shows a generic POST span but not the archived item id, hurting traceability when investigating user reports.\",\"suggestion\":\"Acquire the current span (opentelemetry.trace.get_current_span()) and call set_attribute(\\\"item.id\\\", item_id) / set_attribute(\\\"app.operation\\\", \\\"archive_item\\\"), or create an explicit child span around the commit.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"low\",\"message\":\"Importing HTTPException lazily inside the function body (from fastapi import HTTPException) is unusual and obscures the error path from static analysis and from any import-time observability wiring; prefer a module-level import alongside APIRouter/Depends.\",\"suggestion\":\"Move `from fastapi import HTTPException` to the top-level imports.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

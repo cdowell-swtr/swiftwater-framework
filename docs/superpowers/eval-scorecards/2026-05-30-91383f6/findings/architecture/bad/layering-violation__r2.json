@@ -1,0 +1,29 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 7,
+      "message": "Inappropriate import of SessionLocal from database engine module. Routes should not directly access session factory objects; they should only work through repository functions via dependency injection.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove SessionLocal from imports on line 7. Use the existing create_item function from the repository layer instead."
+    },
+    {
+      "line": 41,
+      "message": "Layering violation: Route handler directly instantiates and manages database session (SessionLocal()) and performs ORM operations inline, bypassing the repository layer. This violates the architectural separation between routes and data access layers.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Refactor create_item to follow the same pattern as get_items: inject session via SessionDep dependency, then call repository.create_item(session, payload.name). Move all database logic to the repository layer."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":7,\"severity\":\"high\",\"message\":\"Inappropriate import of SessionLocal from database engine module. Routes should not directly access session factory objects; they should only work through repository functions via dependency injection.\",\"suggestion\":\"Remove SessionLocal from imports on line 7. Use the existing create_item function from the repository layer instead.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Layering violation: Route handler directly instantiates and manages database session (SessionLocal()) and performs ORM operations inline, bypassing the repository layer. This violates the architectural separation between routes and data access layers.\",\"suggestion\":\"Refactor create_item to follow the same pattern as get_items: inject session via SessionDep dependency, then call repository.create_item(session, payload.name). Move all database logic to the repository layer.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 48,
+      "message": "Stale derived field: rename_item() updates item.name without updating slug, violating the documented invariant that slug must stay in sync with name. The route bypasses repository.update_item_name() which correctly maintains both fields together.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace the direct ORM manipulation with a call to the repository helper: from ..db.repository import update_item_name; then call update_item_name(session, item_id, payload.name) instead of manually setting item.name and committing. This ensures slug remains synchronized."
+    },
+    {
+      "line": 43,
+      "message": "Docstring documents a data consistency bug: 'Updates only item.name; slug is not recalculated so it diverges from name.' This explicit documentation of broken behavior indicates the derived field invariant is being knowingly violated.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove this docstring or update it to accurately describe correct behavior. Either way, fix the underlying implementation to use update_item_name() from the repository layer."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":48,\"severity\":\"high\",\"message\":\"Stale derived field: rename_item() updates item.name without updating slug, violating the documented invariant that slug must stay in sync with name. The route bypasses repository.update_item_name() which correctly maintains both fields together.\",\"suggestion\":\"Replace the direct ORM manipulation with a call to the repository helper: from ..db.repository import update_item_name; then call update_item_name(session, item_id, payload.name) instead of manually setting item.name and committing. This ensures slug remains synchronized.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"high\",\"message\":\"Docstring documents a data consistency bug: 'Updates only item.name; slug is not recalculated so it diverges from name.' This explicit documentation of broken behavior indicates the derived field invariant is being knowingly violated.\",\"suggestion\":\"Remove this docstring or update it to accurately describe correct behavior. Either way, fix the underlying implementation to use update_item_name() from the repository layer.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

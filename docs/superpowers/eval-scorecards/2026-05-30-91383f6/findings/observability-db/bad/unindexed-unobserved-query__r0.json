@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New database query path with no observable metrics or tracing. The get_item_by_name() function performs a SELECT query without instrumentation for latency measurement or query count tracking, and has no explicit limit/pagination controls.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add OpenTelemetry span instrumentation or metrics recording around this query to capture latency and row count, or ensure the query has explicit pagination/limit controls. Consider using a database instrumentation library (e.g., opentelemetry-instrumentation-sqlalchemy) or wrapping the query with latency metrics recording similar to how the HTTP middleware records request latency."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New database query path with no observable metrics or tracing. The get_item_by_name() function performs a SELECT query without instrumentation for latency measurement or query count tracking, and has no explicit limit/pagination controls.\",\"suggestion\":\"Add OpenTelemetry span instrumentation or metrics recording around this query to capture latency and row count, or ensure the query has explicit pagination/limit controls. Consider using a database instrumentation library (e.g., opentelemetry-instrumentation-sqlalchemy) or wrapping the query with latency metrics recording similar to how the HTTP middleware records request latency.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

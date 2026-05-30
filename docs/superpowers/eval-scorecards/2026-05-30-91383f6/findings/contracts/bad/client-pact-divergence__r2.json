@@ -1,0 +1,36 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "Client adds 'include_location' query parameter, but committed consumer pact does not expect it. The pact test defines .with_request('GET', '/inventory/1') without parameters, creating a contract mismatch when the mock server runs.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Regenerate the consumer pact by running the inventory contract test (test_consumer_inventory.py) so the committed pact reflects the new parameter expectation, OR remove the parameter addition if the provider has not been updated to support it."
+    },
+    {
+      "line": 18,
+      "message": "Client accesses 'location' field from response, but committed consumer pact only defines {'item_id': int, 'in_stock': int}. This field is not part of the contracted response.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Update the consumer pact test to include 'location' in the expected response body, then regenerate the pact file. Alternatively, remove the location access if the provider does not supply it."
+    },
+    {
+      "line": 10,
+      "message": "Consumer pact appears to not have been regenerated after the client change. The inventory pact file (pacts/demo-inventory.json) is missing or not published after the client was modified.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "suggestion": "Run the consumer pact test to regenerate and publish the updated pact to pacts/ directory and ensure it is committed before this client change is deployed."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"high\",\"message\":\"Client adds 'include_location' query parameter, but committed consumer pact does not expect it. The pact test defines .with_request('GET', '/inventory/1') without parameters, creating a contract mismatch when the mock server runs.\",\"suggestion\":\"Regenerate the consumer pact by running the inventory contract test (test_consumer_inventory.py) so the committed pact reflects the new parameter expectation, OR remove the parameter addition if the provider has not been updated to support it.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Client accesses 'location' field from response, but committed consumer pact only defines {'item_id': int, 'in_stock': int}. This field is not part of the contracted response.\",\"suggestion\":\"Update the consumer pact test to include 'location' in the expected response body, then regenerate the pact file. Alternatively, remove the location access if the provider does not supply it.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":10,\"severity\":\"info\",\"message\":\"Consumer pact appears to not have been regenerated after the client change. The inventory pact file (pacts/demo-inventory.json) is missing or not published after the client was modified.\",\"suggestion\":\"Run the consumer pact test to regenerate and publish the updated pact to pacts/ directory and ensure it is committed before this client change is deployed.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

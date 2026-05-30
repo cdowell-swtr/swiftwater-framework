@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 37,
+      "message": "Mutation input 'description' parameter is accepted but silently ignored; not passed to repository.create_item() and not stored. The Item response type lacks a description field anyway. This creates a broken client contract where input is accepted but discarded.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Either: (1) Remove the description parameter from the mutation signature and update clients, or (2) Add description field to the Item database model, update the Item GraphQL type to expose it, update repository.create_item() to accept and persist description, and update line 40 to pass description to the repository call. Consider wrapping the mutation in a typed payload object with error information rather than returning bare Item."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":37,\"severity\":\"high\",\"message\":\"Mutation input 'description' parameter is accepted but silently ignored; not passed to repository.create_item() and not stored. The Item response type lacks a description field anyway. This creates a broken client contract where input is accepted but discarded.\",\"suggestion\":\"Either: (1) Remove the description parameter from the mutation signature and update clients, or (2) Add description field to the Item database model, update the Item GraphQL type to expose it, update repository.create_item() to accept and persist description, and update line 40 to pass description to the repository call. Consider wrapping the mutation in a typed payload object with error information rather than returning bare Item.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

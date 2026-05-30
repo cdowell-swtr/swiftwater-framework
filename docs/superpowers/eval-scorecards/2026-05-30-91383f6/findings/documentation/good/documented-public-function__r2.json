@@ -1,0 +1,29 @@
+{
+  "agent": "documentation",
+  "case": "documented-public-function",
+  "findings": [
+    {
+      "line": 32,
+      "message": "New public endpoint GET /items/count is added but the README's 'Endpoints' section (which explicitly enumerates /heartbeat, /health, /metrics, /items) is not updated to list it. The endpoint catalogue in README.md will be stale once this lands.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a bullet under README.md's 'Endpoints' section, e.g. '- `GET /items/count` \u2014 total number of items in the catalogue'."
+    },
+    {
+      "line": 33,
+      "message": "The route uses an untyped `dict` return annotation rather than a Pydantic response model. The README notes `task openapi:export` must be re-run after route changes and CI fails on a stale or breaking spec; a bare `dict` produces a weaker OpenAPI schema (no documented `count` field/type) than the `response_model=...` pattern used by `get_items` (ItemRead).",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "suggestion": "Define a small Pydantic response model (e.g. `class ItemCount(BaseModel): count: int`) and use `@router.get('/items/count', response_model=ItemCount)` so the generated OpenAPI documents the response shape, mirroring the ItemRead pattern already in this file."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":32,\"severity\":\"low\",\"message\":\"New public endpoint GET /items/count is added but the README's 'Endpoints' section (which explicitly enumerates /heartbeat, /health, /metrics, /items) is not updated to list it. The endpoint catalogue in README.md will be stale once this lands.\",\"suggestion\":\"Add a bullet under README.md's 'Endpoints' section, e.g. '- `GET /items/count` \u2014 total number of items in the catalogue'.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"info\",\"message\":\"The route uses an untyped `dict` return annotation rather than a Pydantic response model. The README notes `task openapi:export` must be re-run after route changes and CI fails on a stale or breaking spec; a bare `dict` produces a weaker OpenAPI schema (no documented `count` field/type) than the `response_model=...` pattern used by `get_items` (ItemRead).\",\"suggestion\":\"Define a small Pydantic response model (e.g. `class ItemCount(BaseModel): count: int`) and use `@router.get('/items/count', response_model=ItemCount)` so the generated OpenAPI documents the response shape, mirroring the ItemRead pattern already in this file.\"}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

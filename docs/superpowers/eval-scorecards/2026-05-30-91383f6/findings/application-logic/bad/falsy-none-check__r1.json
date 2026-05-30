@@ -1,0 +1,36 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 41,
+      "message": "Missing return on the happy path: when the item is found, the function falls through to an implicit `return None`, but the signature is `-> Item` and `response_model=ItemRead` \u2014 FastAPI will fail to serialize None against ItemRead and the endpoint will always 500 on success.",
+      "path": "src/demo/routes/items.py",
+      "severity": "critical",
+      "suggestion": "Add `return item` after the 404 branch (e.g. `if item is None: raise HTTPException(...); return item`)."
+    },
+    {
+      "line": 40,
+      "message": "Falsy check `if not item:` is the wrong idiom for a None-vs-found test on an ORM object \u2014 it relies on truthiness rather than explicit identity. Use `if item is None:` to make intent precise and avoid surprises if `Item.__bool__` is ever overridden.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace `if not item:` with `if item is None:`."
+    },
+    {
+      "line": 36,
+      "message": "`from fastapi import HTTPException` is imported inside the function body; this works but obscures dependencies and re-executes the import bookkeeping on every request. Hoist to the module-level imports alongside the existing `from fastapi import APIRouter, Depends`.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Move `HTTPException` into the top-level FastAPI import line."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"critical\",\"message\":\"Missing return on the happy path: when the item is found, the function falls through to an implicit `return None`, but the signature is `-> Item` and `response_model=ItemRead` \u2014 FastAPI will fail to serialize None against ItemRead and the endpoint will always 500 on success.\",\"suggestion\":\"Add `return item` after the 404 branch (e.g. `if item is None: raise HTTPException(...); return item`).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"Falsy check `if not item:` is the wrong idiom for a None-vs-found test on an ORM object \u2014 it relies on truthiness rather than explicit identity. Use `if item is None:` to make intent precise and avoid surprises if `Item.__bool__` is ever overridden.\",\"suggestion\":\"Replace `if not item:` with `if item is None:`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"low\",\"message\":\"`from fastapi import HTTPException` is imported inside the function body; this works but obscures dependencies and re-executes the import bookkeeping on every request. Hoist to the module-level imports alongside the existing `from fastapi import APIRouter, Depends`.\",\"suggestion\":\"Move `HTTPException` into the top-level FastAPI import line.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

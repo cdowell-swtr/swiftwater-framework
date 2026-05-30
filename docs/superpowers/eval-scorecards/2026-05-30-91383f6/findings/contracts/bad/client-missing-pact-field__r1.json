@@ -1,0 +1,22 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "line": 13,
+      "message": "Weakened consumer contract: the client now requires 'reserved_count' field from the response (line 14), but the consumer pact test does not declare this field in the expected response body. The pact interaction only includes 'item_id' and 'in_stock', not 'reserved_count'. This creates a contract mismatch: if the provider delivers only what the pact specifies, the client code will crash with a KeyError when trying to access data['reserved_count'].",
+      "path": "/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-missing-pact-field/src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Regenerate and publish the consumer pact by running the updated consumer test. The test needs to be updated to: (1) include 'reserved_count' in the expected response body (.with_body(...)), and (2) update the assertion to expect a dict return value instead of int. Then run the test to regenerate pacts/demo-inventory.json."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-missing-pact-field/src/demo/clients/inventory.py\",\"line\":13,\"severity\":\"high\",\"message\":\"Weakened consumer contract: the client now requires 'reserved_count' field from the response (line 14), but the consumer pact test does not declare this field in the expected response body. The pact interaction only includes 'item_id' and 'in_stock', not 'reserved_count'. This creates a contract mismatch: if the provider delivers only what the pact specifies, the client code will crash with a KeyError when trying to access data['reserved_count'].\",\"suggestion\":\"Regenerate and publish the consumer pact by running the updated consumer test. The test needs to be updated to: (1) include 'reserved_count' in the expected response body (.with_body(...)), and (2) update the assertion to expect a dict return value instead of int. Then run the test to regenerate pacts/demo-inventory.json.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

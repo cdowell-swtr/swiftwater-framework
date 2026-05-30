@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 37,
+      "message": "Mutation input mismatch: create_item accepts 'description' parameter but does not pass it to repository.create_item(), which only accepts (session, name). The description input is silently ignored, violating the principle that GraphQL inputs should be used.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "info",
+      "suggestion": "Either (1) remove 'description' from the mutation signature if not needed, (2) extend repository.create_item() to accept and persist description, or (3) document in the schema if description is intentionally unused. If description is needed, update line 40 to pass it: repository.create_item(session, name, description)"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":37,\"severity\":\"info\",\"message\":\"Mutation input mismatch: create_item accepts 'description' parameter but does not pass it to repository.create_item(), which only accepts (session, name). The description input is silently ignored, violating the principle that GraphQL inputs should be used.\",\"suggestion\":\"Either (1) remove 'description' from the mutation signature if not needed, (2) extend repository.create_item() to accept and persist description, or (3) document in the schema if description is intentionally unused. If description is needed, update line 40 to pass it: repository.create_item(session, name, description)\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

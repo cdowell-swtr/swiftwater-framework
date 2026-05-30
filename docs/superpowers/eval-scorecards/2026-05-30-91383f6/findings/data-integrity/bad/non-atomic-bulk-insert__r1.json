@@ -1,0 +1,29 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 25,
+      "message": "bulk_create_items() commits inside the loop, so a failure on any iteration leaves a partial batch persisted with no rollback path. This breaks atomicity of the bulk operation and can corrupt downstream invariants that assume all-or-nothing inserts (e.g. callers retrying with the full list will double-insert the already-committed prefix). It also defeats transactional bulk-insert performance.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add all items first and commit once at the end inside a single transaction, e.g.:\n\n    items = [Item(name=name) for name in names]\n    session.add_all(items)\n    session.commit()\n    for item in items:\n        session.refresh(item)\n    return items\n\nOr wrap in `with session.begin():` so any failure rolls back the whole batch."
+    },
+    {
+      "line": 19,
+      "message": "No input validation on `names`: empty strings, None, or values exceeding the column's String(255) length will only fail at flush/commit time, and with per-iteration commits earlier rows are already persisted before the offending row raises. Validate (non-empty, length <= 255, de-duplicated if required) before any writes to preserve batch integrity.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "suggestion": "Validate inputs up-front (e.g. assert all `n` is a non-empty str with len(n) <= 255) before adding to the session, and surface a single ValueError rather than a partial DB state."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":25,\"severity\":\"high\",\"message\":\"bulk_create_items() commits inside the loop, so a failure on any iteration leaves a partial batch persisted with no rollback path. This breaks atomicity of the bulk operation and can corrupt downstream invariants that assume all-or-nothing inserts (e.g. callers retrying with the full list will double-insert the already-committed prefix). It also defeats transactional bulk-insert performance.\",\"suggestion\":\"Add all items first and commit once at the end inside a single transaction, e.g.:\\n\\n    items = [Item(name=name) for name in names]\\n    session.add_all(items)\\n    session.commit()\\n    for item in items:\\n        session.refresh(item)\\n    return items\\n\\nOr wrap in `with session.begin():` so any failure rolls back the whole batch.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"medium\",\"message\":\"No input validation on `names`: empty strings, None, or values exceeding the column's String(255) length will only fail at flush/commit time, and with per-iteration commits earlier rows are already persisted before the offending row raises. Validate (non-empty, length <= 255, de-duplicated if required) before any writes to preserve batch integrity.\",\"suggestion\":\"Validate inputs up-front (e.g. assert all `n` is a non-empty str with len(n) <= 255) before adding to the session, and surface a single ValueError rather than a partial DB state.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

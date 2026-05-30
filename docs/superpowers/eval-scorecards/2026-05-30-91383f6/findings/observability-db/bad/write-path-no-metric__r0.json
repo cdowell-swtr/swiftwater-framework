@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New database write path has no span or metric instrumentation. The delete_items_by_prefix function performs datastore operations without observability hooks, making this operation invisible to tracing and metrics collection systems.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the database operation with OpenTelemetry spans and/or metrics to track write latency, row counts affected, and errors. Consider adding a span context around the query and delete operations, and record metrics for rows deleted (e.g., via app.state.metrics or an OpenTelemetry meter)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New database write path has no span or metric instrumentation. The delete_items_by_prefix function performs datastore operations without observability hooks, making this operation invisible to tracing and metrics collection systems.\",\"suggestion\":\"Wrap the database operation with OpenTelemetry spans and/or metrics to track write latency, row counts affected, and errors. Consider adding a span context around the query and delete operations, and record metrics for rows deleted (e.g., via app.state.metrics or an OpenTelemetry meter).\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

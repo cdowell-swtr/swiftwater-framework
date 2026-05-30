@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New write-path data-store function with no metric or span instrumentation. The delete_items_by_prefix function performs database operations (querying and deleting items, committing the transaction) without any observability instrumentation, making this write operation invisible to tracing and metrics systems.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add span and metric instrumentation around the database operations. Consider wrapping the function body with a tracer.start_as_current_span() context and recording operation metrics (duration, row count affected). This will make the data-layer operations observable through distributed tracing and metrics collection."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New write-path data-store function with no metric or span instrumentation. The delete_items_by_prefix function performs database operations (querying and deleting items, committing the transaction) without any observability instrumentation, making this write operation invisible to tracing and metrics systems.\",\"suggestion\":\"Add span and metric instrumentation around the database operations. Consider wrapping the function body with a tracer.start_as_current_span() context and recording operation metrics (duration, row count affected). This will make the data-layer operations observable through distributed tracing and metrics collection.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

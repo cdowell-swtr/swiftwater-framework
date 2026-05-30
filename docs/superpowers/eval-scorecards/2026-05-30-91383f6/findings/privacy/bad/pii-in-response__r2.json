@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "ItemRead response schema includes 'owner_email' field, which is marked as PII in the model that should NOT be included in external responses (see models.py:16). This PII will be exposed in all API responses for GET /items and POST /items endpoints.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email: str | None = None' from the ItemRead class to exclude PII from the API contract. If owner email needs to be displayed elsewhere, create a separate authenticated response schema with appropriate access controls."
+    },
+    {
+      "line": 29,
+      "message": "ItemCreate input schema includes 'owner_email' field, but the post_item endpoint (line 44) ignores this input and does not pass it to create_item(). This creates a false expectation that clients can set PII and an unused surface area for PII collection.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email: str | None = None' from ItemCreate schema, or implement the endpoint to properly handle and persist the owner email if it's genuinely required. If owner email should never be provided by clients, remove it from both the schema and route entirely."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"ItemRead response schema includes 'owner_email' field, which is marked as PII in the model that should NOT be included in external responses (see models.py:16). This PII will be exposed in all API responses for GET /items and POST /items endpoints.\",\"suggestion\":\"Remove 'owner_email: str | None = None' from the ItemRead class to exclude PII from the API contract. If owner email needs to be displayed elsewhere, create a separate authenticated response schema with appropriate access controls.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":29,\"severity\":\"high\",\"message\":\"ItemCreate input schema includes 'owner_email' field, but the post_item endpoint (line 44) ignores this input and does not pass it to create_item(). This creates a false expectation that clients can set PII and an unused surface area for PII collection.\",\"suggestion\":\"Remove 'owner_email: str | None = None' from ItemCreate schema, or implement the endpoint to properly handle and persist the owner email if it's genuinely required. If owner email should never be provided by clients, remove it from both the schema and route entirely.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

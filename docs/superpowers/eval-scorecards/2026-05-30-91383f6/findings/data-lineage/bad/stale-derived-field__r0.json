@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 47,
+      "message": "Stale derived field: rename_item() updates name without recalculating slug. The slug field is declared as derived from name (per models.py comment) and must stay in sync, but this endpoint only updates item.name, causing slug to diverge and violate the data invariant.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace the direct name update with a call to update_item_name(session, item_id, payload.name) from repository.py, which properly synchronizes both fields."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"Stale derived field: rename_item() updates name without recalculating slug. The slug field is declared as derived from name (per models.py comment) and must stay in sync, but this endpoint only updates item.name, causing slug to diverge and violate the data invariant.\",\"suggestion\":\"Replace the direct name update with a call to update_item_name(session, item_id, payload.name) from repository.py, which properly synchronizes both fields.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

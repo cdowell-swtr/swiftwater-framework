@@ -1,0 +1,36 @@
+{
+  "agent": "observability-infra",
+  "case": "scrape-without-alert",
+  "findings": [
+    {
+      "line": 21,
+      "message": "New Redis scrape job has no corresponding redis-exporter service defined in any compose file (base.yml, observability.yml, dev.yml, test.yml, staging.yml, prod.yml)",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "suggestion": "Either add a redis-exporter service to infra/compose/observability.yml (and other compose files as appropriate for the deployment topology), or remove the redis scrape job if Redis monitoring is not required"
+    },
+    {
+      "line": 21,
+      "message": "New Redis scrape job has no matching alert rules. All alert rules are SLO-based (from slo_alerts.yml) and cover only the app service",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "suggestion": "Define Redis SLOs in the SLO definition (demo.observability.slo module) and regenerate alerts via `task observability:gen`, or document why Redis has no SLOs"
+    },
+    {
+      "line": 21,
+      "message": "New Redis scrape job has no matching Grafana dashboard. Dashboards are generated from SLO definitions and currently cover only the app service",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "suggestion": "Define Redis SLOs in demo.observability.slo and regenerate the dashboard via `task observability:gen`, or document why Redis has no dashboard"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"high\",\"message\":\"New Redis scrape job has no corresponding redis-exporter service defined in any compose file (base.yml, observability.yml, dev.yml, test.yml, staging.yml, prod.yml)\",\"suggestion\":\"Either add a redis-exporter service to infra/compose/observability.yml (and other compose files as appropriate for the deployment topology), or remove the redis scrape job if Redis monitoring is not required\"},{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"high\",\"message\":\"New Redis scrape job has no matching alert rules. All alert rules are SLO-based (from slo_alerts.yml) and cover only the app service\",\"suggestion\":\"Define Redis SLOs in the SLO definition (demo.observability.slo module) and regenerate alerts via `task observability:gen`, or document why Redis has no SLOs\"},{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"high\",\"message\":\"New Redis scrape job has no matching Grafana dashboard. Dashboards are generated from SLO definitions and currently cover only the app service\",\"suggestion\":\"Define Redis SLOs in demo.observability.slo and regenerate the dashboard via `task observability:gen`, or document why Redis has no dashboard\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/observability/prometheus/prometheus.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

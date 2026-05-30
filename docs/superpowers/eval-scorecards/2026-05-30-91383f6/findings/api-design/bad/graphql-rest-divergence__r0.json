@@ -1,0 +1,36 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: field renamed from 'name' to 'title' without backwards-compatible migration path. This breaks existing GraphQL clients querying the 'name' field.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Either maintain 'name' as the field name or introduce a deprecation directive (@deprecated) on 'name' and keep both fields during a transition period. Coordinate this change with REST API (ItemRead still uses 'name' in src/demo/routes/items.py)."
+    },
+    {
+      "line": 18,
+      "message": "GraphQL/REST API divergence: the Item entity is exposed as 'title' in GraphQL but 'name' in REST (ItemRead in routes/items.py line 22). Different field names for the same concept across APIs create inconsistency and confuse client developers.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Standardize the field name across both APIs. Either rename REST ItemRead.name to 'title', or rename GraphQL Item.title back to 'name' to match the database model and REST API."
+    },
+    {
+      "line": 35,
+      "message": "Unbounded list field: the 'items' query returns list[Item] with no pagination. This can cause performance issues and excessive data transfer if the items collection grows large.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Add pagination arguments (e.g., 'first' and 'after' for cursor-based pagination, or 'limit' and 'offset') to the items field. Use Strawberry's connection types or a custom pagination wrapper to ensure scalability."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: field renamed from 'name' to 'title' without backwards-compatible migration path. This breaks existing GraphQL clients querying the 'name' field.\",\"suggestion\":\"Either maintain 'name' as the field name or introduce a deprecation directive (@deprecated) on 'name' and keep both fields during a transition period. Coordinate this change with REST API (ItemRead still uses 'name' in src/demo/routes/items.py).\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"GraphQL/REST API divergence: the Item entity is exposed as 'title' in GraphQL but 'name' in REST (ItemRead in routes/items.py line 22). Different field names for the same concept across APIs create inconsistency and confuse client developers.\",\"suggestion\":\"Standardize the field name across both APIs. Either rename REST ItemRead.name to 'title', or rename GraphQL Item.title back to 'name' to match the database model and REST API.\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":35,\"severity\":\"high\",\"message\":\"Unbounded list field: the 'items' query returns list[Item] with no pagination. This can cause performance issues and excessive data transfer if the items collection grows large.\",\"suggestion\":\"Add pagination arguments (e.g., 'first' and 'after' for cursor-based pagination, or 'limit' and 'offset') to the items field. Use Strawberry's connection types or a custom pagination wrapper to ensure scalability.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,43 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New state-mutating endpoint `archive_item` is untraced/unmetered beyond the generic ObservabilityMiddleware. There is no structured log entry recording the archive action (no correlation id, no item_id, no actor/outcome), no domain-specific metric (e.g. archive attempts/successes counter), and no explicit trace span for the DB mutation. A write-path that changes persistent state must emit a structured log with the correlation id and a counter so the operation is observable in Loki/Prometheus/Tempo.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Inject `get_logger()` and log `log.info(\"item_archived\", item_id=item_id)` (binding the request correlation id) before/after the commit; add a domain counter (e.g. `recoverability`-style or a new app counter for archive_total/archive_failures_total) and consider an explicit OTel span around `session.commit()` so the DB write shows up in Tempo."
+    },
+    {
+      "line": 36,
+      "message": "The 404 error path (`item is None`) raises `HTTPException` with no log line. Error paths must be logged with the correlation id so operators can correlate a 4xx in the access log with a structured event; currently a missing-item lookup leaves no trace beyond the request middleware counters. (Also, `from fastapi import HTTPException` is imported inside the function body \u2014 top-of-module import keeps the error path predictable and avoids hiding it from static analysis.)",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Before raising, log a warning with the correlation id: `log.warning(\"archive_item_not_found\", item_id=item_id)`. Move the `HTTPException` import to the module top."
+    },
+    {
+      "line": 33,
+      "message": "No SLO threshold covers this new write endpoint's behaviour. The default SLOs in `observability/slo.py` are global (p99 latency + 5xx rate) and conflate reads and writes; a state-mutating archive endpoint should either be covered by a write-path-specific SLO (e.g. archive latency / archive error rate) or be explicitly excluded with a rationale. As-is, a regression in archive latency or 5xx rate is only visible diluted into the aggregate `app_request_*` counters.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Either add a write-path SLO (e.g. `archive_latency_p99_ms`) to `default_slos()` with PromQL mapped in `SLO_PROMQL`, or label requests by method/route in the metrics registry so `error_rate_pct` / `request_latency_p99_ms` can be sliced per endpoint."
+    },
+    {
+      "line": 39,
+      "message": "`session.commit()` has no surrounding error handling or trace span. If the commit fails (constraint violation, DB outage) the exception will bubble to the global handler \u2014 which will increment `app_unhandled_exceptions_total` but without any endpoint-specific context (no log line tying the failure to `item_id`, no break in the write attempt counter). The DB write is the riskiest line in the handler and currently the least observable.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Wrap the mutation+commit in a try/except, log a structured error with the correlation id and `item_id` on failure (then re-raise), and consider an explicit `tracer.start_as_current_span(\"archive_item.commit\")` so the DB write is a distinct span in Tempo."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New state-mutating endpoint `archive_item` is untraced/unmetered beyond the generic ObservabilityMiddleware. There is no structured log entry recording the archive action (no correlation id, no item_id, no actor/outcome), no domain-specific metric (e.g. archive attempts/successes counter), and no explicit trace span for the DB mutation. A write-path that changes persistent state must emit a structured log with the correlation id and a counter so the operation is observable in Loki/Prometheus/Tempo.\",\"suggestion\":\"Inject `get_logger()` and log `log.info(\\\"item_archived\\\", item_id=item_id)` (binding the request correlation id) before/after the commit; add a domain counter (e.g. `recoverability`-style or a new app counter for archive_total/archive_failures_total) and consider an explicit OTel span around `session.commit()` so the DB write shows up in Tempo.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":36,\"severity\":\"high\",\"message\":\"The 404 error path (`item is None`) raises `HTTPException` with no log line. Error paths must be logged with the correlation id so operators can correlate a 4xx in the access log with a structured event; currently a missing-item lookup leaves no trace beyond the request middleware counters. (Also, `from fastapi import HTTPException` is imported inside the function body \u2014 top-of-module import keeps the error path predictable and avoids hiding it from static analysis.)\",\"suggestion\":\"Before raising, log a warning with the correlation id: `log.warning(\\\"archive_item_not_found\\\", item_id=item_id)`. Move the `HTTPException` import to the module top.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"No SLO threshold covers this new write endpoint's behaviour. The default SLOs in `observability/slo.py` are global (p99 latency + 5xx rate) and conflate reads and writes; a state-mutating archive endpoint should either be covered by a write-path-specific SLO (e.g. archive latency / archive error rate) or be explicitly excluded with a rationale. As-is, a regression in archive latency or 5xx rate is only visible diluted into the aggregate `app_request_*` counters.\",\"suggestion\":\"Either add a write-path SLO (e.g. `archive_latency_p99_ms`) to `default_slos()` with PromQL mapped in `SLO_PROMQL`, or label requests by method/route in the metrics registry so `error_rate_pct` / `request_latency_p99_ms` can be sliced per endpoint.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"medium\",\"message\":\"`session.commit()` has no surrounding error handling or trace span. If the commit fails (constraint violation, DB outage) the exception will bubble to the global handler \u2014 which will increment `app_unhandled_exceptions_total` but without any endpoint-specific context (no log line tying the failure to `item_id`, no break in the write attempt counter). The DB write is the riskiest line in the handler and currently the least observable.\",\"suggestion\":\"Wrap the mutation+commit in a try/except, log a structured error with the correlation id and `item_id` on failure (then re-raise), and consider an explicit `tracer.start_as_current_span(\\\"archive_item.commit\\\")` so the DB write is a distinct span in Tempo.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

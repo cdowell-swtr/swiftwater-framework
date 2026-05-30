@@ -1,0 +1,36 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 18,
+      "message": "New dependency `requests` is unpinned (no version specifier). All other runtime dependencies in this manifest carry a lower bound (e.g. `tenacity>=9.0`, `pybreaker>=1.2`). An unpinned entry lets resolvers pull arbitrary/incompatible versions and weakens supply-chain reproducibility.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Add a lower bound consistent with the rest of the manifest, e.g. `requests>=2.32`."
+    },
+    {
+      "line": 18,
+      "message": "`requests` is a synchronous HTTP client being added to an async FastAPI service. Calling it from request handlers will block the event loop. `httpx` is already present (in the dev group) and is the idiomatic async client for this stack \u2014 it can fully replace `requests` for both sync and async call sites, avoiding a new top-level dependency that duplicates capability.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Drop `requests` and promote `httpx` from the dev group to `[project].dependencies` (e.g. `httpx>=0.28`); use `httpx.AsyncClient` from handlers and `httpx.Client` where sync is needed."
+    },
+    {
+      "line": 18,
+      "message": "`requests` is in long-term maintenance mode (security/bugfix only, no new features) per its maintainers. Adopting it for a new service is a supply-chain/health regression vs. an actively developed client like `httpx`, especially given the rest of the stack is modern-async (FastAPI, OpenTelemetry, SQLAlchemy 2.x).",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Prefer `httpx` (already a transitive/dev dependency) for new HTTP client work; reserve `requests` for legacy integrations that genuinely require it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"New dependency `requests` is unpinned (no version specifier). All other runtime dependencies in this manifest carry a lower bound (e.g. `tenacity>=9.0`, `pybreaker>=1.2`). An unpinned entry lets resolvers pull arbitrary/incompatible versions and weakens supply-chain reproducibility.\",\"suggestion\":\"Add a lower bound consistent with the rest of the manifest, e.g. `requests>=2.32`.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"low\",\"message\":\"`requests` is a synchronous HTTP client being added to an async FastAPI service. Calling it from request handlers will block the event loop. `httpx` is already present (in the dev group) and is the idiomatic async client for this stack \u2014 it can fully replace `requests` for both sync and async call sites, avoiding a new top-level dependency that duplicates capability.\",\"suggestion\":\"Drop `requests` and promote `httpx` from the dev group to `[project].dependencies` (e.g. `httpx>=0.28`); use `httpx.AsyncClient` from handlers and `httpx.Client` where sync is needed.\"},{\"path\":\"pyproject.toml\",\"line\":18,\"severity\":\"info\",\"message\":\"`requests` is in long-term maintenance mode (security/bugfix only, no new features) per its maintainers. Adopting it for a new service is a supply-chain/health regression vs. an actively developed client like `httpx`, especially given the rest of the stack is modern-async (FastAPI, OpenTelemetry, SQLAlchemy 2.x).\",\"suggestion\":\"Prefer `httpx` (already a transitive/dev dependency) for new HTTP client work; reserve `requests` for legacy integrations that genuinely require it.\"}]",
+  "repeat": 2,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

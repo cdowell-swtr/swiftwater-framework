@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 51,
+      "message": "Tautological assertion: `assert s is s` is always true regardless of any Settings behavior. This test cannot fail and provides zero coverage of the code under test.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful assertion about Settings (e.g., assert a default field value, or assert that two Settings() instances produce expected attribute values)."
+    },
+    {
+      "line": 58,
+      "message": "Over-mocked test: patches `Settings.resolved_log_level` (the very property under test) to return 'MOCKED', then asserts it equals 'MOCKED'. This only tests that `unittest.mock.patch.object` works; it does not exercise the real `resolved_log_level` logic and cannot detect any regression in it.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Remove the patch and test the real property by setting inputs it derives from (e.g., monkeypatch APP_LOG_LEVEL env var or set the underlying attribute) and assert the resolved value matches the documented resolution rules."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":51,\"severity\":\"high\",\"message\":\"Tautological assertion: `assert s is s` is always true regardless of any Settings behavior. This test cannot fail and provides zero coverage of the code under test.\",\"suggestion\":\"Replace with a meaningful assertion about Settings (e.g., assert a default field value, or assert that two Settings() instances produce expected attribute values).\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":58,\"severity\":\"high\",\"message\":\"Over-mocked test: patches `Settings.resolved_log_level` (the very property under test) to return 'MOCKED', then asserts it equals 'MOCKED'. This only tests that `unittest.mock.patch.object` works; it does not exercise the real `resolved_log_level` logic and cannot detect any regression in it.\",\"suggestion\":\"Remove the patch and test the real property by setting inputs it derives from (e.g., monkeypatch APP_LOG_LEVEL env var or set the underlying attribute) and assert the resolved value matches the documented resolution rules.\"}]",
+  "repeat": 1,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

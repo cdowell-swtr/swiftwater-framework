@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-excluded",
+  "findings": [
+    {
+      "line": 45,
+      "message": "Docstring claims 'owner_email stored' but the actual implementation at line 46 calls create_item(session, payload.name) without passing owner_email, so it is not stored. This is a documentation-code mismatch.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Either (1) update the docstring to clarify that owner_email is intentionally not persisted, (2) modify create_item() to accept and store owner_email, or (3) remove owner_email from ItemCreate if it's not needed for the current functionality."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"medium\",\"message\":\"Docstring claims 'owner_email stored' but the actual implementation at line 46 calls create_item(session, payload.name) without passing owner_email, so it is not stored. This is a documentation-code mismatch.\",\"suggestion\":\"Either (1) update the docstring to clarify that owner_email is intentionally not persisted, (2) modify create_item() to accept and store owner_email, or (3) remove owner_email from ItemCreate if it's not needed for the current functionality.\"}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

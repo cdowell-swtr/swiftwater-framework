@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New write path `delete_items_by_prefix` has no span or metric instrumentation. Data-layer delete is invisible to observability monitoring.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add OpenTelemetry span tracing and metrics instrumentation (latency, row count) around the delete operation. See how other repository functions are instrumented to match the pattern."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New write path `delete_items_by_prefix` has no span or metric instrumentation. Data-layer delete is invisible to observability monitoring.\",\"suggestion\":\"Add OpenTelemetry span tracing and metrics instrumentation (latency, row count) around the delete operation. See how other repository functions are instrumented to match the pattern.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,36 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "PII (owner_email) is exposed in the ItemRead response model, directly contradicting the explicit protection requirement stated in the model comment 'do not include in logs or external responses'",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from ItemRead response model or create a separate internal model for storage. If client display is needed, implement explicit field filtering via Pydantic Field(exclude=True) or create a separate response schema without PII."
+    },
+    {
+      "line": 29,
+      "message": "owner_email is collected in ItemCreate request but never used by the post_item endpoint, representing unnecessary PII collection",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Either use the owner_email field in create_item() or remove it from ItemCreate to prevent unnecessary PII collection."
+    },
+    {
+      "line": 42,
+      "message": "post_item endpoint accepts owner_email PII but ignores it, passing only name to create_item(). This suggests incomplete implementation of PII handling.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "If owner_email should be stored, pass it to create_item(). If it should not be exposed, remove it from ItemRead response model or implement filtering."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"PII (owner_email) is exposed in the ItemRead response model, directly contradicting the explicit protection requirement stated in the model comment 'do not include in logs or external responses'\",\"suggestion\":\"Remove owner_email from ItemRead response model or create a separate internal model for storage. If client display is needed, implement explicit field filtering via Pydantic Field(exclude=True) or create a separate response schema without PII.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":29,\"severity\":\"high\",\"message\":\"owner_email is collected in ItemCreate request but never used by the post_item endpoint, representing unnecessary PII collection\",\"suggestion\":\"Either use the owner_email field in create_item() or remove it from ItemCreate to prevent unnecessary PII collection.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"post_item endpoint accepts owner_email PII but ignores it, passing only name to create_item(). This suggests incomplete implementation of PII handling.\",\"suggestion\":\"If owner_email should be stored, pass it to create_item(). If it should not be exposed, remove it from ItemRead response model or implement filtering.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "data-lineage",
+  "case": "normalized-write",
+  "findings": [
+    {
+      "line": 19,
+      "message": "Seed data bypasses create_item_normalized() normalization when creating Item records. Seeds inject raw names directly without stripping/lowercasing, creating inconsistent data provenance across writes.",
+      "path": "/tmp/claude-1000/evalprep-2an_0z63/fx-data-lineage-good-normalized-write/src/demo/db/seed.py",
+      "severity": "medium",
+      "suggestion": "Import create_item_normalized() and use it instead of direct Item() construction, or apply normalization before creating: normalized = row['name'].strip().lower(); session.add(Item(name=normalized))"
+    },
+    {
+      "line": 12,
+      "message": "Test setup uses create_item() without normalization when testing the GET endpoint, creating test data inconsistent with POST endpoint behavior which uses create_item_normalized().",
+      "path": "/tmp/claude-1000/evalprep-2an_0z63/fx-data-lineage-good-normalized-write/tests/functional/test_items_route.py",
+      "severity": "low",
+      "suggestion": "For consistency, import and use create_item_normalized() in test setup: create_item_normalized(db_session, 'alpha')"
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"/tmp/claude-1000/evalprep-2an_0z63/fx-data-lineage-good-normalized-write/src/demo/db/seed.py\",\"line\":19,\"severity\":\"medium\",\"message\":\"Seed data bypasses create_item_normalized() normalization when creating Item records. Seeds inject raw names directly without stripping/lowercasing, creating inconsistent data provenance across writes.\",\"suggestion\":\"Import create_item_normalized() and use it instead of direct Item() construction, or apply normalization before creating: normalized = row['name'].strip().lower(); session.add(Item(name=normalized))\"},{\"path\":\"/tmp/claude-1000/evalprep-2an_0z63/fx-data-lineage-good-normalized-write/tests/functional/test_items_route.py\",\"line\":12,\"severity\":\"low\",\"message\":\"Test setup uses create_item() without normalization when testing the GET endpoint, creating test data inconsistent with POST endpoint behavior which uses create_item_normalized().\",\"suggestion\":\"For consistency, import and use create_item_normalized() in test setup: create_item_normalized(db_session, 'alpha')\"}]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "Client now sends query parameter 'include_location=true' but the committed consumer pact (test_consumer_inventory.py:17) specifies GET /inventory/1 without query parameters. The Pact mock server will not match this request during contract testing.",
+      "path": "/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-pact-divergence/src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Either remove the query parameter from the client request, or update the consumer pact test (test_consumer_inventory.py) to include the query parameter in the expected request and regenerate/publish the pact."
+    },
+    {
+      "line": 18,
+      "message": "Client now accesses 'location' field from the response, but the committed consumer pact (test_consumer_inventory.py:19) does not include 'location' in the expected response body. The pact must be updated to reflect this new response field before contract testing will pass.",
+      "path": "/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-pact-divergence/src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Update the consumer pact test to include the 'location' field in the expected response (e.g., 'location': match.string(...)), then regenerate and publish the pact to reflect this contract change."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-pact-divergence/src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"high\",\"message\":\"Client now sends query parameter 'include_location=true' but the committed consumer pact (test_consumer_inventory.py:17) specifies GET /inventory/1 without query parameters. The Pact mock server will not match this request during contract testing.\",\"suggestion\":\"Either remove the query parameter from the client request, or update the consumer pact test (test_consumer_inventory.py) to include the query parameter in the expected request and regenerate/publish the pact.\"},{\"path\":\"/tmp/claude-1000/evalprep-2an_0z63/fx-contracts-bad-client-pact-divergence/src/demo/clients/inventory.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Client now accesses 'location' field from the response, but the committed consumer pact (test_consumer_inventory.py:19) does not include 'location' in the expected response body. The pact must be updated to reflect this new response field before contract testing will pass.\",\"suggestion\":\"Update the consumer pact test to include the 'location' field in the expected response (e.g., 'location': match.string(...)), then regenerate and publish the pact to reflect this contract change.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

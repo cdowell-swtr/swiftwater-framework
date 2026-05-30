@@ -1,0 +1,43 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 49,
+      "message": "Personal data (email address) is logged in plaintext at INFO level on every /items/search call. Under GDPR this is processing of personal data with no lawful basis declared, no retention/deletion path (it lives in application logs indefinitely), and no pseudonymisation \u2014 a clear regulatory violation (Art. 5(1)(c) data minimisation, Art. 5(1)(e) storage limitation, Art. 32 security of processing).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log the raw email. Either drop it from the log entirely, log a hash/pseudonymous user id, or mask it (e.g. log only the domain). If the email genuinely must be processed, document the lawful basis and ensure log retention/erasure honours the data subject's rights."
+    },
+    {
+      "line": 49,
+      "message": "Right-to-erasure (GDPR Art. 17) is not satisfiable for this data: emails are emitted into the application log stream with no identifier-to-record mapping and no retention policy, so a deletion request cannot reliably purge the data subject's email from logs.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace the email with a stable pseudonymous user id that can be re-mapped/erased centrally, and define a bounded log retention window. Document the erasure pathway for any field that can identify a natural person."
+    },
+    {
+      "line": 41,
+      "message": "This is a sensitive operation (search personalised by an identified user) with no audit log \u2014 only an INFO application log line. There is no tamper-evident, retained audit trail (who accessed what, when, with what correlation id) suitable for accountability/compliance evidence.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Emit a structured audit event via a dedicated audit logger (separate sink, retention policy, pseudonymised subject id, correlation id from request.state) rather than a free-form application INFO log."
+    },
+    {
+      "line": 35,
+      "message": "Accepting the user's email as a query-string parameter causes the email (personal data) to be captured by upstream access logs, proxies, and browser history \u2014 a data-minimisation problem independent of the explicit application log. Email-as-query is the wrong transport for PII.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Take the caller identity from the authenticated session/JWT rather than a query parameter, or move it to the request body; ensure the access-log layer is configured not to record PII-bearing query strings."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":49,\"severity\":\"high\",\"message\":\"Personal data (email address) is logged in plaintext at INFO level on every /items/search call. Under GDPR this is processing of personal data with no lawful basis declared, no retention/deletion path (it lives in application logs indefinitely), and no pseudonymisation \u2014 a clear regulatory violation (Art. 5(1)(c) data minimisation, Art. 5(1)(e) storage limitation, Art. 32 security of processing).\",\"suggestion\":\"Do not log the raw email. Either drop it from the log entirely, log a hash/pseudonymous user id, or mask it (e.g. log only the domain). If the email genuinely must be processed, document the lawful basis and ensure log retention/erasure honours the data subject's rights.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":49,\"severity\":\"high\",\"message\":\"Right-to-erasure (GDPR Art. 17) is not satisfiable for this data: emails are emitted into the application log stream with no identifier-to-record mapping and no retention policy, so a deletion request cannot reliably purge the data subject's email from logs.\",\"suggestion\":\"Replace the email with a stable pseudonymous user id that can be re-mapped/erased centrally, and define a bounded log retention window. Document the erasure pathway for any field that can identify a natural person.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"medium\",\"message\":\"This is a sensitive operation (search personalised by an identified user) with no audit log \u2014 only an INFO application log line. There is no tamper-evident, retained audit trail (who accessed what, when, with what correlation id) suitable for accountability/compliance evidence.\",\"suggestion\":\"Emit a structured audit event via a dedicated audit logger (separate sink, retention policy, pseudonymised subject id, correlation id from request.state) rather than a free-form application INFO log.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":35,\"severity\":\"medium\",\"message\":\"Accepting the user's email as a query-string parameter causes the email (personal data) to be captured by upstream access logs, proxies, and browser history \u2014 a data-minimisation problem independent of the explicit application log. Email-as-query is the wrong transport for PII.\",\"suggestion\":\"Take the caller identity from the authenticated session/JWT rather than a query parameter, or move it to the request body; ensure the access-log layer is configured not to record PII-bearing query strings.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

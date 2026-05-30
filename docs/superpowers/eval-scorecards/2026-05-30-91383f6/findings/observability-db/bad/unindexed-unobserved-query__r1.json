@@ -1,0 +1,29 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 19,
+      "message": "New data-store query path with no observability instrumentation. The get_item_by_name function performs a database lookup without metrics recording, span tracing, or latency observation. This makes it impossible to monitor query performance or diagnose latency issues in production.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Instrument this database access path with OpenTelemetry spans and/or metrics similar to how request-level observability is handled in the middleware. Consider adding a span wrapper around the session.scalars call to track query latency and success/failure."
+    },
+    {
+      "line": 21,
+      "message": "Unindexed database query on Item.name field. The WHERE clause filters on 'name' without a corresponding database index, causing a full table scan. Combined with missing observability, query slowdowns will be invisible until user-facing latency occurs.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add a database index on the Item.name field (e.g., 'name' as a unique or indexed column in the Item model) to ensure query performance scales with table size."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"New data-store query path with no observability instrumentation. The get_item_by_name function performs a database lookup without metrics recording, span tracing, or latency observation. This makes it impossible to monitor query performance or diagnose latency issues in production.\",\"suggestion\":\"Instrument this database access path with OpenTelemetry spans and/or metrics similar to how request-level observability is handled in the middleware. Consider adding a span wrapper around the session.scalars call to track query latency and success/failure.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":21,\"severity\":\"high\",\"message\":\"Unindexed database query on Item.name field. The WHERE clause filters on 'name' without a corresponding database index, causing a full table scan. Combined with missing observability, query slowdowns will be invisible until user-facing latency occurs.\",\"suggestion\":\"Add a database index on the Item.name field (e.g., 'name' as a unique or indexed column in the Item model) to ensure query performance scales with table size.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,36 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 40,
+      "message": "N+1 query pattern: the handler first fetches all item ids with one query, then issues a separate `session.get(Item, iid)` per id inside the loop. For a table of N rows this is N+1 round-trips to the database, scaling linearly with table size on an unbounded endpoint. Under load this exhausts the connection pool, blows the request latency SLO, and is purely wasted work since only `name` is needed.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace the id-then-per-row pattern with a single query that selects the column you need, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))` \u2014 one round-trip, no Python-side loop, no per-row ORM materialisation."
+    },
+    {
+      "line": 44,
+      "message": "Missing return statement: `get_item_names` builds `names` but never returns it, so the endpoint will always respond with `null` regardless of DB contents. Beyond the correctness bug, this also means the N+1 work above is performed and then discarded \u2014 pure wasted DB and CPU on every request.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add `return names` (or, preferably, return the result of the single-query rewrite above)."
+    },
+    {
+      "line": 37,
+      "message": "Unbounded list endpoint: `/items/names` has no pagination or limit, so response size and DB work grow linearly with the table. Combined with the N+1 above this is a latent availability risk as the dataset grows.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a `limit`/`offset` (or keyset) pagination contract, and push the slice into SQL (`.limit(limit).offset(offset)`)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"N+1 query pattern: the handler first fetches all item ids with one query, then issues a separate `session.get(Item, iid)` per id inside the loop. For a table of N rows this is N+1 round-trips to the database, scaling linearly with table size on an unbounded endpoint. Under load this exhausts the connection pool, blows the request latency SLO, and is purely wasted work since only `name` is needed.\",\"suggestion\":\"Replace the id-then-per-row pattern with a single query that selects the column you need, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))` \u2014 one round-trip, no Python-side loop, no per-row ORM materialisation.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"medium\",\"message\":\"Missing return statement: `get_item_names` builds `names` but never returns it, so the endpoint will always respond with `null` regardless of DB contents. Beyond the correctness bug, this also means the N+1 work above is performed and then discarded \u2014 pure wasted DB and CPU on every request.\",\"suggestion\":\"Add `return names` (or, preferably, return the result of the single-query rewrite above).\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"low\",\"message\":\"Unbounded list endpoint: `/items/names` has no pagination or limit, so response size and DB work grow linearly with the table. Combined with the N+1 above this is a latent availability risk as the dataset grows.\",\"suggestion\":\"Add a `limit`/`offset` (or keyset) pagination contract, and push the slice into SQL (`.limit(limit).offset(offset)`).\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

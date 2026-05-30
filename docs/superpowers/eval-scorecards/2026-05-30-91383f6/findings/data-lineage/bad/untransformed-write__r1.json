@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 45,
+      "message": "User-supplied input bypasses the documented normalization transformation. The post_item() endpoint calls create_item() directly with untransformed user input, but the codebase provides create_item_normalized() specifically for user-supplied names to ensure consistent casing and whitespace handling. This violates the documented data consistency strategy.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace create_item(session, payload.name) with create_item_normalized(session, payload.name) to apply the required normalization transformation to user-supplied input before persisting to the database."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"User-supplied input bypasses the documented normalization transformation. The post_item() endpoint calls create_item() directly with untransformed user input, but the codebase provides create_item_normalized() specifically for user-supplied names to ensure consistent casing and whitespace handling. This violates the documented data consistency strategy.\",\"suggestion\":\"Replace create_item(session, payload.name) with create_item_normalized(session, payload.name) to apply the required normalization transformation to user-supplied input before persisting to the database.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

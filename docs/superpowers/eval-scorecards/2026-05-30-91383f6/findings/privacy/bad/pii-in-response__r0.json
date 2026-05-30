@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "PII field 'owner_email' included in ItemRead response schema. The database model explicitly marks this as PII with directive 'do not include in logs or external responses' (models.py:16), but this response contract exposes it to API clients.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove 'owner_email' from ItemRead response schema, or if client contact is genuinely needed, implement proper authorization checks and audit logging before exposing this PII."
+    },
+    {
+      "line": 42,
+      "message": "POST endpoint returns complete Item ORM object serialized through ItemRead response model, which includes owner_email PII. This exposes personally identifiable information to API clients in violation of the PII constraint documented in the database model.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Either exclude owner_email from ItemRead (recommended), or implement a separate response model for POST that excludes sensitive fields, or add explicit PII filtering logic before returning the response."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"PII field 'owner_email' included in ItemRead response schema. The database model explicitly marks this as PII with directive 'do not include in logs or external responses' (models.py:16), but this response contract exposes it to API clients.\",\"suggestion\":\"Remove 'owner_email' from ItemRead response schema, or if client contact is genuinely needed, implement proper authorization checks and audit logging before exposing this PII.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"high\",\"message\":\"POST endpoint returns complete Item ORM object serialized through ItemRead response model, which includes owner_email PII. This exposes personally identifiable information to API clients in violation of the PII constraint documented in the database model.\",\"suggestion\":\"Either exclude owner_email from ItemRead (recommended), or implement a separate response model for POST that excludes sensitive fields, or add explicit PII filtering logic before returning the response.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

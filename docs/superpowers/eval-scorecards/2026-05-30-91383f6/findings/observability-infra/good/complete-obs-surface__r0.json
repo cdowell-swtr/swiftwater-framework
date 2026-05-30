@@ -1,0 +1,22 @@
+{
+  "agent": "observability-infra",
+  "case": "complete-obs-surface",
+  "findings": [
+    {
+      "line": 100,
+      "message": "redis-exporter service depends on undefined 'redis' service. The service reference 'redis' in depends_on and REDIS_ADDR environment variable has no corresponding service definition in any compose file (dev.yml, staging.yml, prod.yml, services.yml, or base.yml).",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add a redis service definition to the appropriate compose file(s). If redis should be present in dev/staging/prod, define it alongside postgres-exporter in observability.yml or in the respective environment overlays. Verify APP_REDIS_URL environment variable is set if the app needs redis connectivity."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/observability.yml\",\"line\":100,\"severity\":\"high\",\"message\":\"redis-exporter service depends on undefined 'redis' service. The service reference 'redis' in depends_on and REDIS_ADDR environment variable has no corresponding service definition in any compose file (dev.yml, staging.yml, prod.yml, services.yml, or base.yml).\",\"suggestion\":\"Add a redis service definition to the appropriate compose file(s). If redis should be present in dev/staging/prod, define it alongside postgres-exporter in observability.yml or in the respective environment overlays. Verify APP_REDIS_URL environment variable is set if the app needs redis connectivity.\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

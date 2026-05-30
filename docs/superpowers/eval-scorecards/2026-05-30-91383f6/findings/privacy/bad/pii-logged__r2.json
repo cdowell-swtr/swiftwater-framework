@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 47,
+      "message": "PII (owner_email) is logged in the log.info call, violating the explicit constraint in the model comment that states 'do not include in logs or external responses'. Email addresses are personally identifiable information and should never be included in application logs.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log.info call. Log only the item_id and other non-sensitive metadata: log.info(\"item_created\", item_id=item.id)"
+    },
+    {
+      "line": 30,
+      "message": "The ItemCreate schema accepts owner_email from the request payload, but this field is never actually used (create_item is called with only payload.name at line 45). Collecting PII without a stated purpose increases exposure risk.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Remove owner_email from the ItemCreate schema unless there is a legitimate need to process it. If owner_email should be set, ensure it comes from an authenticated context (e.g., current_user.email) rather than the request payload, and do not log it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"PII (owner_email) is logged in the log.info call, violating the explicit constraint in the model comment that states 'do not include in logs or external responses'. Email addresses are personally identifiable information and should never be included in application logs.\",\"suggestion\":\"Remove owner_email from the log.info call. Log only the item_id and other non-sensitive metadata: log.info(\\\"item_created\\\", item_id=item.id)\"},{\"path\":\"src/demo/routes/items.py\",\"line\":30,\"severity\":\"medium\",\"message\":\"The ItemCreate schema accepts owner_email from the request payload, but this field is never actually used (create_item is called with only payload.name at line 45). Collecting PII without a stated purpose increases exposure risk.\",\"suggestion\":\"Remove owner_email from the ItemCreate schema unless there is a legitimate need to process it. If owner_email should be set, ensure it comes from an authenticated context (e.g., current_user.email) rather than the request payload, and do not log it.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

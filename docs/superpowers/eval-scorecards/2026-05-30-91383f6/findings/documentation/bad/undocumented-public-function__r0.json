@@ -1,0 +1,43 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New public endpoint `count_items` has no docstring explaining what it returns or why it exists. All other public route handlers in this module/project (e.g. `get_items`, `health`, `heartbeat`, `metrics`) carry an explanatory docstring; this one should too for consistency.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a docstring describing the endpoint's purpose, e.g. `\"\"\"Return the total number of items as {\\\"count\\\": int} \u2014 a lightweight summary endpoint.\"\"\"`"
+    },
+    {
+      "line": 34,
+      "message": "Return type is the bare `dict` (untyped values) and the route has no `response_model`. Other routes in this module declare an explicit response contract (`ItemRead`) so the API surface is documented in the OpenAPI spec. Without a typed response model, the new `/items/count` endpoint will appear with an empty schema in OpenAPI.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Define a small response model (e.g. `class ItemCount(BaseModel): count: int`) and annotate `def count_items(...) -> ItemCount` with `@router.get(\"/items/count\", response_model=ItemCount)`."
+    },
+    {
+      "line": 75,
+      "message": "The README's `## Endpoints` section lists `/heartbeat`, `/health`, `/metrics`, and `/items` but the diff adds a new public endpoint `GET /items/count` without updating the README \u2014 the documented endpoint list is now stale.",
+      "path": "README.md",
+      "severity": "low",
+      "suggestion": "Add a bullet under `## Endpoints`: `- `GET /items/count` \u2014 number of items currently stored`."
+    },
+    {
+      "line": 34,
+      "message": "The new endpoint adds a public route but `openapi.json` is generated from the route definitions; per the README, `openapi.json` must be regenerated and committed (`task openapi:export`) after route changes, or CI's contract job fails. This is a documentation/contract artifact that the diff does not update.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "suggestion": "Run `task openapi:export` and commit the regenerated `openapi.json` alongside this change."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":33,\"severity\":\"low\",\"message\":\"New public endpoint `count_items` has no docstring explaining what it returns or why it exists. All other public route handlers in this module/project (e.g. `get_items`, `health`, `heartbeat`, `metrics`) carry an explanatory docstring; this one should too for consistency.\",\"suggestion\":\"Add a docstring describing the endpoint's purpose, e.g. `\\\"\\\"\\\"Return the total number of items as {\\\\\\\"count\\\\\\\": int} \u2014 a lightweight summary endpoint.\\\"\\\"\\\"`\"},{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"low\",\"message\":\"Return type is the bare `dict` (untyped values) and the route has no `response_model`. Other routes in this module declare an explicit response contract (`ItemRead`) so the API surface is documented in the OpenAPI spec. Without a typed response model, the new `/items/count` endpoint will appear with an empty schema in OpenAPI.\",\"suggestion\":\"Define a small response model (e.g. `class ItemCount(BaseModel): count: int`) and annotate `def count_items(...) -> ItemCount` with `@router.get(\\\"/items/count\\\", response_model=ItemCount)`.\"},{\"path\":\"README.md\",\"line\":75,\"severity\":\"low\",\"message\":\"The README's `## Endpoints` section lists `/heartbeat`, `/health`, `/metrics`, and `/items` but the diff adds a new public endpoint `GET /items/count` without updating the README \u2014 the documented endpoint list is now stale.\",\"suggestion\":\"Add a bullet under `## Endpoints`: `- `GET /items/count` \u2014 number of items currently stored`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":34,\"severity\":\"info\",\"message\":\"The new endpoint adds a public route but `openapi.json` is generated from the route definitions; per the README, `openapi.json` must be regenerated and committed (`task openapi:export`) after route changes, or CI's contract job fails. This is a documentation/contract artifact that the diff does not update.\",\"suggestion\":\"Run `task openapi:export` and commit the regenerated `openapi.json` alongside this change.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

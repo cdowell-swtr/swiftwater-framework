@@ -1,0 +1,36 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 40,
+      "message": "N+1 query pattern: get_item_names first selects all Item.id values, then issues a separate SELECT per id via session.get(Item, iid) inside the loop. On an unbounded items table this is O(N) round-trips per request \u2014 a clear performance regression for an endpoint that only needs the name column. Latency and DB connection-pool pressure grow linearly with row count.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Fetch names in a single query, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))`. This drops the endpoint to one round-trip and avoids loading full ORM objects. Also consider adding pagination (LIMIT/OFFSET or keyset) since the result set is unbounded."
+    },
+    {
+      "line": 43,
+      "message": "Unbounded result set: get_item_names materializes every row's name into a Python list with no LIMIT/pagination. Combined with the N+1 above, a large items table can exhaust the connection's memory and the request worker, and amplifies pool-exhaustion risk under concurrency.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Add pagination (e.g. `limit`/`offset` or keyset query parameters) and apply a server-side cap before returning, so a single request cannot fan out to arbitrarily many DB calls or allocations."
+    },
+    {
+      "line": 44,
+      "message": "names.append in a tight per-row loop is unnecessary allocation in the hot path when the query can yield the strings directly. Minor on its own, but combined with the N+1 it compounds per-request CPU/GC cost.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Replace the loop with a single `list(session.scalars(select(Item.name).order_by(Item.id)))` \u2014 eliminates both the per-iteration append and the per-row ORM materialization."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"high\",\"message\":\"N+1 query pattern: get_item_names first selects all Item.id values, then issues a separate SELECT per id via session.get(Item, iid) inside the loop. On an unbounded items table this is O(N) round-trips per request \u2014 a clear performance regression for an endpoint that only needs the name column. Latency and DB connection-pool pressure grow linearly with row count.\",\"suggestion\":\"Fetch names in a single query, e.g. `names = list(session.scalars(select(Item.name).order_by(Item.id)))`. This drops the endpoint to one round-trip and avoids loading full ORM objects. Also consider adding pagination (LIMIT/OFFSET or keyset) since the result set is unbounded.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"medium\",\"message\":\"Unbounded result set: get_item_names materializes every row's name into a Python list with no LIMIT/pagination. Combined with the N+1 above, a large items table can exhaust the connection's memory and the request worker, and amplifies pool-exhaustion risk under concurrency.\",\"suggestion\":\"Add pagination (e.g. `limit`/`offset` or keyset query parameters) and apply a server-side cap before returning, so a single request cannot fan out to arbitrarily many DB calls or allocations.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"low\",\"message\":\"names.append in a tight per-row loop is unnecessary allocation in the hot path when the query can yield the strings directly. Minor on its own, but combined with the N+1 it compounds per-request CPU/GC cost.\",\"suggestion\":\"Replace the loop with a single `list(session.scalars(select(Item.name).order_by(Item.id)))` \u2014 eliminates both the per-iteration append and the per-row ORM materialization.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

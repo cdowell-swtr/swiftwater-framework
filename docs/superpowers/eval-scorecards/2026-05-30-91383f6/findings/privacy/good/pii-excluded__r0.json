@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-excluded",
+  "findings": [
+    {
+      "line": 44,
+      "message": "ItemCreate schema accepts owner_email but post_item endpoint discards it: create_item() is called with only payload.name, not payload.owner_email. This creates a silent data loss pattern where clients submit PII that is never persisted.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Either remove owner_email from ItemCreate schema if it should not be accepted, or update create_item() signature to accept and persist owner_email: change create_item(session, payload.name) to create_item(session, payload.name, payload.owner_email)"
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"medium\",\"message\":\"ItemCreate schema accepts owner_email but post_item endpoint discards it: create_item() is called with only payload.name, not payload.owner_email. This creates a silent data loss pattern where clients submit PII that is never persisted.\",\"suggestion\":\"Either remove owner_email from ItemCreate schema if it should not be accepted, or update create_item() signature to accept and persist owner_email: change create_item(session, payload.name) to create_item(session, payload.name, payload.owner_email)\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

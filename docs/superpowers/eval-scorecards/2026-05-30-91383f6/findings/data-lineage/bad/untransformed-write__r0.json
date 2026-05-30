@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 45,
+      "message": "User-supplied input written to database without intended transformation. The post_item() endpoint calls create_item() instead of create_item_normalized(), bypassing the required normalization (strip + lowercase) that ensures consistent casing. This violates the data consistency contract documented in create_item_normalized().",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Change line 45 from 'return create_item(session, payload.name)' to 'return create_item_normalized(session, payload.name)' to ensure user input is transformed before persistence."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"User-supplied input written to database without intended transformation. The post_item() endpoint calls create_item() instead of create_item_normalized(), bypassing the required normalization (strip + lowercase) that ensures consistent casing. This violates the data consistency contract documented in create_item_normalized().\",\"suggestion\":\"Change line 45 from 'return create_item(session, payload.name)' to 'return create_item_normalized(session, payload.name)' to ensure user input is transformed before persistence.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}
