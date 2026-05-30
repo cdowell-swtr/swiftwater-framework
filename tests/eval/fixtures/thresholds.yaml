@@ -1,6 +1,58 @@
 # Per-agent overrides for the eval pass thresholds. Agents omitted here use the defaults
-# (recall_min 0.67, fp_max 0.34). Add an entry only when a real eval run shows an agent's
-# healthy behavior doesn't fit the defaults. Example:
-# documentation:
-#   recall_min: 0.5
-#   fp_max: 0.5
+# (recall_min 0.67, fp_max 0.34).
+#
+# Values are calibrated from docs/superpowers/eval-scorecards/2026-05-30-91383f6/ (the
+# inaugural full-sweep /reviewers:tune run, 132 work items × 3 repeats, drift-check clean).
+# Calibration policy: recall_min = observed - 0.10, fp_max = observed + 0.10 (margins for
+# subagent variance). Comments show the observed value the floor/ceiling was derived from.
+#
+# Agents NOT listed here (contracts, documentation, observability-infra) use defaults — they
+# FAIL the inaugural scorecard for real reasons that need fixing (contracts under-finding;
+# documentation + observability-infra "good" fixtures aren't actually clean). Calibrating
+# to their current numbers would lock in those issues. Re-calibrate after fixing.
+
+accessibility:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+api-design:
+  recall_min: 0.73  # observed 0.83
+  fp_max: 0.10  # observed 0.00
+application-logic:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+architecture:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+compliance:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+data-integrity:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.43  # observed 0.33
+data-lineage:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+dependency:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.43  # observed 0.33
+observability:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+observability-db:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+performance:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+privacy:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+security:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+test-quality:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
+usability:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
