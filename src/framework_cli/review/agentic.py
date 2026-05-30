@@ -2,9 +2,22 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from framework_cli.review.findings import Finding, parse_findings
+
+
+def _accum_usage(into: dict[str, int], resp: Any) -> None:
+    u = getattr(resp, "usage", None)
+    for k in (
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+    ):
+        into[k] = into.get(k, 0) + (getattr(u, k, 0) or 0)
+
 
 DEFAULT_MAX_TURNS = 12
 _MAX_TOKENS = 4096
@@ -161,7 +174,13 @@ def _text_of(resp: Any) -> str:
 
 
 def run_agent_agentic(
-    diff: str, root: Path, spec: Any, client: Any, *, max_turns: int
+    diff: str,
+    root: Path,
+    spec: Any,
+    client: Any,
+    *,
+    max_turns: int,
+    report: dict | None = None,
 ) -> list[Finding]:
     """Drive a tool-use loop letting `spec` explore the tree at `root`; return findings.
 
@@ -178,7 +197,13 @@ def run_agent_agentic(
         {"type": "text", "text": spec.prompt},
     ]
     messages: list[dict[str, Any]] = [{"role": "user", "content": _INITIAL_INSTRUCTION}]
+    t0 = perf_counter()
+    usage: dict[str, int] = {}
+    tool_calls: list[dict[str, Any]] = []
+    turns = 0
+    last_resp: Any = None
     for _turn in range(max_turns):
+        turns += 1
         resp = client.messages.create(
             model=spec.model,
             max_tokens=_MAX_TOKENS,
@@ -186,9 +211,21 @@ def run_agent_agentic(
             tools=TOOL_SCHEMAS,
             messages=messages,
         )
+        last_resp = resp
+        _accum_usage(usage, resp)
         tool_uses = [b for b in resp.content if getattr(b, "type", None) == "tool_use"]
         if not tool_uses:
-            return parse_findings(_text_of(resp))
+            text = _text_of(resp)
+            if report is not None:
+                report["usage"] = usage
+                report["latency_ms"] = int((perf_counter() - t0) * 1000)
+                report["stop_reason"] = getattr(resp, "stop_reason", None)
+                report["raw_text"] = text
+                report["turns"] = turns
+                report["tool_calls"] = tool_calls
+            return parse_findings(text)
+        for tu in tool_uses:
+            tool_calls.append({"turn": turns, "tool": tu.name, "input": dict(tu.input)})
         messages.append({"role": "assistant", "content": resp.content})
         results = [
             {
@@ -201,7 +238,18 @@ def run_agent_agentic(
         messages.append({"role": "user", "content": results})
 
     messages.append({"role": "user", "content": _FINALIZE_INSTRUCTION})
+    turns += 1
     resp = client.messages.create(
         model=spec.model, max_tokens=_MAX_TOKENS, system=system, messages=messages
     )
-    return parse_findings(_text_of(resp))
+    last_resp = resp
+    _accum_usage(usage, resp)
+    text = _text_of(resp)
+    if report is not None:
+        report["usage"] = usage
+        report["latency_ms"] = int((perf_counter() - t0) * 1000)
+        report["stop_reason"] = getattr(last_resp, "stop_reason", None)
+        report["raw_text"] = text
+        report["turns"] = turns
+        report["tool_calls"] = tool_calls
+    return parse_findings(text)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from time import perf_counter
 from typing import Any
 
 from framework_cli.review.context import Bundle
@@ -10,7 +11,20 @@ from framework_cli.review.registry import AgentSpec
 _MAX_TOKENS = 4096
 
 
-def run_agent(bundle: Bundle, spec: AgentSpec, client: Any) -> list[Finding]:
+def _usage_dict(resp: Any) -> dict[str, int]:
+    u = getattr(resp, "usage", None)
+    return {
+        "input_tokens": getattr(u, "input_tokens", 0) or 0,
+        "output_tokens": getattr(u, "output_tokens", 0) or 0,
+        "cache_read_input_tokens": getattr(u, "cache_read_input_tokens", 0) or 0,
+        "cache_creation_input_tokens": getattr(u, "cache_creation_input_tokens", 0)
+        or 0,
+    }
+
+
+def run_agent(
+    bundle: Bundle, spec: AgentSpec, client: Any, *, report: dict | None = None
+) -> list[Finding]:
     """Call the LLM with `spec`'s prompt over an assembled `bundle`; return findings.
 
     System blocks, in cache-prefix order: (1) the diff — identical across agents on the
@@ -38,6 +52,7 @@ def run_agent(bundle: Bundle, spec: AgentSpec, client: Any) -> list[Finding]:
         )
     system.append({"type": "text", "text": spec.prompt})
 
+    t0 = perf_counter()
     message = client.messages.create(
         model=spec.model,
         max_tokens=_MAX_TOKENS,
@@ -51,6 +66,13 @@ def run_agent(bundle: Bundle, spec: AgentSpec, client: Any) -> list[Finding]:
         for block in message.content
         if getattr(block, "type", None) == "text"
     )
+    if report is not None:
+        report["usage"] = _usage_dict(message)
+        report["latency_ms"] = int((perf_counter() - t0) * 1000)
+        report["stop_reason"] = getattr(message, "stop_reason", None)
+        report["raw_text"] = text
+        report["turns"] = 1
+        report["tool_calls"] = []
     return parse_findings(text)
 
 

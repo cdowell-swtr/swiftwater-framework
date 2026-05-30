@@ -294,7 +294,9 @@ def _review_run(diff: str, spec: object, force_agentic: bool = False) -> list:
     return run_agent(bundle, spec, default_client(RUNTIME_KEY_ENV))  # type: ignore[arg-type]
 
 
-def _eval_run(diff: str, root: object, spec: object) -> list:
+def _eval_run(
+    diff: str, root: object, spec: object, *, report: dict | None = None
+) -> list:
     from framework_cli.review.context import assemble
     from framework_cli.review.runner import run_agent
 
@@ -304,14 +306,26 @@ def _eval_run(diff: str, root: object, spec: object) -> list:
 
         turns = spec.context.max_agentic_turns or DEFAULT_MAX_TURNS  # type: ignore[attr-defined]
         return run_agent_agentic(
-            diff, base, spec, default_client(EVAL_KEY_ENV), max_turns=turns
+            diff,
+            base,
+            spec,
+            default_client(EVAL_KEY_ENV),
+            max_turns=turns,
+            report=report,
         )
     bundle = assemble(diff, base, spec.context, model=spec.model)  # type: ignore[attr-defined]
-    return run_agent(bundle, spec, default_client(EVAL_KEY_ENV))  # type: ignore[arg-type]
+    return run_agent(
+        bundle,
+        spec,  # type: ignore[arg-type]
+        default_client(EVAL_KEY_ENV),
+        report=report,
+    )
 
 
-def _write_findings(out: Path, fx: object, repeat_idx: int, findings: list) -> None:
-    """Persist one (agent, fixture, repeat)'s findings as JSON for diagnosis."""
+def _write_findings(
+    out: Path, fx: object, repeat_idx: int, findings: list, report: dict
+) -> None:
+    """Persist one (agent, fixture, repeat)'s findings + telemetry as JSON for diagnosis."""
     from dataclasses import asdict
 
     dest = out / fx.agent / fx.kind  # type: ignore[attr-defined]
@@ -323,6 +337,7 @@ def _write_findings(out: Path, fx: object, repeat_idx: int, findings: list) -> N
         "repeat": repeat_idx,
         "seeded_file": fx.seeded_file,  # type: ignore[attr-defined]
         "findings": [asdict(f) for f in findings],
+        **report,
     }
     (dest / f"{fx.name}__r{repeat_idx}.json").write_text(  # type: ignore[attr-defined]
         json.dumps(payload, indent=2, sort_keys=True)
@@ -464,8 +479,9 @@ def eval_agents(
             rroot, rdiff = realize_cached(fx, _combo_cache, _base_dir)
             hits = 0
             for i in range(repeat):
+                report: dict | None = {} if findings_out else None
                 try:
-                    found = _eval_run(rdiff, rroot, spec)
+                    found = _eval_run(rdiff, rroot, spec, report=report)
                 except anthropic.APIError as exc:
                     typer.echo(
                         f"\neval: ABORTED at {spec.name} — API error "
@@ -479,7 +495,7 @@ def eval_agents(
                     )
                     raise typer.Exit(3) from exc
                 if findings_out:
-                    _write_findings(Path(findings_out), fx, i, found)
+                    _write_findings(Path(findings_out), fx, i, found, report or {})
                 blocked = (
                     flags(found, spec, file=fx.seeded_file)
                     if fx.kind == "bad"
@@ -503,6 +519,57 @@ def eval_agents(
     typer.echo(summary)
     coverage_fail = bool(missing) and require_fixtures
     raise typer.Exit(1 if failing or coverage_fail else 0)
+
+
+@app.command(name="eval-analyze")
+def eval_analyze(
+    findings_dir: str = typer.Argument(
+        ..., help="Directory written by `framework eval --findings-out`."
+    ),
+    out: str = typer.Option(
+        "", "--out", help="Write the report to this path (else print to stdout)."
+    ),
+    thresholds: str = typer.Option(
+        "tests/eval/fixtures/thresholds.yaml",
+        "--thresholds",
+        help="Current thresholds file (used as the comparison baseline).",
+    ),
+    margin: float = typer.Option(
+        0.10,
+        "--margin",
+        help="Margin applied when proposing thresholds (recall_min = recall - margin).",
+    ),
+) -> None:
+    """Produce scorecard + cost + recall/fp diagnosis + threshold proposal from
+    per-call eval records (the artifacts written by `framework eval --findings-out`)."""
+    from framework_cli.review import analyze
+    from framework_cli.review.evals import load_thresholds
+
+    records = analyze.load_records(Path(findings_dir))
+    if not records:
+        typer.echo(f"eval-analyze: no records found under {findings_dir}", err=True)
+        raise typer.Exit(1)
+    thr = load_thresholds(Path(thresholds))
+    scores = analyze.scorecard(records, thr)
+    model_map: dict[str, str] = {}
+    for r in records:
+        try:
+            model_map[r.agent] = get_agent(r.agent).model
+        except KeyError:
+            pass
+    costs = analyze.cost_report(records, model_map)
+    recall_diag = analyze.recall_diagnosis(records)
+    fp_diag = analyze.fp_diagnosis(records)
+    agentic = analyze.agentic_behavior(records)
+    proposed = analyze.propose_thresholds(scores, margin=margin)
+    md = analyze.render_markdown(
+        records, scores, costs, recall_diag, fp_diag, agentic, proposed
+    )
+    if out:
+        Path(out).write_text(md)
+        typer.echo(f"eval-analyze: wrote {out}")
+    else:
+        typer.echo(md)
 
 
 @app.command()

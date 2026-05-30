@@ -355,7 +355,7 @@ def test_eval_passes_when_agent_catches_bad_and_clean_on_good(tmp_path, monkeypa
     monkeypatch.setattr(
         cli_mod,
         "_eval_run",
-        lambda diff, root, spec: (
+        lambda diff, root, spec, **kw: (
             [] if "clean" in diff else [Finding("a.py", 1, "high", "danger")]
         ),
     )
@@ -374,7 +374,7 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
     monkeypatch.setattr(
-        cli_mod, "_eval_run", lambda diff, root, spec: []
+        cli_mod, "_eval_run", lambda diff, root, spec, **kw: []
     )  # never catches anything
     result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
     assert result.exit_code == 1
@@ -395,7 +395,7 @@ def test_eval_findings_out_writes_per_call_json(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cli_mod,
         "_eval_run",
-        lambda diff, root, spec: (
+        lambda diff, root, spec, **kw: (
             []
             if "clean" in diff
             else [Finding("a.py", 7, "high", "hardcoded secret", "use env var")]
@@ -438,6 +438,225 @@ def test_eval_findings_out_writes_per_call_json(tmp_path, monkeypatch):
     assert _json.loads(good.read_text())["findings"] == []
 
 
+def _write_record(
+    dir, agent, kind, case, repeat, *, findings, usage=None, turns=1, tool_calls=None
+):
+    path = dir / agent / kind
+    path.mkdir(parents=True, exist_ok=True)
+    seeded = "a.py" if kind == "bad" else None
+    payload = {
+        "agent": agent,
+        "kind": kind,
+        "case": case,
+        "repeat": repeat,
+        "seeded_file": seeded,
+        "findings": findings,
+        "usage": usage
+        or {
+            "input_tokens": 1000,
+            "output_tokens": 50,
+            "cache_read_input_tokens": 800,
+            "cache_creation_input_tokens": 0,
+        },
+        "latency_ms": 500,
+        "stop_reason": "end_turn",
+        "raw_text": _json.dumps(findings),
+        "turns": turns,
+        "tool_calls": tool_calls or [],
+    }
+    (path / f"{case}__r{repeat}.json").write_text(_json.dumps(payload))
+
+
+def test_eval_analyze_produces_scorecard_cost_diagnosis_and_thresholds(tmp_path):
+    """eval-analyze loads --findings-out records and emits scorecard + cost + fp-diagnosis +
+    threshold proposal — the diagnostic surface the re-run needs."""
+    d = tmp_path / "f"
+    # security: 1 bad caught, 1 good clean → recall 1.0, fp 0.0 → PASS
+    _write_record(
+        d,
+        "security",
+        "bad",
+        "b1",
+        0,
+        findings=[
+            {
+                "path": "a.py",
+                "line": 1,
+                "severity": "high",
+                "message": "danger",
+                "suggestion": None,
+            }
+        ],
+    )
+    _write_record(d, "security", "good", "g1", 0, findings=[])
+    # compliance: 1 bad caught, 1 good with a high finding → recall 1.0, fp 1.0 → FAIL (fp)
+    _write_record(
+        d,
+        "compliance",
+        "bad",
+        "b1",
+        0,
+        findings=[
+            {
+                "path": "a.py",
+                "line": 1,
+                "severity": "high",
+                "message": "policy",
+                "suggestion": None,
+            }
+        ],
+    )
+    _write_record(
+        d,
+        "compliance",
+        "good",
+        "g1",
+        0,
+        findings=[
+            {
+                "path": "src/demo/main.py",
+                "line": 14,
+                "severity": "high",
+                "message": "no rate limit",
+                "suggestion": None,
+            }
+        ],
+    )
+    # architecture: agentic, with a tool-call log
+    _write_record(
+        d,
+        "architecture",
+        "bad",
+        "b1",
+        0,
+        findings=[
+            {
+                "path": "a.py",
+                "line": 1,
+                "severity": "high",
+                "message": "x",
+                "suggestion": None,
+            }
+        ],
+        turns=4,
+        tool_calls=[
+            {"turn": 1, "tool": "grep", "input": {"pattern": "Item"}},
+            {
+                "turn": 2,
+                "tool": "read_file",
+                "input": {"path": "src/demo/db/repository.py"},
+            },
+        ],
+    )
+
+    result = runner.invoke(app, ["eval-analyze", str(d)])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    # Scorecard
+    assert "## Scorecard" in out
+    assert "review-security" in out and "PASS" in out
+    assert "review-compliance" in out and "fp 1.00" in out
+    # Cost report (numbers will be tiny; check the section + agent names)
+    assert "## Cost by agent" in out
+    assert "claude-sonnet-4-6" in out
+    # FP diagnosis surfaces the good-fixture finding
+    assert "## FP diagnosis" in out
+    assert "no rate limit" in out
+    # Agentic behavior surfaces the tool calls
+    assert "## Agentic behavior" in out
+    assert "review-architecture" in out
+    assert "grep" in out and "read_file" in out
+    # Threshold proposal has margin
+    assert "## Proposed thresholds.yaml" in out
+    assert "recall_min:" in out and "fp_max:" in out
+
+
+def test_eval_analyze_propose_thresholds_applies_margin():
+    """propose_thresholds: recall_min = recall - margin (floored at 0), fp_max = fp + margin (capped at 1)."""
+    from framework_cli.review.analyze import propose_thresholds
+    from framework_cli.review.evals import AgentScore
+
+    scores = [
+        AgentScore(
+            "security",
+            recall=1.00,
+            fp_rate=0.00,
+            bad_total=1,
+            good_total=1,
+            passed=True,
+            reason="",
+        ),
+        AgentScore(
+            "compliance",
+            recall=1.00,
+            fp_rate=1.00,
+            bad_total=1,
+            good_total=1,
+            passed=False,
+            reason="fp 1.00 > 0.34",
+        ),
+        AgentScore(
+            "contracts",
+            recall=0.62,
+            fp_rate=0.00,
+            bad_total=1,
+            good_total=1,
+            passed=False,
+            reason="recall 0.62 < 0.67",
+        ),
+    ]
+    out = propose_thresholds(scores, margin=0.10)
+    assert out["security"]["recall_min"] == 0.90
+    assert out["security"]["fp_max"] == 0.10
+    assert out["compliance"]["fp_max"] == 1.00  # capped at 1.0
+    assert out["contracts"]["recall_min"] == 0.52
+
+
+def test_eval_findings_out_includes_instrumentation(tmp_path, monkeypatch):
+    """The per-call JSON also carries usage/latency/stop_reason/turns/tool_calls/raw_text
+    so the re-run produces a single record sufficient for calibration AND diagnosis."""
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.findings import Finding
+
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
+
+    def _fake_run(diff, root, spec, *, report=None):
+        # the bundle/agentic runners populate `report`; mimic that contract here
+        if report is not None:
+            report["usage"] = {
+                "input_tokens": 1234,
+                "output_tokens": 56,
+                "cache_read_input_tokens": 1000,
+                "cache_creation_input_tokens": 0,
+            }
+            report["latency_ms"] = 789
+            report["stop_reason"] = "end_turn"
+            report["raw_text"] = "[]" if "clean" in diff else '[{"path":"a.py"}]'
+            report["turns"] = 1
+            report["tool_calls"] = []
+        return [] if "clean" in diff else [Finding("a.py", 7, "high", "x", None)]
+
+    monkeypatch.setattr(cli_mod, "_eval_run", _fake_run)
+    out = tmp_path / "findings"
+    result = runner.invoke(
+        app,
+        ["eval", "security", "--fixtures", str(tmp_path), "--findings-out", str(out)],
+    )
+    assert result.exit_code == 0, result.output
+    bad_obj = _json.loads((out / "security" / "bad" / "b1__r0.json").read_text())
+    assert bad_obj["usage"]["input_tokens"] == 1234
+    assert bad_obj["usage"]["cache_read_input_tokens"] == 1000
+    assert bad_obj["latency_ms"] == 789
+    assert bad_obj["stop_reason"] == "end_turn"
+    assert bad_obj["raw_text"] == '[{"path":"a.py"}]'
+    assert bad_obj["turns"] == 1
+    assert bad_obj["tool_calls"] == []
+
+
 def test_eval_aborts_loudly_on_api_error(tmp_path, monkeypatch):
     """An API/credit/rate-limit failure is NOT a non-detection: the eval must abort
     loudly (so a contaminated scorecard is impossible), not silently score 0."""
@@ -452,7 +671,7 @@ def test_eval_aborts_loudly_on_api_error(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
 
-    def _credit_wall(diff, root, spec):
+    def _credit_wall(diff, root, spec, **kw):
         req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
         raise anthropic.APIError("credit balance is too low", req, body=None)
 
@@ -624,7 +843,7 @@ def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
 
     calls = {"n": 0}
 
-    def flaky(diff, root, spec):
+    def flaky(diff, root, spec, **kw):
         if "clean" in diff:
             return []
         calls["n"] += 1
