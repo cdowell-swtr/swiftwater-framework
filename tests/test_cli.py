@@ -1428,3 +1428,46 @@ def test_eval_finalize_audit_mode_writes_audit_report(tmp_path):
     assert result.exit_code == 0, result.output
     assert (out / "findings" / "security.json").is_file()
     assert (out / "audit-report.md").is_file()
+
+
+def test_eval_finalize_fails_loudly_on_missing_results_file(tmp_path):
+    """A missing --results file produces a friendly error, not a Python traceback."""
+    out = tmp_path / "scorecard"
+    out.mkdir()
+    missing = tmp_path / "does-not-exist.json"
+    result = runner.invoke(
+        app,
+        [
+            "eval-finalize",
+            "--mode",
+            "tune",
+            "--results",
+            str(missing),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "failed to load results" in result.output
+
+
+def test_eval_finalize_fails_loudly_on_malformed_results(tmp_path):
+    """A malformed --results file produces a friendly error."""
+    out = tmp_path / "scorecard"
+    out.mkdir()
+    bad = tmp_path / "bad.json"
+    bad.write_text("not valid json {{{ ")
+    result = runner.invoke(
+        app,
+        [
+            "eval-finalize",
+            "--mode",
+            "tune",
+            "--results",
+            str(bad),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "failed to load results" in result.output

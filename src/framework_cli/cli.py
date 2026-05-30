@@ -874,7 +874,16 @@ def eval_finalize(
 ) -> None:
     """Take the workflow's results, write per-call JSON records + scorecard/audit-report
     + apply.md (tune) + meta.json."""
-    payload = json.loads(Path(results).read_text())
+    try:
+        payload = json.loads(Path(results).read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        typer.echo(
+            f"eval-finalize: failed to load results from {results}: {exc}", err=True
+        )
+        raise typer.Exit(1) from exc
+    if "results" not in payload:
+        typer.echo("eval-finalize: results JSON missing 'results' key", err=True)
+        raise typer.Exit(1)
     records = payload["results"]
     meta_in = payload.get("meta", {})
     out = Path(out_dir)
