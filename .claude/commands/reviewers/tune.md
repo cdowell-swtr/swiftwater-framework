@@ -61,9 +61,9 @@ You are running the `/reviewers:tune` workflow. Your job: dispatch the subagent-
    # Claude writes the workflow result JSON to /tmp/reviewers-tune-results.json via Write tool.
    ```
 
-10. **Run eval-finalize**:
+10. **Run tune-finalize**:
     ```bash
-    uv run framework eval-finalize --mode tune \
+    uv run framework tune-finalize \
       --results /tmp/reviewers-tune-results.json \
       --out-dir "$OUT"
     ```
@@ -77,7 +77,7 @@ You are running the `/reviewers:tune` workflow. Your job: dispatch the subagent-
 
 **Important notes:**
 - This command runs entirely on CC subagents (subscription quota), NOT the paid Anthropic API.
-- If any subagent calls fail mid-workflow, the workflow still returns partial results — eval-finalize handles missing data gracefully but the scorecard will be incomplete. Re-run if needed.
+- If any subagent calls fail mid-workflow, the workflow still returns partial results — tune-finalize handles missing data gracefully but the scorecard will be incomplete. Re-run if needed.
 - Do NOT auto-apply the proposal to `tests/eval/fixtures/thresholds.yaml`. Threshold changes are deliberate; the user invokes `apply.md`'s instructions.
 - The output dir is committed to git as part of the calibration history.
 - The `/tmp/reviewers-tune-items/` split-manifest dir is ephemeral — safe to delete after the run.

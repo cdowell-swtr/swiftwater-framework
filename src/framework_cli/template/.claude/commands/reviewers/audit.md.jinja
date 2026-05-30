@@ -41,9 +41,9 @@ You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent
    # Claude writes /tmp/reviewers-audit-results.json via Write tool.
    ```
 
-8. **Run eval-finalize**:
+8. **Run audit-finalize**:
    ```bash
-   uv run framework eval-finalize --mode audit \
+   uv run framework audit-finalize \
      --results /tmp/reviewers-audit-results.json \
      --out-dir .framework/audit/latest
    ```

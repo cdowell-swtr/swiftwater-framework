@@ -21,6 +21,7 @@ from framework_cli.review.diff import (
     framework_diff,
     matches_globs,
     pr_diff,
+    staged_diff,
 )
 from framework_cli.review.registry import active_agents, agent_names, get_agent
 from framework_cli.review.runner import EVAL_KEY_ENV, RUNTIME_KEY_ENV, default_client
@@ -801,8 +802,11 @@ def _emit_gate_prep(split_to: str = "") -> None:
             "output_dir": ".framework/audit/latest",
         }
     else:
-        # Build work items for each affected agent (same shape as audit-mode items)
-        diff = _review_diff()
+        # Build work items for each affected agent (same shape as audit-mode items).
+        # Use staged_diff() — NOT _review_diff() / pr_diff() — so the gate reviews the
+        # about-to-be-committed staged set, not the prior commit (HEAD~1...HEAD), which
+        # was the original (buggy) behavior that reviewed the wrong content.
+        diff = staged_diff()
         root = Path.cwd()
         work_items: list[dict] = []
         for a in agents:
@@ -830,10 +834,14 @@ def _emit_gate_prep(split_to: str = "") -> None:
             shutil.rmtree(split_dir)
         items_dir = split_dir / "items"
         items_dir.mkdir(parents=True, exist_ok=True)
+        split_dir.chmod(0o700)
+        items_dir.chmod(0o700)
 
         index_items: list[dict] = []
         for i, wi in enumerate(manifest["work_items"]):
-            (items_dir / f"item-{i:04d}.json").write_text(json.dumps(wi, indent=2))
+            item_path = items_dir / f"item-{i:04d}.json"
+            item_path.write_text(json.dumps(wi, indent=2))
+            item_path.chmod(0o600)
             index_items.append(
                 {
                     "i": i,
@@ -848,7 +856,9 @@ def _emit_gate_prep(split_to: str = "") -> None:
             "items": index_items,
             "output_dir": manifest["output_dir"],
         }
-        (split_dir / "index.json").write_text(json.dumps(index, indent=2))
+        index_path = split_dir / "index.json"
+        index_path.write_text(json.dumps(index, indent=2))
+        index_path.chmod(0o600)
 
     typer.echo(json.dumps(manifest, indent=2))
 
@@ -901,10 +911,14 @@ def _emit_tune_prep(
             shutil.rmtree(split_dir)
         items_dir = split_dir / "items"
         items_dir.mkdir(parents=True, exist_ok=True)
+        split_dir.chmod(0o700)
+        items_dir.chmod(0o700)
 
         index_items: list[dict] = []
         for i, wi in enumerate(work_items):
-            (items_dir / f"item-{i:04d}.json").write_text(json.dumps(wi, indent=2))
+            item_path = items_dir / f"item-{i:04d}.json"
+            item_path.write_text(json.dumps(wi, indent=2))
+            item_path.chmod(0o600)
             index_items.append(
                 {
                     "i": i,
@@ -923,7 +937,9 @@ def _emit_tune_prep(
             "items": index_items,
             "output_dir": output_dir or "",
         }
-        (split_dir / "index.json").write_text(json.dumps(index, indent=2))
+        index_path = split_dir / "index.json"
+        index_path.write_text(json.dumps(index, indent=2))
+        index_path.chmod(0o600)
 
     typer.echo(json.dumps(manifest, indent=2))
 
@@ -1124,9 +1140,23 @@ def _build_audit_work_item(spec: object, diff: str, root: Path) -> dict:
     }
 
 
-@app.command(name="eval-finalize")
-def eval_finalize(
-    mode: str = typer.Option(..., "--mode", help="'tune', 'audit', or 'gate'."),
+def _load_finalize_payload(results: str, command_name: str) -> tuple[list, dict]:
+    """Load and validate a finalize results JSON; return (records, meta_in)."""
+    try:
+        payload = json.loads(Path(results).read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        typer.echo(
+            f"{command_name}: failed to load results from {results}: {exc}", err=True
+        )
+        raise typer.Exit(1) from exc
+    if "results" not in payload:
+        typer.echo(f"{command_name}: results JSON missing 'results' key", err=True)
+        raise typer.Exit(1)
+    return payload["results"], payload.get("meta", {})
+
+
+@app.command(name="tune-finalize")
+def tune_finalize(
     results: str = typer.Option(
         ..., "--results", help="Path to JSON file from the workflow."
     ),
@@ -1134,33 +1164,55 @@ def eval_finalize(
         ..., "--out-dir", help="Output dir to write artifacts."
     ),
 ) -> None:
-    """Take the workflow's results, write per-call JSON records + scorecard/audit-report
-    + apply.md (tune) + meta.json."""
-    try:
-        payload = json.loads(Path(results).read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        typer.echo(
-            f"eval-finalize: failed to load results from {results}: {exc}", err=True
-        )
-        raise typer.Exit(1) from exc
-    if "results" not in payload:
-        typer.echo("eval-finalize: results JSON missing 'results' key", err=True)
-        raise typer.Exit(1)
-    records = payload["results"]
-    meta_in = payload.get("meta", {})
+    """Take the tune workflow's results, write per-call JSON records + scorecard.md
+    + thresholds.proposal.yaml + apply.md + meta.json."""
+    records, meta_in = _load_finalize_payload(results, "tune-finalize")
     out = Path(out_dir)
     findings_dir = out / "findings"
     findings_dir.mkdir(parents=True, exist_ok=True)
+    _finalize_tune(records, findings_dir, out, meta_in)
 
-    if mode == "tune":
-        _finalize_tune(records, findings_dir, out, meta_in)
-    elif mode == "audit":
-        _finalize_audit(records, findings_dir, out, meta_in)
-    elif mode == "gate":
-        _finalize_gate(records, findings_dir, out, meta_in)
-    else:
-        typer.echo(f"eval-finalize: invalid --mode '{mode}'", err=True)
-        raise typer.Exit(2)
+
+@app.command(name="audit-finalize")
+def audit_finalize(
+    results: str = typer.Option(
+        ..., "--results", help="Path to JSON file from the workflow."
+    ),
+    out_dir: str = typer.Option(
+        ..., "--out-dir", help="Output dir to write artifacts."
+    ),
+) -> None:
+    """Take the audit workflow's results, write findings/<agent>.json records,
+    audit-report.md (per-agent findings grouped by severity), and meta.json."""
+    records, meta_in = _load_finalize_payload(results, "audit-finalize")
+    out = Path(out_dir)
+    findings_dir = out / "findings"
+    findings_dir.mkdir(parents=True, exist_ok=True)
+    _finalize_audit(records, findings_dir, out, meta_in)
+
+
+@app.command(name="gate-finalize")
+def gate_finalize(
+    results: str = typer.Option(
+        ..., "--results", help="Path to JSON file from the workflow."
+    ),
+    out_dir: str = typer.Option(
+        ..., "--out-dir", help="Output dir to write artifacts."
+    ),
+) -> None:
+    """Take the gate workflow's results, write per-agent records (gate mode), compute
+    verdict, write marker.json.
+
+    In gate mode, stale per-agent records under <out-dir>/findings/ are cleared
+    before this run's records are written, so the verdict reflects only this run.
+    Noop/regrade modes leave findings_dir alone so the regrade-against-prior-findings
+    workflow continues to work.
+    """
+    records, meta_in = _load_finalize_payload(results, "gate-finalize")
+    out = Path(out_dir)
+    findings_dir = out / "findings"
+    findings_dir.mkdir(parents=True, exist_ok=True)
+    _finalize_gate(records, findings_dir, out, meta_in)
 
 
 def _finalize_tune(records: list, findings_dir: Path, out: Path, meta_in: dict) -> None:
@@ -1240,7 +1292,7 @@ def _finalize_tune(records: list, findings_dir: Path, out: Path, meta_in: dict) 
         "run_duration_seconds": meta_in.get("run_duration_seconds", 0),
     }
     (out / "meta.json").write_text(json.dumps(meta, indent=2, sort_keys=True))
-    typer.echo(f"eval-finalize: wrote {out}")
+    typer.echo(f"tune-finalize: wrote {out}")
 
 
 def _finalize_audit(
@@ -1302,7 +1354,7 @@ def _finalize_audit(
             md_lines.append(f"- ⚠ `{d['agent']}` — disallowed tools: {tools}")
     md_lines.append("")
     (out / "audit-report.md").write_text("\n".join(md_lines) + "\n")
-    typer.echo(f"eval-finalize: wrote {out}")
+    typer.echo(f"audit-finalize: wrote {out}")
 
 
 def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) -> None:
@@ -1317,8 +1369,14 @@ def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) 
     staged_hash = meta_in.get("staged_hash", "")
     agents_run = meta_in.get("agents_set", [])
 
-    # In gate mode (non-regrade), write per-agent records first.
+    # Clear stale per-agent records from prior runs before writing this run's records.
+    # Without this, analyze.load_records() below would mix old findings into the verdict —
+    # surfaced as a known follow-up in CLAUDE.md and flagged by the gate's data-lineage
+    # reviewer. Noop/regrade modes skip the clear so the regrade-against-prior-findings
+    # workflow still works.
     if actual_mode == "gate":
+        for stale in findings_dir.glob("*.json"):
+            stale.unlink()
         for r in records:
             record = {
                 "agent": r["agent"],
@@ -1330,9 +1388,9 @@ def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) 
                 "turns": r.get("turns", 1),
                 "tool_calls": r.get("tool_calls", []),
             }
-            (findings_dir / f"{r['agent']}.json").write_text(
-                json.dumps(record, indent=2, sort_keys=True)
-            )
+            record_path = findings_dir / f"{r['agent']}.json"
+            record_path.write_text(json.dumps(record, indent=2, sort_keys=True))
+            record_path.chmod(0o600)
 
     # Load all records under findings_dir (works for regrade too).
     loaded = analyze.load_records(findings_dir)
@@ -1377,7 +1435,7 @@ def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) 
     }
     marker_path.parent.mkdir(parents=True, exist_ok=True)
     marker_path.write_text(json.dumps(marker, indent=2, sort_keys=True))
-    typer.echo(f"eval-finalize: verdict={verdict}, marker={marker_path}")
+    typer.echo(f"gate-finalize: verdict={verdict}, marker={marker_path}")
 
 
 def _apply_md_content() -> str:

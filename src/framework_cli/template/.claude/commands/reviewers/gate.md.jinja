@@ -21,10 +21,10 @@ You are running `/reviewers:gate`. Your job: evaluate the staged set with the af
 3. **Branch on mode**:
 
    **If `mode == "noop"`** (no review-relevant files staged):
-   - Run eval-finalize directly (it writes a PASS marker with empty agents_run):
+   - Run gate-finalize directly (it writes a PASS marker with empty agents_run):
      ```bash
      echo '{"results": [], "meta": '$(cat /tmp/reviewers-gate-prep.json | jq '{mode, staged_hash, agents_set}')'}' > /tmp/reviewers-gate-results.json
-     uv run framework eval-finalize --mode gate \
+     uv run framework gate-finalize \
        --results /tmp/reviewers-gate-results.json \
        --out-dir .framework/audit/latest
      ```
@@ -32,10 +32,10 @@ You are running `/reviewers:gate`. Your job: evaluate the staged set with the af
    - DONE.
 
    **If `mode == "regrade"`** (only thresholds.yaml staged):
-   - Run eval-finalize directly (it re-flags existing findings against current thresholds):
+   - Run gate-finalize directly (it re-flags existing findings against current thresholds):
      ```bash
      echo '{"results": [], "meta": '$(cat /tmp/reviewers-gate-prep.json | jq '{mode, staged_hash, agents_set}')'}' > /tmp/reviewers-gate-results.json
-     uv run framework eval-finalize --mode gate \
+     uv run framework gate-finalize \
        --results /tmp/reviewers-gate-results.json \
        --out-dir .framework/audit/latest
      ```
@@ -60,14 +60,19 @@ You are running `/reviewers:gate`. Your job: evaluate the staged set with the af
 
 5. **Write the workflow's `{results, meta}` to a temp file** (`/tmp/reviewers-gate-results.json`).
 
-6. **Run eval-finalize**:
+6. **Run gate-finalize**:
    ```bash
-   uv run framework eval-finalize --mode gate \
+   uv run framework gate-finalize \
      --results /tmp/reviewers-gate-results.json \
      --out-dir .framework/audit/latest
    ```
 
-7. **Print the verdict** from `.framework/audit/marker.json`:
+7. **Clean up the transient `/tmp` split-manifest and results** (item files contain the full unified diff; remove them after finalize so they don't linger between runs):
+   ```bash
+   rm -rf /tmp/reviewers-gate-prep-split /tmp/reviewers-gate-prep.json /tmp/reviewers-gate-results.json 2>/dev/null || true
+   ```
+
+8. **Print the verdict** from `.framework/audit/marker.json`:
    - PASS: "Gate PASS — marker written. Commit can proceed."
    - FAIL: "Gate FAIL — see `.framework/audit/latest/audit-report.md` for findings."
 

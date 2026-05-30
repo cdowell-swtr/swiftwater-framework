@@ -1410,7 +1410,7 @@ def test_gate_prepare_affected_single_prompt(tmp_path, monkeypatch):
         "_staged_files",
         lambda: ["src/framework_cli/review/agents/security.md"],
     )
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+    monkeypatch.setattr(cli_mod, "staged_diff", lambda: "diff content")
     result = runner.invoke(app, ["gate-prepare"])
     assert result.exit_code == 0, result.output
     data = _json.loads(result.output)
@@ -1430,7 +1430,7 @@ def test_gate_prepare_runner_change_affects_all_bundle(monkeypatch):
         "_staged_files",
         lambda: ["src/framework_cli/review/runner.py"],
     )
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    monkeypatch.setattr(cli_mod, "staged_diff", lambda: "diff")
     result = runner.invoke(app, ["gate-prepare"])
     assert result.exit_code == 0, result.output
     data = _json.loads(result.output)
@@ -1461,7 +1461,7 @@ def test_gate_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
         "_staged_files",
         lambda: ["src/framework_cli/review/runner.py"],
     )
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+    monkeypatch.setattr(cli_mod, "staged_diff", lambda: "diff content")
 
     split_dir = tmp_path / "split-out"
     result = runner.invoke(app, ["gate-prepare", "--split-to", str(split_dir)])
@@ -1513,7 +1513,7 @@ def test_gate_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
         "_staged_files",
         lambda: ["src/framework_cli/review/agents/security.md"],
     )
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+    monkeypatch.setattr(cli_mod, "staged_diff", lambda: "diff content")
 
     split_dir = tmp_path / "split-out"
     split_dir.mkdir()
@@ -1552,6 +1552,48 @@ def test_gate_prepare_split_to_noop_writes_empty_index(tmp_path, monkeypatch):
     assert index["items"] == []
 
 
+def test_gate_prepare_diff_is_staged_set_not_head_minus_one(monkeypatch):
+    """gate-prepare's work-item diff must reflect the staged set, not HEAD~1...HEAD.
+
+    Regression guard for the design quirk where pr_diff() (HEAD~1...HEAD) was used,
+    causing the gate to review the prior commit instead of the about-to-be-committed
+    content. Mock both diff functions to return distinct sentinels and assert
+    the work_items carry the staged_diff sentinel.
+    """
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(
+        cli_mod,
+        "_staged_files",
+        lambda: ["src/framework_cli/review/agents/security.md"],
+    )
+    monkeypatch.setattr(cli_mod, "staged_diff", lambda: "STAGED_DIFF_SENTINEL")
+    monkeypatch.setattr(cli_mod, "pr_diff", lambda: "PR_DIFF_SENTINEL")
+    # _review_diff() delegates to pr_diff(); patch the helper too so it would
+    # surface the PR sentinel if gate-prepare were (incorrectly) routed through it.
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "PR_DIFF_SENTINEL")
+
+    result = runner.invoke(app, ["gate-prepare"])
+    assert result.exit_code == 0, result.output
+    data = _json.loads(result.output)
+    assert data["mode"] == "gate"
+    assert len(data["work_items"]) >= 1
+
+    # The diff text appears inside each work item's user_message (per
+    # _build_audit_work_item). The staged-set sentinel MUST be present;
+    # the pr_diff sentinel MUST NOT be.
+    for wi in data["work_items"]:
+        blob = _json.dumps(wi)
+        assert "STAGED_DIFF_SENTINEL" in blob, (
+            "gate-prepare work item does not carry the staged diff — "
+            "it is reviewing the wrong content."
+        )
+        assert "PR_DIFF_SENTINEL" not in blob, (
+            "gate-prepare work item carries the PR/HEAD~1 diff instead of "
+            "the staged set — regression of the diff-source bug."
+        )
+
+
 def test_gate_prepare_thresholds_only_signals_regrade(monkeypatch):
     """If the only staged file is tests/eval/fixtures/thresholds.yaml, the manifest
     signals mode='regrade' (no subagent dispatch needed)."""
@@ -1567,8 +1609,8 @@ def test_gate_prepare_thresholds_only_signals_regrade(monkeypatch):
     assert data["work_items"] == []
 
 
-def test_eval_finalize_writes_records_runs_analyze_writes_meta(tmp_path):
-    """eval-finalize: given workflow results, writes per-call JSON records and a scorecard."""
+def test_tune_finalize_writes_records_runs_analyze_writes_meta(tmp_path):
+    """tune-finalize: given workflow results, writes per-call JSON records and a scorecard."""
     out = tmp_path / "scorecard"
     out.mkdir()
 
@@ -1629,9 +1671,7 @@ def test_eval_finalize_writes_records_runs_analyze_writes_meta(tmp_path):
     result = runner.invoke(
         app,
         [
-            "eval-finalize",
-            "--mode",
-            "tune",
+            "tune-finalize",
             "--results",
             str(results_file),
             "--out-dir",
@@ -1657,8 +1697,8 @@ def test_eval_finalize_writes_records_runs_analyze_writes_meta(tmp_path):
     assert meta["mode"] == "tune"
 
 
-def test_eval_finalize_audit_mode_writes_audit_report(tmp_path):
-    """In audit mode, eval-finalize writes findings/<agent>.json and audit-report.md."""
+def test_audit_finalize_writes_audit_report(tmp_path):
+    """audit-finalize writes findings/<agent>.json and audit-report.md."""
     out = tmp_path / "audit"
     out.mkdir()
     results = [
@@ -1686,9 +1726,7 @@ def test_eval_finalize_audit_mode_writes_audit_report(tmp_path):
     result = runner.invoke(
         app,
         [
-            "eval-finalize",
-            "--mode",
-            "audit",
+            "audit-finalize",
             "--results",
             str(results_file),
             "--out-dir",
@@ -1700,7 +1738,7 @@ def test_eval_finalize_audit_mode_writes_audit_report(tmp_path):
     assert (out / "audit-report.md").is_file()
 
 
-def test_eval_finalize_gate_writes_marker_pass(tmp_path):
+def test_gate_finalize_writes_marker_pass(tmp_path):
     """gate-mode finalize writes marker.json with verdict=PASS when no high+ findings."""
     out = tmp_path / "audit"
     out.mkdir()
@@ -1729,9 +1767,7 @@ def test_eval_finalize_gate_writes_marker_pass(tmp_path):
     result = runner.invoke(
         app,
         [
-            "eval-finalize",
-            "--mode",
-            "gate",
+            "gate-finalize",
             "--results",
             str(results_file),
             "--out-dir",
@@ -1748,7 +1784,7 @@ def test_eval_finalize_gate_writes_marker_pass(tmp_path):
     assert marker["drift_detected"] is False
 
 
-def test_eval_finalize_gate_writes_marker_fail_on_high_finding(tmp_path):
+def test_gate_finalize_writes_marker_fail_on_high_finding(tmp_path):
     """A high-severity finding on security (block_threshold='high') → verdict=FAIL."""
     out = tmp_path / "audit"
     out.mkdir()
@@ -1785,9 +1821,7 @@ def test_eval_finalize_gate_writes_marker_fail_on_high_finding(tmp_path):
     result = runner.invoke(
         app,
         [
-            "eval-finalize",
-            "--mode",
-            "gate",
+            "gate-finalize",
             "--results",
             str(results_file),
             "--out-dir",
@@ -1800,7 +1834,7 @@ def test_eval_finalize_gate_writes_marker_fail_on_high_finding(tmp_path):
     assert marker["verdict"] == "FAIL"
 
 
-def test_eval_finalize_gate_marks_drift_detected(tmp_path):
+def test_gate_finalize_marks_drift_detected(tmp_path):
     """A tool_calls entry using a disallowed tool → drift_detected: true in marker."""
     out = tmp_path / "audit"
     out.mkdir()
@@ -1829,9 +1863,7 @@ def test_eval_finalize_gate_marks_drift_detected(tmp_path):
     result = runner.invoke(
         app,
         [
-            "eval-finalize",
-            "--mode",
-            "gate",
+            "gate-finalize",
             "--results",
             str(results_file),
             "--out-dir",
@@ -1845,7 +1877,7 @@ def test_eval_finalize_gate_marks_drift_detected(tmp_path):
     assert marker["verdict"] == "FAIL"
 
 
-def test_eval_finalize_gate_regrade_skips_dispatch(tmp_path):
+def test_gate_finalize_regrade_skips_dispatch(tmp_path):
     """A regrade-mode payload re-flags existing findings against current thresholds
     without invoking subagents."""
     out = tmp_path / "audit"
@@ -1874,9 +1906,7 @@ def test_eval_finalize_gate_regrade_skips_dispatch(tmp_path):
     result = runner.invoke(
         app,
         [
-            "eval-finalize",
-            "--mode",
-            "gate",
+            "gate-finalize",
             "--results",
             str(results_file),
             "--out-dir",
@@ -1889,7 +1919,7 @@ def test_eval_finalize_gate_regrade_skips_dispatch(tmp_path):
     assert marker["verdict"] == "PASS"  # empty findings → PASS
 
 
-def test_eval_finalize_fails_loudly_on_missing_results_file(tmp_path):
+def test_tune_finalize_fails_loudly_on_missing_results_file(tmp_path):
     """A missing --results file produces a friendly error, not a Python traceback."""
     out = tmp_path / "scorecard"
     out.mkdir()
@@ -1897,9 +1927,7 @@ def test_eval_finalize_fails_loudly_on_missing_results_file(tmp_path):
     result = runner.invoke(
         app,
         [
-            "eval-finalize",
-            "--mode",
-            "tune",
+            "tune-finalize",
             "--results",
             str(missing),
             "--out-dir",
@@ -1910,7 +1938,7 @@ def test_eval_finalize_fails_loudly_on_missing_results_file(tmp_path):
     assert "failed to load results" in result.output
 
 
-def test_eval_finalize_fails_loudly_on_malformed_results(tmp_path):
+def test_tune_finalize_fails_loudly_on_malformed_results(tmp_path):
     """A malformed --results file produces a friendly error."""
     out = tmp_path / "scorecard"
     out.mkdir()
@@ -1919,9 +1947,7 @@ def test_eval_finalize_fails_loudly_on_malformed_results(tmp_path):
     result = runner.invoke(
         app,
         [
-            "eval-finalize",
-            "--mode",
-            "tune",
+            "tune-finalize",
             "--results",
             str(bad),
             "--out-dir",

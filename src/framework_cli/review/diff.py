@@ -48,6 +48,19 @@ def pr_diff() -> str:
     return result.stdout
 
 
+def staged_diff() -> str:
+    """The unified diff of the currently-staged set (`git diff --cached`).
+
+    Used by /reviewers:gate so the agents review the about-to-be-committed
+    content, not the prior commit (which is what pr_diff() returns).
+    Returns an empty string when nothing is staged.
+    """
+    result = subprocess.run(
+        ["git", "diff", "--cached"], capture_output=True, text=True, check=False
+    )
+    return result.stdout
+
+
 def framework_diff() -> str:
     """Like `pr_diff`, but excludes the template payload — the framework reviews only its
     own CLI/tooling source; template-payload quality is the product's concern (Slice C)."""
