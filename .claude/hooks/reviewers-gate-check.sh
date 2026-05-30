@@ -8,8 +8,12 @@
 #
 # Implementation note: the staged_hash / marker fields are read by shelling
 # out to `framework eval-prepare --mode gate` (for the current hash) and to
-# `python -c` reads of the marker JSON (for marker fields). This avoids any
+# `python3 -c` reads of the marker JSON (for marker fields). This avoids any
 # sys.path hacking and naturally matches the template-shipped version.
+# We use `python3` (not bare `python`) for portability — many systems
+# (incl. this dev env) ship python3 + uv-managed Pythons but no `python`
+# symlink. `uv run python` would also work but adds ~hundreds of ms per
+# spawn vs the stdlib-only JSON reads here.
 
 set -euo pipefail
 
@@ -28,7 +32,7 @@ fi
 # Recompute current staged_hash by shelling out to eval-prepare --mode gate
 # and parsing the JSON it emits. This is the same code path /reviewers:gate
 # uses, so the hashes are guaranteed to compare apples-to-apples.
-current_hash=$(uv run framework eval-prepare --mode gate 2>/dev/null | python -c "
+current_hash=$(uv run framework eval-prepare --mode gate 2>/dev/null | python3 -c "
 import json, sys
 try:
     print(json.load(sys.stdin).get('staged_hash', ''))
@@ -44,7 +48,7 @@ if [ -z "$current_hash" ]; then
   exit 2
 fi
 
-marker_hash=$(python -c "
+marker_hash=$(python3 -c "
 import json
 try:
     m = json.load(open('$marker'))
@@ -58,7 +62,7 @@ if [ "$current_hash" != "$marker_hash" ]; then
   exit 2
 fi
 
-verdict=$(python -c "
+verdict=$(python3 -c "
 import json
 try:
     m = json.load(open('$marker'))
@@ -67,7 +71,7 @@ except Exception:
     print('FAIL')
 " 2>/dev/null) || verdict="FAIL"
 
-summary=$(python -c "
+summary=$(python3 -c "
 import json
 try:
     m = json.load(open('$marker'))
@@ -76,7 +80,7 @@ except Exception:
     pass
 " 2>/dev/null) || summary=""
 
-drift=$(python -c "
+drift=$(python3 -c "
 import json
 try:
     m = json.load(open('$marker'))
