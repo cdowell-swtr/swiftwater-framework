@@ -660,14 +660,50 @@ def audit_prepare(
             "Idempotent: an existing DIR is cleared first."
         ),
     ),
+    snapshot: bool = typer.Option(
+        False,
+        "--snapshot",
+        help=(
+            "Force every agent into snapshot mode (no diff seed; bundled context "
+            "does the work). Skips per-agent baseline auto-discovery."
+        ),
+    ),
+    since: str = typer.Option(
+        "",
+        "--since",
+        help=(
+            "Force delta mode against a chosen anchor — either a git ref/SHA "
+            "(all agents diff HEAD vs that ref) or a baseline directory under "
+            "docs/superpowers/eval-scorecards/ (per-agent: agents in that baseline "
+            "diff against its SHA; agents not in the baseline fall back to snapshot)."
+        ),
+    ),
 ) -> None:
     """Emit the audit-mode work-item manifest (current code, one item per agent).
 
     Output is JSON on stdout; consumed by /reviewers:audit. When ``--split-to DIR``
     is set, also writes a split-manifest layout (``index.json`` + ``items/item-NNNN.json``)
     under DIR for the Workflow tool to consume via ``{indexPath, itemsDir}`` args.
+
+    By default, each agent's mode is auto-discovered: if a prior baseline under
+    ``docs/superpowers/eval-scorecards/audit-*/`` exists for this (target, agent),
+    the agent runs in delta mode (diff vs that baseline's git_sha). Otherwise the
+    agent falls back to snapshot mode (with a visible log line per agent).
     """
-    _emit_audit_prep(list(agent or []), target, output_dir, split_to)
+    if snapshot and since:
+        typer.echo(
+            "audit-prepare: --snapshot and --since are mutually exclusive",
+            err=True,
+        )
+        raise typer.Exit(2)
+    _emit_audit_prep(
+        list(agent or []),
+        target,
+        output_dir,
+        split_to,
+        snapshot_flag=snapshot,
+        since_arg=since or None,
+    )
 
 
 @app.command(name="gate-prepare")
@@ -1051,6 +1087,11 @@ def _detect_audit_target(explicit: str) -> str:
     )
 
 
+def _default_scorecards_root() -> Path:
+    """The directory under which preserved audit baselines live."""
+    return Path("docs/superpowers/eval-scorecards")
+
+
 def _resolve_audit_base(
     agent: str,
     target: str,
@@ -1120,6 +1161,9 @@ def _emit_audit_prep(
     target_arg: str,
     output_dir: str,
     split_to: str = "",
+    *,
+    snapshot_flag: bool = False,
+    since_arg: str | None = None,
 ) -> None:
     """Emit the audit-mode manifest to stdout (always) plus, when ``split_to`` is
     non-empty, an on-disk split-manifest layout under ``split_to``:
@@ -1131,6 +1175,12 @@ def _emit_audit_prep(
       (``system_blocks``, ``user_message``, etc.). Each written with mode 0o600.
     * ``<split_to>/`` and ``<split_to>/items/`` themselves get mode 0o700.
 
+    Each work-item also carries ``review_mode`` / ``base_sha`` / ``base_baseline``
+    fields, resolved per-agent via :func:`_resolve_audit_base`. The
+    ``system_blocks[0]`` diff text is :func:`delta_diff` output when
+    ``review_mode == "delta"``, or the (empty) :func:`snapshot_seed` output
+    when ``review_mode == "snapshot"``.
+
     The split layout exists so the Workflow tool can be invoked with a tiny
     ``{indexPath, itemsDir}`` args payload instead of a multi-MB inline manifest
     (the documented ~1.76 MB Workflow-args ceiling). Mirrors ``_emit_tune_prep``
@@ -1139,6 +1189,7 @@ def _emit_audit_prep(
     import shutil
 
     from framework_cli.review.context import FRAMEWORK_AGENTS
+    from framework_cli.review.diff import delta_diff, snapshot_seed
     from framework_cli.source import read_batteries
 
     target = _detect_audit_target(target_arg)
@@ -1161,7 +1212,7 @@ def _emit_audit_prep(
     else:
         agents_set = all_agents
 
-    diff = _review_diff()
+    scorecards_root = _default_scorecards_root()
     root = Path.cwd()
     work_items: list[dict] = []
     for a in agents_set:
@@ -1169,7 +1220,35 @@ def _emit_audit_prep(
             spec = get_agent(a)
         except KeyError:
             continue
-        work_items.append(_build_audit_work_item(spec, diff, root))
+
+        try:
+            mode, base_sha, base_baseline = _resolve_audit_base(
+                a,
+                target,
+                snapshot_flag=snapshot_flag,
+                since_arg=since_arg,
+                scorecards_root=scorecards_root,
+            )
+        except ValueError as exc:
+            typer.echo(f"audit-prepare: {exc}", err=True)
+            raise typer.Exit(2) from exc
+
+        if mode == "delta":
+            try:
+                diff = delta_diff(base_sha)  # type: ignore[arg-type]
+            except ValueError as exc:
+                typer.echo(f"audit-prepare: {exc}", err=True)
+                raise typer.Exit(2) from exc
+        else:
+            diff = snapshot_seed(target, root)
+            # Visible log for the fallback / forced-snapshot path.
+            typer.echo(f"audit-prepare: {a} running in snapshot mode", err=True)
+
+        wi = _build_audit_work_item(spec, diff, root)
+        wi["review_mode"] = mode
+        wi["base_sha"] = base_sha
+        wi["base_baseline"] = base_baseline
+        work_items.append(wi)
 
     resolved_output_dir = output_dir or ".framework/audit/latest"
     manifest = {

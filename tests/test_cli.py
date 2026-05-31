@@ -1388,8 +1388,11 @@ def test_audit_prepare_tolerates_pyproject_formatting_variations(tmp_path, monke
         'version = "0.1.0"\n'
     )
     monkeypatch.chdir(fake_repo)
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    result = runner.invoke(app, ["audit-prepare"])
+    # --snapshot: skip per-agent baseline auto-discovery (no diff seed needed for
+    # a test focused on target detection); also patch the scorecards root so any
+    # auto-discovery would find nothing.
+    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
+    result = runner.invoke(app, ["audit-prepare", "--snapshot"])
     # Even with the whitespace, framework auto-detection should fire.
     # If it doesn't (project-target also missing — no .copier-answers.yml),
     # this would error with "Could not auto-detect target".
@@ -1397,7 +1400,7 @@ def test_audit_prepare_tolerates_pyproject_formatting_variations(tmp_path, monke
     assert result.exit_code == 0, result.output
     import json as _j
 
-    data = _j.loads(result.output)
+    data = _j.loads(result.stdout)
     assert data["target"] == "framework"
 
 
@@ -1476,7 +1479,10 @@ def test_audit_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
     """
     import framework_cli.cli as cli_mod
 
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+    # --snapshot: keep the test focused on the split-manifest layout (not on
+    # diff content / baseline auto-discovery). Patch the scorecards root so no
+    # real baseline can be discovered either.
+    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
 
     split_dir = tmp_path / "audit-split-out"
     result = runner.invoke(
@@ -1487,6 +1493,7 @@ def test_audit_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
             "framework",
             "--agent",
             "security",
+            "--snapshot",
             "--split-to",
             str(split_dir),
         ],
@@ -1494,7 +1501,7 @@ def test_audit_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
 
     # Stdout still carries the full manifest (backward compat).
-    manifest = _json.loads(result.output)
+    manifest = _json.loads(result.stdout)
     assert manifest["mode"] == "audit"
     assert manifest["target"] == "framework"
     assert manifest["agents_set"] == ["security"]
@@ -1546,7 +1553,9 @@ def test_audit_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
     """
     import framework_cli.cli as cli_mod
 
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+    # --snapshot: focus the test on the idempotency guarantee (the existing
+    # split-dir is cleared), not on diff content. Patch scorecards root too.
+    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
 
     split_dir = tmp_path / "audit-split-idempotent"
     split_dir.mkdir()
@@ -1564,6 +1573,7 @@ def test_audit_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
             "framework",
             "--agent",
             "security",
+            "--snapshot",
             "--split-to",
             str(split_dir),
         ],
@@ -1580,6 +1590,135 @@ def test_audit_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
     assert fresh.get("stale") is None
     assert fresh["mode"] == "audit"
     assert len(fresh["items"]) == 1
+
+
+def test_audit_prepare_snapshot_flag_produces_snapshot_items(tmp_path, monkeypatch):
+    """--snapshot → every work-item has review_mode='snapshot' and an empty/missing diff."""
+    import framework_cli.cli as cli_mod
+
+    # Force auto-discovery to find nothing (irrelevant for --snapshot but safe).
+    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "audit-prepare",
+            "--target",
+            "framework",
+            "--agent",
+            "security",
+            "--snapshot",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    manifest = _json.loads(result.stdout)
+    assert len(manifest["work_items"]) == 1
+    wi = manifest["work_items"][0]
+    assert wi["review_mode"] == "snapshot"
+    assert wi.get("base_sha") is None
+    assert wi.get("base_baseline") is None
+
+
+def test_audit_prepare_since_with_sha_produces_delta(tmp_path, monkeypatch):
+    """--since <SHA> (not a baseline dir) → every item delta against that SHA."""
+    import subprocess
+
+    import framework_cli.cli as cli_mod
+
+    def fake_run(args, **kwargs):
+        # Pretend "abc123" resolves to "deadbeef".
+        if args[:3] == ["git", "rev-parse", "--verify"]:
+            return subprocess.CompletedProcess(
+                args=args, returncode=0, stdout="deadbeef\n", stderr=""
+            )
+        # Other subprocess calls (like git diff inside delta_diff) — return empty.
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout="", stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "audit-prepare",
+            "--target",
+            "framework",
+            "--agent",
+            "security",
+            "--since",
+            "abc123",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    manifest = _json.loads(result.stdout)
+    wi = manifest["work_items"][0]
+    assert wi["review_mode"] == "delta"
+    assert wi["base_sha"] == "deadbeef"
+    assert wi.get("base_baseline") is None  # ref form, no baseline name
+
+
+def test_audit_prepare_snapshot_and_since_mutually_exclusive(tmp_path, monkeypatch):
+    """Passing both --snapshot and --since → exit 2 with a clear message."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "audit-prepare",
+            "--target",
+            "framework",
+            "--agent",
+            "security",
+            "--snapshot",
+            "--since",
+            "abc123",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output.lower()
+
+
+def test_audit_prepare_autodiscover_picks_latest_baseline(tmp_path, monkeypatch):
+    """No flags + a matching baseline exists → delta against its SHA."""
+    import subprocess
+
+    import framework_cli.cli as cli_mod
+
+    bd = tmp_path / "audit-2026-03-01-x"
+    bd.mkdir()
+    (bd / "meta.json").write_text(
+        '{"target": "framework", "git_sha": "shaNew", "agents": ["security"]}'
+    )
+
+    def fake_run(args, **kwargs):
+        # delta_diff calls git diff; return empty diff (irrelevant for test).
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout="", stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "audit-prepare",
+            "--target",
+            "framework",
+            "--agent",
+            "security",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    manifest = _json.loads(result.stdout)
+    wi = manifest["work_items"][0]
+    assert wi["review_mode"] == "delta"
+    assert wi["base_sha"] == "shaNew"
+    assert wi["base_baseline"] == "audit-2026-03-01-x"
 
 
 def test_resolve_audit_base_snapshot_flag_forces_snapshot(tmp_path):
