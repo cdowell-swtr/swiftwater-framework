@@ -59,7 +59,11 @@ const index = await agent(
 )
 const items = index.items
 
+if (!Array.isArray(items)) {
+  throw new Error('reviewers-audit: index.items must be an array')
+}
 if (items.length === 0) {
+  log('reviewers-audit: no work items — nothing to review')
   return { results: [], meta: ARGS.meta || {} }
 }
 

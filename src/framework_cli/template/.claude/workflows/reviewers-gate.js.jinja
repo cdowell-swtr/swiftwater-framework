@@ -44,8 +44,12 @@ const index = await agent(
 )
 const items = index.items
 
+if (!Array.isArray(items)) {
+  throw new Error('reviewers-gate: index.items must be an array')
+}
 if (items.length === 0) {
   // No affected agents → trivial PASS (the caller handles the noop/regrade case).
+  log('reviewers-gate: no work items — nothing to review')
   return { results: [], meta: ARGS.meta || {} }
 }
 
