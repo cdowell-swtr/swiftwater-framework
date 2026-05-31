@@ -1,4 +1,5 @@
 import json as _json
+import stat
 from pathlib import Path
 
 import pytest
@@ -2741,3 +2742,64 @@ def test_tune_finalize_fails_loudly_on_malformed_results(tmp_path):
     )
     assert result.exit_code == 1
     assert "failed to load results" in result.output
+
+
+# ---------------------------------------------------------------------------
+# _prepare_split_dir hardening (audit #3/#6/#7)
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_split_dir_creates_private_dirs(tmp_path):
+    """_prepare_split_dir returns (split_dir, items_dir), both 0o700."""
+    from framework_cli.cli import _prepare_split_dir
+
+    target = tmp_path / "sd"
+    split_dir, items_dir = _prepare_split_dir(str(target))
+
+    assert split_dir == target
+    assert items_dir == target / "items"
+    assert split_dir.is_dir()
+    assert items_dir.is_dir()
+    assert stat.S_IMODE(split_dir.stat().st_mode) == 0o700
+    assert stat.S_IMODE(items_dir.stat().st_mode) == 0o700
+
+
+def test_prepare_split_dir_rejects_symlink_target(tmp_path):
+    """A symlink at the target is refused (don't rmtree/replace through it)."""
+    from framework_cli.cli import _prepare_split_dir
+
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real)
+
+    with pytest.raises(RuntimeError, match="symlink"):
+        _prepare_split_dir(str(link))
+
+
+def test_prepare_split_dir_rejects_nondir_target(tmp_path):
+    """A plain file at the target is refused, not rmtree'd opaquely."""
+    from framework_cli.cli import _prepare_split_dir
+
+    target = tmp_path / "afile"
+    target.write_text("stale")
+
+    with pytest.raises(RuntimeError, match="not a directory"):
+        _prepare_split_dir(str(target))
+
+
+def test_prepare_split_dir_replaces_pre_populated_dir(tmp_path):
+    """A pre-existing dir (with stale contents) is cleanly replaced."""
+    from framework_cli.cli import _prepare_split_dir
+
+    target = tmp_path / "sd"
+    (target / "items").mkdir(parents=True)
+    (target / "items" / "item-9999.json").write_text("stale")
+    (target / "stray.txt").write_text("stale")
+
+    split_dir, items_dir = _prepare_split_dir(str(target))
+
+    assert items_dir.is_dir()
+    assert not (split_dir / "stray.txt").exists()
+    assert not (items_dir / "item-9999.json").exists()
+    assert stat.S_IMODE(split_dir.stat().st_mode) == 0o700

@@ -828,6 +828,40 @@ def _staged_hash(staged: list[str]) -> str:
     return "sha256:" + h.hexdigest()
 
 
+def _prepare_split_dir(split_to: str) -> tuple[Path, Path]:
+    """Create a clean, private (0o700) split-manifest directory at ``split_to``.
+
+    Returns ``(split_dir, items_dir)``. Hardening for the deferred findings in the
+    2026-05-30 audit (#3/#6/#7): refuse a symlink or non-directory at the target —
+    so we never rmtree/replace through a symlink or raise opaquely on a file
+    collision — and build the tree under a private ``tempfile.mkdtemp`` staging dir
+    that is atomically ``os.replace``d into place, so the published directory is
+    0o700 with no umask window and the publish is atomic. A narrow rmtree->replace
+    race remains (proportionate for this surface); a hostile racer recreating the
+    target as a non-empty dir makes ``os.replace`` raise rather than clobber.
+    """
+    import shutil
+    import tempfile
+
+    split_dir = Path(split_to)
+    if split_dir.is_symlink():
+        raise RuntimeError(f"--split-to target is a symlink, refusing: {split_dir}")
+    if split_dir.exists():
+        if not split_dir.is_dir():
+            raise RuntimeError(
+                f"--split-to target exists and is not a directory: {split_dir}"
+            )
+        shutil.rmtree(split_dir)
+    parent = split_dir.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".split-staging-", dir=parent))
+    items_dir = staging / "items"
+    items_dir.mkdir()
+    items_dir.chmod(0o700)
+    os.replace(staging, split_dir)
+    return split_dir, split_dir / "items"
+
+
 def _emit_gate_prep(split_to: str = "") -> None:
     """Emit a gate-mode manifest from the current staged set."""
     import shutil
