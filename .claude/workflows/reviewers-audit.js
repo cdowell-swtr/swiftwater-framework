@@ -47,6 +47,11 @@ const INDEX_SCHEMA = {
           review_mode: { type: ['string', 'null'] },
           base_sha: { type: ['string', 'null'] },
           base_baseline: { type: ['string', 'null'] },
+          // The registry model for this agent (Sonnet non-agentic / Opus
+          // agentic). Passed to agent() so the subagent runs at its intended
+          // tier rather than the harness default. Absent on legacy layouts →
+          // agent() falls back to the inherited default.
+          model: { type: ['string', 'null'] },
         },
       },
     },
@@ -166,6 +171,7 @@ const results = await parallel(items.map((item) => async () => {
       phase: 'Audit',
       schema: FINDINGS_SCHEMA,
       agentType: item.subagent_type,
+      ...(item.model ? { model: item.model } : {}),
     })
     return {
       agent: item.agent,

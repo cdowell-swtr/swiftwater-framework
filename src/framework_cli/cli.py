@@ -1007,6 +1007,10 @@ def _emit_gate_prep(split_to: str = "") -> None:
                     "i": i,
                     "agent": wi["agent"],
                     "subagent_type": wi["subagent_type"],
+                    # Carry the registry model so the subscription Workflow
+                    # dispatches each subagent at its intended tier instead of
+                    # the harness default.
+                    "model": wi["model"],
                 }
             )
         index = {
@@ -1380,6 +1384,10 @@ def _emit_audit_prep(
                     "i": i,
                     "agent": wi["agent"],
                     "subagent_type": wi["subagent_type"],
+                    # Carry the registry model so the subscription Workflow
+                    # dispatches each subagent at its intended tier (Sonnet
+                    # non-agentic / Opus agentic) instead of the harness default.
+                    "model": wi["model"],
                     # Per-agent audit mode metadata — the workflow's per-item
                     # dispatch reads these directly from the index entry to
                     # select the DELTA vs SNAPSHOT prompt template (it does

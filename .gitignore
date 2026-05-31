@@ -11,5 +11,9 @@ build/
 # Personal, machine-local Claude Code settings (shared config lives in settings.json)
 .claude/settings.local.json
 
+# Claude Code scheduled-tasks runtime state (harness-owned singleton lock + data; per-machine, ephemeral)
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
+
 # Local reviewers (audit + gate) ephemeral outputs
 .framework/audit/

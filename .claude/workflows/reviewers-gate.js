@@ -32,6 +32,10 @@ const INDEX_SCHEMA = {
           i: { type: 'integer' },
           agent: { type: 'string' },
           subagent_type: { type: 'string' },
+          // The registry model (Sonnet non-agentic / Opus agentic). Passed to
+          // agent() so the subagent runs at its intended tier rather than the
+          // harness default. Absent on legacy layouts → inherited default.
+          model: { type: ['string', 'null'] },
         },
       },
     },
@@ -108,6 +112,7 @@ const results = await parallel(items.map((item) => async () => {
       phase: 'Gate',
       schema: FINDINGS_SCHEMA,
       agentType: item.subagent_type,
+      ...(item.model ? { model: item.model } : {}),
     })
     return {
       agent: item.agent,

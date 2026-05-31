@@ -1571,6 +1571,7 @@ def test_audit_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
         "i",
         "agent",
         "subagent_type",
+        "model",
         "review_mode",
         "base_sha",
         "base_baseline",
@@ -1579,6 +1580,11 @@ def test_audit_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
     # workflow's per-item dispatch can branch the DELTA vs SNAPSHOT prompt
     # without re-reading the per-item file.
     assert first["review_mode"] in ("snapshot", "delta")
+    # The registry model MUST ride the index entry so the subscription Workflow
+    # can dispatch each subagent at its intended tier (Sonnet non-agentic / Opus
+    # agentic) instead of inheriting the harness default (which was Haiku).
+    assert first["model"] == manifest["work_items"][0]["model"]
+    assert first["model"] == "claude-sonnet-4-6"  # security is bundle tier
     # Index is intentionally lightweight — must NOT carry the bulky fields.
     assert "system_blocks" not in first
     assert "diff" not in first
@@ -2031,7 +2037,11 @@ def test_gate_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
     assert index["agents_set"] == manifest["agents_set"]
     assert len(index["items"]) == len(manifest["work_items"])
     first = index["items"][0]
-    assert set(first.keys()) >= {"i", "agent", "subagent_type"}
+    assert set(first.keys()) >= {"i", "agent", "subagent_type", "model"}
+    # The registry model MUST ride the index entry so the subscription Workflow
+    # dispatches each subagent at its intended tier rather than the harness
+    # default (which was Haiku for the non-agentic reviewers).
+    assert first["model"] == manifest["work_items"][0]["model"]
     # Index is intentionally lightweight — must NOT carry the bulky fields.
     assert "system_blocks" not in first
     assert "diff" not in first
