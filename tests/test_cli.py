@@ -2836,3 +2836,39 @@ def test_template_render_accepts_subset(tmp_path):
     answers = (out / ".copier-answers.yml").read_text()
     assert "webhooks" in answers
     assert "graphql" not in answers
+
+
+def test_template_map_cli_writes_path_map(tmp_path):
+    from framework_cli.copier_runner import template_path
+
+    findings = tmp_path / "findings"
+    findings.mkdir()
+    (findings / "security.json").write_text(
+        _json.dumps(
+            {
+                "agent": "security",
+                "findings": [
+                    {
+                        "path": "src/demo/main.py",
+                        "line": 5,
+                        "severity": "high",
+                        "message": "m",
+                    }
+                ],
+            }
+        )
+    )
+    result = runner.invoke(
+        app,
+        [
+            "template-map",
+            "--findings",
+            str(findings),
+            "--template-root",
+            str(template_path()),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    out = findings.parent / "path-map.md"
+    assert out.exists()
+    assert "as-rendered" in out.read_text()

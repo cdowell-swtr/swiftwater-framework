@@ -210,6 +210,31 @@ def template_render(
     )
 
 
+@app.command(name="template-map")
+def template_map_cmd(
+    findings: str = typer.Option(
+        ..., "--findings", help="Path to the findings/ dir (per-agent JSON)."
+    ),
+    template_root: str = typer.Option(
+        ..., "--template-root", help="Path to src/framework_cli/template."
+    ),
+    package_name: str = typer.Option(
+        "demo", "--package-name", help="package_name used in the render."
+    ),
+    out: str = typer.Option(
+        "", "--out", help="Output markdown path (default: <findings>/../path-map.md)."
+    ),
+) -> None:
+    """Annotate rendered-project findings with best-guess template-source paths."""
+    from framework_cli.template_map import map_findings, render_markdown
+
+    findings_dir = Path(findings)
+    rows = map_findings(findings_dir, Path(template_root), package_name)
+    out_path = Path(out) if out else findings_dir.parent / "path-map.md"
+    out_path.write_text(render_markdown(rows))
+    typer.echo(json.dumps({"rows": len(rows), "out": str(out_path)}, indent=2))
+
+
 @app.command()
 def restore(
     file: str = typer.Argument(
