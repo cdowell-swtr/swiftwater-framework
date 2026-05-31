@@ -2872,3 +2872,15 @@ def test_template_map_cli_writes_path_map(tmp_path):
     out = findings.parent / "path-map.md"
     assert out.exists()
     assert "as-rendered" in out.read_text()
+
+
+def test_template_audit_command_is_framework_only():
+    """The template-audit slash command must NOT ship in the template payload
+    (it audits the framework's own template; meaningless in a generated project)."""
+    from framework_cli.copier_runner import template_path
+
+    repo_cmd = Path(".claude/commands/reviewers/template-audit.md")
+    assert repo_cmd.exists(), "framework-side slash command should exist"
+    payload_dir = template_path() / ".claude/commands/reviewers"
+    assert not (payload_dir / "template-audit.md.jinja").exists()
+    assert not (payload_dir / "template-audit.md").exists()
