@@ -76,13 +76,49 @@ const FINDINGS_SCHEMA = {
 // Audit items may be agentic (root_dir + tools_allowed set), mirroring the
 // reviewers-tune item shape: agentic reviewers can use the listed tools to
 // explore the code under root_dir.
-const ITEM_PROMPT = (path) => `
+//
+// Two templates branch on item.review_mode: DELTA (diff vs prior baseline)
+// vs SNAPSHOT (no prior baseline; review from scratch). Both preserve the
+// same JSON-file-reading mechanics — only the framing prose differs.
+const DELTA_ITEM_PROMPT = (path, baseSha, baseBaselineName) => `
 You are acting as a code reviewer. Your inputs live in a JSON file on disk.
+
+This is a DELTA review: the diff below is the change between the prior baseline
+(commit ${baseSha}${baseBaselineName ? `, recorded in baseline ${baseBaselineName}` : ''}) and the current HEAD. Focus on what is new or
+changed; the rest of the codebase has been reviewed previously and is out of
+scope for this run.
 
 1. Read the JSON file at ${path}. It has fields:
    - system_blocks: array of {text} — these together form the system context for the reviewer
-     (typically a unified diff, optionally bundled context files, and the reviewer's prompt).
+     (the unified diff vs the prior baseline, optionally bundled context files, and the reviewer's prompt).
    - user_message: string — the final user instruction (typically "Return your findings as a JSON array only.").
+   - tools_allowed: array of strings or null. If non-null, use ONLY those tools.
+   - root_dir: string — when present, all tool paths should be ABSOLUTE paths starting with this root.
+
+2. Concatenate the text of every system_block with double newlines as your effective system context.
+   Treat this as your operating identity and instructions.
+
+3. Execute the review as that reviewer would. If tools_allowed is non-null (an agentic reviewer),
+   you may use the listed tools to explore the code under root_dir; use absolute paths only.
+
+4. Return a JSON object: {"findings": [...]} where findings is the JSON array the reviewer would
+   produce (each finding has path/line/severity/message and optional suggestion). If no issues,
+   return {"findings": []}. The response will be schema-validated.
+`
+
+const SNAPSHOT_ITEM_PROMPT = (path) => `
+You are acting as a code reviewer. Your inputs live in a JSON file on disk.
+
+This is a SNAPSHOT review: there is no prior baseline to diff against, so review
+the current code from scratch. For bundle reviewers, the bundled context files
+in system_blocks are the code to review. For agentic reviewers, explore the code
+under root_dir using the listed tools.
+
+1. Read the JSON file at ${path}. It has fields:
+   - system_blocks: array of {text} — these together form the system context for the reviewer.
+     For snapshot mode, the first block (the diff) is empty/missing; the bundled context block
+     (and/or root_dir for agentic reviewers) carries the code to review.
+   - user_message: string — the final user instruction.
    - tools_allowed: array of strings or null. If non-null, use ONLY those tools.
    - root_dir: string — when present, all tool paths should be ABSOLUTE paths starting with this root.
 
@@ -100,8 +136,13 @@ You are acting as a code reviewer. Your inputs live in a JSON file on disk.
 const results = await parallel(items.map((item) => async () => {
   const itemPath = `${itemsDir}/item-${String(item.i).padStart(4, '0')}.json`
   const label = `audit:${item.agent}`
+  // Default to snapshot for safety if review_mode is missing (older split-manifest
+  // files from before the audit-semantics change).
+  const itemPrompt = item.review_mode === 'delta'
+    ? DELTA_ITEM_PROMPT(itemPath, item.base_sha, item.base_baseline)
+    : SNAPSHOT_ITEM_PROMPT(itemPath)
   try {
-    const out = await agent(ITEM_PROMPT(itemPath), {
+    const out = await agent(itemPrompt, {
       label,
       phase: 'Audit',
       schema: FINDINGS_SCHEMA,
