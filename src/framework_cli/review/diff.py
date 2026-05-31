@@ -4,6 +4,7 @@ import fnmatch
 import os
 import re
 import subprocess
+from pathlib import Path
 
 
 _NEW_PATH_RE = re.compile(r"^\+\+\+ b/(.+)$", re.MULTILINE)
@@ -77,4 +78,44 @@ def framework_diff() -> str:
         text=True,
         check=False,
     )
+    return result.stdout
+
+
+def snapshot_seed(target: str, root: Path) -> str:
+    """Return the diff seed for audit snapshot mode.
+
+    For bundle agents this is always empty: the per-agent bundled context block
+    (driven by ContextPolicy.context_globs) already carries the relevant source
+    files, so no diff is needed. Agentic agents get a root_dir at the workflow
+    layer and explore the tree via their tools; they also don't need a diff
+    seed here.
+
+    Returns an empty string. The `target` and `root` parameters are kept for
+    symmetry with `delta_diff(base_sha)` and to allow future extension (e.g.,
+    target-specific synthetic diffs) without breaking the call sites.
+    """
+    del target, root  # currently unused; kept for symmetry and future extension
+    return ""
+
+
+def delta_diff(base_sha: str) -> str:
+    """Return ``git diff <base_sha>...HEAD`` as a unified diff string.
+
+    Raises ValueError when ``git diff`` exits non-zero (e.g., ref unreachable).
+    The CLI layer translates this into a clear ``typer.Exit(2)`` with the
+    git error attached.
+    """
+    result = subprocess.run(
+        ["git", "diff", f"{base_sha}...HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        msg = (
+            result.stderr or ""
+        ).strip() or f"unable to compute diff for {base_sha}...HEAD"
+        raise ValueError(
+            f"delta_diff({base_sha!r}) failed: {msg}. Is that ref reachable?"
+        )
     return result.stdout
