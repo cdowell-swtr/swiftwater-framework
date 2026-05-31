@@ -632,10 +632,13 @@ def tune_prepare(
 
 @app.command(name="audit-prepare")
 def audit_prepare(
-    agent: str = typer.Option(
-        "",
+    agent: list[str] = typer.Option(
+        None,
         "--agent",
-        help="Single agent to prepare (default: all active for the target).",
+        help=(
+            "Restrict to this agent. Repeat for multiple agents. "
+            "Omit for all active agents for the target."
+        ),
     ),
     target: str = typer.Option(
         "",
@@ -652,7 +655,7 @@ def audit_prepare(
 
     Output is JSON on stdout; consumed by /reviewers:audit.
     """
-    _emit_audit_prep(agent, target, output_dir)
+    _emit_audit_prep(list(agent or []), target, output_dir)
 
 
 @app.command(name="gate-prepare")
@@ -1036,7 +1039,9 @@ def _detect_audit_target(explicit: str) -> str:
     )
 
 
-def _emit_audit_prep(single_agent: str, target_arg: str, output_dir: str) -> None:
+def _emit_audit_prep(
+    selected_agents: list[str], target_arg: str, output_dir: str
+) -> None:
     from framework_cli.review.context import FRAMEWORK_AGENTS
     from framework_cli.source import read_batteries
 
@@ -1045,14 +1050,18 @@ def _emit_audit_prep(single_agent: str, target_arg: str, output_dir: str) -> Non
         all_agents = sorted(FRAMEWORK_AGENTS)
     else:
         all_agents = active_agents("pull_request", read_batteries(Path(".")))
-    if single_agent:
-        if single_agent not in all_agents:
+    # Dedupe selected agents while preserving insertion order.
+    selected = list(dict.fromkeys(selected_agents))
+    if selected:
+        unknown = [a for a in selected if a not in all_agents]
+        if unknown:
             typer.echo(
-                f"audit-prepare: agent '{single_agent}' not active for target '{target}'",
+                f"audit-prepare: unknown agent(s): {', '.join(unknown)}. "
+                f"Valid agents for target '{target}': {', '.join(sorted(all_agents))}",
                 err=True,
             )
-            raise typer.Exit(1)
-        agents_set = [single_agent]
+            raise typer.Exit(2)
+        agents_set = selected
     else:
         agents_set = all_agents
 

@@ -1400,6 +1400,70 @@ def test_audit_prepare_tolerates_pyproject_formatting_variations(tmp_path, monke
     assert data["target"] == "framework"
 
 
+def test_audit_prepare_multiple_agents_produces_union(tmp_path, monkeypatch):
+    """audit-prepare with two --agent flags produces work-items for both agents, deduplicated."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    result = runner.invoke(
+        app,
+        [
+            "audit-prepare",
+            "--target",
+            "framework",
+            "--agent",
+            "security",
+            "--agent",
+            "dependency",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    manifest = _json.loads(result.output)
+    agent_names_in_manifest = {item["agent"] for item in manifest["work_items"]}
+    assert agent_names_in_manifest == {"security", "dependency"}
+    assert set(manifest["agents_set"]) == {"security", "dependency"}
+
+
+def test_audit_prepare_duplicate_agents_deduped(tmp_path, monkeypatch):
+    """Passing the same agent twice does not produce duplicate work-items."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    result = runner.invoke(
+        app,
+        [
+            "audit-prepare",
+            "--target",
+            "framework",
+            "--agent",
+            "security",
+            "--agent",
+            "security",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    manifest = _json.loads(result.output)
+    security_items = [i for i in manifest["work_items"] if i["agent"] == "security"]
+    assert len(security_items) == 1
+
+
+def test_audit_prepare_unknown_agent_errors_clearly(monkeypatch):
+    """audit-prepare --agent <unknown> errors with a clear message listing valid names."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    result = runner.invoke(
+        app,
+        ["audit-prepare", "--target", "framework", "--agent", "bogus"],
+    )
+    assert result.exit_code != 0
+    assert "bogus" in result.output
+    assert (
+        "unknown agent" in result.output.lower()
+        or "valid agents" in result.output.lower()
+    )
+
+
 def test_gate_prepare_affected_single_prompt(tmp_path, monkeypatch):
     """A staged change to one agent's prompt → only that agent in the work items."""
     import framework_cli.cli as cli_mod
