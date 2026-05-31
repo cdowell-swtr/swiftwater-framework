@@ -1527,6 +1527,59 @@ def test_audit_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
     assert on_disk["user_message"] == work_item["user_message"]
     assert on_disk["subagent_type"] == work_item["subagent_type"]
 
+    # Permissions are load-bearing — per-item files carry the full diff payload
+    # (potentially sensitive). Dirs: 0o700; files: 0o600.
+    import stat
+
+    assert stat.S_IMODE(split_dir.stat().st_mode) == 0o700
+    assert stat.S_IMODE(items_dir.stat().st_mode) == 0o700
+    assert stat.S_IMODE(index_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(item_path.stat().st_mode) == 0o600
+
+
+def test_audit_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
+    """A second invocation against a pre-populated split-dir clears the prior layout.
+
+    Mirrors the tune-prepare idempotency guarantee — `if split_dir.exists(): rmtree(...)`
+    must remove stale items from a prior run so the index + items reflect this run only.
+    """
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+
+    split_dir = tmp_path / "audit-split-idempotent"
+    split_dir.mkdir()
+    # Seed stale files that a fresh invocation should remove.
+    (split_dir / "items").mkdir()
+    (split_dir / "items" / "item-9999.json").write_text('{"stale": true}')
+    (split_dir / "index.json").write_text('{"stale": true}')
+    (split_dir / "stray.txt").write_text("leftover")
+
+    result = runner.invoke(
+        app,
+        [
+            "audit-prepare",
+            "--target",
+            "framework",
+            "--agent",
+            "security",
+            "--split-to",
+            str(split_dir),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    # Stale leftovers must be gone.
+    assert not (split_dir / "items" / "item-9999.json").exists()
+    assert not (split_dir / "stray.txt").exists()
+
+    # Fresh layout for THIS run is in place.
+    assert (split_dir / "items" / "item-0000.json").is_file()
+    fresh = _json.loads((split_dir / "index.json").read_text())
+    assert fresh.get("stale") is None
+    assert fresh["mode"] == "audit"
+    assert len(fresh["items"]) == 1
+
 
 def test_gate_prepare_affected_single_prompt(tmp_path, monkeypatch):
     """A staged change to one agent's prompt → only that agent in the work items."""

@@ -663,7 +663,9 @@ def audit_prepare(
 ) -> None:
     """Emit the audit-mode work-item manifest (current code, one item per agent).
 
-    Output is JSON on stdout; consumed by /reviewers:audit.
+    Output is JSON on stdout; consumed by /reviewers:audit. When ``--split-to DIR``
+    is set, also writes a split-manifest layout (``index.json`` + ``items/item-NNNN.json``)
+    under DIR for the Workflow tool to consume via ``{indexPath, itemsDir}`` args.
     """
     _emit_audit_prep(list(agent or []), target, output_dir, split_to)
 
@@ -1055,6 +1057,21 @@ def _emit_audit_prep(
     output_dir: str,
     split_to: str = "",
 ) -> None:
+    """Emit the audit-mode manifest to stdout (always) plus, when ``split_to`` is
+    non-empty, an on-disk split-manifest layout under ``split_to``:
+
+    * ``<split_to>/index.json`` — slim metadata (``mode``, ``target``,
+      ``agents_set``, ``output_dir``, ``items: [{i, agent, subagent_type}]``).
+      Written with mode 0o600.
+    * ``<split_to>/items/item-NNNN.json`` — one full work-item per file
+      (``system_blocks``, ``user_message``, etc.). Each written with mode 0o600.
+    * ``<split_to>/`` and ``<split_to>/items/`` themselves get mode 0o700.
+
+    The split layout exists so the Workflow tool can be invoked with a tiny
+    ``{indexPath, itemsDir}`` args payload instead of a multi-MB inline manifest
+    (the documented ~1.76 MB Workflow-args ceiling). Mirrors ``_emit_tune_prep``
+    and ``_emit_gate_prep``.
+    """
     import shutil
 
     from framework_cli.review.context import FRAMEWORK_AGENTS
