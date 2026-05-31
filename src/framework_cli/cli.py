@@ -1190,14 +1190,62 @@ def audit_finalize(
     out_dir: str = typer.Option(
         ..., "--out-dir", help="Output dir to write artifacts."
     ),
+    preserve_as: str | None = typer.Option(
+        None,
+        "--preserve-as",
+        help="After writing out_dir, copy its tree into this dated baseline directory.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Required to overwrite a non-empty --preserve-as target.",
+    ),
 ) -> None:
     """Take the audit workflow's results, write findings/<agent>.json records,
-    audit-report.md (per-agent findings grouped by severity), and meta.json."""
+    audit-report.md (per-agent findings grouped by severity), and meta.json.
+
+    If --preserve-as is set, also copies the out_dir tree (findings/, audit-report.md,
+    meta.json) into the target directory. Refuses to overwrite a non-empty target
+    without --force.
+    """
     records, meta_in = _load_finalize_payload(results, "audit-finalize")
     out = Path(out_dir)
     findings_dir = out / "findings"
     findings_dir.mkdir(parents=True, exist_ok=True)
     _finalize_audit(records, findings_dir, out, meta_in)
+    if preserve_as is not None:
+        _preserve_audit_tree(out, Path(preserve_as), force=force)
+
+
+def _preserve_audit_tree(src: Path, dst: Path, *, force: bool) -> None:
+    """Copy the audit output tree (findings/, audit-report.md, meta.json) from
+    src into dst. Refuses to overwrite a non-empty dst without force=True.
+
+    Used by `audit-finalize --preserve-as` to snapshot a hygiene-mode audit run
+    into a dated baseline directory parallel to the tune scorecards under
+    `docs/superpowers/eval-scorecards/`.
+    """
+    import shutil
+
+    if dst.exists() and any(dst.iterdir()):
+        if not force:
+            typer.echo(
+                f"audit-finalize: --preserve-as target exists and is non-empty: {dst}. "
+                f"Pass --force to overwrite.",
+                err=True,
+            )
+            raise typer.Exit(2)
+        shutil.rmtree(dst)
+    dst.mkdir(parents=True, exist_ok=True)
+    for item in ("findings", "audit-report.md", "meta.json"):
+        s = src / item
+        if not s.exists():
+            continue
+        if s.is_dir():
+            shutil.copytree(s, dst / item)
+        else:
+            shutil.copy2(s, dst / item)
+    typer.echo(f"audit-finalize: preserved to {dst}")
 
 
 @app.command(name="gate-finalize")

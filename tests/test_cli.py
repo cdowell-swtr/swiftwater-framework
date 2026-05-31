@@ -1802,6 +1802,104 @@ def test_audit_finalize_writes_audit_report(tmp_path):
     assert (out / "audit-report.md").is_file()
 
 
+def test_audit_finalize_preserve_as_copies_into_fresh_dir(tmp_path):
+    """audit-finalize --preserve-as copies findings/, audit-report.md, meta.json into target."""
+    out_dir = tmp_path / "latest"
+    out_dir.mkdir()
+    (out_dir / "findings").mkdir()
+    (out_dir / "findings" / "security.json").write_text(
+        '{"agent":"security","findings":[],"raw_text":"[]"}'
+    )
+    (out_dir / "audit-report.md").write_text("# Audit\n")
+    (out_dir / "meta.json").write_text("{}")
+
+    target = tmp_path / "preserved"
+    results = tmp_path / "results.json"
+    results.write_text('{"results": [], "meta": {"mode": "audit"}}')
+
+    result = runner.invoke(
+        app,
+        [
+            "audit-finalize",
+            "--results",
+            str(results),
+            "--out-dir",
+            str(out_dir),
+            "--preserve-as",
+            str(target),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    # `findings/` should land at target/findings/
+    assert (target / "findings" / "security.json").exists()
+    assert (target / "audit-report.md").exists()
+    assert (target / "meta.json").exists()
+
+
+def test_audit_finalize_preserve_as_refuses_non_empty_target(tmp_path):
+    """--preserve-as refuses to overwrite a non-empty target dir without --force."""
+    out_dir = tmp_path / "latest"
+    out_dir.mkdir()
+    (out_dir / "audit-report.md").write_text("# Audit\n")
+
+    target = tmp_path / "preserved"
+    target.mkdir()
+    (target / "existing.txt").write_text("not empty")
+
+    results = tmp_path / "results.json"
+    results.write_text('{"results": [], "meta": {"mode": "audit"}}')
+
+    result = runner.invoke(
+        app,
+        [
+            "audit-finalize",
+            "--results",
+            str(results),
+            "--out-dir",
+            str(out_dir),
+            "--preserve-as",
+            str(target),
+        ],
+    )
+    assert result.exit_code != 0
+    assert str(target) in result.output
+    assert (
+        "non-empty" in result.output.lower()
+        or "exists" in result.output.lower()
+        or "use --force" in result.output.lower()
+    )
+
+
+def test_audit_finalize_preserve_as_force_overwrites_non_empty(tmp_path):
+    """--force allows --preserve-as to overwrite a non-empty target."""
+    out_dir = tmp_path / "latest"
+    out_dir.mkdir()
+    (out_dir / "audit-report.md").write_text("# Audit\n")
+
+    target = tmp_path / "preserved"
+    target.mkdir()
+    (target / "existing.txt").write_text("will be replaced")
+
+    results = tmp_path / "results.json"
+    results.write_text('{"results": [], "meta": {"mode": "audit"}}')
+
+    result = runner.invoke(
+        app,
+        [
+            "audit-finalize",
+            "--results",
+            str(results),
+            "--out-dir",
+            str(out_dir),
+            "--preserve-as",
+            str(target),
+            "--force",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert (target / "audit-report.md").exists()
+
+
 def test_gate_finalize_writes_marker_pass(tmp_path):
     """gate-mode finalize writes marker.json with verdict=PASS when no high+ findings."""
     out = tmp_path / "audit"
