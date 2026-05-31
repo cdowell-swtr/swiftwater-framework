@@ -1,0 +1,28 @@
+{
+  "agent": "test-quality",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 55,
+      "message": "test_duplicate_delivery_is_deduped cannot fail if deduplication is broken. Both POSTs send an identical body and the test only asserts each returns status 200. In the route (routes/webhooks.py), a successfully-processed event returns 200 ('accepted') and a deduped redelivery also returns 200 ('duplicate'). So whether the second delivery is correctly deduped or wrongly re-processed, the response is 200 either way \u2014 the assertion is satisfied in both cases. The test asserts nothing that distinguishes deduped from not-deduped behaviour, despite its name. (Dedup is in fact covered by test_metrics_count_outcomes, which asserts outcome=\"duplicate\" 1; this test adds no independent guarantee.)",
+      "path": "tests/functional/test_webhooks.py",
+      "severity": "high",
+      "suggestion": "Assert an observable signal of dedup rather than just the status code: e.g. after the second POST assert the webhook 'duplicate' metric incremented (or that only one inbox/webhook_events row exists for the key). Otherwise this test passes for a no-op dedup implementation."
+    },
+    {
+      "line": 34,
+      "message": "test_get_logger_is_usable has no assertion \u2014 it only calls get_logger().info(...) with a 'must not raise' comment. It will pass as long as the call does not raise, but it does not verify the logger emits anything, uses the configured level, or includes structured fields. A regression that silently dropped the log call (or returned a no-op logger) would not be caught.",
+      "path": "tests/unit/test_logging.py",
+      "severity": "low",
+      "suggestion": "Capture output via structlog's testing helpers (e.g. structlog.testing.capture_logs) and assert the event/level/fields, or at minimum assert the returned logger is the expected bound-logger type."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/functional/test_webhooks.py\",\"line\":55,\"severity\":\"high\",\"message\":\"test_duplicate_delivery_is_deduped cannot fail if deduplication is broken. Both POSTs send an identical body and the test only asserts each returns status 200. In the route (routes/webhooks.py), a successfully-processed event returns 200 ('accepted') and a deduped redelivery also returns 200 ('duplicate'). So whether the second delivery is correctly deduped or wrongly re-processed, the response is 200 either way \u2014 the assertion is satisfied in both cases. The test asserts nothing that distinguishes deduped from not-deduped behaviour, despite its name. (Dedup is in fact covered by test_metrics_count_outcomes, which asserts outcome=\\\"duplicate\\\" 1; this test adds no independent guarantee.)\",\"suggestion\":\"Assert an observable signal of dedup rather than just the status code: e.g. after the second POST assert the webhook 'duplicate' metric incremented (or that only one inbox/webhook_events row exists for the key). Otherwise this test passes for a no-op dedup implementation.\"},{\"path\":\"tests/unit/test_logging.py\",\"line\":34,\"severity\":\"low\",\"message\":\"test_get_logger_is_usable has no assertion \u2014 it only calls get_logger().info(...) with a 'must not raise' comment. It will pass as long as the call does not raise, but it does not verify the logger emits anything, uses the configured level, or includes structured fields. A regression that silently dropped the log call (or returned a no-op logger) would not be caught.\",\"suggestion\":\"Capture output via structlog's testing helpers (e.g. structlog.testing.capture_logs) and assert the event/level/fields, or at minimum assert the returned logger is the expected bound-logger type.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

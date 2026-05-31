@@ -1,0 +1,21 @@
+{
+  "agent": "privacy",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 82,
+      "message": "Validation error response includes detailed field error information (errors=jsonable_encoder(exc.errors())), which could expose PII if request schemas contain sensitive fields like email, phone, or SSN. Even with benign current models, validation error details leak information about request structure and failed validation reasons.",
+      "path": "src/demo/middleware/errors.py",
+      "severity": "high",
+      "suggestion": "Return a generic validation error message without field-level details. Alternatively, implement a sanitization layer that filters or redacts sensitive field names from the errors array before returning to the client."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/middleware/errors.py\",\"line\":82,\"severity\":\"high\",\"message\":\"Validation error response includes detailed field error information (errors=jsonable_encoder(exc.errors())), which could expose PII if request schemas contain sensitive fields like email, phone, or SSN. Even with benign current models, validation error details leak information about request structure and failed validation reasons.\",\"suggestion\":\"Return a generic validation error message without field-level details. Alternatively, implement a sanitization layer that filters or redacts sensitive field names from the errors array before returning to the client.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

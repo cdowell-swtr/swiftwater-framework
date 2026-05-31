@@ -1,0 +1,117 @@
+{
+  "agents": [
+    "accessibility",
+    "api-design",
+    "application-logic",
+    "architecture",
+    "compliance",
+    "contracts",
+    "data-integrity",
+    "data-lineage",
+    "dependency",
+    "documentation",
+    "observability",
+    "observability-db",
+    "observability-infra",
+    "performance",
+    "privacy",
+    "security",
+    "test-quality",
+    "usability"
+  ],
+  "git_sha": "76d9b6563598e57f4a9a239e298faf1a12ddb89f",
+  "per_agent": {
+    "accessibility": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "api-design": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "application-logic": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "architecture": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "compliance": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "contracts": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "data-integrity": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "data-lineage": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "dependency": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "documentation": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "observability": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "observability-db": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "observability-infra": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "performance": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "privacy": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "security": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "test-quality": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    },
+    "usability": {
+      "base_baseline": null,
+      "base_sha": null,
+      "review_mode": "snapshot"
+    }
+  },
+  "target": "project",
+  "timestamp": "2026-05-31T22:10:05+00:00"
+}

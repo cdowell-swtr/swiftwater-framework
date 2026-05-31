@@ -1,0 +1,21 @@
+{
+  "agent": "api-design",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 29,
+      "message": "Unbounded list field: 'items' returns a list[Item] with no pagination (limit/offset, first/after, or cursor-based). As the items table grows, this query could return unbounded results, causing performance and memory issues.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Add pagination parameters (e.g., limit and offset, or cursor-based pagination with first/after) to the items field to ensure bounded result sets. Example: 'def items(self, info: strawberry.Info, limit: int = 10, offset: int = 0) -> list[Item]:'"
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":29,\"severity\":\"high\",\"message\":\"Unbounded list field: 'items' returns a list[Item] with no pagination (limit/offset, first/after, or cursor-based). As the items table grows, this query could return unbounded results, causing performance and memory issues.\",\"suggestion\":\"Add pagination parameters (e.g., limit and offset, or cursor-based pagination with first/after) to the items field to ensure bounded result sets. Example: 'def items(self, info: strawberry.Info, limit: int = 10, offset: int = 0) -> list[Item]:'\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

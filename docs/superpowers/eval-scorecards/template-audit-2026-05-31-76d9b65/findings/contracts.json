@@ -1,0 +1,35 @@
+{
+  "agent": "contracts",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 19,
+      "message": "Incompatible response shape: pact expects response body wrapped in {\"content\": [...]}, but provider endpoint GET /items returns list[ItemRead] which serializes directly to [...]. This is an uncompensated breaking change in response structure that will cause verification to fail.",
+      "path": "pacts/examplewebapp-app.json",
+      "severity": "high",
+      "suggestion": "Update the pact to match the actual provider response shape. The body should be [{\"id\": 1, \"name\": \"alpha\"}, {\"id\": 2, \"name\": \"beta\"}] instead of {\"content\": [{\"id\": 1, \"name\": \"alpha\"}]}, and update matching rules from \"$[*]\" to \"$[*]\" (applied to array items directly)."
+    },
+    {
+      "line": 20,
+      "message": "Incomplete response expectation: pact only includes one item (id=1, name=\"alpha\") in the response body, but the provider test seeds two items (\"alpha\" and \"beta\" at lines 37-38 of test_provider_pact.py). The actual /items endpoint will return both items, causing pact verification to fail due to response mismatch.",
+      "path": "pacts/examplewebapp-app.json",
+      "severity": "high",
+      "suggestion": "Add the second item to the pact response body or adjust the test provider state. The expected body should include both items: [{\"id\": 1, \"name\": \"alpha\"}, {\"id\": 2, \"name\": \"beta\"}] to match what the provider actually returns."
+    },
+    {
+      "line": 11,
+      "message": "Pact not regenerated after provider change: the committed pact (pacts/examplewebapp-app.json) does not match the current provider implementation. The provider's response shape and content differ from what the pact specifies, indicating the consumer-side pact generation needs to be re-run and published.",
+      "path": "tests/contract/test_provider_pact.py",
+      "severity": "info",
+      "suggestion": "Run the consumer-driven contract test to regenerate the pact against the actual provider implementation, then commit and publish the updated pact to the Pact Broker."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pacts/examplewebapp-app.json\",\"line\":19,\"severity\":\"high\",\"message\":\"Incompatible response shape: pact expects response body wrapped in {\\\"content\\\": [...]}, but provider endpoint GET /items returns list[ItemRead] which serializes directly to [...]. This is an uncompensated breaking change in response structure that will cause verification to fail.\",\"suggestion\":\"Update the pact to match the actual provider response shape. The body should be [{\\\"id\\\": 1, \\\"name\\\": \\\"alpha\\\"}, {\\\"id\\\": 2, \\\"name\\\": \\\"beta\\\"}] instead of {\\\"content\\\": [{\\\"id\\\": 1, \\\"name\\\": \\\"alpha\\\"}]}, and update matching rules from \\\"$[*]\\\" to \\\"$[*]\\\" (applied to array items directly).\"},{\"path\":\"pacts/examplewebapp-app.json\",\"line\":20,\"severity\":\"high\",\"message\":\"Incomplete response expectation: pact only includes one item (id=1, name=\\\"alpha\\\") in the response body, but the provider test seeds two items (\\\"alpha\\\" and \\\"beta\\\" at lines 37-38 of test_provider_pact.py). The actual /items endpoint will return both items, causing pact verification to fail due to response mismatch.\",\"suggestion\":\"Add the second item to the pact response body or adjust the test provider state. The expected body should include both items: [{\\\"id\\\": 1, \\\"name\\\": \\\"alpha\\\"}, {\\\"id\\\": 2, \\\"name\\\": \\\"beta\\\"}] to match what the provider actually returns.\"},{\"path\":\"tests/contract/test_provider_pact.py\",\"line\":11,\"severity\":\"info\",\"message\":\"Pact not regenerated after provider change: the committed pact (pacts/examplewebapp-app.json) does not match the current provider implementation. The provider's response shape and content differ from what the pact specifies, indicating the consumer-side pact generation needs to be re-run and published.\",\"suggestion\":\"Run the consumer-driven contract test to regenerate the pact against the actual provider implementation, then commit and publish the updated pact to the Pact Broker.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

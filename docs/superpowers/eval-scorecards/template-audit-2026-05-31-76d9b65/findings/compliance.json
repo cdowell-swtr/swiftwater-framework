@@ -1,0 +1,35 @@
+{
+  "agent": "compliance",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 36,
+      "message": "Inbound webhook processing (handle_event) is a sensitive, externally-triggered state-mutating operation, but it produces no audit log. Outcomes are recorded only as aggregate metric counters (rejected_signature/malformed/duplicate/accepted), which cannot reconstruct which event was processed, when, or under which correlation id. For compliance/audit purposes, externally-triggered mutations should leave a per-event audit record.",
+      "path": "src/demo/routes/webhooks.py",
+      "severity": "medium",
+      "suggestion": "Emit a structured audit log entry on accept/reject (event key, event type, outcome, correlation id) in addition to the metric counter, so processed webhook events are auditable."
+    },
+    {
+      "line": 33,
+      "message": "The webhook inbox persists a row per inbound event (record(session, key)) with no visible retention or pruning path. Inbound webhook bodies can carry personal data and the dedup/inbox table grows unbounded; there is no documented deletion or retention policy, which is a GDPR retention/storage-limitation gap.",
+      "path": "src/demo/routes/webhooks.py",
+      "severity": "medium",
+      "suggestion": "Add a documented retention/pruning job for the webhook inbox (e.g. expire dedup records older than the redelivery window) so inbound event records are not retained indefinitely."
+    },
+    {
+      "line": 27,
+      "message": "Items are persisted (id, name) and only a list endpoint is exposed; there is no deletion / right-to-erasure path. If the 'name' field is ever used to store personal data, this store offers no mechanism to satisfy a deletion request. Demo data here is generic, so this is advisory rather than a clear violation.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "If items may hold personal data, add a delete endpoint / erasure path and document the retention policy; otherwise note explicitly that items hold no personal data."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/webhooks.py\",\"line\":36,\"severity\":\"medium\",\"message\":\"Inbound webhook processing (handle_event) is a sensitive, externally-triggered state-mutating operation, but it produces no audit log. Outcomes are recorded only as aggregate metric counters (rejected_signature/malformed/duplicate/accepted), which cannot reconstruct which event was processed, when, or under which correlation id. For compliance/audit purposes, externally-triggered mutations should leave a per-event audit record.\",\"suggestion\":\"Emit a structured audit log entry on accept/reject (event key, event type, outcome, correlation id) in addition to the metric counter, so processed webhook events are auditable.\"},{\"path\":\"src/demo/routes/webhooks.py\",\"line\":33,\"severity\":\"medium\",\"message\":\"The webhook inbox persists a row per inbound event (record(session, key)) with no visible retention or pruning path. Inbound webhook bodies can carry personal data and the dedup/inbox table grows unbounded; there is no documented deletion or retention policy, which is a GDPR retention/storage-limitation gap.\",\"suggestion\":\"Add a documented retention/pruning job for the webhook inbox (e.g. expire dedup records older than the redelivery window) so inbound event records are not retained indefinitely.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":27,\"severity\":\"low\",\"message\":\"Items are persisted (id, name) and only a list endpoint is exposed; there is no deletion / right-to-erasure path. If the 'name' field is ever used to store personal data, this store offers no mechanism to satisfy a deletion request. Demo data here is generic, so this is advisory rather than a clear violation.\",\"suggestion\":\"If items may hold personal data, add a delete endpoint / erasure path and document the retention policy; otherwise note explicitly that items hold no personal data.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

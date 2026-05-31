@@ -1,0 +1,13 @@
+{
+  "agent": "architecture",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [],
+  "latency_ms": null,
+  "raw_text": "[]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

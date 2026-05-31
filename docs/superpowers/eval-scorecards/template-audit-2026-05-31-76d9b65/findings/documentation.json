@@ -1,0 +1,42 @@
+{
+  "agent": "documentation",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 80,
+      "message": "The README \"Endpoints\" section lists only /heartbeat, /health, /metrics, and /items, but the rendered project also exposes POST /webhooks (routes/webhooks.py), the /ws WebSocket (routes/websockets.py), and the /graphql endpoint + GraphiQL IDE (routes/graphql.py). These public HTTP/WS surfaces are undocumented here, so the endpoint list is effectively a stale API spec for a full-battery project.",
+      "path": "README.md",
+      "severity": "low",
+      "suggestion": "Add /webhooks, /ws, and /graphql to the Endpoints list (or note they appear only when the corresponding batteries are enabled), so the documented surface matches the routes that are actually wired by include_routers()."
+    },
+    {
+      "line": 125,
+      "message": "The public cache helpers cache_set/cache_get/cache_delete have no docstrings, unlike the other repository modules (db, mongo, vectors, timeseries, graph) whose public functions document behavior. The TTL semantics (ttl_seconds=None meaning no expiry) and that these operate on the dedicated cache DB (cache/client.py _CACHE_DB=3) are left implicit.",
+      "path": "src/demo/cache/repository.py",
+      "severity": "info",
+      "suggestion": "Add a one-line docstring to each (especially noting ttl_seconds=None => persist with no expiry, and that they expect the cache-DB Redis client from get_redis())."
+    },
+    {
+      "line": 201,
+      "message": "graphql_ide_enabled (and mongo_url, redis_url, celery_broker_url, celery_result_backend, webhook_signing_secret, inventory_url) are app config knobs sourced via the APP_ env prefix, but the README does not document them and there is no visible .env.example in the bundled context to confirm they are advertised to project builders. New config vars introduced by batteries should be surfaced so a builder knows they exist and what they default to.",
+      "path": "src/demo/config/settings.py",
+      "severity": "info",
+      "suggestion": "Document the battery-introduced settings (their APP_ env names and defaults) in the README/.env.example, e.g. APP_GRAPHQL_IDE_ENABLED, APP_MONGO_URL, APP_REDIS_URL, APP_CELERY_BROKER_URL, APP_CELERY_RESULT_BACKEND, APP_WEBHOOK_SIGNING_SECRET, APP_INVENTORY_URL."
+    },
+    {
+      "line": 882,
+      "message": "The module docstring still references \"Plan 3a\"/\"Plan 3b\" as the rationale for the unbounded _latencies_ms list and for /metrics scraping. These internal plan references are framework-development artifacts that carry no meaning in a generated project and read as stale context to a downstream builder.",
+      "path": "src/demo/observability/metrics.py",
+      "severity": "info",
+      "suggestion": "Reword the docstring in builder-facing terms (e.g. \"the latency list is unbounded; cap or flush it for high-traffic services\") without the Plan 3a/3b references."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"README.md\",\"line\":80,\"severity\":\"low\",\"message\":\"The README \\\"Endpoints\\\" section lists only /heartbeat, /health, /metrics, and /items, but the rendered project also exposes POST /webhooks (routes/webhooks.py), the /ws WebSocket (routes/websockets.py), and the /graphql endpoint + GraphiQL IDE (routes/graphql.py). These public HTTP/WS surfaces are undocumented here, so the endpoint list is effectively a stale API spec for a full-battery project.\",\"suggestion\":\"Add /webhooks, /ws, and /graphql to the Endpoints list (or note they appear only when the corresponding batteries are enabled), so the documented surface matches the routes that are actually wired by include_routers().\"},{\"path\":\"src/demo/cache/repository.py\",\"line\":125,\"severity\":\"info\",\"message\":\"The public cache helpers cache_set/cache_get/cache_delete have no docstrings, unlike the other repository modules (db, mongo, vectors, timeseries, graph) whose public functions document behavior. The TTL semantics (ttl_seconds=None meaning no expiry) and that these operate on the dedicated cache DB (cache/client.py _CACHE_DB=3) are left implicit.\",\"suggestion\":\"Add a one-line docstring to each (especially noting ttl_seconds=None => persist with no expiry, and that they expect the cache-DB Redis client from get_redis()).\"},{\"path\":\"src/demo/config/settings.py\",\"line\":201,\"severity\":\"info\",\"message\":\"graphql_ide_enabled (and mongo_url, redis_url, celery_broker_url, celery_result_backend, webhook_signing_secret, inventory_url) are app config knobs sourced via the APP_ env prefix, but the README does not document them and there is no visible .env.example in the bundled context to confirm they are advertised to project builders. New config vars introduced by batteries should be surfaced so a builder knows they exist and what they default to.\",\"suggestion\":\"Document the battery-introduced settings (their APP_ env names and defaults) in the README/.env.example, e.g. APP_GRAPHQL_IDE_ENABLED, APP_MONGO_URL, APP_REDIS_URL, APP_CELERY_BROKER_URL, APP_CELERY_RESULT_BACKEND, APP_WEBHOOK_SIGNING_SECRET, APP_INVENTORY_URL.\"},{\"path\":\"src/demo/observability/metrics.py\",\"line\":882,\"severity\":\"info\",\"message\":\"The module docstring still references \\\"Plan 3a\\\"/\\\"Plan 3b\\\" as the rationale for the unbounded _latencies_ms list and for /metrics scraping. These internal plan references are framework-development artifacts that carry no meaning in a generated project and read as stale context to a downstream builder.\",\"suggestion\":\"Reword the docstring in builder-facing terms (e.g. \\\"the latency list is unbounded; cap or flush it for high-traffic services\\\") without the Plan 3a/3b references.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

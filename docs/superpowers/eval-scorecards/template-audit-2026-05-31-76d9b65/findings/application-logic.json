@@ -1,0 +1,28 @@
+{
+  "agent": "application-logic",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 17,
+      "message": "The receive loop only handles WebSocketDisconnect. Any other exception raised by ws.receive_text() or _manager.broadcast() (e.g. a peer that errors out, a serialization/encode failure, or broadcast to a half-open socket) escapes the try block WITHOUT calling _manager.disconnect(ws), leaving a stale/dead connection registered in the ConnectionManager. Subsequent broadcasts then target a dead socket and the connection is never reaped.",
+      "path": "src/demo/routes/websockets.py",
+      "severity": "medium",
+      "suggestion": "Wrap cleanup in a finally (or add a broad except) so disconnect always runs: `try: ... except WebSocketDisconnect: pass finally: _manager.disconnect(ws)`. Ensure _manager.disconnect is idempotent."
+    },
+    {
+      "line": 41,
+      "message": "The workers/mongo/redis liveness probes each swallow `except Exception` to report `{\"alive\": False}` but emit NO log, unlike the /metrics DLQ path which logs `dlq_metrics_unavailable`. A dependency that flips to degraded leaves no trace of WHY (connection refused vs auth vs timeout), so operators see 'alive: false' in the report with nothing to diagnose against.",
+      "path": "src/demo/routes/health.py",
+      "severity": "low",
+      "suggestion": "Log the swallowed exception at warning level before degrading, mirroring the /metrics handler: `get_logger().warning(\"health_probe_failed\", dependency=\"redis\", error=str(exc))`."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/websockets.py\",\"line\":17,\"severity\":\"medium\",\"message\":\"The receive loop only handles WebSocketDisconnect. Any other exception raised by ws.receive_text() or _manager.broadcast() (e.g. a peer that errors out, a serialization/encode failure, or broadcast to a half-open socket) escapes the try block WITHOUT calling _manager.disconnect(ws), leaving a stale/dead connection registered in the ConnectionManager. Subsequent broadcasts then target a dead socket and the connection is never reaped.\",\"suggestion\":\"Wrap cleanup in a finally (or add a broad except) so disconnect always runs: `try: ... except WebSocketDisconnect: pass finally: _manager.disconnect(ws)`. Ensure _manager.disconnect is idempotent.\"},{\"path\":\"src/demo/routes/health.py\",\"line\":41,\"severity\":\"low\",\"message\":\"The workers/mongo/redis liveness probes each swallow `except Exception` to report `{\\\"alive\\\": False}` but emit NO log, unlike the /metrics DLQ path which logs `dlq_metrics_unavailable`. A dependency that flips to degraded leaves no trace of WHY (connection refused vs auth vs timeout), so operators see 'alive: false' in the report with nothing to diagnose against.\",\"suggestion\":\"Log the swallowed exception at warning level before degrading, mirroring the /metrics handler: `get_logger().warning(\\\"health_probe_failed\\\", dependency=\\\"redis\\\", error=str(exc))`.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

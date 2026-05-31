@@ -1,0 +1,56 @@
+{
+  "agent": "security",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 274,
+      "message": "Cypher injection: `src`, `dst`, and `kind` are interpolated directly into the AGE Cypher text via f-strings wrapped in single quotes (`{name: '{src}'}`, `[\\:{kind}]`). A value containing a single quote (or Cypher metacharacters) breaks out of the literal and lets an attacker inject arbitrary Cypher into the MERGE statement. The docstring's 'pass only trusted, app-controlled values' caveat is not enforced in code, so any caller that forwards user input is exploitable. AGE's cypher() cannot bind parameters, but the values must still be sanitized.",
+      "path": "src/demo/graph/repository.py",
+      "severity": "high",
+      "suggestion": "Reject/escape single quotes and other Cypher metacharacters in `src`/`dst`/`kind` before interpolation (e.g. validate against an allowlist pattern, or escape `'` by doubling it and disallow backslashes), and constrain `kind` to a known set of relationship types."
+    },
+    {
+      "line": 292,
+      "message": "Cypher injection: `name` is interpolated unsanitized into the MATCH clause (`{name: '{name}'}`) of the AGE cypher() call. A `name` value containing a single quote escapes the string literal and permits arbitrary Cypher injection. Same root cause as `relate()` \u2014 the 'trusted values only' docstring is not enforced.",
+      "path": "src/demo/graph/repository.py",
+      "severity": "high",
+      "suggestion": "Validate/escape `name` before interpolation (escape `'`, reject backslashes/control chars), since AGE cannot bind it as a parameter."
+    },
+    {
+      "line": 1547,
+      "message": "The /ws WebSocket endpoint accepts every connection with no authentication, authorization, or Origin check, then broadcasts each received message to all connected clients. This allows cross-site WebSocket hijacking (a browser on any origin can open the socket since WebSocket handshakes are not subject to the same-origin policy) and lets any client broadcast arbitrary messages to all others. Broken access control on a public realtime surface.",
+      "path": "src/demo/routes/websockets.py",
+      "severity": "medium",
+      "suggestion": "Authenticate the handshake (token/cookie validation before `accept()`), validate the Origin header against an allowlist, and scope/authorize what a connection may broadcast or receive."
+    },
+    {
+      "line": 778,
+      "message": "`find_documents` passes the caller-supplied `query` Mapping straight into pymongo's `find()`. If any caller forwards request-derived data into this filter, an attacker can inject MongoDB query operators (e.g. `$where`, `$gt`, `$ne`, `$regex`) for NoSQL injection / auth bypass / DoS. The helper provides no operator stripping or shape validation, so the safety depends entirely on every future caller doing it.",
+      "path": "src/demo/mongo/repository.py",
+      "severity": "medium",
+      "suggestion": "Validate/whitelist the filter shape (reject keys beginning with `$`) or require typed query parameters rather than an arbitrary Mapping when the filter may originate from untrusted input."
+    },
+    {
+      "line": 1413,
+      "message": "The /metrics endpoint is exposed without any authentication or network restriction and returns internal operational data (request counts, error rates, latency, DLQ depth, circuit-breaker state, webhook/ws/graphql counters). If reachable beyond the trusted scrape network this leaks operational details useful for reconnaissance. Acceptable when bound to an internal network, but the route itself enforces nothing.",
+      "path": "src/demo/routes/health.py",
+      "severity": "low",
+      "suggestion": "Restrict /metrics to the monitoring network (bind/firewall, mTLS, or a bearer token) rather than relying solely on deployment topology, and document the requirement."
+    },
+    {
+      "line": 1172,
+      "message": "The OTLP span exporter is configured with `insecure=True`, sending traces over unencrypted gRPC. Trace spans can contain request paths and other potentially sensitive metadata; on an untrusted network this is exposed in cleartext. Fine for an in-cluster collector but should not be the silent default for production wiring.",
+      "path": "src/demo/observability/tracing.py",
+      "severity": "low",
+      "suggestion": "Make TLS configurable (e.g. an `otel_exporter_insecure` setting defaulting to False outside dev) so production exports traces over an encrypted channel."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graph/repository.py\",\"line\":274,\"severity\":\"high\",\"message\":\"Cypher injection: `src`, `dst`, and `kind` are interpolated directly into the AGE Cypher text via f-strings wrapped in single quotes (`{name: '{src}'}`, `[\\\\:{kind}]`). A value containing a single quote (or Cypher metacharacters) breaks out of the literal and lets an attacker inject arbitrary Cypher into the MERGE statement. The docstring's 'pass only trusted, app-controlled values' caveat is not enforced in code, so any caller that forwards user input is exploitable. AGE's cypher() cannot bind parameters, but the values must still be sanitized.\",\"suggestion\":\"Reject/escape single quotes and other Cypher metacharacters in `src`/`dst`/`kind` before interpolation (e.g. validate against an allowlist pattern, or escape `'` by doubling it and disallow backslashes), and constrain `kind` to a known set of relationship types.\"},{\"path\":\"src/demo/graph/repository.py\",\"line\":292,\"severity\":\"high\",\"message\":\"Cypher injection: `name` is interpolated unsanitized into the MATCH clause (`{name: '{name}'}`) of the AGE cypher() call. A `name` value containing a single quote escapes the string literal and permits arbitrary Cypher injection. Same root cause as `relate()` \u2014 the 'trusted values only' docstring is not enforced.\",\"suggestion\":\"Validate/escape `name` before interpolation (escape `'`, reject backslashes/control chars), since AGE cannot bind it as a parameter.\"},{\"path\":\"src/demo/routes/websockets.py\",\"line\":1547,\"severity\":\"medium\",\"message\":\"The /ws WebSocket endpoint accepts every connection with no authentication, authorization, or Origin check, then broadcasts each received message to all connected clients. This allows cross-site WebSocket hijacking (a browser on any origin can open the socket since WebSocket handshakes are not subject to the same-origin policy) and lets any client broadcast arbitrary messages to all others. Broken access control on a public realtime surface.\",\"suggestion\":\"Authenticate the handshake (token/cookie validation before `accept()`), validate the Origin header against an allowlist, and scope/authorize what a connection may broadcast or receive.\"},{\"path\":\"src/demo/mongo/repository.py\",\"line\":778,\"severity\":\"medium\",\"message\":\"`find_documents` passes the caller-supplied `query` Mapping straight into pymongo's `find()`. If any caller forwards request-derived data into this filter, an attacker can inject MongoDB query operators (e.g. `$where`, `$gt`, `$ne`, `$regex`) for NoSQL injection / auth bypass / DoS. The helper provides no operator stripping or shape validation, so the safety depends entirely on every future caller doing it.\",\"suggestion\":\"Validate/whitelist the filter shape (reject keys beginning with `$`) or require typed query parameters rather than an arbitrary Mapping when the filter may originate from untrusted input.\"},{\"path\":\"src/demo/routes/health.py\",\"line\":1413,\"severity\":\"low\",\"message\":\"The /metrics endpoint is exposed without any authentication or network restriction and returns internal operational data (request counts, error rates, latency, DLQ depth, circuit-breaker state, webhook/ws/graphql counters). If reachable beyond the trusted scrape network this leaks operational details useful for reconnaissance. Acceptable when bound to an internal network, but the route itself enforces nothing.\",\"suggestion\":\"Restrict /metrics to the monitoring network (bind/firewall, mTLS, or a bearer token) rather than relying solely on deployment topology, and document the requirement.\"},{\"path\":\"src/demo/observability/tracing.py\",\"line\":1172,\"severity\":\"low\",\"message\":\"The OTLP span exporter is configured with `insecure=True`, sending traces over unencrypted gRPC. Trace spans can contain request paths and other potentially sensitive metadata; on an untrusted network this is exposed in cleartext. Fine for an in-cluster collector but should not be the silent default for production wiring.\",\"suggestion\":\"Make TLS configurable (e.g. an `otel_exporter_insecure` setting defaulting to False outside dev) so production exports traces over an encrypted channel.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

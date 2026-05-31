@@ -1,0 +1,112 @@
+{
+  "agent": "observability-db",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 8,
+      "message": "Query path `list_items()` reads from database with no metric or span around it",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add metrics.record_query() or span instrumentation around session.scalars() call to track query latency and result count"
+    },
+    {
+      "line": 11,
+      "message": "Write path `create_item()` persists to database with no metric or span around it",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add span instrumentation or explicit metrics tracking around session.add() and session.commit() to observe write latency and errors"
+    },
+    {
+      "line": 10,
+      "message": "Write path `add_embedding()` persists embedding to database with no metric or span",
+      "path": "src/demo/vectors/repository.py",
+      "severity": "high",
+      "suggestion": "Add metrics instrumentation around session.add() and session.commit() to track write operations"
+    },
+    {
+      "line": 19,
+      "message": "Query path `nearest()` executes cosine distance search with no latency metric or span",
+      "path": "src/demo/vectors/repository.py",
+      "severity": "high",
+      "suggestion": "Add metrics.record_query() or span around session.scalars() to track vector search latency and result count"
+    },
+    {
+      "line": 10,
+      "message": "MongoDB write path `insert_document()` has no correlation ID in error logs",
+      "path": "src/demo/mongo/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the insert_one() call in try/except and log errors with get_logger().error() which auto-injects correlation_id via structlog context"
+    },
+    {
+      "line": 14,
+      "message": "MongoDB query path `find_documents()` has no correlation ID in error logs",
+      "path": "src/demo/mongo/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the find() call in try/except and log errors with get_logger().error() which auto-injects correlation_id"
+    },
+    {
+      "line": 12,
+      "message": "MongoDB client `get_client()` returns MongoClient with no health check endpoint",
+      "path": "src/demo/mongo/client.py",
+      "severity": "high",
+      "suggestion": "Consider adding a health() function that calls client.admin.command('ping') similar to the /health route pattern"
+    },
+    {
+      "line": 4,
+      "message": "Cache write path `cache_set()` has no metric or span around it",
+      "path": "src/demo/cache/repository.py",
+      "severity": "high",
+      "suggestion": "Add metrics instrumentation around client.set() to track cache write operations"
+    },
+    {
+      "line": 10,
+      "message": "Cache read path `cache_get()` has no metric or span around it",
+      "path": "src/demo/cache/repository.py",
+      "severity": "high",
+      "suggestion": "Add metrics instrumentation around client.get() to track cache read operations and hit/miss ratio"
+    },
+    {
+      "line": 14,
+      "message": "Cache delete path `cache_delete()` has no metric or span around it",
+      "path": "src/demo/cache/repository.py",
+      "severity": "high",
+      "suggestion": "Add metrics instrumentation around client.delete() to track cache invalidations"
+    },
+    {
+      "line": 14,
+      "message": "Redis client `get_redis()` returns client with no dedicated health check endpoint",
+      "path": "src/demo/cache/client.py",
+      "severity": "high",
+      "suggestion": "Add a health() function that calls client.ping() and is accessible from the health route without creating a separate Redis connection each time"
+    },
+    {
+      "line": 19,
+      "message": "Unbounded aggregation query `bucketed_averages()` executes time_bucket GROUP BY without latency metric or row count",
+      "path": "src/demo/timeseries/repository.py",
+      "severity": "high",
+      "suggestion": "Add metrics.record_query() around session.execute() to track aggregation latency and row count. Consider adding a LIMIT or monitoring row cardinality"
+    },
+    {
+      "line": 12,
+      "message": "Graph write path `relate()` executes Cypher MERGE without metric or span",
+      "path": "src/demo/graph/repository.py",
+      "severity": "high",
+      "suggestion": "Add span instrumentation or metrics around session.execute() to track relationship creation latency and errors"
+    },
+    {
+      "line": 31,
+      "message": "Graph query path `neighbors()` executes Cypher MATCH without metric or span",
+      "path": "src/demo/graph/repository.py",
+      "severity": "high",
+      "suggestion": "Add metrics instrumentation around session.execute() to track graph query latency and result cardinality"
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":8,\"severity\":\"high\",\"message\":\"Query path `list_items()` reads from database with no metric or span around it\",\"suggestion\":\"Add metrics.record_query() or span instrumentation around session.scalars() call to track query latency and result count\"},{\"path\":\"src/demo/db/repository.py\",\"line\":11,\"severity\":\"high\",\"message\":\"Write path `create_item()` persists to database with no metric or span around it\",\"suggestion\":\"Add span instrumentation or explicit metrics tracking around session.add() and session.commit() to observe write latency and errors\"},{\"path\":\"src/demo/vectors/repository.py\",\"line\":10,\"severity\":\"high\",\"message\":\"Write path `add_embedding()` persists embedding to database with no metric or span\",\"suggestion\":\"Add metrics instrumentation around session.add() and session.commit() to track write operations\"},{\"path\":\"src/demo/vectors/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"Query path `nearest()` executes cosine distance search with no latency metric or span\",\"suggestion\":\"Add metrics.record_query() or span around session.scalars() to track vector search latency and result count\"},{\"path\":\"src/demo/mongo/repository.py\",\"line\":10,\"severity\":\"high\",\"message\":\"MongoDB write path `insert_document()` has no correlation ID in error logs\",\"suggestion\":\"Wrap the insert_one() call in try/except and log errors with get_logger().error() which auto-injects correlation_id via structlog context\"},{\"path\":\"src/demo/mongo/repository.py\",\"line\":14,\"severity\":\"high\",\"message\":\"MongoDB query path `find_documents()` has no correlation ID in error logs\",\"suggestion\":\"Wrap the find() call in try/except and log errors with get_logger().error() which auto-injects correlation_id\"},{\"path\":\"src/demo/mongo/client.py\",\"line\":12,\"severity\":\"high\",\"message\":\"MongoDB client `get_client()` returns MongoClient with no health check endpoint\",\"suggestion\":\"Consider adding a health() function that calls client.admin.command('ping') similar to the /health route pattern\"},{\"path\":\"src/demo/cache/repository.py\",\"line\":4,\"severity\":\"high\",\"message\":\"Cache write path `cache_set()` has no metric or span around it\",\"suggestion\":\"Add metrics instrumentation around client.set() to track cache write operations\"},{\"path\":\"src/demo/cache/repository.py\",\"line\":10,\"severity\":\"high\",\"message\":\"Cache read path `cache_get()` has no metric or span around it\",\"suggestion\":\"Add metrics instrumentation around client.get() to track cache read operations and hit/miss ratio\"},{\"path\":\"src/demo/cache/repository.py\",\"line\":14,\"severity\":\"high\",\"message\":\"Cache delete path `cache_delete()` has no metric or span around it\",\"suggestion\":\"Add metrics instrumentation around client.delete() to track cache invalidations\"},{\"path\":\"src/demo/cache/client.py\",\"line\":14,\"severity\":\"high\",\"message\":\"Redis client `get_redis()` returns client with no dedicated health check endpoint\",\"suggestion\":\"Add a health() function that calls client.ping() and is accessible from the health route without creating a separate Redis connection each time\"},{\"path\":\"src/demo/timeseries/repository.py\",\"line\":19,\"severity\":\"high\",\"message\":\"Unbounded aggregation query `bucketed_averages()` executes time_bucket GROUP BY without latency metric or row count\",\"suggestion\":\"Add metrics.record_query() around session.execute() to track aggregation latency and row count. Consider adding a LIMIT or monitoring row cardinality\"},{\"path\":\"src/demo/graph/repository.py\",\"line\":12,\"severity\":\"high\",\"message\":\"Graph write path `relate()` executes Cypher MERGE without metric or span\",\"suggestion\":\"Add span instrumentation or metrics around session.execute() to track relationship creation latency and errors\"},{\"path\":\"src/demo/graph/repository.py\",\"line\":31,\"severity\":\"high\",\"message\":\"Graph query path `neighbors()` executes Cypher MATCH without metric or span\",\"suggestion\":\"Add metrics instrumentation around session.execute() to track graph query latency and result cardinality\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,42 @@
+{
+  "agent": "data-integrity",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 25,
+      "message": "embeddings.item_id is a FK to items.id with no ON DELETE behavior. With the default (RESTRICT/NO ACTION), deleting an item with embeddings will fail; if app code expects cleanup it silently leaves orphaned embedding rows. There is also no index on item_id, so the referential-integrity check and any item->embeddings lookup do a full scan.",
+      "path": "migrations/versions/0004_embeddings.py",
+      "severity": "high",
+      "suggestion": "Declare the delete policy explicitly, e.g. sa.ForeignKey(\"items.id\", ondelete=\"CASCADE\") (or RESTRICT if intentional), and add an index on item_id (sa.Column(..., index=True) or op.create_index)."
+    },
+    {
+      "line": 26,
+      "message": "readings.item_id is a FK to items.id with no ON DELETE behavior. Deleting an item with readings will error under the default RESTRICT, and there is no separate index on item_id (the PK is (item_id, time), so the composite PK index covers item_id-prefixed lookups, but the missing ondelete still leaves the deletion/cascade semantics undefined for time-series child rows).",
+      "path": "migrations/versions/0005_readings.py",
+      "severity": "high",
+      "suggestion": "Specify ondelete explicitly on the FK (CASCADE to remove a deleted item's readings, or RESTRICT to forbid it), so the data-lifecycle behavior of the hypertable's child rows is intentional rather than DB-default."
+    },
+    {
+      "line": 11,
+      "message": "create_item accepts any name string and writes it directly; the column is nullable=False but does not reject empty/whitespace-only names, so '' is a valid persisted Item.name. There is no length guard either, so a name longer than the column's String(255) will raise an opaque DB error rather than a validated rejection.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Validate name before insert (reject empty/whitespace; enforce/truncate to the 255-char column limit), or add a CHECK constraint (length(name) > 0) in the migration so the invariant lives with the schema."
+    },
+    {
+      "line": 18,
+      "message": "seed() reads each row['name'] directly from the JSON file; a malformed seed row (missing 'name', null, or non-string) raises KeyError/TypeError mid-loop AFTER prior rows were added to the session. Because the commit is at the end, the failure aborts the whole transaction, but the error surfaced is an opaque KeyError rather than a clear data-validation message, and a name set to null/empty would be persisted as an invalid Item.",
+      "path": "src/demo/db/seed.py",
+      "severity": "high",
+      "suggestion": "Validate each row before adding (require a non-empty string 'name'), and raise a clear error identifying the offending row, so bad seed data cannot silently or confusingly corrupt the items table."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"migrations/versions/0004_embeddings.py\",\"line\":25,\"severity\":\"high\",\"message\":\"embeddings.item_id is a FK to items.id with no ON DELETE behavior. With the default (RESTRICT/NO ACTION), deleting an item with embeddings will fail; if app code expects cleanup it silently leaves orphaned embedding rows. There is also no index on item_id, so the referential-integrity check and any item->embeddings lookup do a full scan.\",\"suggestion\":\"Declare the delete policy explicitly, e.g. sa.ForeignKey(\\\"items.id\\\", ondelete=\\\"CASCADE\\\") (or RESTRICT if intentional), and add an index on item_id (sa.Column(..., index=True) or op.create_index).\"},{\"path\":\"migrations/versions/0005_readings.py\",\"line\":26,\"severity\":\"high\",\"message\":\"readings.item_id is a FK to items.id with no ON DELETE behavior. Deleting an item with readings will error under the default RESTRICT, and there is no separate index on item_id (the PK is (item_id, time), so the composite PK index covers item_id-prefixed lookups, but the missing ondelete still leaves the deletion/cascade semantics undefined for time-series child rows).\",\"suggestion\":\"Specify ondelete explicitly on the FK (CASCADE to remove a deleted item's readings, or RESTRICT to forbid it), so the data-lifecycle behavior of the hypertable's child rows is intentional rather than DB-default.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":11,\"severity\":\"high\",\"message\":\"create_item accepts any name string and writes it directly; the column is nullable=False but does not reject empty/whitespace-only names, so '' is a valid persisted Item.name. There is no length guard either, so a name longer than the column's String(255) will raise an opaque DB error rather than a validated rejection.\",\"suggestion\":\"Validate name before insert (reject empty/whitespace; enforce/truncate to the 255-char column limit), or add a CHECK constraint (length(name) > 0) in the migration so the invariant lives with the schema.\"},{\"path\":\"src/demo/db/seed.py\",\"line\":18,\"severity\":\"high\",\"message\":\"seed() reads each row['name'] directly from the JSON file; a malformed seed row (missing 'name', null, or non-string) raises KeyError/TypeError mid-loop AFTER prior rows were added to the session. Because the commit is at the end, the failure aborts the whole transaction, but the error surfaced is an opaque KeyError rather than a clear data-validation message, and a name set to null/empty would be persisted as an invalid Item.\",\"suggestion\":\"Validate each row before adding (require a non-empty string 'name'), and raise a clear error identifying the offending row, so bad seed data cannot silently or confusingly corrupt the items table.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

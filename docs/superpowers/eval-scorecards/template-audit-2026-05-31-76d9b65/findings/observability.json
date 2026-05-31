@@ -1,0 +1,42 @@
+{
+  "agent": "observability",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 13,
+      "message": "The /ws websocket endpoint only meters inbound messages via ws_metrics.message_received() (line 17). The connection lifecycle is unobserved: _manager.connect (line 13), _manager.disconnect (line 20), and _manager.broadcast (line 18) emit no metric, no trace, and no log. Connection counts, broadcast fan-out volume, and disconnects are invisible to /metrics and Prometheus \u2014 an entire long-lived code path with no observability signal.",
+      "path": "src/demo/routes/websockets.py",
+      "severity": "high",
+      "suggestion": "Add ws_metrics counters/gauges for connections opened, connections closed, active connections, and broadcasts sent, and record them around _manager.connect/disconnect/broadcast. Optionally wrap the receive/broadcast loop in a span so websocket activity is traced like HTTP requests."
+    },
+    {
+      "line": 33,
+      "message": "The /health dependency probes swallow `except Exception` and downgrade the dependency to {\"alive\": False} without logging the failure or the correlation id. The workers probe (line 33), the mongo probe (line 43), and the redis probe (line 51) are all silent error paths \u2014 a broker/mongo/redis outage produces no log line, so the only signal is the health JSON body. Contrast the /metrics DLQ path (line 86-88) which correctly logs `get_logger().warning(\"dlq_metrics_unavailable\", error=str(_exc))`. An operator inspecting logs sees nothing when a backing store goes down.",
+      "path": "src/demo/routes/health.py",
+      "severity": "high",
+      "suggestion": "In each except block, log the failure with the structured logger and the exception detail, e.g. `get_logger().warning(\"health_probe_failed\", dependency=\"workers\", error=str(exc))` (capture `as exc`), mirroring the DLQ-metrics path. This preserves the never-500 behavior while making degradation observable."
+    },
+    {
+      "line": 11,
+      "message": "The GraphQL introspection toggle (`disable_introspection=not _ide`, line 11) and the GraphiQL IDE enablement (line 17) are resolved at import time with no log of the security-relevant decision. When introspection/IDE is enabled (e.g. in a misconfigured prod), nothing records that the schema is exposed, so the configuration drift is unobservable from logs or metrics.",
+      "path": "src/demo/routes/graphql.py",
+      "severity": "medium",
+      "suggestion": "Emit a structured log at router construction recording whether introspection/IDE is enabled, e.g. `get_logger().info(\"graphql_ide_configured\", introspection_enabled=_ide)`, so the exposure state is auditable."
+    },
+    {
+      "line": 41,
+      "message": "MetricsRegistry._latencies_ms is an unbounded list (line 41) that grows by one entry per request (record_request, line 48) and is never trimmed except by an explicit reset(). For a long-running, high-traffic service this is an unbounded memory leak, and render_prometheus / p99 sort the entire history on every /metrics scrape (lines 65, 72), making the scrape cost O(n log n) and grow without limit. The module docstring acknowledges this as a deferred concern, but it remains a real observability-infrastructure risk: the metrics endpoint itself degrades the process it is meant to monitor.",
+      "path": "src/demo/observability/metrics.py",
+      "severity": "medium",
+      "suggestion": "Cap the latency buffer (e.g. a fixed-size deque / reservoir sample) or compute a streaming/windowed p99 so memory and scrape cost stay bounded under sustained load."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/websockets.py\",\"line\":13,\"severity\":\"high\",\"message\":\"The /ws websocket endpoint only meters inbound messages via ws_metrics.message_received() (line 17). The connection lifecycle is unobserved: _manager.connect (line 13), _manager.disconnect (line 20), and _manager.broadcast (line 18) emit no metric, no trace, and no log. Connection counts, broadcast fan-out volume, and disconnects are invisible to /metrics and Prometheus \u2014 an entire long-lived code path with no observability signal.\",\"suggestion\":\"Add ws_metrics counters/gauges for connections opened, connections closed, active connections, and broadcasts sent, and record them around _manager.connect/disconnect/broadcast. Optionally wrap the receive/broadcast loop in a span so websocket activity is traced like HTTP requests.\"},{\"path\":\"src/demo/routes/health.py\",\"line\":33,\"severity\":\"high\",\"message\":\"The /health dependency probes swallow `except Exception` and downgrade the dependency to {\\\"alive\\\": False} without logging the failure or the correlation id. The workers probe (line 33), the mongo probe (line 43), and the redis probe (line 51) are all silent error paths \u2014 a broker/mongo/redis outage produces no log line, so the only signal is the health JSON body. Contrast the /metrics DLQ path (line 86-88) which correctly logs `get_logger().warning(\\\"dlq_metrics_unavailable\\\", error=str(_exc))`. An operator inspecting logs sees nothing when a backing store goes down.\",\"suggestion\":\"In each except block, log the failure with the structured logger and the exception detail, e.g. `get_logger().warning(\\\"health_probe_failed\\\", dependency=\\\"workers\\\", error=str(exc))` (capture `as exc`), mirroring the DLQ-metrics path. This preserves the never-500 behavior while making degradation observable.\"},{\"path\":\"src/demo/routes/graphql.py\",\"line\":11,\"severity\":\"medium\",\"message\":\"The GraphQL introspection toggle (`disable_introspection=not _ide`, line 11) and the GraphiQL IDE enablement (line 17) are resolved at import time with no log of the security-relevant decision. When introspection/IDE is enabled (e.g. in a misconfigured prod), nothing records that the schema is exposed, so the configuration drift is unobservable from logs or metrics.\",\"suggestion\":\"Emit a structured log at router construction recording whether introspection/IDE is enabled, e.g. `get_logger().info(\\\"graphql_ide_configured\\\", introspection_enabled=_ide)`, so the exposure state is auditable.\"},{\"path\":\"src/demo/observability/metrics.py\",\"line\":41,\"severity\":\"medium\",\"message\":\"MetricsRegistry._latencies_ms is an unbounded list (line 41) that grows by one entry per request (record_request, line 48) and is never trimmed except by an explicit reset(). For a long-running, high-traffic service this is an unbounded memory leak, and render_prometheus / p99 sort the entire history on every /metrics scrape (lines 65, 72), making the scrape cost O(n log n) and grow without limit. The module docstring acknowledges this as a deferred concern, but it remains a real observability-infrastructure risk: the metrics endpoint itself degrades the process it is meant to monitor.\",\"suggestion\":\"Cap the latency buffer (e.g. a fixed-size deque / reservoir sample) or compute a streaming/windowed p99 so memory and scrape cost stay bounded under sustained load.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

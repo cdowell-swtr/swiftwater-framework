@@ -1,0 +1,35 @@
+{
+  "agent": "performance",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 28,
+      "message": "GET /items loads the entire items table with no LIMIT/pagination. list_items runs `select(Item).order_by(Item.id)` and materializes every row into a list, then serializes all of them through ItemRead. On an unbounded table this is an unbounded query + unbounded allocation + unbounded serialization on a public read endpoint \u2014 a clear latency/memory regression that grows linearly with table size.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add limit/offset (or cursor) pagination, e.g. accept `limit: int = 50, offset: int = 0` query params and apply `.limit(limit).offset(offset)` in the repository, with a sane default and max cap."
+    },
+    {
+      "line": 7,
+      "message": "list_items() does `list(session.scalars(select(Item).order_by(Item.id)))` with no bound \u2014 it always fetches and materializes the full table. This is the underlying unbounded-query/allocation hot path behind GET /items; any caller pays O(rows) memory and serialization cost.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add `limit`/`offset` parameters (or a keyset/cursor) and apply `.limit(...).offset(...)` to the statement so the result set is bounded."
+    },
+    {
+      "line": 38,
+      "message": "The /health probe creates a brand-new redis client via `_redis.Redis.from_url(settings.redis_url)` on every request, which constructs a fresh connection pool, opens a connection to ping liveness, then closes it. Because the probe 'fires continuously' (per the docstring), this churns a new connection pool + TCP connection per probe instead of reusing a cached client \u2014 repeated pool setup/teardown in a hot, high-frequency path. Note the mongo and redis checks below already reuse module-level cached clients (get_client/get_redis); only this worker-liveness check pays the per-call pool cost.",
+      "path": "src/demo/routes/health.py",
+      "severity": "medium",
+      "suggestion": "Reuse a process-level cached redis client (mirror demo.cache.client.get_redis / demo.mongo.client.get_client) for the worker-liveness ping rather than building and tearing down a new Redis.from_url() pool on every probe."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":28,\"severity\":\"high\",\"message\":\"GET /items loads the entire items table with no LIMIT/pagination. list_items runs `select(Item).order_by(Item.id)` and materializes every row into a list, then serializes all of them through ItemRead. On an unbounded table this is an unbounded query + unbounded allocation + unbounded serialization on a public read endpoint \u2014 a clear latency/memory regression that grows linearly with table size.\",\"suggestion\":\"Add limit/offset (or cursor) pagination, e.g. accept `limit: int = 50, offset: int = 0` query params and apply `.limit(limit).offset(offset)` in the repository, with a sane default and max cap.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":7,\"severity\":\"high\",\"message\":\"list_items() does `list(session.scalars(select(Item).order_by(Item.id)))` with no bound \u2014 it always fetches and materializes the full table. This is the underlying unbounded-query/allocation hot path behind GET /items; any caller pays O(rows) memory and serialization cost.\",\"suggestion\":\"Add `limit`/`offset` parameters (or a keyset/cursor) and apply `.limit(...).offset(...)` to the statement so the result set is bounded.\"},{\"path\":\"src/demo/routes/health.py\",\"line\":38,\"severity\":\"medium\",\"message\":\"The /health probe creates a brand-new redis client via `_redis.Redis.from_url(settings.redis_url)` on every request, which constructs a fresh connection pool, opens a connection to ping liveness, then closes it. Because the probe 'fires continuously' (per the docstring), this churns a new connection pool + TCP connection per probe instead of reusing a cached client \u2014 repeated pool setup/teardown in a hot, high-frequency path. Note the mongo and redis checks below already reuse module-level cached clients (get_client/get_redis); only this worker-liveness check pays the per-call pool cost.\",\"suggestion\":\"Reuse a process-level cached redis client (mirror demo.cache.client.get_redis / demo.mongo.client.get_client) for the worker-liveness ping rather than building and tearing down a new Redis.from_url() pool on every probe.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

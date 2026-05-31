@@ -1,0 +1,35 @@
+{
+  "agent": "dependency",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 20,
+      "message": "`httpx>=0.28` is declared in both the runtime `dependencies` array and the `dev` dependency-group with the identical constraint. The dev-group entry is redundant \u2014 runtime deps are always installed in the dev environment too. httpx is genuinely used at runtime (src/demo/clients/inventory.py), so the runtime declaration is the correct one; the dev-group copy just creates two places to keep the version bound in sync.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Drop `\"httpx>=0.28\"` from the `[dependency-groups].dev` list; keep only the runtime `dependencies` entry."
+    },
+    {
+      "line": 9,
+      "message": "`psycopg[binary]>=3.2`: the `[binary]` extra ships psycopg's prebuilt C wheels, which the psycopg maintainers explicitly recommend only for development/quick-start and advise against for production (the bundled libpq is not the system one and isn't security-patched with the OS). Justified as a default for a scaffold, but worth flagging that production builds typically pin `psycopg[c]` (compiled against the system libpq) or the pure-Python build.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Consider documenting that production deployments should switch `psycopg[binary]` to `psycopg[c]` (with build deps) \u2014 or leave a comment noting the binary extra is the dev-convenience default."
+    },
+    {
+      "line": 19,
+      "message": "`redis>=5` is a direct runtime dependency while `celery[redis]>=5.4` (line 17) also pulls redis transitively. The direct declaration is justified \u2014 redis is used directly (src/demo/cache/client.py, repository.py, routes/health.py), so it should not rely on celery's transitive pin. The note is coordination/supply-chain: two declared paths to the same package mean the resolver must keep them compatible, and `redis>=5` is a bare-major lower bound that is looser than every other pin here (which carry a minor, e.g. `>=5.4`, `>=0.28`).",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Tighten to a minor-level bound consistent with the rest of the manifest (e.g. `redis>=5.0` or the actual tested minor) so the direct and celery[redis]-transitive constraints resolve predictably."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":20,\"severity\":\"low\",\"message\":\"`httpx>=0.28` is declared in both the runtime `dependencies` array and the `dev` dependency-group with the identical constraint. The dev-group entry is redundant \u2014 runtime deps are always installed in the dev environment too. httpx is genuinely used at runtime (src/demo/clients/inventory.py), so the runtime declaration is the correct one; the dev-group copy just creates two places to keep the version bound in sync.\",\"suggestion\":\"Drop `\\\"httpx>=0.28\\\"` from the `[dependency-groups].dev` list; keep only the runtime `dependencies` entry.\"},{\"path\":\"pyproject.toml\",\"line\":9,\"severity\":\"info\",\"message\":\"`psycopg[binary]>=3.2`: the `[binary]` extra ships psycopg's prebuilt C wheels, which the psycopg maintainers explicitly recommend only for development/quick-start and advise against for production (the bundled libpq is not the system one and isn't security-patched with the OS). Justified as a default for a scaffold, but worth flagging that production builds typically pin `psycopg[c]` (compiled against the system libpq) or the pure-Python build.\",\"suggestion\":\"Consider documenting that production deployments should switch `psycopg[binary]` to `psycopg[c]` (with build deps) \u2014 or leave a comment noting the binary extra is the dev-convenience default.\"},{\"path\":\"pyproject.toml\",\"line\":19,\"severity\":\"info\",\"message\":\"`redis>=5` is a direct runtime dependency while `celery[redis]>=5.4` (line 17) also pulls redis transitively. The direct declaration is justified \u2014 redis is used directly (src/demo/cache/client.py, repository.py, routes/health.py), so it should not rely on celery's transitive pin. The note is coordination/supply-chain: two declared paths to the same package mean the resolver must keep them compatible, and `redis>=5` is a bare-major lower bound that is looser than every other pin here (which carry a minor, e.g. `>=5.4`, `>=0.28`).\",\"suggestion\":\"Tighten to a minor-level bound consistent with the rest of the manifest (e.g. `redis>=5.0` or the actual tested minor) so the direct and celery[redis]-transitive constraints resolve predictably.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

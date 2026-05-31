@@ -1,0 +1,49 @@
+{
+  "agent": "data-lineage",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 21,
+      "message": "Webhook event payload passed to process_async.delay() may contain PII or sensitive user data. If task fails after retries, the full event payload is serialized and stored in dead_letter_tasks.args_json as plain text, creating an undocumented PII storage location.",
+      "path": "src/demo/webhooks/handler.py",
+      "severity": "high",
+      "suggestion": "Implement payload redaction before enqueueing to Celery. Extract only required fields from the event and exclude sensitive fields. Alternatively, store the event separately with encryption and pass only an event ID to the task."
+    },
+    {
+      "line": 23,
+      "message": "Dead-letter queue stores full task arguments (args_json) in plain text with no retention policy, TTL, or cleanup mechanism. PII from failed webhook events will persist indefinitely in the database, violating data minimization and erasure requirements.",
+      "path": "src/demo/tasks/dead_letter.py",
+      "severity": "high",
+      "suggestion": "Add a retention/TTL column with a scheduled cleanup task. Implement a purge mechanism that deletes DLQ records older than a configurable retention period. For sensitive tasks, redact args_json before storage or exclude the field entirely."
+    },
+    {
+      "line": 46,
+      "message": "Task failure handler unconditionally serializes all task arguments to JSON and stores them in the dead-letter queue. No filtering or redaction is performed, so sensitive webhook payloads (potentially containing customer email, phone, payment info) are persisted unencrypted.",
+      "path": "src/demo/tasks/base.py",
+      "severity": "high",
+      "suggestion": "Implement PII redaction in on_failure before calling dead_letter.record_failure(). Add a hook to allow tasks to specify which arguments should be excluded from DLQ logging. Consider encrypting the args_json field if redaction is not feasible."
+    },
+    {
+      "line": 82,
+      "message": "Dead-letter queue metrics are exposed via the public /metrics endpoint (render_dlq_metrics). While the DLQ depth gauge itself is benign, the DLQ table remains queryable by anyone with direct DB access, and no audit trail tracks who accessed PII stored in args_json.",
+      "path": "src/demo/routes/health.py",
+      "severity": "medium",
+      "suggestion": "Add audit logging for all queries/updates to dead_letter_tasks, especially when args_json is accessed. Consider adding role-based access control to restrict DLQ table access. Document the DLQ as a sensitive data location in operations runbooks."
+    },
+    {
+      "line": 15,
+      "message": "No documentation or contract specifying which fields in the webhook event payload are safe to log/store. Downstream consumers of process_async cannot distinguish between PII and non-sensitive fields, leading to accidental exposure in error handlers, logs, or serialization.",
+      "path": "src/demo/webhooks/handler.py",
+      "severity": "medium",
+      "suggestion": "Document the webhook event schema with PII markers (e.g., @pii or @sensitive decorators). Create a schema that explicitly lists fields to exclude from DLQ/logging. Validate and redact the event at the webhook boundary before handing it to async processing."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/webhooks/handler.py\",\"line\":21,\"severity\":\"high\",\"message\":\"Webhook event payload passed to process_async.delay() may contain PII or sensitive user data. If task fails after retries, the full event payload is serialized and stored in dead_letter_tasks.args_json as plain text, creating an undocumented PII storage location.\",\"suggestion\":\"Implement payload redaction before enqueueing to Celery. Extract only required fields from the event and exclude sensitive fields. Alternatively, store the event separately with encryption and pass only an event ID to the task.\"},{\"path\":\"src/demo/tasks/dead_letter.py\",\"line\":23,\"severity\":\"high\",\"message\":\"Dead-letter queue stores full task arguments (args_json) in plain text with no retention policy, TTL, or cleanup mechanism. PII from failed webhook events will persist indefinitely in the database, violating data minimization and erasure requirements.\",\"suggestion\":\"Add a retention/TTL column with a scheduled cleanup task. Implement a purge mechanism that deletes DLQ records older than a configurable retention period. For sensitive tasks, redact args_json before storage or exclude the field entirely.\"},{\"path\":\"src/demo/tasks/base.py\",\"line\":46,\"severity\":\"high\",\"message\":\"Task failure handler unconditionally serializes all task arguments to JSON and stores them in the dead-letter queue. No filtering or redaction is performed, so sensitive webhook payloads (potentially containing customer email, phone, payment info) are persisted unencrypted.\",\"suggestion\":\"Implement PII redaction in on_failure before calling dead_letter.record_failure(). Add a hook to allow tasks to specify which arguments should be excluded from DLQ logging. Consider encrypting the args_json field if redaction is not feasible.\"},{\"path\":\"src/demo/routes/health.py\",\"line\":82,\"severity\":\"medium\",\"message\":\"Dead-letter queue metrics are exposed via the public /metrics endpoint (render_dlq_metrics). While the DLQ depth gauge itself is benign, the DLQ table remains queryable by anyone with direct DB access, and no audit trail tracks who accessed PII stored in args_json.\",\"suggestion\":\"Add audit logging for all queries/updates to dead_letter_tasks, especially when args_json is accessed. Consider adding role-based access control to restrict DLQ table access. Document the DLQ as a sensitive data location in operations runbooks.\"},{\"path\":\"src/demo/webhooks/handler.py\",\"line\":15,\"severity\":\"medium\",\"message\":\"No documentation or contract specifying which fields in the webhook event payload are safe to log/store. Downstream consumers of process_async cannot distinguish between PII and non-sensitive fields, leading to accidental exposure in error handlers, logs, or serialization.\",\"suggestion\":\"Document the webhook event schema with PII markers (e.g., @pii or @sensitive decorators). Create a schema that explicitly lists fields to exclude from DLQ/logging. Validate and redact the event at the webhook boundary before handing it to async processing.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

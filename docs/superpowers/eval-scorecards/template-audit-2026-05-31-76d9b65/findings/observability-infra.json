@@ -1,0 +1,35 @@
+{
+  "agent": "observability-infra",
+  "base_baseline": null,
+  "base_sha": null,
+  "findings": [
+    {
+      "line": 18,
+      "message": "Prometheus scrape job 'prometheus' (line 18) has no corresponding alert rule to monitor Prometheus itself. Without alerts on prometheus_tsdb_* or prometheus_sd_* metrics, Prometheus failures and service discovery issues may be silent.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "suggestion": "Create a prometheus alert rule file (e.g., infra/observability/prometheus/alerts/prometheus_alerts.yml) with alerts for PrometheusDown (up{job=\"prometheus\"}==0) and prometheus_tsdb_symbol_table_size_bytes if applicable."
+    },
+    {
+      "line": 76,
+      "message": "otel-collector service is deployed (line 76) but has no Prometheus scrape job to monitor it. The collector's health and performance cannot be observed, and failures may go undetected.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add a scrape job in infra/observability/prometheus/prometheus.yml for otel-collector with metrics endpoint (e.g., otel-collector:8888 if metrics are enabled), and create an alert rule to monitor its availability."
+    },
+    {
+      "line": 29,
+      "message": "worker service (line 29-50) and beat service (line 51-63) in services.yml (merged for prod/staging) are missing APP_OTEL_ENABLED and APP_OTEL_EXPORTER_OTLP_ENDPOINT environment variables. These runtime surfaces will not send traces to Tempo, creating an observability gap in production workloads.",
+      "path": "infra/compose/services.yml",
+      "severity": "high",
+      "suggestion": "Add APP_OTEL_ENABLED: \"true\" and APP_OTEL_EXPORTER_OTLP_ENDPOINT: \"http://otel-collector:4317\" to both worker and beat service environment sections in services.yml, or define them in a separate overlay to match app service configuration."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":18,\"severity\":\"high\",\"message\":\"Prometheus scrape job 'prometheus' (line 18) has no corresponding alert rule to monitor Prometheus itself. Without alerts on prometheus_tsdb_* or prometheus_sd_* metrics, Prometheus failures and service discovery issues may be silent.\",\"suggestion\":\"Create a prometheus alert rule file (e.g., infra/observability/prometheus/alerts/prometheus_alerts.yml) with alerts for PrometheusDown (up{job=\\\"prometheus\\\"}==0) and prometheus_tsdb_symbol_table_size_bytes if applicable.\"},{\"path\":\"infra/compose/observability.yml\",\"line\":76,\"severity\":\"high\",\"message\":\"otel-collector service is deployed (line 76) but has no Prometheus scrape job to monitor it. The collector's health and performance cannot be observed, and failures may go undetected.\",\"suggestion\":\"Add a scrape job in infra/observability/prometheus/prometheus.yml for otel-collector with metrics endpoint (e.g., otel-collector:8888 if metrics are enabled), and create an alert rule to monitor its availability.\"},{\"path\":\"infra/compose/services.yml\",\"line\":29,\"severity\":\"high\",\"message\":\"worker service (line 29-50) and beat service (line 51-63) in services.yml (merged for prod/staging) are missing APP_OTEL_ENABLED and APP_OTEL_EXPORTER_OTLP_ENDPOINT environment variables. These runtime surfaces will not send traces to Tempo, creating an observability gap in production workloads.\",\"suggestion\":\"Add APP_OTEL_ENABLED: \\\"true\\\" and APP_OTEL_EXPORTER_OTLP_ENDPOINT: \\\"http://otel-collector:4317\\\" to both worker and beat service environment sections in services.yml, or define them in a separate overlay to match app service configuration.\"}]",
+  "review_mode": "snapshot",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}
