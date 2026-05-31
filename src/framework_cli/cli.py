@@ -1728,6 +1728,14 @@ def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) 
             )
             for f in r.findings
         ]
+        # Advisory agents (block_threshold is None) surface findings into the
+        # report but must NOT block the gate — per the flags() docstring
+        # "Advisory agent ... never blocks in production". flags() itself
+        # returns True on any finding for None-threshold agents (intentional
+        # for eval scoring's surfacing metrics); we need to gate the gate-mode
+        # FAIL on real block_threshold agents only.
+        if spec.block_threshold is None:
+            continue
         if flags(findings_objs, spec):
             failing = True
             summary_parts.append(f"{r.agent}:{len(findings_objs)}")

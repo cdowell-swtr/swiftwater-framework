@@ -62,6 +62,15 @@ class Record:
     raw_text: str
     turns: int
     tool_calls: list[dict[str, Any]]
+    # Audit-mode metadata. None for tune-mode records (which don't have a
+    # baseline concept) and for legacy audit records written before
+    # audit-finalize started persisting these fields. review_mode is
+    # "snapshot" or "delta" when set; base_sha is the commit the agent
+    # delta-diffed against (None for snapshot); base_baseline is the dated
+    # baseline-dir name (None for ref-form --since or no-prior fallback).
+    review_mode: str | None = None
+    base_sha: str | None = None
+    base_baseline: str | None = None
 
 
 _REQUIRED = ("agent", "findings")  # kind/case/repeat are optional (audit shape)
@@ -93,6 +102,9 @@ def load_records(root: Path) -> list[Record]:
                 raw_text=d.get("raw_text", ""),
                 turns=int(d.get("turns", 1)),
                 tool_calls=list(d.get("tool_calls", [])),
+                review_mode=d.get("review_mode"),
+                base_sha=d.get("base_sha"),
+                base_baseline=d.get("base_baseline"),
             )
         )
     return records

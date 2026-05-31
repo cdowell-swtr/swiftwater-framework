@@ -1130,6 +1130,41 @@ def test_load_records_tolerates_missing_audit_dimensions(tmp_path):
     assert r.kind == "current"  # default for audit
     assert r.case == "security"  # default = agent name
     assert r.repeat == 0
+    # Audit-mode fields default to None when absent (legacy/tune records).
+    assert r.review_mode is None
+    assert r.base_sha is None
+    assert r.base_baseline is None
+
+
+def test_load_records_carries_audit_mode_metadata(tmp_path):
+    """Records with review_mode/base_sha/base_baseline preserve them through load.
+
+    Audit baselines persist these fields per-agent so future delta-discovery
+    + analysis tooling can reason about each agent's mode without parsing the
+    raw JSON. The Record dataclass round-trips them.
+    """
+    from framework_cli.review.analyze import load_records
+
+    d = tmp_path / "f"
+    (d / "security").mkdir(parents=True)
+    (d / "security" / "security.json").write_text(
+        _json.dumps(
+            {
+                "agent": "security",
+                "findings": [],
+                "review_mode": "delta",
+                "base_sha": "abc1234567890",
+                "base_baseline": "audit-2026-05-30-2446de8",
+                "raw_text": "[]",
+            }
+        )
+    )
+    records = load_records(d)
+    assert len(records) == 1
+    r = records[0]
+    assert r.review_mode == "delta"
+    assert r.base_sha == "abc1234567890"
+    assert r.base_baseline == "audit-2026-05-30-2446de8"
 
 
 def test_eval_analyze_handles_audit_records_gracefully(tmp_path):
@@ -2499,6 +2534,75 @@ def test_gate_finalize_writes_marker_fail_on_high_finding(tmp_path):
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
     assert marker["verdict"] == "FAIL"
+
+
+def test_gate_finalize_advisory_agent_findings_dont_block_gate(tmp_path):
+    """Advisory agents (block_threshold=None — documentation, dependency,
+    usability) surface findings but must NEVER cause the gate to FAIL.
+
+    Regression guard for the bug where _finalize_gate reused flags() — which
+    for None-threshold agents returns True on any finding (intentional for
+    eval-scoring's surfacing metrics) — and turned every advisory-agent
+    finding into a gate FAIL. Documented as the root cause of the
+    documentation-INFO gate-iteration noise on the audit-semantics branch.
+    """
+    out = tmp_path / "audit"
+    out.mkdir()
+    # documentation has block_threshold=None (advisory) per the registry.
+    results = [
+        {
+            "agent": "documentation",
+            "findings": [
+                {
+                    "path": "a.py",
+                    "line": 1,
+                    "severity": "high",
+                    "message": "docstring missing",
+                    "suggestion": None,
+                },
+                {
+                    "path": "b.py",
+                    "line": 2,
+                    "severity": "info",
+                    "message": "comment could be clearer",
+                    "suggestion": None,
+                },
+            ],
+            "usage": {},
+            "latency_ms": None,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+    ]
+    payload = {
+        "results": results,
+        "meta": {
+            "mode": "gate",
+            "staged_hash": "sha256:abc",
+            "agents_set": ["documentation"],
+        },
+    }
+    results_file = tmp_path / "results.json"
+    results_file.write_text(_json.dumps(payload))
+    result = runner.invoke(
+        app,
+        [
+            "gate-finalize",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    marker_path = out.parent / "marker.json"
+    marker = _json.loads(marker_path.read_text())
+    # Advisory findings surface in the report but do NOT block.
+    assert marker["verdict"] == "PASS", (
+        f"Advisory agent findings caused FAIL; marker={marker}"
+    )
 
 
 def test_gate_finalize_marks_drift_detected(tmp_path):
