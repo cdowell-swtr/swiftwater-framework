@@ -15,7 +15,13 @@ You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent
 
 1. **Parse the user's arguments**. Extract the optional positional agent name, `--target`, `--agents`, `--preserve-as`, and `--force`. Bind the parsed values to shell vars `AGENT`, `AGENTS`, `TARGET`, `PRESERVE_AS`, `FORCE` (empty if not supplied) so the snippets below can reference them.
 
-2. **Run audit-prepare** via Bash. Build the agent flag list from the `--agents` arg (comma-split) and pass each as a separate `--agent` flag. If `--agents` is not set, fall back to the positional agent name (if any):
+2. **Run audit-prepare** via Bash (writes BOTH a stdout manifest AND a
+   split-manifest layout under `/tmp/reviewers-audit-prep-split/` for the
+   Workflow-tool args; the split layout exists because the inline manifest can
+   exceed the ~1.76MB Workflow-args ceiling for full audits across many
+   agents). Build the agent flag list from the `--agents` arg (comma-split)
+   and pass each as a separate `--agent` flag. If `--agents` is not set, fall
+   back to the positional agent name (if any):
    ```bash
    AGENT_FLAGS=""
    if [ -n "$AGENTS" ]; then
@@ -24,10 +30,12 @@ You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent
    elif [ -n "$AGENT" ]; then
      AGENT_FLAGS="--agent $AGENT"
    fi
+   rm -rf /tmp/reviewers-audit-prep-split 2>/dev/null
    uv run framework audit-prepare \
      ${TARGET:+--target "$TARGET"} \
      $AGENT_FLAGS \
-     --output-dir .framework/audit/latest > /tmp/reviewers-audit-prep.json
+     --output-dir .framework/audit/latest \
+     --split-to /tmp/reviewers-audit-prep-split > /tmp/reviewers-audit-prep.json
    ```
    If audit-prepare errors with "Could not auto-detect target," inform the user and suggest `--target framework` or `--target project`.
 
@@ -41,10 +49,18 @@ You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent
 
 5. **If work item count > 30**, **confirm with the user** before proceeding.
 
-6. **Invoke the Workflow tool**:
-   - `name`: `"reviewers-audit"`
-   - `args`: the JSON loaded from the prep manifest
-   - Wait for the result in the foreground.
+6. **Invoke the Workflow tool** (`name: "reviewers-audit"`). Build the `args`
+   object as `{indexPath, itemsDir, meta}` where:
+   - `indexPath` is `"/tmp/reviewers-audit-prep-split/index.json"`
+   - `itemsDir` is `"/tmp/reviewers-audit-prep-split/items"`
+   - `meta` is `{mode, target, agents_set, output_dir}` copied from the
+     stdout prep manifest at `/tmp/reviewers-audit-prep.json` (e.g.
+     `jq '{mode, target, agents_set, output_dir}' /tmp/reviewers-audit-prep.json`).
+
+   The workflow loads the index from disk and dispatches one subagent per
+   item (each subagent reads its own item file). Inline `work_items` is no
+   longer passed — the split-manifest layout keeps the Workflow-args payload
+   tiny. Wait for the result in the foreground.
 
 7. **Write the workflow's returned `{results, meta}` to a temp file**:
    ```bash
@@ -60,8 +76,16 @@ You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent
      ${FORCE:+--force}
    ```
 
-9. **Clean up transient `/tmp` artifacts** (the prep + results files contain the full diff payload). After this step: the `--preserve-as` baseline under `docs/superpowers/eval-scorecards/audit-…/` is the only repo-persisted output (review it for sensitive findings before committing); `.framework/audit/latest/` is gitignored and overwritten on the next run; `/tmp/reviewers-audit-*.json` are gone. `rm -f` is silent on missing files but will report other errors (permission denied, etc.) so a failed cleanup is visible to the user.
+9. **Clean up transient `/tmp` artifacts** (the prep + results files and the
+   per-item split layout all contain the full diff payload). After this step:
+   the `--preserve-as` baseline under `docs/superpowers/eval-scorecards/audit-…/`
+   is the only repo-persisted output (review it for sensitive findings before
+   committing); `.framework/audit/latest/` is gitignored and overwritten on
+   the next run; `/tmp/reviewers-audit-*` are gone. `rm -f`/`rm -rf` are silent
+   on missing files but will report other errors (permission denied, etc.) so
+   a failed cleanup is visible to the user.
    ```bash
+   rm -rf /tmp/reviewers-audit-prep-split
    rm -f /tmp/reviewers-audit-prep.json /tmp/reviewers-audit-results.json
    ```
 

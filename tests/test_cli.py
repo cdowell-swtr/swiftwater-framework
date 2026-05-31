@@ -1464,6 +1464,70 @@ def test_audit_prepare_unknown_agent_errors_clearly(monkeypatch):
     )
 
 
+def test_audit_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
+    """audit-prepare --split-to DIR writes index.json + items/item-NNNN.json
+    in addition to printing the full manifest to stdout (unchanged behavior).
+
+    Mirrors the gate-prepare / tune-prepare split-manifest pattern: the
+    Workflow tool consumes a tiny {indexPath, itemsDir, meta} payload, while
+    each per-item file holds the full agent work-item (system_blocks,
+    user_message, optional root_dir/tools_allowed for agentic reviewers).
+    """
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
+
+    split_dir = tmp_path / "audit-split-out"
+    result = runner.invoke(
+        app,
+        [
+            "audit-prepare",
+            "--target",
+            "framework",
+            "--agent",
+            "security",
+            "--split-to",
+            str(split_dir),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    # Stdout still carries the full manifest (backward compat).
+    manifest = _json.loads(result.output)
+    assert manifest["mode"] == "audit"
+    assert manifest["target"] == "framework"
+    assert manifest["agents_set"] == ["security"]
+    assert len(manifest["work_items"]) == 1
+
+    # Index file: small per-item metadata, no system_blocks / no diff.
+    index_path = split_dir / "index.json"
+    assert index_path.is_file(), f"index.json not written under {split_dir}"
+    index = _json.loads(index_path.read_text())
+    assert index["mode"] == "audit"
+    assert index["target"] == "framework"
+    assert index["agents_set"] == manifest["agents_set"]
+    assert "output_dir" in index
+    assert len(index["items"]) == len(manifest["work_items"])
+    first = index["items"][0]
+    assert set(first.keys()) >= {"i", "agent", "subagent_type"}
+    # Index is intentionally lightweight — must NOT carry the bulky fields.
+    assert "system_blocks" not in first
+    assert "diff" not in first
+    assert "user_message" not in first
+
+    # Per-item files exist with the expected full payload.
+    items_dir = split_dir / "items"
+    assert items_dir.is_dir()
+    item_path = items_dir / "item-0000.json"
+    assert item_path.is_file(), f"missing {item_path}"
+    on_disk = _json.loads(item_path.read_text())
+    work_item = manifest["work_items"][0]
+    assert on_disk["agent"] == work_item["agent"]
+    assert on_disk["system_blocks"] == work_item["system_blocks"]
+    assert on_disk["user_message"] == work_item["user_message"]
+    assert on_disk["subagent_type"] == work_item["subagent_type"]
+
+
 def test_gate_prepare_affected_single_prompt(tmp_path, monkeypatch):
     """A staged change to one agent's prompt → only that agent in the work items."""
     import framework_cli.cli as cli_mod

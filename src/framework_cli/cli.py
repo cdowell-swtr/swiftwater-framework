@@ -650,12 +650,22 @@ def audit_prepare(
         "--output-dir",
         help="Output dir for finalize (echoed in the prep manifest).",
     ),
+    split_to: str = typer.Option(
+        "",
+        "--split-to",
+        help=(
+            "If set, write a small index.json + per-item items/item-NNNN.json under "
+            "DIR (in addition to the stdout manifest). Lets the Workflow tool be "
+            "invoked with a tiny args payload instead of a multi-MB inline manifest. "
+            "Idempotent: an existing DIR is cleared first."
+        ),
+    ),
 ) -> None:
     """Emit the audit-mode work-item manifest (current code, one item per agent).
 
     Output is JSON on stdout; consumed by /reviewers:audit.
     """
-    _emit_audit_prep(list(agent or []), target, output_dir)
+    _emit_audit_prep(list(agent or []), target, output_dir, split_to)
 
 
 @app.command(name="gate-prepare")
@@ -1040,8 +1050,13 @@ def _detect_audit_target(explicit: str) -> str:
 
 
 def _emit_audit_prep(
-    selected_agents: list[str], target_arg: str, output_dir: str
+    selected_agents: list[str],
+    target_arg: str,
+    output_dir: str,
+    split_to: str = "",
 ) -> None:
+    import shutil
+
     from framework_cli.review.context import FRAMEWORK_AGENTS
     from framework_cli.source import read_batteries
 
@@ -1075,13 +1090,52 @@ def _emit_audit_prep(
             continue
         work_items.append(_build_audit_work_item(spec, diff, root))
 
+    resolved_output_dir = output_dir or ".framework/audit/latest"
     manifest = {
         "mode": "audit",
         "target": target,
         "agents_set": agents_set,
         "work_items": work_items,
-        "output_dir": output_dir or ".framework/audit/latest",
+        "output_dir": resolved_output_dir,
     }
+
+    # Optional split-manifest write: in addition to the stdout manifest, write a small
+    # index.json + per-item items/item-NNNN.json so the Workflow tool can be invoked with
+    # a tiny args payload ({indexPath, itemsDir}) instead of a multi-MB inline manifest.
+    # Mirrors the gate-prepare / tune-prepare split layout. Audit items can be agentic
+    # (root_dir + tools_allowed), so per-item files carry the full audit work-item shape.
+    if split_to:
+        split_dir = Path(split_to)
+        if split_dir.exists():
+            shutil.rmtree(split_dir)
+        items_dir = split_dir / "items"
+        items_dir.mkdir(parents=True, exist_ok=True)
+        split_dir.chmod(0o700)
+        items_dir.chmod(0o700)
+
+        index_items: list[dict] = []
+        for i, wi in enumerate(work_items):
+            item_path = items_dir / f"item-{i:04d}.json"
+            item_path.write_text(json.dumps(wi, indent=2))
+            item_path.chmod(0o600)
+            index_items.append(
+                {
+                    "i": i,
+                    "agent": wi["agent"],
+                    "subagent_type": wi["subagent_type"],
+                }
+            )
+        index = {
+            "mode": "audit",
+            "target": target,
+            "agents_set": agents_set,
+            "items": index_items,
+            "output_dir": resolved_output_dir,
+        }
+        index_path = split_dir / "index.json"
+        index_path.write_text(json.dumps(index, indent=2))
+        index_path.chmod(0o600)
+
     typer.echo(json.dumps(manifest, indent=2))
 
 
