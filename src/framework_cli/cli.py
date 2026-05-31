@@ -864,8 +864,6 @@ def _prepare_split_dir(split_to: str) -> tuple[Path, Path]:
 
 def _emit_gate_prep(split_to: str = "") -> None:
     """Emit a gate-mode manifest from the current staged set."""
-    import shutil
-
     staged = _staged_files()
     detected_mode, agents = _affected_agents(staged)
     staged_hash = _staged_hash(staged)
@@ -914,13 +912,7 @@ def _emit_gate_prep(split_to: str = "") -> None:
     # Mirrors the tune-prepare split layout but with gate's simpler item shape
     # (one item per affected agent; no kind/case/repeat dimension).
     if split_to:
-        split_dir = Path(split_to)
-        if split_dir.exists():
-            shutil.rmtree(split_dir)
-        items_dir = split_dir / "items"
-        items_dir.mkdir(parents=True, exist_ok=True)
-        split_dir.chmod(0o700)
-        items_dir.chmod(0o700)
+        split_dir, items_dir = _prepare_split_dir(split_to)
 
         index_items: list[dict] = []
         for i, wi in enumerate(manifest["work_items"]):
@@ -955,7 +947,6 @@ def _emit_tune_prep(
     output_dir: str,
     split_to: str = "",
 ) -> None:
-    import shutil
     import tempfile
 
     from framework_cli.review.evals import load_fixtures
@@ -991,13 +982,7 @@ def _emit_tune_prep(
     # index.json + per-item items/item-NNNN.json so the Workflow tool can be invoked with
     # a tiny args payload ({indexPath, itemsDir}) instead of a multi-MB inline manifest.
     if split_to:
-        split_dir = Path(split_to)
-        if split_dir.exists():
-            shutil.rmtree(split_dir)
-        items_dir = split_dir / "items"
-        items_dir.mkdir(parents=True, exist_ok=True)
-        split_dir.chmod(0o700)
-        items_dir.chmod(0o700)
+        split_dir, items_dir = _prepare_split_dir(split_to)
 
         index_items: list[dict] = []
         for i, wi in enumerate(work_items):
@@ -1223,8 +1208,6 @@ def _emit_audit_prep(
     (the documented ~1.76 MB Workflow-args ceiling). Mirrors ``_emit_tune_prep``
     and ``_emit_gate_prep``.
     """
-    import shutil
-
     from framework_cli.review.context import FRAMEWORK_AGENTS
     from framework_cli.review.diff import delta_diff, snapshot_seed
     from framework_cli.source import read_batteries
@@ -1302,13 +1285,7 @@ def _emit_audit_prep(
     # Mirrors the gate-prepare / tune-prepare split layout. Audit items can be agentic
     # (root_dir + tools_allowed), so per-item files carry the full audit work-item shape.
     if split_to:
-        split_dir = Path(split_to)
-        if split_dir.exists():
-            shutil.rmtree(split_dir)
-        items_dir = split_dir / "items"
-        items_dir.mkdir(parents=True, exist_ok=True)
-        split_dir.chmod(0o700)
-        items_dir.chmod(0o700)
+        split_dir, items_dir = _prepare_split_dir(split_to)
 
         index_items: list[dict] = []
         for i, wi in enumerate(work_items):
