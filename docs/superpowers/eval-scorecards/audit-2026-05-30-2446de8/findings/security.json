@@ -1,0 +1,25 @@
+{
+  "agent": "security",
+  "findings": [
+    {
+      "line": 268,
+      "message": "Predictable path in /tmp combined with exists()->rmtree->mkdir is a small TOCTOU/symlink attack window on multi-user systems. A local attacker could replace /tmp/reviewers-audit-prep-split with a symlink between the exists() check and the rmtree/mkdir; shutil.rmtree refuses to follow a top-level symlink but the slash command's preceding `rm -rf /tmp/reviewers-audit-prep-split 2>/dev/null` (audit.md line ~26) does follow symlinks and could be coerced into removing arbitrary attacker-pointed paths the invoking user can write. Per-item files carry the full diff (potentially sensitive), so the temp tree is a confidentiality boundary.",
+      "path": "src/framework_cli/cli.py",
+      "severity": "low",
+      "suggestion": "Use tempfile.mkdtemp(prefix='reviewers-audit-prep-split-') (creates a uniquely-named 0o700 dir atomically) and pass that path through to the workflow + slash command via stdout, instead of hardcoding /tmp/reviewers-audit-prep-split. If the fixed path must remain, at least open the directory with O_NOFOLLOW semantics and refuse to proceed if Path(split_to).is_symlink() or st_uid != os.getuid()."
+    },
+    {
+      "line": 271,
+      "message": "items_dir.mkdir(parents=True, exist_ok=True) creates the directory tree using the process umask (commonly 0o022 \u2192 0o755) and only afterwards chmods to 0o700. Between mkdir and chmod, another user on the host can list the directory and read per-item filenames (the file contents themselves get 0o600 only after write, so there is also a tiny window where they are world-readable on a permissive umask).",
+      "path": "src/framework_cli/cli.py",
+      "severity": "low",
+      "suggestion": "Create the directories with the restrictive mode up front, e.g. items_dir.mkdir(parents=True, exist_ok=True, mode=0o700) (and likewise for split_dir), and open the per-item files with os.open(path, O_WRONLY|O_CREAT|O_EXCL, 0o600) before writing JSON, so the 0o600 mode is applied atomically at creation rather than after the content lands on disk."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/framework_cli/cli.py\",\"line\":268,\"severity\":\"low\",\"message\":\"Predictable path in /tmp combined with exists()->rmtree->mkdir is a small TOCTOU/symlink attack window on multi-user systems. A local attacker could replace /tmp/reviewers-audit-prep-split with a symlink between the exists() check and the rmtree/mkdir; shutil.rmtree refuses to follow a top-level symlink but the slash command's preceding `rm -rf /tmp/reviewers-audit-prep-split 2>/dev/null` (audit.md line ~26) does follow symlinks and could be coerced into removing arbitrary attacker-pointed paths the invoking user can write. Per-item files carry the full diff (potentially sensitive), so the temp tree is a confidentiality boundary.\",\"suggestion\":\"Use tempfile.mkdtemp(prefix='reviewers-audit-prep-split-') (creates a uniquely-named 0o700 dir atomically) and pass that path through to the workflow + slash command via stdout, instead of hardcoding /tmp/reviewers-audit-prep-split. If the fixed path must remain, at least open the directory with O_NOFOLLOW semantics and refuse to proceed if Path(split_to).is_symlink() or st_uid != os.getuid().\"},{\"path\":\"src/framework_cli/cli.py\",\"line\":271,\"severity\":\"low\",\"message\":\"items_dir.mkdir(parents=True, exist_ok=True) creates the directory tree using the process umask (commonly 0o022 \u2192 0o755) and only afterwards chmods to 0o700. Between mkdir and chmod, another user on the host can list the directory and read per-item filenames (the file contents themselves get 0o600 only after write, so there is also a tiny window where they are world-readable on a permissive umask).\",\"suggestion\":\"Create the directories with the restrictive mode up front, e.g. items_dir.mkdir(parents=True, exist_ok=True, mode=0o700) (and likewise for split_dir), and open the per-item files with os.open(path, O_WRONLY|O_CREAT|O_EXCL, 0o600) before writing JSON, so the 0o600 mode is applied atomically at creation rather than after the content lands on disk.\"}]",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

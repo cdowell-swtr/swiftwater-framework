@@ -1,0 +1,32 @@
+{
+  "agent": "application-logic",
+  "findings": [
+    {
+      "line": 132,
+      "message": "Behavior regression on empty items: the old code threw 'reviewers-audit: args.work_items must be a non-empty array' so an empty audit was loud and visible. The new code silently returns `{results: [], meta: ARGS.meta || {}}` when `index.items` is empty. If `audit-prepare` accidentally produces zero work items (e.g., agent filtering bug, target detection mishap), the workflow no longer surfaces the problem \u2014 finalize then receives an empty result set and the operator gets a green run that did nothing. The recovery path (early return) doesn't actually recover; it hides the failure.",
+      "path": ".claude/workflows/reviewers-audit.js",
+      "severity": "medium",
+      "suggestion": "Either keep an explicit error/log on empty items (e.g. `log('reviewers-audit: index has 0 items \u2014 nothing to review'); return {results: [], meta: ARGS.meta || {}}`), or throw as before. At minimum, emit a visible warning so the empty case isn't silently swallowed."
+    },
+    {
+      "line": 130,
+      "message": "The guard `!Array.isArray(items)` from the old code was dropped. Only `items.length === 0` is checked. If the index-load subagent returns a malformed payload that slips the JSON-Schema validator (e.g., `items` set to a non-array via an unexpected coercion), `items.length` may be undefined and the downstream `items.map(...)` will throw a less informative TypeError instead of the previous descriptive Error.",
+      "path": ".claude/workflows/reviewers-audit.js",
+      "severity": "low",
+      "suggestion": "Restore the array check: `if (!Array.isArray(items) || items.length === 0) { ... }`. Cheap defensive guard against schema bypass."
+    },
+    {
+      "line": 268,
+      "message": "`if split_dir.exists(): shutil.rmtree(split_dir)` will raise NotADirectoryError if a stale FILE happens to be at `split_to` (e.g., a user passed a path that collides with an existing non-directory). `shutil.rmtree` only handles directories. The split-manifest setup will then crash mid-`_emit_audit_prep`, leaving `audit-prepare` in a broken state. The doc claims 'Idempotent: an existing DIR is cleared first' but doesn't handle the non-dir case.",
+      "path": "src/framework_cli/cli.py",
+      "severity": "low",
+      "suggestion": "Use `if split_dir.is_dir(): shutil.rmtree(split_dir); elif split_dir.exists(): split_dir.unlink()` \u2014 or wrap rmtree with `ignore_errors=False` and catch NotADirectoryError to fall back to unlink."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\".claude/workflows/reviewers-audit.js\",\"line\":132,\"severity\":\"medium\",\"message\":\"Behavior regression on empty items: the old code threw 'reviewers-audit: args.work_items must be a non-empty array' so an empty audit was loud and visible. The new code silently returns `{results: [], meta: ARGS.meta || {}}` when `index.items` is empty. If `audit-prepare` accidentally produces zero work items (e.g., agent filtering bug, target detection mishap), the workflow no longer surfaces the problem \u2014 finalize then receives an empty result set and the operator gets a green run that did nothing. The recovery path (early return) doesn't actually recover; it hides the failure.\",\"suggestion\":\"Either keep an explicit error/log on empty items (e.g. `log('reviewers-audit: index has 0 items \u2014 nothing to review'); return {results: [], meta: ARGS.meta || {}}`), or throw as before. At minimum, emit a visible warning so the empty case isn't silently swallowed.\"},{\"path\":\".claude/workflows/reviewers-audit.js\",\"line\":130,\"severity\":\"low\",\"message\":\"The guard `!Array.isArray(items)` from the old code was dropped. Only `items.length === 0` is checked. If the index-load subagent returns a malformed payload that slips the JSON-Schema validator (e.g., `items` set to a non-array via an unexpected coercion), `items.length` may be undefined and the downstream `items.map(...)` will throw a less informative TypeError instead of the previous descriptive Error.\",\"suggestion\":\"Restore the array check: `if (!Array.isArray(items) || items.length === 0) { ... }`. Cheap defensive guard against schema bypass.\"},{\"path\":\"src/framework_cli/cli.py\",\"line\":268,\"severity\":\"low\",\"message\":\"`if split_dir.exists(): shutil.rmtree(split_dir)` will raise NotADirectoryError if a stale FILE happens to be at `split_to` (e.g., a user passed a path that collides with an existing non-directory). `shutil.rmtree` only handles directories. The split-manifest setup will then crash mid-`_emit_audit_prep`, leaving `audit-prepare` in a broken state. The doc claims 'Idempotent: an existing DIR is cleared first' but doesn't handle the non-dir case.\",\"suggestion\":\"Use `if split_dir.is_dir(): shutil.rmtree(split_dir); elif split_dir.exists(): split_dir.unlink()` \u2014 or wrap rmtree with `ignore_errors=False` and catch NotADirectoryError to fall back to unlink.\"}]",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

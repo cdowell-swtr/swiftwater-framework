@@ -1,0 +1,10 @@
+{
+  "agent": "dependency",
+  "findings": [],
+  "latency_ms": null,
+  "raw_text": "[]",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,32 @@
+{
+  "agent": "test-quality",
+  "findings": [
+    {
+      "line": 549,
+      "message": "The new test does not assert the file permissions (0o700 on split_dir/items_dir, 0o600 on index.json/item-NNNN.json) that the production code in _emit_audit_prep explicitly sets. The accompanying code path and PR description emphasize these tight perms because per-item files carry the full diff payload (sensitive), so a regression that drops the chmod calls would silently slip past this test. Add asserts on stat().st_mode & 0o777 for split_dir, items_dir, index.json, and the per-item file.",
+      "path": "tests/test_cli.py",
+      "severity": "medium",
+      "suggestion": "After the existing assertions, add e.g.: `assert (split_dir.stat().st_mode & 0o777) == 0o700`, `assert (items_dir.stat().st_mode & 0o777) == 0o700`, `assert (index_path.stat().st_mode & 0o777) == 0o600`, `assert (item_path.stat().st_mode & 0o777) == 0o600`."
+    },
+    {
+      "line": 511,
+      "message": "The --split-to behavior is documented as idempotent ('an existing DIR is cleared first' \u2014 implemented via shutil.rmtree before mkdir), but the test only exercises the fresh-dir path. A regression that removed the rmtree call (leaving stale items from a prior run) would not be caught. Add a second invocation against a pre-populated split_dir and assert stale files are gone.",
+      "path": "tests/test_cli.py",
+      "severity": "medium",
+      "suggestion": "Pre-create `split_dir / 'items' / 'item-9999.json'` with sentinel content before invoking audit-prepare, then assert that file no longer exists after the run and only the freshly written items/index remain."
+    },
+    {
+      "line": 540,
+      "message": "The test only exercises a single agent (`--agent security`), so index ordering, the i-indexed item filename padding (`item-NNNN.json` for i>=10), and multi-item dispatch are not covered. A bug in the `enumerate` loop or `f\"item-{i:04d}.json\"` formatter for multi-digit indices would not be caught.",
+      "path": "tests/test_cli.py",
+      "severity": "low",
+      "suggestion": "Either parametrize with multiple `--agent` flags (e.g. security + test-quality + complexity) and assert each index entry's `i` matches its filename, or add a second test case that monkeypatches FRAMEWORK_AGENTS to a list of >=2 agents and verifies item-0000.json and item-0001.json both exist with the correct agent names."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/test_cli.py\",\"line\":549,\"severity\":\"medium\",\"message\":\"The new test does not assert the file permissions (0o700 on split_dir/items_dir, 0o600 on index.json/item-NNNN.json) that the production code in _emit_audit_prep explicitly sets. The accompanying code path and PR description emphasize these tight perms because per-item files carry the full diff payload (sensitive), so a regression that drops the chmod calls would silently slip past this test. Add asserts on stat().st_mode & 0o777 for split_dir, items_dir, index.json, and the per-item file.\",\"suggestion\":\"After the existing assertions, add e.g.: `assert (split_dir.stat().st_mode & 0o777) == 0o700`, `assert (items_dir.stat().st_mode & 0o777) == 0o700`, `assert (index_path.stat().st_mode & 0o777) == 0o600`, `assert (item_path.stat().st_mode & 0o777) == 0o600`.\"},{\"path\":\"tests/test_cli.py\",\"line\":511,\"severity\":\"medium\",\"message\":\"The --split-to behavior is documented as idempotent ('an existing DIR is cleared first' \u2014 implemented via shutil.rmtree before mkdir), but the test only exercises the fresh-dir path. A regression that removed the rmtree call (leaving stale items from a prior run) would not be caught. Add a second invocation against a pre-populated split_dir and assert stale files are gone.\",\"suggestion\":\"Pre-create `split_dir / 'items' / 'item-9999.json'` with sentinel content before invoking audit-prepare, then assert that file no longer exists after the run and only the freshly written items/index remain.\"},{\"path\":\"tests/test_cli.py\",\"line\":540,\"severity\":\"low\",\"message\":\"The test only exercises a single agent (`--agent security`), so index ordering, the i-indexed item filename padding (`item-NNNN.json` for i>=10), and multi-item dispatch are not covered. A bug in the `enumerate` loop or `f\\\"item-{i:04d}.json\\\"` formatter for multi-digit indices would not be caught.\",\"suggestion\":\"Either parametrize with multiple `--agent` flags (e.g. security + test-quality + complexity) and assert each index entry's `i` matches its filename, or add a second test case that monkeypatches FRAMEWORK_AGENTS to a list of >=2 agents and verifies item-0000.json and item-0001.json both exist with the correct agent names.\"}]",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

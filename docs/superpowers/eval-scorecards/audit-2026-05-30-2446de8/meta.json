@@ -1,0 +1,48 @@
+{
+  "agents": [
+    "application-logic",
+    "architecture",
+    "dependency",
+    "documentation",
+    "security",
+    "test-quality"
+  ],
+  "agents_inactive_for_target": [
+    "api-design",
+    "contracts",
+    "performance"
+  ],
+  "findings_summary": {
+    "application-logic": {
+      "low": 2,
+      "medium": 1
+    },
+    "architecture": {},
+    "dependency": {},
+    "documentation": {
+      "info": 1,
+      "low": 1
+    },
+    "security": {
+      "low": 2
+    },
+    "test-quality": {
+      "low": 1,
+      "medium": 2
+    }
+  },
+  "git_sha": "2446de8",
+  "model_versions": {
+    "application-logic": "claude-sonnet-4-6",
+    "architecture": "claude-opus-4-8",
+    "dependency": "claude-sonnet-4-6",
+    "documentation": "claude-sonnet-4-6",
+    "security": "claude-opus-4-8",
+    "test-quality": "claude-sonnet-4-6"
+  },
+  "results_received": 6,
+  "review_surface": "HEAD~1...HEAD diff (audit reuses pr_diff()) \u2014 the run reviewed the just-committed audit-split-manifest changes, not the whole framework source.",
+  "target": "framework",
+  "timestamp": "2026-05-31T02:13:21+00:00",
+  "work_item_count": 6
+}

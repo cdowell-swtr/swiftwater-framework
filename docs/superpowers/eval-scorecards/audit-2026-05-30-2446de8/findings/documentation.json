@@ -1,0 +1,25 @@
+{
+  "agent": "documentation",
+  "findings": [
+    {
+      "line": 666,
+      "message": "The `audit-prepare` command docstring states 'Output is JSON on stdout; consumed by /reviewers:audit.' but with the new `--split-to` flag the command now also writes an `index.json` + `items/item-NNNN.json` tree to disk. The docstring is slightly stale \u2014 consider a one-line note describing the side-effect when `--split-to` is set.",
+      "path": "src/framework_cli/cli.py",
+      "severity": "low",
+      "suggestion": "Append: 'When --split-to DIR is set, also writes a split-manifest layout (index.json + items/item-NNNN.json) under DIR for the Workflow tool.'"
+    },
+    {
+      "line": 1052,
+      "message": "`_emit_audit_prep` gained a new `split_to` parameter but has no function-level docstring. An inline comment block explains the split-manifest write, which is helpful, but a short docstring on the helper would make its dual-output contract (stdout manifest + optional on-disk split layout) explicit to readers.",
+      "path": "src/framework_cli/cli.py",
+      "severity": "info",
+      "suggestion": "Add a docstring summarizing: emits the audit-mode manifest to stdout; when split_to is non-empty, also writes a small index.json + items/item-NNNN.json split layout (perm 0700/0600) under split_to."
+    }
+  ],
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/framework_cli/cli.py\",\"line\":666,\"severity\":\"low\",\"message\":\"The `audit-prepare` command docstring states 'Output is JSON on stdout; consumed by /reviewers:audit.' but with the new `--split-to` flag the command now also writes an `index.json` + `items/item-NNNN.json` tree to disk. The docstring is slightly stale \u2014 consider a one-line note describing the side-effect when `--split-to` is set.\",\"suggestion\":\"Append: 'When --split-to DIR is set, also writes a split-manifest layout (index.json + items/item-NNNN.json) under DIR for the Workflow tool.'\"},{\"path\":\"src/framework_cli/cli.py\",\"line\":1052,\"severity\":\"info\",\"message\":\"`_emit_audit_prep` gained a new `split_to` parameter but has no function-level docstring. An inline comment block explains the split-manifest write, which is helpful, but a short docstring on the helper would make its dual-output contract (stdout manifest + optional on-disk split layout) explicit to readers.\",\"suggestion\":\"Add a docstring summarizing: emits the audit-mode manifest to stdout; when split_to is non-empty, also writes a small index.json + items/item-NNNN.json split layout (perm 0700/0600) under split_to.\"}]",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}
