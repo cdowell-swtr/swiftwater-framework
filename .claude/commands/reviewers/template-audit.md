@@ -20,10 +20,10 @@ You are running the `/reviewers:template-audit` workflow. Your job: audit the **
    uv run framework template-render --out /tmp/template-audit-render
    ```
 
-3. **Prepare the audit** (run IN the render dir so it reads that project's batteries; snapshot ⇒ whole-tree, no baseline lookup):
+3. **Prepare the audit** (run IN the render dir so `read_batteries(".")` sees that project's all-batteries roster; snapshot ⇒ whole-tree, no baseline lookup). **Use `uv run --project "$FW_ROOT"`** — a bare `uv run framework` inside the render dir resolves to the *rendered project's* venv (which has `demo` installed, not `framework-cli`) and fails with `Failed to spawn: framework`. `--project` keeps cwd at the render dir while running the framework's own CLI:
    ```bash
    cd /tmp/template-audit-render
-   uv run framework audit-prepare --target project --snapshot \
+   uv run --project "$FW_ROOT" framework audit-prepare --target project --snapshot \
      --output-dir /tmp/template-audit-render/.framework/audit/latest \
      --split-to /tmp/template-audit-split > /tmp/template-audit-prep.json
    cd "$FW_ROOT"
@@ -36,7 +36,7 @@ You are running the `/reviewers:template-audit` workflow. Your job: audit the **
 6. **Quota-drop guard:** compare the number of returned `results` to `agents_set`. If any agents are missing (silent subagent-quota drops), re-run `audit-prepare` restricted to the missing agents — **from inside the render dir** so the all-batteries project roster is in effect (a battery-gated agent name like `accessibility`/`api-design` is only valid against the rendered project's roster, not `$FW_ROOT`):
    ```bash
    cd /tmp/template-audit-render
-   uv run framework audit-prepare --target project --snapshot \
+   uv run --project "$FW_ROOT" framework audit-prepare --target project --snapshot \
      --agent <MISSING_1> --agent <MISSING_2> \
      --output-dir /tmp/template-audit-render/.framework/audit/latest \
      --split-to /tmp/template-audit-split-retry > /tmp/template-audit-prep-retry.json
