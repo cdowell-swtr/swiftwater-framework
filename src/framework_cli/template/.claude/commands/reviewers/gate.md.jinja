@@ -69,7 +69,7 @@ You are running `/reviewers:gate`. Your job: evaluate the staged set with the af
 
 7. **Clean up the transient `/tmp` split-manifest and results** (item files contain the full unified diff; remove them after finalize so they don't linger between runs):
    ```bash
-   rm -rf /tmp/reviewers-gate-prep-split /tmp/reviewers-gate-prep.json /tmp/reviewers-gate-results.json 2>/dev/null || true
+   rm -rf /tmp/reviewers-gate-prep-split /tmp/reviewers-gate-prep.json /tmp/reviewers-gate-results.json
    ```
 
 8. **Print the verdict** from `.framework/audit/marker.json`:
