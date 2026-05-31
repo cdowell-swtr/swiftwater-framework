@@ -1569,12 +1569,17 @@ def _finalize_tune(records: list, findings_dir: Path, out: Path, meta_in: dict) 
 def _finalize_audit(
     records: list, findings_dir: Path, out: Path, meta_in: dict
 ) -> None:
+    from datetime import datetime, timezone
+
     from framework_cli.review import analyze
 
     for r in records:
         record = {
             "agent": r["agent"],
             "findings": r.get("findings", []),
+            "review_mode": r.get("review_mode", "snapshot"),
+            "base_sha": r.get("base_sha"),
+            "base_baseline": r.get("base_baseline"),
             "usage": r.get("usage", {}),
             "latency_ms": r.get("latency_ms"),
             "stop_reason": r.get("stop_reason"),
@@ -1582,9 +1587,9 @@ def _finalize_audit(
             "turns": r.get("turns", 1),
             "tool_calls": r.get("tool_calls", []),
         }
-        (findings_dir / f"{r['agent']}.json").write_text(
-            json.dumps(record, indent=2, sort_keys=True)
-        )
+        record_path = findings_dir / f"{r['agent']}.json"
+        record_path.write_text(json.dumps(record, indent=2, sort_keys=True))
+        record_path.chmod(0o600)
     loaded = analyze.load_records(findings_dir)
     model_map: dict[str, str] = {}
     for r in loaded:
@@ -1625,6 +1630,35 @@ def _finalize_audit(
             md_lines.append(f"- ⚠ `{d['agent']}` — disallowed tools: {tools}")
     md_lines.append("")
     (out / "audit-report.md").write_text("\n".join(md_lines) + "\n")
+
+    # Determine current git SHA (full, not short).
+    sha_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    git_sha = sha_result.stdout.strip() if sha_result.returncode == 0 else ""
+
+    per_agent: dict[str, dict] = {}
+    for r in records:
+        per_agent[r["agent"]] = {
+            "review_mode": r.get("review_mode", "snapshot"),
+            "base_sha": r.get("base_sha"),
+            "base_baseline": r.get("base_baseline"),
+        }
+
+    meta_out = {
+        "target": meta_in.get("target", ""),
+        "git_sha": git_sha,
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "agents": [r["agent"] for r in records],
+        "per_agent": per_agent,
+    }
+    meta_path = out / "meta.json"
+    meta_path.write_text(json.dumps(meta_out, indent=2, sort_keys=True))
+    meta_path.chmod(0o600)
+
     typer.echo(f"audit-finalize: wrote {out}")
 
 

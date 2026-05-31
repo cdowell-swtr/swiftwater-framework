@@ -2322,6 +2322,78 @@ def test_audit_finalize_preserve_as_force_overwrites_non_empty(tmp_path):
     assert (target / "audit-report.md").exists()
 
 
+def test_audit_finalize_writes_per_agent_meta_json(tmp_path):
+    """audit-finalize writes a meta.json with run-level + per_agent fields."""
+    out_dir = tmp_path / "latest"
+    out_dir.mkdir()
+
+    results_path = tmp_path / "results.json"
+    results_path.write_text(
+        _json.dumps(
+            {
+                "results": [
+                    {
+                        "agent": "security",
+                        "findings": [],
+                        "review_mode": "delta",
+                        "base_sha": "shaX",
+                        "base_baseline": "audit-2026-01-01-aaa",
+                        "raw_text": "[]",
+                    },
+                    {
+                        "agent": "architecture",
+                        "findings": [],
+                        "review_mode": "snapshot",
+                        "base_sha": None,
+                        "base_baseline": None,
+                        "raw_text": "[]",
+                    },
+                ],
+                "meta": {
+                    "mode": "audit",
+                    "target": "framework",
+                    "agents_set": ["security", "architecture"],
+                },
+            }
+        )
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "audit-finalize",
+            "--results",
+            str(results_path),
+            "--out-dir",
+            str(out_dir),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    meta_path = out_dir / "meta.json"
+    assert meta_path.is_file()
+    meta = _json.loads(meta_path.read_text())
+
+    # Run-level fields
+    assert meta["target"] == "framework"
+    assert meta["agents"] == ["security", "architecture"]
+    assert "git_sha" in meta
+    assert "timestamp" in meta
+
+    # Per-agent traceability
+    assert meta["per_agent"]["security"]["review_mode"] == "delta"
+    assert meta["per_agent"]["security"]["base_sha"] == "shaX"
+    assert meta["per_agent"]["security"]["base_baseline"] == "audit-2026-01-01-aaa"
+    assert meta["per_agent"]["architecture"]["review_mode"] == "snapshot"
+    assert meta["per_agent"]["architecture"]["base_sha"] is None
+    assert meta["per_agent"]["architecture"]["base_baseline"] is None
+
+    # Per-agent findings records also include the fields
+    sec_record = _json.loads((out_dir / "findings" / "security.json").read_text())
+    assert sec_record["review_mode"] == "delta"
+    assert sec_record["base_sha"] == "shaX"
+
+
 def test_gate_finalize_writes_marker_pass(tmp_path):
     """gate-mode finalize writes marker.json with verdict=PASS when no high+ findings."""
     out = tmp_path / "audit"
