@@ -1,6 +1,7 @@
 import json as _json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from framework_cli.cli import app
@@ -1579,6 +1580,171 @@ def test_audit_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
     assert fresh.get("stale") is None
     assert fresh["mode"] == "audit"
     assert len(fresh["items"]) == 1
+
+
+def test_resolve_audit_base_snapshot_flag_forces_snapshot(tmp_path):
+    """snapshot_flag=True → ("snapshot", None, None) regardless of available baselines."""
+    from framework_cli.cli import _resolve_audit_base
+
+    # Seed a matching baseline that would otherwise be picked up.
+    bd = tmp_path / "audit-2026-01-01-x"
+    bd.mkdir()
+    (bd / "meta.json").write_text(
+        '{"target": "framework", "git_sha": "shaX", "agents": ["security"]}'
+    )
+
+    mode, sha, name = _resolve_audit_base(
+        "security",
+        "framework",
+        snapshot_flag=True,
+        since_arg=None,
+        scorecards_root=tmp_path,
+    )
+    assert mode == "snapshot"
+    assert sha is None
+    assert name is None
+
+
+def test_resolve_audit_base_since_as_baseline_dir_delta_when_agent_in_baseline(
+    tmp_path,
+):
+    """since_arg points at a baseline dir AND agent is in that baseline → delta vs its SHA."""
+    from framework_cli.cli import _resolve_audit_base
+
+    bd = tmp_path / "audit-2026-01-01-x"
+    bd.mkdir()
+    (bd / "meta.json").write_text(
+        '{"target": "framework", "git_sha": "shaX", "agents": ["security", "architecture"]}'
+    )
+
+    mode, sha, name = _resolve_audit_base(
+        "security",
+        "framework",
+        snapshot_flag=False,
+        since_arg=str(bd),
+        scorecards_root=tmp_path,
+    )
+    assert mode == "delta"
+    assert sha == "shaX"
+    assert name == "audit-2026-01-01-x"
+
+
+def test_resolve_audit_base_since_as_baseline_dir_snapshot_fallback_when_agent_not_in_baseline(
+    tmp_path,
+):
+    """since_arg points at a baseline dir but agent wasn't in it → snapshot fallback."""
+    from framework_cli.cli import _resolve_audit_base
+
+    bd = tmp_path / "audit-2026-01-01-x"
+    bd.mkdir()
+    (bd / "meta.json").write_text(
+        '{"target": "framework", "git_sha": "shaX", "agents": ["security"]}'
+    )
+
+    mode, sha, name = _resolve_audit_base(
+        "documentation",  # not in the baseline
+        "framework",
+        snapshot_flag=False,
+        since_arg=str(bd),
+        scorecards_root=tmp_path,
+    )
+    assert mode == "snapshot"
+    assert sha is None
+    assert name is None
+
+
+def test_resolve_audit_base_since_as_ref_resolves_via_rev_parse(tmp_path, monkeypatch):
+    """since_arg looks like a ref (not a baseline dir) → resolve via git rev-parse,
+    use the resolved SHA for every agent (no per-agent presence question)."""
+    import subprocess
+
+    from framework_cli.cli import _resolve_audit_base
+
+    def fake_run(args, **kwargs):
+        # Pretend "v1.0" resolves to "abc123..."
+        if args[:3] == ["git", "rev-parse", "--verify"]:
+            assert args[3] == "v1.0^{commit}"
+            return subprocess.CompletedProcess(
+                args=args, returncode=0, stdout="abc1234567890\n", stderr=""
+            )
+        raise AssertionError(f"unexpected subprocess call: {args}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    mode, sha, name = _resolve_audit_base(
+        "security",
+        "framework",
+        snapshot_flag=False,
+        since_arg="v1.0",
+        scorecards_root=tmp_path,
+    )
+    assert mode == "delta"
+    assert sha == "abc1234567890"
+    assert name is None  # ref form has no baseline-dir name
+
+
+def test_resolve_audit_base_since_as_bad_ref_raises(tmp_path, monkeypatch):
+    """since_arg is a ref but git rev-parse fails → ValueError (caller exits 2)."""
+    import subprocess
+
+    from framework_cli.cli import _resolve_audit_base
+
+    def fake_run(args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args, returncode=128, stdout="", stderr="fatal: bad revision"
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(ValueError) as exc:
+        _resolve_audit_base(
+            "security",
+            "framework",
+            snapshot_flag=False,
+            since_arg="nope",
+            scorecards_root=tmp_path,
+        )
+    assert "nope" in str(exc.value)
+
+
+def test_resolve_audit_base_autodiscover_finds_latest_baseline(tmp_path):
+    """No flags → auto-discover the newest baseline that included this agent."""
+    from framework_cli.cli import _resolve_audit_base
+
+    bd = tmp_path / "audit-2026-03-01-x"
+    bd.mkdir()
+    (bd / "meta.json").write_text(
+        '{"target": "framework", "git_sha": "shaNew", "agents": ["security"]}'
+    )
+
+    mode, sha, name = _resolve_audit_base(
+        "security",
+        "framework",
+        snapshot_flag=False,
+        since_arg=None,
+        scorecards_root=tmp_path,
+    )
+    assert mode == "delta"
+    assert sha == "shaNew"
+    assert name == "audit-2026-03-01-x"
+
+
+def test_resolve_audit_base_autodiscover_falls_back_to_snapshot_when_no_baseline(
+    tmp_path,
+):
+    """No flags + no prior baseline for this agent → snapshot fallback."""
+    from framework_cli.cli import _resolve_audit_base
+
+    mode, sha, name = _resolve_audit_base(
+        "security",
+        "framework",
+        snapshot_flag=False,
+        since_arg=None,
+        scorecards_root=tmp_path,
+    )
+    assert mode == "snapshot"
+    assert sha is None
+    assert name is None
 
 
 def test_gate_prepare_affected_single_prompt(tmp_path, monkeypatch):

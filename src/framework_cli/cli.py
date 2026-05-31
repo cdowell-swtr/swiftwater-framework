@@ -1051,6 +1051,70 @@ def _detect_audit_target(explicit: str) -> str:
     )
 
 
+def _resolve_audit_base(
+    agent: str,
+    target: str,
+    *,
+    snapshot_flag: bool,
+    since_arg: str | None,
+    scorecards_root: Path,
+) -> tuple[str, str | None, str | None]:
+    """Return (review_mode, base_sha, base_baseline_name) for one agent.
+
+    review_mode is "snapshot" or "delta".
+    base_sha is the commit to diff HEAD against (None for snapshot).
+    base_baseline_name is the dated-dir name of the resolved baseline, if any.
+
+    Cases:
+      * snapshot_flag → ("snapshot", None, None) — forced.
+      * since_arg is a baseline dir → per-agent: ("delta", sha, name) if agent
+        was in that baseline, else ("snapshot", None, None) (fallback).
+      * since_arg is a ref/SHA → ("delta", resolved_sha, None); raises
+        ValueError if the ref doesn't resolve.
+      * No flags → auto-discover the newest baseline for this (target, agent);
+        ("delta", sha, name) if found, else ("snapshot", None, None) (fallback).
+    """
+    from framework_cli.review.baselines import (
+        find_latest_baseline_for_agent,
+        is_baseline_dir,
+        read_baseline_sha,
+    )
+
+    if snapshot_flag:
+        return ("snapshot", None, None)
+
+    if since_arg:
+        since_path = Path(since_arg)
+        if is_baseline_dir(since_path):
+            meta = json.loads((since_path / "meta.json").read_text())
+            agents_in_baseline = meta.get("agents") or []
+            if agent in agents_in_baseline:
+                sha = read_baseline_sha(since_path)
+                return ("delta", sha, since_path.name)
+            return ("snapshot", None, None)
+        # Treat as a ref/SHA. Resolve via git rev-parse.
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{since_arg}^{{commit}}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip()
+            detail = f": {stderr}" if stderr else ""
+            raise ValueError(
+                f"could not resolve --since ref {since_arg!r}{detail}. Is that ref reachable?"
+            )
+        return ("delta", result.stdout.strip(), None)
+
+    # Auto-discover.
+    found = find_latest_baseline_for_agent(target, agent, scorecards_root)
+    if found is None:
+        return ("snapshot", None, None)
+    sha = read_baseline_sha(found)
+    return ("delta", sha, found.name)
+
+
 def _emit_audit_prep(
     selected_agents: list[str],
     target_arg: str,
