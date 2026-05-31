@@ -1169,8 +1169,11 @@ def _emit_audit_prep(
     non-empty, an on-disk split-manifest layout under ``split_to``:
 
     * ``<split_to>/index.json`` — slim metadata (``mode``, ``target``,
-      ``agents_set``, ``output_dir``, ``items: [{i, agent, subagent_type}]``).
-      Written with mode 0o600.
+      ``agents_set``, ``output_dir``, ``items: [{i, agent, subagent_type,
+      review_mode, base_sha, base_baseline}]``). The three mode-related fields
+      ride on the index entry — not just the per-item file — so the workflow's
+      per-item dispatch can branch the DELTA vs SNAPSHOT prompt template
+      without re-reading each item file. Written with mode 0o600.
     * ``<split_to>/items/item-NNNN.json`` — one full work-item per file
       (``system_blocks``, ``user_message``, etc.). Each written with mode 0o600.
     * ``<split_to>/`` and ``<split_to>/items/`` themselves get mode 0o700.
@@ -1283,6 +1286,13 @@ def _emit_audit_prep(
                     "i": i,
                     "agent": wi["agent"],
                     "subagent_type": wi["subagent_type"],
+                    # Per-agent audit mode metadata — the workflow's per-item
+                    # dispatch reads these directly from the index entry to
+                    # select the DELTA vs SNAPSHOT prompt template (it does
+                    # not re-read the per-item file just for the framing).
+                    "review_mode": wi.get("review_mode", "snapshot"),
+                    "base_sha": wi.get("base_sha"),
+                    "base_baseline": wi.get("base_baseline"),
                 }
             )
         index = {

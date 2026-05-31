@@ -32,6 +32,21 @@ const INDEX_SCHEMA = {
           i: { type: 'integer' },
           agent: { type: 'string' },
           subagent_type: { type: 'string' },
+          // Per-agent audit mode metadata. Carried on the index entry so the
+          // per-item dispatch can branch the prompt template without re-reading
+          // each item file. May be absent on legacy split-manifest layouts
+          // (from before this field existed) — workflow defaults to snapshot.
+          // review_mode allowed values: 'snapshot' | 'delta' (or null/absent on
+          //   legacy layouts → treated as snapshot).
+          // base_sha is the full git SHA of the prior baseline (delta mode) or null.
+          // base_baseline is the dated dir name under docs/superpowers/eval-scorecards/
+          //   (e.g. 'audit-2026-05-30-2446de8') when known, or null for ref-form --since.
+          // The enum constraint is enforced by audit-prepare (the producer);
+          // the schema here only constrains type so the index loader doesn't
+          // reject legacy layouts where review_mode is absent (default: snapshot).
+          review_mode: { type: ['string', 'null'] },
+          base_sha: { type: ['string', 'null'] },
+          base_baseline: { type: ['string', 'null'] },
         },
       },
     },

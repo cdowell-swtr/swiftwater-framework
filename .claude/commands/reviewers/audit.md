@@ -1,5 +1,5 @@
 ---
-description: Hygiene review — run review agents against current code state via local subagents (no paid API). Auto-detects framework vs project target. Optional positional arg = single agent shortcut; --agents a,b,c for a subset; --preserve-as <dir> [--force] to snapshot the run as a dated baseline under docs/superpowers/eval-scorecards/audit-…/.
+description: Hygiene review — run review agents against current code state via local subagents (no paid API). Auto-detects framework vs project target. Optional positional arg = single agent shortcut; --agents a,b,c for a subset; --snapshot (force all-snapshot) or --since <ref-or-dir> (force all-delta against ref or baseline-dir); --preserve-as <dir> [--force] to snapshot the run as a dated baseline under docs/superpowers/eval-scorecards/audit-…/.
 ---
 
 You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent-backed audit pipeline and surface what the review agents would flag in the current code state.
@@ -10,10 +10,14 @@ You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent
 - Optional flag: `--agents a,b,c` — comma-separated list to run a specific subset of agents. Each name is validated against the active roster for the target; unknown agent names cause `audit-prepare` to exit non-zero with the list of valid names. If both `--agents` and the positional argument are passed, `--agents` wins.
 - Optional flag: `--preserve-as <dir>` — after finalize, copy `.framework/audit/latest/` into `<dir>` (a dated baseline directory parallel to the tune scorecards under `docs/superpowers/eval-scorecards/`). Refuses to overwrite a non-empty target unless `--force` is also passed.
 - Optional flag: `--force` — overwrite a non-empty `--preserve-as` target.
+- Optional flag: `--snapshot` — force every agent into snapshot mode (no diff seed; bundled context does the work). Skips per-agent baseline auto-discovery. Mutually exclusive with `--since`.
+- Optional flag: `--since <ref-or-dir>` — force delta mode against a chosen anchor. Either a git ref/SHA (every agent diffs HEAD vs that ref) or a baseline directory under `docs/superpowers/eval-scorecards/` (per-agent: agents that were in that baseline diff against its `git_sha`; agents not in that baseline fall back to snapshot). Disambiguation: `audit-prepare` first checks whether the value is an existing path that looks like a baseline dir (a directory containing a readable `meta.json` with a non-empty `git_sha`); if yes, baseline-dir form. Otherwise resolved as a git ref via `git rev-parse --verify`. Mutually exclusive with `--snapshot` — passing both causes `audit-prepare` to exit non-zero with an error message. Examples: `--since 2446de8` (against a SHA), `--since v1.0` (against a tag), `--since docs/superpowers/eval-scorecards/audit-2026-05-30-2446de8` (against a baseline dir; agents not in that baseline silently fall back to snapshot).
+
+Each agent's resolved mode is recorded as `review_mode: "snapshot" | "delta"` in `meta.json`'s `per_agent` block and in each `findings/<agent>.json` record (alongside `base_sha` and `base_baseline` for delta-mode agents).
 
 **Steps:**
 
-1. **Parse the user's arguments**. Extract the optional positional agent name, `--target`, `--agents`, `--preserve-as`, and `--force`. Bind the parsed values to shell vars `AGENT`, `AGENTS`, `TARGET`, `PRESERVE_AS`, `FORCE` (empty if not supplied) so the snippets below can reference them.
+1. **Parse the user's arguments**. Extract the optional positional agent name, `--target`, `--agents`, `--preserve-as`, `--force`, `--snapshot`, and `--since`. Bind the parsed values to shell vars `AGENT`, `AGENTS`, `TARGET`, `PRESERVE_AS`, `FORCE`, `SNAPSHOT`, `SINCE` (empty if not supplied) so the snippets below can reference them.
 
 2. **Run audit-prepare** via Bash (writes BOTH a stdout manifest AND a
    split-manifest layout under `/tmp/reviewers-audit-prep-split/` for the
@@ -34,6 +38,8 @@ You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent
    uv run framework audit-prepare \
      ${TARGET:+--target "$TARGET"} \
      $AGENT_FLAGS \
+     ${SNAPSHOT:+--snapshot} \
+     ${SINCE:+--since "$SINCE"} \
      --output-dir .framework/audit/latest \
      --split-to /tmp/reviewers-audit-prep-split > /tmp/reviewers-audit-prep.json
    ```
@@ -77,13 +83,20 @@ You are running the `/reviewers:audit` workflow. Your job: dispatch the subagent
    ```
 
 9. **Clean up transient `/tmp` artifacts** (the prep + results files and the
-   per-item split layout all contain the full diff payload). After this step:
-   the `--preserve-as` baseline under `docs/superpowers/eval-scorecards/audit-…/`
-   is the only repo-persisted output (review it for sensitive findings before
-   committing); `.framework/audit/latest/` is gitignored and overwritten on
-   the next run; `/tmp/reviewers-audit-*` are gone. `rm -f`/`rm -rf` are silent
-   on missing files but will report other errors (permission denied, etc.) so
-   a failed cleanup is visible to the user.
+   per-item split layout all contain the full diff payload AND per-agent
+   audit-mode metadata — `review_mode`, `base_sha`, `base_baseline`). After
+   step 8 (audit-finalize) completes, that per-agent metadata is durably
+   stored in `.framework/audit/latest/meta.json`'s `per_agent` block (and in
+   each `findings/<agent>.json` record), so cleaning the `/tmp` layout here
+   does not lose traceability. After this step: the `--preserve-as` baseline
+   under `docs/superpowers/eval-scorecards/audit-…/` is the only repo-persisted
+   output (review it for sensitive findings before committing);
+   `.framework/audit/latest/` is gitignored and overwritten on the next run;
+   `/tmp/reviewers-audit-*` are gone. `rm -f`/`rm -rf` are silent on missing
+   files but will report other errors (permission denied, etc.) so a failed
+   cleanup is visible to the user. (If audit-finalize fails before writing
+   meta.json, the per-agent metadata in `/tmp/reviewers-audit-prep-split/`
+   is the only place it lived — investigate before clearing.)
    ```bash
    rm -rf /tmp/reviewers-audit-prep-split
    rm -f /tmp/reviewers-audit-prep.json /tmp/reviewers-audit-results.json

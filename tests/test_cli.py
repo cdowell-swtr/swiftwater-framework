@@ -1517,7 +1517,18 @@ def test_audit_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
     assert "output_dir" in index
     assert len(index["items"]) == len(manifest["work_items"])
     first = index["items"][0]
-    assert set(first.keys()) >= {"i", "agent", "subagent_type"}
+    assert set(first.keys()) >= {
+        "i",
+        "agent",
+        "subagent_type",
+        "review_mode",
+        "base_sha",
+        "base_baseline",
+    }
+    # Per-agent audit-mode metadata must be carried on the index entry so the
+    # workflow's per-item dispatch can branch the DELTA vs SNAPSHOT prompt
+    # without re-reading the per-item file.
+    assert first["review_mode"] in ("snapshot", "delta")
     # Index is intentionally lightweight — must NOT carry the bulky fields.
     assert "system_blocks" not in first
     assert "diff" not in first
