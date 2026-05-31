@@ -1385,13 +1385,15 @@ def test_audit_prepare_detects_framework_target(tmp_path, monkeypatch):
     (presence of src/framework_cli/ + pyproject.toml [project].name='framework-cli')."""
     import framework_cli.cli as cli_mod
 
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff content")
-    result = runner.invoke(app, ["audit-prepare"])
+    # --snapshot skips per-agent auto-discovery; this test is about target detection,
+    # not mode resolution. Use result.stdout (the snapshot fallback path logs to stderr
+    # per-agent, which would corrupt a stdout+stderr-combined JSON parse).
+    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
+    result = runner.invoke(app, ["audit-prepare", "--snapshot"])
     assert result.exit_code == 0, result.output
-    data = _json.loads(result.output)
+    data = _json.loads(result.stdout)
     assert data["mode"] == "audit"
     assert data["target"] == "framework"
-    # FRAMEWORK_AGENTS: architecture, security, dependency, test-quality, documentation, application-logic
     assert set(data["agents_set"]) >= {"security", "architecture"}
     assert len(data["work_items"]) == len(data["agents_set"])
     item = data["work_items"][0]
@@ -1400,13 +1402,25 @@ def test_audit_prepare_detects_framework_target(tmp_path, monkeypatch):
 
 
 def test_audit_prepare_explicit_target_override(tmp_path, monkeypatch):
-    """--target flag forces the target regardless of cwd signals."""
+    """--target flag forces the target regardless of cwd signals.
+
+    Makes the override observable: forces auto-detection to return 'project'
+    (which would normally apply in a non-framework cwd), then passes
+    --target framework and asserts framework wins. Without the override
+    working, the assertion would fail because auto-detect would return
+    'project'.
+    """
     import framework_cli.cli as cli_mod
 
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    result = runner.invoke(app, ["audit-prepare", "--target", "framework"])
+    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
+    # Force auto-detect to "project" so the --target framework override is observable.
+    monkeypatch.setattr(cli_mod, "_detect_audit_target", lambda arg: arg or "project")
+    result = runner.invoke(
+        app, ["audit-prepare", "--target", "framework", "--snapshot"]
+    )
     assert result.exit_code == 0, result.output
-    data = _json.loads(result.output)
+    data = _json.loads(result.stdout)
+    # The override wins over the (mocked) "project" default.
     assert data["target"] == "framework"
 
 

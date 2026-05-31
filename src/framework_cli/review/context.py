@@ -60,6 +60,13 @@ def generated_project_target(root: Path, active: tuple[str, ...]) -> ReviewTarge
 # The review agents applicable to the framework's OWN CLI/tooling source (a Python
 # Copier-wrapper CLI). App-domain agents (observability*, api-design, contracts,
 # accessibility, usability, data-integrity, privacy, compliance, performance) don't apply.
+# Note on the three "near-misses" some readers might want to add (api-design, contracts,
+# performance): each one's PROMPT is calibrated for a generated-project app domain —
+# api-design is GraphQL/Strawberry, contracts is Pact consumer-contract review, performance
+# targets web-app SLOs with `src/*/routes/*.py` + `src/*/db/*.py` context globs that don't
+# exist in framework_cli. Enabling them would produce false negatives (CLI surface goes
+# unreviewed) and waste subagent quota. Proper coverage would need new CLI-scoped agent
+# prompts (e.g. `cli-api-design`), not membership in this tuple.
 FRAMEWORK_AGENTS: tuple[str, ...] = (
     "application-logic",
     "architecture",
