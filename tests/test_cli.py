@@ -2803,3 +2803,36 @@ def test_prepare_split_dir_replaces_pre_populated_dir(tmp_path):
     assert not (split_dir / "stray.txt").exists()
     assert not (items_dir / "item-9999.json").exists()
     assert stat.S_IMODE(split_dir.stat().st_mode) == 0o700
+
+
+def test_template_render_renders_all_batteries(tmp_path):
+    """template-render --out DIR renders the template with all 11 batteries,
+    git-inits the result, and reports the resolved battery list."""
+    out = tmp_path / "render"
+    result = runner.invoke(app, ["template-render", "--out", str(out)])
+    assert result.exit_code == 0, result.output
+
+    from framework_cli.batteries import battery_names
+
+    answers = (out / ".copier-answers.yml").read_text()
+    for b in battery_names():
+        assert b in answers, f"battery {b} missing from .copier-answers.yml"
+
+    assert (out / "pyproject.toml").exists()
+    assert (out / ".git").is_dir()
+    assert (out / "frontend").is_dir()  # react battery artifact
+
+    payload = _json.loads(result.stdout)
+    assert sorted(payload["batteries"]) == sorted(battery_names())
+
+
+def test_template_render_accepts_subset(tmp_path):
+    """--batteries <csv> renders only the named batteries."""
+    out = tmp_path / "render"
+    result = runner.invoke(
+        app, ["template-render", "--out", str(out), "--batteries", "webhooks"]
+    )
+    assert result.exit_code == 0, result.output
+    answers = (out / ".copier-answers.yml").read_text()
+    assert "webhooks" in answers
+    assert "graphql" not in answers

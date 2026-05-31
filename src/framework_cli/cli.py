@@ -152,6 +152,64 @@ def dev_combos(
     typer.echo(json.dumps([c.as_dict() for c in combos]))
 
 
+@app.command(name="template-render")
+def template_render(
+    out: str = typer.Option(..., "--out", help="Target directory to render into."),
+    batteries: str = typer.Option(
+        "all",
+        "--batteries",
+        help="'all' (default) or a comma-separated battery subset.",
+    ),
+) -> None:
+    """Render the bundled template into OUT (deterministic, non-interactive).
+
+    Uses the canonical fixture answers (package_name=demo) plus the chosen
+    batteries (default: all), then git-inits + commits so review tooling sees a
+    clean repo. Produces the audit subject for /reviewers:template-audit.
+    """
+    from framework_cli.batteries import battery_names, resolve
+
+    if batteries.strip() == "all":
+        selected = battery_names()
+    else:
+        selected = [b.strip() for b in batteries.split(",") if b.strip()]
+    resolved = resolve(selected)
+
+    root = Path(out).resolve()
+    render_project(
+        root,
+        {
+            "project_name": "Demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+            "batteries": resolved,
+        },
+    )
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "template-audit base",
+        ],
+        cwd=root,
+        check=True,
+    )
+    typer.echo(
+        json.dumps(
+            {"out": str(root), "package_name": "demo", "batteries": resolved},
+            indent=2,
+        )
+    )
+
+
 @app.command()
 def restore(
     file: str = typer.Argument(
