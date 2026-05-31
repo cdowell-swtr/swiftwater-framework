@@ -74,7 +74,16 @@ separate, ephemeral Postgres (`postgres-test`, reset every run) for the full E2E
 - `GET /heartbeat` — liveness ping
 - `GET /health` — readiness + SLO status
 - `GET /metrics` — Prometheus metrics
-- `GET /items` — example DB-backed listing (seeded data)
+- `GET /items` — example DB-backed listing (seeded data; paginated via `?limit=&offset=`)
+{%- if "webhooks" in batteries %}
+- `POST /webhooks` — signed inbound webhook receiver (HMAC-verified, deduplicated)
+{%- endif %}
+{%- if "websockets" in batteries %}
+- `WS /ws` — echo/broadcast WebSocket
+{%- endif %}
+{%- if "graphql" in batteries %}
+- `POST /graphql` — GraphQL API (GraphiQL IDE served when `APP_GRAPHQL_IDE_ENABLED` is set)
+{%- endif %}
 {%- if "consumers" in batteries %}
 
 ## Contract testing (Pact)

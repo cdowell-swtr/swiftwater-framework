@@ -30,7 +30,12 @@ def health(request: Request) -> JSONResponse:
     _client = _redis.Redis.from_url(request.app.state.settings.redis_url)
     try:
         report["workers"] = {"alive": _liveness.is_alive(_client)}  # type: ignore[arg-type]
-    except Exception:  # broker unreachable — report degraded, never 500 the probe
+    except Exception as exc:  # broker down — degrade, never 500 the probe
+        from {{ package_name }}.logging_config import get_logger
+
+        get_logger().warning(
+            "health_probe_failed", dependency="workers", error=str(exc)
+        )
         report["workers"] = {"alive": False}
     finally:
         _client.close()  # probe fires continuously — don't leak the connection pool
@@ -41,7 +46,10 @@ def health(request: Request) -> JSONResponse:
     try:
         _mongo_client().admin.command("ping")
         report["mongo"] = {"alive": True}
-    except Exception:  # mongo unreachable — degrade, never 500 the probe
+    except Exception as exc:  # mongo unreachable — degrade, never 500 the probe
+        from {{ package_name }}.logging_config import get_logger
+
+        get_logger().warning("health_probe_failed", dependency="mongo", error=str(exc))
         report["mongo"] = {"alive": False}
 {% endif -%}
 {% if "redis" in batteries %}
@@ -50,7 +58,10 @@ def health(request: Request) -> JSONResponse:
     try:
         _get_redis().ping()
         report["redis"] = {"alive": True}
-    except Exception:  # redis unreachable — degrade, never 500 the probe
+    except Exception as exc:  # redis unreachable — degrade, never 500 the probe
+        from {{ package_name }}.logging_config import get_logger
+
+        get_logger().warning("health_probe_failed", dependency="redis", error=str(exc))
         report["redis"] = {"alive": False}
 {% endif %}
     return JSONResponse(report, status_code=200)

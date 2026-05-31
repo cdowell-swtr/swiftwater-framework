@@ -1,8 +1,8 @@
 """In-process metrics registry. Fed by the observability middleware; read by /metrics and /health.
 
-A deliberately small, dependency-free store. The latency list is unbounded — fine for Plan 3a's
-local runtime; Plan 3b should cap or flush it for high-traffic services. Plan 3b scrapes /metrics
-into Prometheus.
+A deliberately small, dependency-free store. The latency list is unbounded — fine for low/moderate
+traffic, but cap or flush it (e.g. a fixed-size deque or reservoir sample) for high-traffic, long-
+running services. Prometheus scrapes /metrics for the fleet-wide view.
 """
 
 from __future__ import annotations

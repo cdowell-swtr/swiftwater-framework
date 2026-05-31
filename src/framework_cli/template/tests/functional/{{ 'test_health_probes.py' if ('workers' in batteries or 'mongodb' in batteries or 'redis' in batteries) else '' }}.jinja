@@ -1,0 +1,68 @@
+"""A degraded /health dependency probe must LOG the failure (not silently flip
+alive:false). Mirrors the /metrics DLQ path, which logs dlq_metrics_unavailable.
+
+Hermetic: each probe's dependency call is monkeypatched to raise, and get_logger
+is swapped for a recorder, so no real broker/mongo/redis (or its timeout) is hit.
+"""
+
+from fastapi.testclient import TestClient
+
+import {{ package_name }}.logging_config as logging_config
+from {{ package_name }}.main import create_app
+
+
+class _Recorder:
+    def __init__(self) -> None:
+        self.warnings: list[tuple[str, dict]] = []
+
+    def warning(self, event: str, **kw: object) -> None:
+        self.warnings.append((event, kw))
+
+    def info(self, *a: object, **kw: object) -> None: ...
+    def error(self, *a: object, **kw: object) -> None: ...
+    def debug(self, *a: object, **kw: object) -> None: ...
+
+
+def _boom(*_a: object, **_kw: object):
+    raise RuntimeError("dependency down")
+
+
+def test_degraded_probes_emit_warning_logs(monkeypatch):
+    rec = _Recorder()
+    monkeypatch.setattr(logging_config, "get_logger", lambda: rec)
+{%- if "workers" in batteries %}
+    from {{ package_name }}.tasks import liveness as _liveness
+
+    monkeypatch.setattr(_liveness, "is_alive", _boom)
+{%- endif %}
+{%- if "mongodb" in batteries %}
+    from {{ package_name }}.mongo import client as _mongo_client_mod
+
+    monkeypatch.setattr(_mongo_client_mod, "get_client", _boom)
+{%- endif %}
+{%- if "redis" in batteries %}
+    from {{ package_name }}.cache import client as _cache_client_mod
+
+    monkeypatch.setattr(_cache_client_mod, "get_redis", _boom)
+{%- endif %}
+
+    resp = TestClient(create_app()).get("/health")
+    assert resp.status_code == 200  # probe never 500s
+    body = resp.json()
+    logged = {
+        kw.get("dependency")
+        for (event, kw) in rec.warnings
+        if event == "health_probe_failed"
+    }
+{%- if "workers" in batteries %}
+    assert body["workers"]["alive"] is False
+    assert "workers" in logged
+{%- endif %}
+{%- if "mongodb" in batteries %}
+    assert body["mongo"]["alive"] is False
+    assert "mongo" in logged
+{%- endif %}
+{%- if "redis" in batteries %}
+    assert body["redis"]["alive"] is False
+    assert "redis" in logged
+{%- endif %}

@@ -1,0 +1,41 @@
+"""AGE graph battery — unit tests for Cypher-literal escaping (hermetic, no DB).
+
+AGE's cypher() cannot bind parameters, so values are interpolated into the query
+text. These guard the escaping/validation that keeps interpolation injection-safe.
+"""
+
+import pytest
+
+from {{ package_name }}.graph.repository import _escape_literal, _validate_rel_type
+
+
+def test_escape_doubles_backslash_then_escapes_quote():
+    # Backslash is escaped first so the escape char itself can't be used to
+    # break back out of the literal; then the single quote.
+    assert _escape_literal("O'Brien") == "O\\'Brien"
+    assert _escape_literal("a\\b") == "a\\\\b"
+
+
+def test_escape_neutralizes_injection_attempt():
+    # A value that tries to close the Cypher string and inject a clause comes
+    # back with its quote escaped, so it stays inside the literal.
+    out = _escape_literal("x'}) DETACH DELETE a //")
+    assert out.startswith("x\\'")
+    assert "'}" not in out.replace("\\'", "")  # no un-escaped quote survives
+
+
+def test_escape_rejects_control_chars():
+    with pytest.raises(ValueError):
+        _escape_literal("line1\nline2")
+
+
+def test_validate_rel_type_accepts_identifier():
+    assert _validate_rel_type("KNOWS") == "KNOWS"
+    assert _validate_rel_type("WORKS_WITH") == "WORKS_WITH"
+
+
+def test_validate_rel_type_rejects_injection_and_empty():
+    with pytest.raises(ValueError):
+        _validate_rel_type("KNOWS]->(x) //")
+    with pytest.raises(ValueError):
+        _validate_rel_type("")

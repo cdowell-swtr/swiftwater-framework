@@ -1,0 +1,40 @@
+"""Websockets battery — the /ws route must reap a connection even when the receive
+loop raises something other than WebSocketDisconnect (hermetic, no server)."""
+
+import asyncio
+
+import pytest
+
+from {{ package_name }}.routes import websockets as ws_route
+from {{ package_name }}.websockets.metrics import ws_metrics
+
+
+class _FakeWS:
+    """Minimal async WebSocket whose receive_text raises a non-disconnect error."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+        self.accepted = False
+
+    async def accept(self) -> None:
+        self.accepted = True
+
+    async def receive_text(self) -> str:
+        raise self._exc
+
+    async def send_text(self, message: str) -> None:  # pragma: no cover - unreached
+        raise AssertionError("broadcast should not run after a receive error")
+
+
+def test_non_disconnect_error_still_reaps_connection():
+    ws_metrics.reset()
+    ws_route._manager._active.clear()
+    fake = _FakeWS(RuntimeError("boom"))
+
+    # A non-WebSocketDisconnect error must still propagate AND leave no stale
+    # connection registered (the bug: disconnect ran only on WebSocketDisconnect).
+    with pytest.raises(RuntimeError):
+        asyncio.run(ws_route.websocket_endpoint(fake))
+
+    assert fake not in ws_route._manager._active
+    assert "app_websocket_connections_active 0" in ws_metrics.render_prometheus()
