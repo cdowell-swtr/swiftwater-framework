@@ -1,0 +1,48 @@
+"""Data-store auto-instrumentation gating (hermetic — no real engines/clients).
+
+Each store instrumentor's .instrument is monkeypatched to record, so we verify the
+gating/wiring without opening a DB connection or patching libraries globally.
+"""
+
+from {{ package_name }}.config.settings import Settings
+from {{ package_name }}.observability import datastores
+
+
+def test_noop_when_otel_disabled():
+    # Disabled: returns without importing the SDK / instrumenting (must not raise).
+    datastores.configure_datastore_instrumentation(Settings(otel_enabled=False))
+
+
+def test_instruments_present_stores_when_enabled(monkeypatch):
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        SQLAlchemyInstrumentor,
+        "instrument",
+        lambda self, **k: calls.append("sqlalchemy"),
+    )
+{%- if "mongodb" in batteries %}
+    from opentelemetry.instrumentation.pymongo import PymongoInstrumentor
+
+    monkeypatch.setattr(
+        PymongoInstrumentor, "instrument", lambda self, **k: calls.append("pymongo")
+    )
+{%- endif %}
+{%- if "redis" in batteries or "workers" in batteries %}
+    from opentelemetry.instrumentation.redis import RedisInstrumentor
+
+    monkeypatch.setattr(
+        RedisInstrumentor, "instrument", lambda self, **k: calls.append("redis")
+    )
+{%- endif %}
+
+    datastores.configure_datastore_instrumentation(Settings(otel_enabled=True))
+
+    assert "sqlalchemy" in calls
+{%- if "mongodb" in batteries %}
+    assert "pymongo" in calls
+{%- endif %}
+{%- if "redis" in batteries or "workers" in batteries %}
+    assert "redis" in calls
+{%- endif %}

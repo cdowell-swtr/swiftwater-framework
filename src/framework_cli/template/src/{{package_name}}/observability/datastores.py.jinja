@@ -1,0 +1,38 @@
+"""Data-store OpenTelemetry auto-instrumentation (SQLAlchemy + battery stores).
+
+Instruments the store client libraries so DB/cache queries produce spans that continue
+the trace from the triggering request or task. Called once per process from the app
+(configure_tracing) and the worker (configure_worker_tracing). OTel imports are lazy so
+a disabled process never imports the SDK.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..config.settings import Settings
+
+
+def configure_datastore_instrumentation(settings: "Settings") -> None:
+    """Auto-instrument the data stores for tracing (no-op when OTel is disabled)."""
+    if not settings.otel_enabled:
+        return
+
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
+    from ..db.engine import engine
+
+    SQLAlchemyInstrumentor().instrument(engine=engine)
+{%- if "mongodb" in batteries %}
+
+    from opentelemetry.instrumentation.pymongo import PymongoInstrumentor
+
+    PymongoInstrumentor().instrument()
+{%- endif %}
+{%- if "redis" in batteries or "workers" in batteries %}
+
+    from opentelemetry.instrumentation.redis import RedisInstrumentor
+
+    RedisInstrumentor().instrument()
+{%- endif %}

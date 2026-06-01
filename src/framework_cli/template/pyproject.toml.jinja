@@ -10,6 +10,7 @@ dependencies = [
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp-proto-grpc>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
     "psycopg[binary]>=3.2",
@@ -20,7 +21,9 @@ dependencies = [
 {% endif %}{% if "workers" in batteries %}    "celery[redis]>=5.4",
     "opentelemetry-instrumentation-celery>=0.48b0",
 {% endif %}{% if "mongodb" in batteries %}    "pymongo>=4.9",
+    "opentelemetry-instrumentation-pymongo>=0.48b0",
 {% endif %}{% if "redis" in batteries %}    "redis>=5",
+{% endif %}{% if "redis" in batteries or "workers" in batteries %}    "opentelemetry-instrumentation-redis>=0.48b0",
 {% endif %}{% if "consumers" in batteries %}    "httpx>=0.28",
 {% endif %}]
 
