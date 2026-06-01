@@ -1,0 +1,19 @@
+"""The DLQ args serialization is an overridable seam for redacting PII (hermetic)."""
+
+import json
+
+from {{ package_name }}.tasks.base import BaseTask
+
+
+def test_dlq_args_json_default_serializes_all_args():
+    assert json.loads(BaseTask().dlq_args_json((1, "x"), {})) == [1, "x"]
+
+
+def test_dlq_args_json_can_be_overridden_to_redact():
+    class Redacting(BaseTask):
+        def dlq_args_json(self, args, kwargs):
+            return json.dumps(["<redacted>"])
+
+    assert json.loads(Redacting().dlq_args_json(({"email": "a@b.c"},), {})) == [
+        "<redacted>"
+    ]

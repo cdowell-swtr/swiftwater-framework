@@ -11,4 +11,8 @@ def register_schedule(app: Celery) -> None:
             "task": "{{ package_name }}.tasks.tasks.heartbeat",
             "schedule": 30.0,  # seconds
         },
+        "prune-expired-records": {
+            "task": "{{ package_name }}.tasks.retention.prune_expired_records",
+            "schedule": 86400.0,  # daily
+        },
     }

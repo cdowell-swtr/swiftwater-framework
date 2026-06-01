@@ -25,6 +25,11 @@ class BaseTask(celery.Task):
     retry_backoff_max = 600
     retry_jitter = True
 
+    def dlq_args_json(self, args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
+        """Serialize task args for the dead-letter row. OVERRIDE to redact PII before it is
+        persisted to dead_letter_tasks.args_json (e.g. drop or scrub sensitive fields)."""
+        return json.dumps(list(args), default=str)
+
     def on_failure(
         self,
         exc: Exception,
@@ -43,6 +48,6 @@ class BaseTask(celery.Task):
                 session,
                 task_name=self.name or "unknown",
                 task_id=task_id,
-                args_json=json.dumps(list(args), default=str),
+                args_json=self.dlq_args_json(args, kwargs),
                 traceback=str(einfo),
             )

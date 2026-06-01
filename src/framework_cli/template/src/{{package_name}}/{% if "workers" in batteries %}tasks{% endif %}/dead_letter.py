@@ -3,9 +3,9 @@
 This is the terminal sink Plan 4's `retries_exhausted` recoverability metric anticipated.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import DateTime, Integer, String, Text, func, select, text
+from sqlalchemy import DateTime, Integer, String, Text, delete, func, select, text
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from ..db.base import Base
@@ -43,6 +43,20 @@ def record_failure(
         )
     )
     session.commit()
+
+
+def prune_expired(session: Session, retention_days: int) -> int:
+    """Delete dead-letter rows older than retention_days; returns the number deleted.
+
+    Run periodically (tasks/retention.py). Terminal-failure rows may hold PII in args_json,
+    so they must not accumulate forever — override BaseTask.dlq_args_json to redact at write.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+    result = session.execute(
+        delete(DeadLetterTask).where(DeadLetterTask.failed_at < cutoff)
+    )
+    session.commit()
+    return result.rowcount
 
 
 def count(session: Session) -> int:

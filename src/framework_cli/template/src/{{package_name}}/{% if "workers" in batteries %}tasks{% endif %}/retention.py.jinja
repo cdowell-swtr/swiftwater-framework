@@ -1,0 +1,32 @@
+"""Periodic retention: prune dead-letter rows (and, with webhooks, inbox dedup rows) past
+their configured window. Scheduled daily in schedule.py. Deliberately NOT a BaseTask — a
+pruning slip is operational, not work to dead-letter."""
+
+from __future__ import annotations
+
+from ..config.settings import get_settings
+from ..db.engine import SessionLocal
+from ..logging_config import get_logger
+from . import dead_letter
+from .app import app
+
+
+@app.task
+def prune_expired_records() -> None:
+    settings = get_settings()
+    log = get_logger()
+    with SessionLocal() as session:
+        deleted = dead_letter.prune_expired(session, settings.dlq_retention_days)
+    log.info("dlq_pruned", deleted=deleted, retention_days=settings.dlq_retention_days)
+{%- if "webhooks" in batteries %}
+
+    from ..webhooks import inbox
+
+    with SessionLocal() as session:
+        deleted = inbox.prune_expired(session, settings.webhook_inbox_retention_days)
+    log.info(
+        "webhook_inbox_pruned",
+        deleted=deleted,
+        retention_days=settings.webhook_inbox_retention_days,
+    )
+{%- endif %}

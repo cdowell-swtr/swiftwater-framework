@@ -31,6 +31,9 @@ class Settings(BaseSettings):
 
     # Webhook ingress: HMAC-SHA256 signing secret (read from APP_WEBHOOK_SIGNING_SECRET).
     webhook_signing_secret: str = ""
+    # Inbox dedup rows are pruned after this many days. Keep >= your provider's webhook
+    # redelivery window, or a late retry could be processed twice.
+    webhook_inbox_retention_days: int = 7
 {%- endif %}
 {%- if "workers" in batteries or "redis" in batteries %}
 
@@ -42,6 +45,8 @@ class Settings(BaseSettings):
     # Celery workers (broker + result backend).
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/1"
+    # Dead-letter rows (terminal task failures) are pruned after this many days.
+    dlq_retention_days: int = 30
 {%- endif %}
 {%- if "graphql" in batteries %}
 

@@ -1,0 +1,48 @@
+"""DLQ retention pruning (hermetic — in-memory SQLite, no broker/Postgres)."""
+
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.tasks import dead_letter
+
+
+def _session() -> Session:
+    engine = create_engine("sqlite://")
+    dead_letter.DeadLetterTask.__table__.create(engine)
+    return Session(engine)
+
+
+def _add(session: Session, *, days_ago: int) -> None:
+    session.add(
+        dead_letter.DeadLetterTask(
+            task_name="t",
+            task_id=f"id-{days_ago}",
+            args_json="[]",
+            traceback="",
+            failed_at=datetime.now(UTC) - timedelta(days=days_ago),
+        )
+    )
+    session.commit()
+
+
+def test_prune_expired_deletes_only_old_rows():
+    s = _session()
+    _add(s, days_ago=40)
+    _add(s, days_ago=1)
+    deleted = dead_letter.prune_expired(s, retention_days=30)
+    assert deleted == 1
+    assert dead_letter.count(s) == 1  # the recent row survives
+
+
+def test_retention_task_is_scheduled_daily():
+    from celery import Celery
+
+    from {{ package_name }}.tasks.schedule import register_schedule
+
+    app = Celery()
+    register_schedule(app)
+    entry = app.conf.beat_schedule["prune-expired-records"]
+    assert entry["task"] == "{{ package_name }}.tasks.retention.prune_expired_records"
+    assert entry["schedule"] == 86400.0

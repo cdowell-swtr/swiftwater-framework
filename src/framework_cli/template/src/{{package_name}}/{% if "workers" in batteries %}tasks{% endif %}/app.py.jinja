@@ -20,7 +20,7 @@ app = Celery(
     __name__,
     broker=_settings.celery_broker_url,
     backend=_settings.celery_result_backend,
-    include=["{{ package_name }}.tasks.tasks"],
+    include=["{{ package_name }}.tasks.tasks", "{{ package_name }}.tasks.retention"],
 )
 
 app.conf.update(
