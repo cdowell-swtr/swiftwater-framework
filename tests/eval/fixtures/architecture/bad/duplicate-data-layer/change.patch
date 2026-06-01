@@ -1,45 +1,6 @@
---- a/src/demo/routes/items.py
-+++ b/src/demo/routes/items.py
-@@ -1,12 +1,12 @@
- from typing import Annotated
- 
- from fastapi import APIRouter, Depends
--from pydantic import BaseModel, ConfigDict
-+from pydantic import BaseModel, ConfigDict, Field
- from sqlalchemy.orm import Session
- 
- from ..db.engine import get_session
-+from ..db.item_service import add_item, fetch_all_items
- from ..db.models import Item
--from ..db.repository import list_items
- 
- router = APIRouter()
- 
-@@ -22,10 +22,23 @@
-     name: str
- 
- 
-+class ItemCreate(BaseModel):
-+    name: str = Field(min_length=1, max_length=255)
-+
-+
- @router.get("/items", response_model=list[ItemRead])
- def get_items(session: SessionDep) -> list[Item]:
-     """List seeded/created items — demonstrates the DB wiring end to end.
- 
-     FastAPI serializes the ORM objects through ItemRead (the response contract).
-     """
--    return list_items(session)
-+    return fetch_all_items(session)
-+
-+
-+@router.post("/items", response_model=ItemRead, status_code=201)
-+def create_item(payload: ItemCreate, session: SessionDep) -> Item:
-+    """Create a new item via item_service (duplicate data-access layer)."""
-+    item = add_item(session, payload.name)
-+    session.commit()
-+    session.refresh(item)
-+    return item
+diff --git a/src/demo/db/item_service.py b/src/demo/db/item_service.py
+new file mode 100644
+index 0000000..ead2318
 --- /dev/null
 +++ b/src/demo/db/item_service.py
 @@ -0,0 +1,16 @@
@@ -58,4 +19,38 @@
 +    item = Item(name=name)
 +    session.add(item)
 +    session.flush()
++    return item
+diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
+index fa242f4..c68b898 100644
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -1,10 +1,11 @@
+ from typing import Annotated
+ 
+ from fastapi import APIRouter, Depends, Query
+-from pydantic import BaseModel, ConfigDict
++from pydantic import BaseModel, ConfigDict, Field
+ from sqlalchemy.orm import Session
+ 
+ from ..db.engine import get_session
++from ..db.item_service import add_item, fetch_all_items
+ from ..db.models import Item
+ from ..db.repository import MAX_PAGE_SIZE, list_items
+ 
+@@ -34,3 +35,16 @@ def get_items(
+     repository clamps it. FastAPI serializes the ORM objects through ItemRead.
+     """
+     return list_items(session, limit=limit, offset=offset)
++
++
++class ItemCreate(BaseModel):
++    name: str = Field(min_length=1, max_length=255)
++
++
++@router.post("/items", response_model=ItemRead, status_code=201)
++def create_item(payload: ItemCreate, session: SessionDep) -> Item:
++    """Create a new item via item_service (duplicate data-access layer)."""
++    item = add_item(session, payload.name)
++    session.commit()
++    session.refresh(item)
 +    return item

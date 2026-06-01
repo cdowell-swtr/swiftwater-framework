@@ -1,9 +1,11 @@
+diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
+index fa242f4..867d1c4 100644
 --- a/src/demo/routes/items.py
 +++ b/src/demo/routes/items.py
-@@ -29,3 +29,15 @@
-     FastAPI serializes the ORM objects through ItemRead (the response contract).
+@@ -34,3 +34,15 @@ def get_items(
+     repository clamps it. FastAPI serializes the ORM objects through ItemRead.
      """
-     return list_items(session)
+     return list_items(session, limit=limit, offset=offset)
 +
 +
 +@router.post("/items/{item_id}/archive")

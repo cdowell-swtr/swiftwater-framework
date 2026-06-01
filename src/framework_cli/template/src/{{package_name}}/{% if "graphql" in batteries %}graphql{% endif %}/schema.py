@@ -26,9 +26,15 @@ def _to_item(row: ItemModel) -> Item:
 @strawberry.type
 class Query:
     @strawberry.field
-    def items(self, info: strawberry.Info) -> list[Item]:
+    def items(
+        self, info: strawberry.Info, limit: int = 50, offset: int = 0
+    ) -> list[Item]:
+        # Bounded page (repository clamps limit/offset) — never an unbounded list.
         session = info.context["session"]
-        return [_to_item(r) for r in repository.list_items(session)]
+        return [
+            _to_item(r)
+            for r in repository.list_items(session, limit=limit, offset=offset)
+        ]
 
 
 @strawberry.type

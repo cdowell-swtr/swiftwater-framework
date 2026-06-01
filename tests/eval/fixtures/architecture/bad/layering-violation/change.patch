@@ -1,9 +1,11 @@
+diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
+index fa242f4..8a39369 100644
 --- a/src/demo/routes/items.py
 +++ b/src/demo/routes/items.py
 @@ -1,10 +1,10 @@
  from typing import Annotated
  
- from fastapi import APIRouter, Depends
+ from fastapi import APIRouter, Depends, Query
 -from pydantic import BaseModel, ConfigDict
 +from pydantic import BaseModel, ConfigDict, Field
  from sqlalchemy.orm import Session
@@ -11,12 +13,12 @@
 -from ..db.engine import get_session
 +from ..db.engine import SessionLocal, get_session
  from ..db.models import Item
- from ..db.repository import list_items
+ from ..db.repository import MAX_PAGE_SIZE, list_items
  
-@@ -29,3 +29,17 @@
-     FastAPI serializes the ORM objects through ItemRead (the response contract).
+@@ -34,3 +34,17 @@ def get_items(
+     repository clamps it. FastAPI serializes the ORM objects through ItemRead.
      """
-     return list_items(session)
+     return list_items(session, limit=limit, offset=offset)
 +
 +
 +class ItemCreate(BaseModel):

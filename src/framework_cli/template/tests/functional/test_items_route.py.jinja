@@ -23,3 +23,21 @@ def test_items_endpoint_returns_rows(db_session: Session):
     body = resp.json()
     assert [row["name"] for row in body] == ["alpha"]
     assert all(set(row) == {"id", "name"} for row in body)  # response matches ItemRead
+
+
+def test_items_endpoint_paginates_and_caps_limit(db_session: Session):
+    for name in ["a", "b", "c"]:
+        create_item(db_session, name)
+
+    def override() -> Iterator[Session]:
+        yield db_session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override
+    client = TestClient(app)
+
+    body = client.get("/items?limit=2&offset=1").json()
+    assert [row["name"] for row in body] == ["b", "c"]
+    # An over-cap limit is rejected at the API boundary (Query le=MAX_PAGE_SIZE),
+    # so the read path can never be made unbounded by the caller.
+    assert client.get("/items?limit=999999").status_code == 422

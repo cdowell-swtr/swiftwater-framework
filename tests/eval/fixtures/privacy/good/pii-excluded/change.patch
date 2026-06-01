@@ -43,11 +43,11 @@ index 5308c5d..3acceec 100644
          DateTime(timezone=True), server_default=func.now(), nullable=False
      )
 diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
-index 1820d78..87eabc8 100644
+index 862bafd..e4cb475 100644
 --- a/src/demo/db/repository.py
 +++ b/src/demo/db/repository.py
-@@ -8,8 +8,8 @@ def list_items(session: Session) -> list[Item]:
-     return list(session.scalars(select(Item).order_by(Item.id)))
+@@ -22,8 +22,8 @@ def list_items(
+     return list(session.scalars(stmt))
  
  
 -def create_item(session: Session, name: str) -> Item:
@@ -58,21 +58,21 @@ index 1820d78..87eabc8 100644
      session.commit()
      session.refresh(item)
 diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
-index 1b02bdf..0868a1f 100644
+index fa242f4..fc240cf 100644
 --- a/src/demo/routes/items.py
 +++ b/src/demo/routes/items.py
 @@ -1,12 +1,12 @@
  from typing import Annotated
  
- from fastapi import APIRouter, Depends
+ from fastapi import APIRouter, Depends, Query
 -from pydantic import BaseModel, ConfigDict
 +from pydantic import BaseModel, ConfigDict, EmailStr, Field
  from sqlalchemy.orm import Session
  
  from ..db.engine import get_session
  from ..db.models import Item
--from ..db.repository import list_items
-+from ..db.repository import create_item, list_items
+-from ..db.repository import MAX_PAGE_SIZE, list_items
++from ..db.repository import MAX_PAGE_SIZE, create_item, list_items
  
  router = APIRouter()
  
@@ -89,25 +89,18 @@ index 1b02bdf..0868a1f 100644
  
      model_config = ConfigDict(from_attributes=True)
  
-@@ -22,6 +26,14 @@ class ItemRead(BaseModel):
-     name: str
- 
- 
+@@ -34,3 +38,23 @@ def get_items(
+     repository clamps it. FastAPI serializes the ORM objects through ItemRead.
+     """
+     return list_items(session, limit=limit, offset=offset)
++
++
 +class ItemCreate(BaseModel):
 +    """Request body — what the API ACCEPTS. owner_email is captured but
 +    excluded from ItemRead so it never round-trips back to consumers."""
 +
 +    name: str = Field(min_length=1, max_length=255)
 +    owner_email: EmailStr | None = None
-+
-+
- @router.get("/items", response_model=list[ItemRead])
- def get_items(session: SessionDep) -> list[Item]:
-     """List seeded/created items — demonstrates the DB wiring end to end.
-@@ -29,3 +41,15 @@ def get_items(session: SessionDep) -> list[Item]:
-     FastAPI serializes the ORM objects through ItemRead (the response contract).
-     """
-     return list_items(session)
 +
 +
 +@router.post("/items", response_model=ItemRead, status_code=201)

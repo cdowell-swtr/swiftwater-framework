@@ -1,7 +1,9 @@
+diff --git a/src/demo/db/models.py b/src/demo/db/models.py
+index 5308c5d..da5548f 100644
 --- a/src/demo/db/models.py
 +++ b/src/demo/db/models.py
-@@ -13,6 +13,9 @@
-
+@@ -13,6 +13,9 @@ class Item(Base):
+ 
      id: Mapped[int] = mapped_column(Integer, primary_key=True)
      name: Mapped[str] = mapped_column(String(255), nullable=False)
 +    # slug is always derived from name: name.strip().lower().replace(" ", "-").
@@ -10,12 +12,14 @@
      created_at: Mapped[datetime] = mapped_column(
          DateTime(timezone=True), server_default=func.now(), nullable=False
      )
+diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
+index 862bafd..3ee70b2 100644
 --- a/src/demo/db/repository.py
 +++ b/src/demo/db/repository.py
-@@ -8,9 +8,26 @@
-     return list(session.scalars(select(Item).order_by(Item.id)))
-
-
+@@ -22,9 +22,26 @@ def list_items(
+     return list(session.scalars(stmt))
+ 
+ 
 +def _make_slug(name: str) -> str:
 +    """Derive the canonical slug from a name value."""
 +    return name.strip().lower().replace(" ", "-")
@@ -40,20 +44,22 @@
 +    session.commit()
 +    session.refresh(item)
 +    return item
+diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
+index fa242f4..037bfb0 100644
 --- a/src/demo/routes/items.py
 +++ b/src/demo/routes/items.py
 @@ -1,7 +1,7 @@
  from typing import Annotated
-
--from fastapi import APIRouter, Depends
+ 
+-from fastapi import APIRouter, Depends, Query
 -from pydantic import BaseModel, ConfigDict
-+from fastapi import APIRouter, Depends, HTTPException
++from fastapi import APIRouter, Depends, HTTPException, Query
 +from pydantic import BaseModel, ConfigDict, Field
  from sqlalchemy.orm import Session
-
+ 
  from ..db.engine import get_session
-@@ -20,6 +20,11 @@
-
+@@ -20,6 +20,11 @@ class ItemRead(BaseModel):
+ 
      id: int
      name: str
 +    slug: str
@@ -61,13 +67,13 @@
 +
 +class ItemRename(BaseModel):
 +    name: str = Field(min_length=1, max_length=255)
-
-
+ 
+ 
  @router.get("/items", response_model=list[ItemRead])
-@@ -29,3 +34,18 @@
-     FastAPI serializes the ORM objects through ItemRead (the response contract).
+@@ -34,3 +39,18 @@ def get_items(
+     repository clamps it. FastAPI serializes the ORM objects through ItemRead.
      """
-     return list_items(session)
+     return list_items(session, limit=limit, offset=offset)
 +
 +
 +@router.patch("/items/{item_id}", response_model=ItemRead)

@@ -1,0 +1,37 @@
+"""list_items() must bound its result set so the /items read path and the GraphQL
+items field can never be unbounded. Hermetic — in-memory SQLite, no Docker."""
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.models import Item
+from {{ package_name }}.db.repository import create_item, list_items
+
+
+def _session() -> Session:
+    engine = create_engine("sqlite://")
+    Item.__table__.create(engine)  # just the items table — avoids battery-only models
+    return Session(engine)
+
+
+def test_list_items_applies_limit_and_offset():
+    s = _session()
+    for name in ["a", "b", "c", "d", "e"]:
+        create_item(s, name)
+    assert [i.name for i in list_items(s, limit=2)] == ["a", "b"]
+    assert [i.name for i in list_items(s, limit=2, offset=2)] == ["c", "d"]
+
+
+def test_list_items_caps_limit_to_bound_unbounded_requests():
+    s = _session()
+    for n in range(120):
+        create_item(s, f"i{n}")
+    # An over-large limit is capped so the read path can't be made unbounded.
+    assert len(list_items(s, limit=10_000)) == 100
+
+
+def test_list_items_default_is_bounded():
+    s = _session()
+    for n in range(80):
+        create_item(s, f"i{n}")
+    assert len(list_items(s)) == 50  # default page size
