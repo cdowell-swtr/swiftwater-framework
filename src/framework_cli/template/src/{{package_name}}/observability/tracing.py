@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .datastores import configure_datastore_instrumentation
+
 if TYPE_CHECKING:
     from fastapi import FastAPI
     from opentelemetry.sdk.trace import TracerProvider
@@ -52,6 +54,7 @@ def configure_tracing(app: "FastAPI", settings: "Settings") -> None:
 
     _build_tracer_provider(settings)
     FastAPIInstrumentor.instrument_app(app)
+    configure_datastore_instrumentation(settings)
 
 
 def configure_worker_tracing(settings: "Settings") -> None:
@@ -67,3 +70,4 @@ def configure_worker_tracing(settings: "Settings") -> None:
 
     _build_tracer_provider(settings)
     CeleryInstrumentor().instrument()
+    configure_datastore_instrumentation(settings)
