@@ -15,3 +15,36 @@ def test_build_tracer_provider_carries_service_name():
         Settings(otel_enabled=True, service_name="demo-svc")
     )
     assert provider.resource.attributes["service.name"] == "demo-svc"
+
+
+def test_configure_worker_tracing_instruments_when_enabled(monkeypatch):
+    # Avoid global side effects: record the two collaborators instead of running them.
+    import opentelemetry.instrumentation.celery as cel
+
+    calls = []
+    monkeypatch.setattr(
+        tracing, "_build_tracer_provider", lambda s: calls.append("provider")
+    )
+    monkeypatch.setattr(
+        cel.CeleryInstrumentor,
+        "instrument",
+        lambda self, **k: calls.append("instrument"),
+    )
+    tracing.configure_worker_tracing(Settings(otel_enabled=True))
+    assert calls == ["provider", "instrument"]
+
+
+def test_worker_process_init_fires_tracing_setup(monkeypatch):
+    # Firing the signal must reach our handler, which delegates to
+    # configure_worker_tracing(get_settings()). Sending the signal exercises both
+    # the registration and the delegation without touching Celery signal internals.
+    from celery.signals import worker_process_init
+
+    from {{ package_name }}.tasks import app as tasks_app
+
+    seen = {}
+    monkeypatch.setattr(
+        tasks_app, "configure_worker_tracing", lambda s: seen.setdefault("s", s)
+    )
+    worker_process_init.send(sender=None)
+    assert "s" in seen
