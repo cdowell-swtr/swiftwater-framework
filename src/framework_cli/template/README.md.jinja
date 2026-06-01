@@ -84,6 +84,12 @@ separate, ephemeral Postgres (`postgres-test`, reset every run) for the full E2E
 {%- if "graphql" in batteries %}
 - `POST /graphql` — GraphQL API (GraphiQL IDE served when `APP_GRAPHQL_IDE_ENABLED` is set)
 {%- endif %}
+{%- if "workers" in batteries %}
+
+## Data retention
+
+Dead-letter rows are pruned after `APP_DLQ_RETENTION_DAYS` (default 30){% if "webhooks" in batteries %} and webhook-inbox dedup rows after `APP_WEBHOOK_INBOX_RETENTION_DAYS` (default 7; keep ≥ your provider's webhook redelivery window){% endif %} by the daily `prune_expired_records` task. The DLQ stores task args, which may contain PII — override `BaseTask.dlq_args_json` to redact sensitive fields before they're dead-lettered.
+{%- endif %}
 {%- if "consumers" in batteries %}
 
 ## Contract testing (Pact)
