@@ -1459,12 +1459,16 @@ def test_audit_prepare_multiple_agents_produces_union(tmp_path, monkeypatch):
     import framework_cli.cli as cli_mod
 
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    # --snapshot: skip per-agent baseline auto-discovery so the test does not depend on a
+    # historical SHA being present (it isn't in a shallow CI checkout). This test is about
+    # agent union, not diff mode. Parse result.stdout (snapshot-mode stderr corrupts .output).
     result = runner.invoke(
         app,
         [
             "audit-prepare",
             "--target",
             "framework",
+            "--snapshot",
             "--agent",
             "security",
             "--agent",
@@ -1472,7 +1476,7 @@ def test_audit_prepare_multiple_agents_produces_union(tmp_path, monkeypatch):
         ],
     )
     assert result.exit_code == 0, result.output
-    manifest = _json.loads(result.output)
+    manifest = _json.loads(result.stdout)
     agent_names_in_manifest = {item["agent"] for item in manifest["work_items"]}
     assert agent_names_in_manifest == {"security", "dependency"}
     assert set(manifest["agents_set"]) == {"security", "dependency"}
@@ -1483,12 +1487,15 @@ def test_audit_prepare_duplicate_agents_deduped(tmp_path, monkeypatch):
     import framework_cli.cli as cli_mod
 
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
+    # --snapshot + result.stdout: avoid baseline auto-discovery (shallow-checkout-fragile SHA)
+    # and snapshot-mode stderr corrupting the parsed JSON. This test is about dedup, not diff mode.
     result = runner.invoke(
         app,
         [
             "audit-prepare",
             "--target",
             "framework",
+            "--snapshot",
             "--agent",
             "security",
             "--agent",
@@ -1496,7 +1503,7 @@ def test_audit_prepare_duplicate_agents_deduped(tmp_path, monkeypatch):
         ],
     )
     assert result.exit_code == 0, result.output
-    manifest = _json.loads(result.output)
+    manifest = _json.loads(result.stdout)
     security_items = [i for i in manifest["work_items"] if i["agent"] == "security"]
     assert len(security_items) == 1
 
