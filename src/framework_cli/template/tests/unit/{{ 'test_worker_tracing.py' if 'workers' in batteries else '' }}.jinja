@@ -50,26 +50,6 @@ def test_worker_process_init_fires_tracing_setup(monkeypatch):
     assert "s" in seen
 
 
-def test_configure_tracing_invokes_datastore_instrumentation(monkeypatch):
-    # The app path must instrument the data stores after building the provider.
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-
-    calls: list[str] = []
-    monkeypatch.setattr(
-        tracing, "_build_tracer_provider", lambda s: calls.append("provider")
-    )
-    monkeypatch.setattr(
-        FastAPIInstrumentor, "instrument_app", lambda app: calls.append("fastapi")
-    )
-    monkeypatch.setattr(
-        tracing,
-        "configure_datastore_instrumentation",
-        lambda s: calls.append("datastores"),
-    )
-    tracing.configure_tracing(object(), Settings(otel_enabled=True))
-    assert "datastores" in calls
-
-
 def test_configure_worker_tracing_invokes_datastore_instrumentation(monkeypatch):
     # The worker path must instrument the data stores too (workers hit the DB + redis).
     import opentelemetry.instrumentation.celery as cel

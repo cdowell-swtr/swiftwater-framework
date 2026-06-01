@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from {{ package_name }}.config.settings import Settings
+from {{ package_name }}.observability import tracing
 from {{ package_name }}.observability.tracing import configure_tracing
 
 
@@ -14,3 +15,24 @@ def test_configure_tracing_disabled_is_noop():
     app = FastAPI()
     assert configure_tracing(app, Settings(otel_enabled=False)) is None
     assert all("OpenTelemetry" not in m.cls.__name__ for m in app.user_middleware)
+
+
+def test_configure_tracing_invokes_datastore_instrumentation(monkeypatch):
+    # The app path must instrument the data stores after building the provider.
+    # Lives here (always-rendered) so non-workers projects cover the app wiring too.
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        tracing, "_build_tracer_provider", lambda s: calls.append("provider")
+    )
+    monkeypatch.setattr(
+        FastAPIInstrumentor, "instrument_app", lambda app: calls.append("fastapi")
+    )
+    monkeypatch.setattr(
+        tracing,
+        "configure_datastore_instrumentation",
+        lambda s: calls.append("datastores"),
+    )
+    tracing.configure_tracing(object(), Settings(otel_enabled=True))
+    assert "datastores" in calls
