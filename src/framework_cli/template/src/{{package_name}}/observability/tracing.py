@@ -12,17 +12,19 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
+    from opentelemetry.sdk.trace import TracerProvider
 
     from ..config.settings import Settings
 
 
-def configure_tracing(app: "FastAPI", settings: "Settings") -> None:
-    if not settings.otel_enabled:
-        return
+def _build_tracer_provider(settings: "Settings") -> "TracerProvider":
+    """Build + register a TracerProvider exporting spans via OTLP/gRPC.
 
+    Shared by the FastAPI (app) and Celery (worker) tracing setups. OTel imports are
+    local so a disabled process never imports the SDK or starts an exporter.
+    """
     from opentelemetry import trace
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -38,4 +40,29 @@ def configure_tracing(app: "FastAPI", settings: "Settings") -> None:
         )
     )
     trace.set_tracer_provider(provider)
+    return provider
+
+
+def configure_tracing(app: "FastAPI", settings: "Settings") -> None:
+    if not settings.otel_enabled:
+        return
+
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    _build_tracer_provider(settings)
     FastAPIInstrumentor.instrument_app(app)
+
+
+def configure_worker_tracing(settings: "Settings") -> None:
+    """Initialize tracing for a Celery worker process (call from worker_process_init).
+
+    Builds the shared provider and instruments Celery so task executions are traced and
+    the trace context from the enqueuing request is continued. No-op when OTel is off.
+    """
+    if not settings.otel_enabled:
+        return
+
+    from opentelemetry.instrumentation.celery import CeleryInstrumentor
+
+    _build_tracer_provider(settings)
+    CeleryInstrumentor().instrument()
