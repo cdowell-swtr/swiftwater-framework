@@ -1,9 +1,10 @@
-"""OpenTelemetry tracing setup.
+"""OpenTelemetry tracing setup (FastAPI app + Celery workers).
 
-Off unless settings.otel_enabled (the dev Compose app sets APP_OTEL_ENABLED=true). When on,
-auto-instruments FastAPI and exports spans via OTLP/gRPC to the OTEL Collector, which forwards
-them to Tempo. The OTel SDK/exporter/instrumentation are imported lazily here so a disabled app
-(tests, lite, local uvicorn) never imports them or starts an exporter.
+Off unless settings.otel_enabled (the Compose app/worker set APP_OTEL_ENABLED=true). When on,
+auto-instruments FastAPI (in the app process) or Celery (in each worker process) and exports
+spans via OTLP/gRPC to the OTEL Collector, which forwards them to Tempo. The OTel SDK/exporter/
+instrumentation are imported lazily here so a disabled process (tests, lite, local uvicorn, a
+disabled worker) never imports them or starts an exporter.
 """
 
 from __future__ import annotations
