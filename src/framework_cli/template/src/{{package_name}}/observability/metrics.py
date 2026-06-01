@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import threading
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Collection
 
 # Bound the in-process latency window so memory + per-scrape sort cost stay constant.
 # p99 is therefore a windowed p99 (the last _MAX_LATENCY_SAMPLES requests).
@@ -32,7 +32,7 @@ _PROM_TEMPLATE = (
 )
 
 
-def _p99(latencies: Iterable[float]) -> float:
+def _p99(latencies: Collection[float]) -> float:
     """p99 of latencies (the max element for n < 100). Pure; safe to call while holding the lock."""
     if not latencies:
         return 0.0
