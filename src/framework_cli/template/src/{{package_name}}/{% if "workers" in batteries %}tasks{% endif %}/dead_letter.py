@@ -4,11 +4,23 @@ This is the terminal sink Plan 4's `retries_exhausted` recoverability metric ant
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
-from sqlalchemy import DateTime, Integer, String, Text, delete, func, select, text
+from sqlalchemy import (
+    CursorResult,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    delete,
+    func,
+    select,
+    text,
+)
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from ..db.base import Base
+from ..logging_config import get_logger
 
 
 class DeadLetterTask(Base):
@@ -50,13 +62,22 @@ def prune_expired(session: Session, retention_days: int) -> int:
 
     Run periodically (tasks/retention.py). Terminal-failure rows may hold PII in args_json,
     so they must not accumulate forever — override BaseTask.dlq_args_json to redact at write.
+
+    Commits its own transaction by design: a standalone maintenance prune invoked from the
+    prune_expired_records beat task with a dedicated session, not part of a caller's
+    unit-of-work. retention_days must be positive — a value <= 0 yields a now-or-future
+    cutoff that would delete every row.
     """
+    if retention_days <= 0:
+        raise ValueError("retention_days must be positive")
     cutoff = datetime.now(UTC) - timedelta(days=retention_days)
     result = session.execute(
         delete(DeadLetterTask).where(DeadLetterTask.failed_at < cutoff)
     )
+    deleted = cast(CursorResult, result).rowcount  # capture before commit
     session.commit()
-    return result.rowcount
+    get_logger().info("dlq_pruned", rows_deleted=deleted, retention_days=retention_days)
+    return deleted
 
 
 def count(session: Session) -> int:

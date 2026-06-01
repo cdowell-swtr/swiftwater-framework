@@ -55,6 +55,7 @@ def configure_tracing(app: "FastAPI", settings: "Settings") -> None:
     _build_tracer_provider(settings)
     FastAPIInstrumentor.instrument_app(app)
     configure_datastore_instrumentation(settings)
+{%- if "workers" in batteries %}
 
 
 def configure_worker_tracing(settings: "Settings") -> None:
@@ -71,3 +72,4 @@ def configure_worker_tracing(settings: "Settings") -> None:
     _build_tracer_provider(settings)
     CeleryInstrumentor().instrument()
     configure_datastore_instrumentation(settings)
+{%- endif %}

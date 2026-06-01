@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+import structlog
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -34,6 +36,30 @@ def test_prune_expired_deletes_only_old_rows():
     deleted = dead_letter.prune_expired(s, retention_days=30)
     assert deleted == 1
     assert dead_letter.count(s) == 1  # the recent row survives
+
+
+def test_prune_expired_rejects_nonpositive_retention():
+    # retention_days <= 0 yields a cutoff of now-or-future, which would delete every row;
+    # guard against the misconfiguration rather than silently wiping the table.
+    s = _session()
+    _add(s, days_ago=1)
+    for bad in (0, -1):
+        with pytest.raises(ValueError):
+            dead_letter.prune_expired(s, retention_days=bad)
+    assert dead_letter.count(s) == 1  # nothing deleted
+
+
+def test_prune_expired_logs_summary():
+    s = _session()
+    _add(s, days_ago=40)
+    with structlog.testing.capture_logs() as logs:
+        dead_letter.prune_expired(s, retention_days=30)
+    assert any(
+        e.get("event") == "dlq_pruned"
+        and e.get("rows_deleted") == 1
+        and e.get("retention_days") == 30
+        for e in logs
+    )
 
 
 def test_retention_task_is_scheduled_daily():

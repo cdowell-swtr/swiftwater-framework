@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+import structlog
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
@@ -32,3 +34,27 @@ def test_prune_expired_deletes_only_old_rows():
     deleted = inbox.prune_expired(s, retention_days=7)
     assert deleted == 1
     assert s.scalar(select(func.count()).select_from(WebhookEvent)) == 1
+
+
+def test_prune_expired_rejects_nonpositive_retention():
+    # retention_days <= 0 would delete every row; guard rather than wipe the inbox. Keep
+    # retention_days >= the provider redelivery window (see prune_expired docstring).
+    s = _session()
+    _add(s, "keep", days_ago=1)
+    for bad in (0, -1):
+        with pytest.raises(ValueError):
+            inbox.prune_expired(s, retention_days=bad)
+    assert s.scalar(select(func.count()).select_from(WebhookEvent)) == 1
+
+
+def test_prune_expired_logs_summary():
+    s = _session()
+    _add(s, "old", days_ago=30)
+    with structlog.testing.capture_logs() as logs:
+        inbox.prune_expired(s, retention_days=7)
+    assert any(
+        e.get("event") == "webhook_inbox_pruned"
+        and e.get("rows_deleted") == 1
+        and e.get("retention_days") == 7
+        for e in logs
+    )

@@ -38,5 +38,9 @@ def test_app_image_services_carry_otel_env(tmp_path):
     dev = _services(root / "infra/compose/dev.yml")
     svc = _services(root / "infra/compose/services.yml")
     for name in ("worker", "beat"):
-        assert _OTEL_VARS <= set(dev[name]["environment"]), f"dev.yml {name} missing OTEL env"
-        assert _OTEL_VARS <= set(svc[name]["environment"]), f"services.yml {name} missing OTEL env"
+        assert _OTEL_VARS <= set(dev[name]["environment"]), (
+            f"dev.yml {name} missing OTEL env"
+        )
+        assert _OTEL_VARS <= set(svc[name]["environment"]), (
+            f"services.yml {name} missing OTEL env"
+        )

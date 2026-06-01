@@ -19,7 +19,9 @@ def _configure_graphql_router() -> GraphQLRouter:
     get_logger().info("graphql_ide_configured", introspection_enabled=ide)
     return GraphQLRouter(
         build_schema(disable_introspection=not ide),
-        context_getter=get_context,
+        # strawberry infers Context=None for an un-parametrized GraphQLRouter, so it types
+        # context_getter as returning None and rejects our dict-returning FastAPI DI getter.
+        context_getter=get_context,  # type: ignore[arg-type]
         graphql_ide="graphiql" if ide else None,
     )
 
