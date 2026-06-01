@@ -40,3 +40,15 @@ def test_reset_clears_all_state():
     assert m.total_requests == 0
     assert m.p99_latency_ms() == 0.0
     assert m.error_rate_pct() == 0.0
+
+
+def test_latency_window_is_bounded():
+    from {{ package_name }}.observability.metrics import _MAX_LATENCY_SAMPLES
+
+    m = MetricsRegistry()
+    for i in range(_MAX_LATENCY_SAMPLES + 100):
+        m.record_request(float(i), 200)
+    # The window keeps only the most recent _MAX_LATENCY_SAMPLES samples.
+    assert len(m._latencies_ms) == _MAX_LATENCY_SAMPLES
+    # p99 is still computed (over the bounded window) and finite.
+    assert m.p99_latency_ms() > 0.0

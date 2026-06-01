@@ -4,17 +4,24 @@ from strawberry.fastapi import GraphQLRouter
 from ..config.settings import get_settings
 from ..graphql.context import get_context
 from ..graphql.schema import build_schema
+from ..logging_config import get_logger
 
 router = APIRouter()
 
-_ide = get_settings().resolved_graphql_ide
-_schema = build_schema(disable_introspection=not _ide)
 
-router.include_router(
-    GraphQLRouter(
-        _schema,
+def _configure_graphql_router() -> GraphQLRouter:
+    """Build the GraphQL router, logging the introspection/IDE decision.
+
+    introspection is enabled iff the IDE is (disable_introspection=not ide), so a
+    misconfigured prod that leaves the schema exposed is auditable from logs.
+    """
+    ide = get_settings().resolved_graphql_ide
+    get_logger().info("graphql_ide_configured", introspection_enabled=ide)
+    return GraphQLRouter(
+        build_schema(disable_introspection=not ide),
         context_getter=get_context,
-        graphql_ide="graphiql" if _ide else None,
-    ),
-    prefix="/graphql",
-)
+        graphql_ide="graphiql" if ide else None,
+    )
+
+
+router.include_router(_configure_graphql_router(), prefix="/graphql")

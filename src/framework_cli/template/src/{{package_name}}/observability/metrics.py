@@ -1,14 +1,20 @@
 """In-process metrics registry. Fed by the observability middleware; read by /metrics and /health.
 
-A deliberately small, dependency-free store. The latency list is unbounded — fine for low/moderate
-traffic, but cap or flush it (e.g. a fixed-size deque or reservoir sample) for high-traffic, long-
-running services. Prometheus scrapes /metrics for the fleet-wide view.
+A deliberately small, dependency-free store. Latencies are kept in a bounded window (the last
+_MAX_LATENCY_SAMPLES requests) so memory and per-scrape sort cost stay constant — p99 is therefore
+a windowed p99. Prometheus scrapes /metrics for the fleet-wide / historical view.
 """
 
 from __future__ import annotations
 
 import math
 import threading
+from collections import deque
+from collections.abc import Iterable
+
+# Bound the in-process latency window so memory + per-scrape sort cost stay constant.
+# p99 is therefore a windowed p99 (the last _MAX_LATENCY_SAMPLES requests).
+_MAX_LATENCY_SAMPLES = 2048
 
 _PROM_TEMPLATE = (
     "# HELP app_requests_total Total HTTP requests handled\n"
@@ -26,7 +32,7 @@ _PROM_TEMPLATE = (
 )
 
 
-def _p99(latencies: list[float]) -> float:
+def _p99(latencies: Iterable[float]) -> float:
     """p99 of latencies (the max element for n < 100). Pure; safe to call while holding the lock."""
     if not latencies:
         return 0.0
@@ -38,7 +44,7 @@ def _p99(latencies: list[float]) -> float:
 class MetricsRegistry:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._latencies_ms: list[float] = []
+        self._latencies_ms: deque[float] = deque(maxlen=_MAX_LATENCY_SAMPLES)
         self._requests = 0
         self._errors = 0
 

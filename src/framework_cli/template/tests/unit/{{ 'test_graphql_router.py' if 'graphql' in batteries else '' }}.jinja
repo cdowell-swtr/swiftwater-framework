@@ -1,0 +1,23 @@
+"""GraphQL battery — the router factory logs the introspection/IDE decision (hermetic)."""
+
+from {{ package_name }}.config.settings import get_settings
+from {{ package_name }}.routes import graphql as graphql_routes
+
+
+class _Recorder:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict]] = []
+
+    def info(self, event: str, **kw: object) -> None:
+        self.events.append((event, kw))
+
+
+def test_configure_graphql_router_logs_toggle(monkeypatch):
+    rec = _Recorder()
+    monkeypatch.setattr(graphql_routes, "get_logger", lambda: rec)
+
+    graphql_routes._configure_graphql_router()
+
+    logged = [kw for (event, kw) in rec.events if event == "graphql_ide_configured"]
+    assert logged, "graphql_ide_configured was not logged at router construction"
+    assert logged[0]["introspection_enabled"] == get_settings().resolved_graphql_ide
