@@ -1,0 +1,17 @@
+groups:
+- name: prometheus
+  rules:
+  - alert: PrometheusDown
+    expr: up{job="prometheus"} == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Prometheus self-scrape is down — app-specific default; tune or remove
+  - alert: PrometheusConfigReloadFailed
+    expr: prometheus_config_last_reload_successful == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Prometheus config reload failed — alerting/scrape config may be stale

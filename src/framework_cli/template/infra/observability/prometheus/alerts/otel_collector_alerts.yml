@@ -1,0 +1,10 @@
+groups:
+- name: otel-collector
+  rules:
+  - alert: OtelCollectorDown
+    expr: up{job="otel-collector"} == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: otel-collector scrape target is down (traces may be dropped) — app-specific default; tune or remove

@@ -112,3 +112,31 @@ def test_battery_obs_matches_declared_surface(
             f"alerts={new_alerts} dashboards={new_dashboards} scrapes={new_scrapes} "
             f"services={new_prod_services} exporters={new_prod_exporters}"
         )
+
+
+def _job_referenced(root: Path, subdir: str, glob: str, job: str) -> bool:
+    # Matches job="x" (YAML alerts) and job=\"x\" (escaped inside dashboard JSON).
+    pat = re.compile(rf'job=\\?"{re.escape(job)}\\?"')
+    return any(pat.search(p.read_text()) for p in (root / subdir).glob(glob))
+
+
+def test_base_obs_components_are_self_monitored(tmp_path: Path) -> None:
+    """The base obs infrastructure (otel-collector, prometheus) must self-monitor.
+
+    The per-battery guard above only covers battery obs surfaces; otel-collector and
+    prometheus are base components (not batteries), so they need their own check: each
+    must be a Prometheus scrape job AND have an alert rule + dashboard referencing its
+    job name. (Caught a real gap: otel-collector deployed but unscraped + unalerted.)
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, {**_BASE, "batteries": []})
+
+    jobs = _scrape_jobs(dest)
+    for job in ("otel-collector", "prometheus"):
+        assert job in jobs, f"base obs component {job!r} has no Prometheus scrape job"
+        assert _job_referenced(
+            dest, "infra/observability/prometheus/alerts", "*.yml", job
+        ), f'base obs component {job!r} has no alert referencing job="{job}"'
+        assert _job_referenced(
+            dest, "infra/observability/grafana/dashboards", "*.json", job
+        ), f'base obs component {job!r} has no dashboard referencing job="{job}"'
