@@ -34,6 +34,18 @@ migration discipline. In short:
 - A turnkey **compose-over-SSH + Traefik/ACME** reference strategy (no-downtime, blue-green)
   ships as a follow-up; until then, implement `__target_place_image` for your target.
 
+### Single-host vs multi-host (turnkey compose-over-SSH)
+
+**Single-host** (default bundled-Postgres path): `strategy.sh` deploys to one host using your
+`__target_*` hooks; Postgres runs co-located in the same Compose stack. Simple to start,
+no external DB required.
+
+**Multi-host turnkey** (`DEPLOY_TARGET=compose-ssh`): set this Environment variable to skip
+writing hooks and use the framework's shipped `infra/deploy/targets/compose-ssh.sh`. It rolls
+your image across `DEPLOY_HOSTS` (space-separated IPs) one host at a time, with a
+**shared external Postgres** (`APP_DATABASE_URL`) and **your load balancer** draining by
+`/health`. See `infra/deploy/README.md` for the full variable table and topology diagram.
+
 ## Migrations are reversible (enforced)
 
 Rollback reverses migrations, and a rolling deploy runs old + new code against one schema, so

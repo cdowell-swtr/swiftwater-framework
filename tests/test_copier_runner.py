@@ -3033,3 +3033,12 @@ def test_app_host_compose_renders_app_only(tmp_path: Path):
     assert 'APP_RUN_MIGRATIONS: "false"' in text
     assert "postgres:" not in text, "app-host.yml must not define a Postgres service"
     assert "traefik" not in text.lower(), "app hosts serve plain HTTP behind the builder's LB"
+
+
+def test_deploy_readme_documents_compose_ssh_target(tmp_path: Path):
+    dest = tmp_path / "proj"
+    render_project(dest, DATA)
+    readme = (dest / "infra/deploy/README.md").read_text()
+    assert "DEPLOY_TARGET=compose-ssh" in readme
+    assert "DEPLOY_HOSTS" in readme
+    assert "load balancer" in readme.lower()

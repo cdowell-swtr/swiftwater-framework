@@ -17,6 +17,41 @@ configure, you do not architect.
 A turnkey default (compose-over-SSH + Traefik/ACME blue-green) ships as a follow-up; until
 then, implement the hooks below for your target.
 
+## Turnkey target: compose-over-SSH (1..N hosts)
+
+Instead of implementing the `__target_*` hooks yourself, set **`DEPLOY_TARGET=compose-ssh`**
+(a workflow/Environment variable) to use the framework's shipped reference target,
+`infra/deploy/targets/compose-ssh.sh`. It deploys your pushed image across 1..N app hosts,
+rolling, with no downtime **given a health-draining load balancer + the app's graceful
+shutdown** (the LB is yours to provide — see below).
+
+**Topology.** Each app host runs `infra/compose/app-host.yml` (app-only; **no Postgres**, **no
+Traefik**) serving plain HTTP on a private port. A single **shared external Postgres**
+(`APP_DATABASE_URL`) is referenced by every host. Your **load balancer** terminates TLS and
+**drains a host by health**: route only to hosts whose `/health` returns 200; drain promptly
+when one goes unhealthy. The roll is one host at a time, so with >=2 hosts the LB always has a
+healthy target.
+
+**Migration safety.** The deploy runs the **expand** migration **once** against the shared DB
+(hosts run `APP_RUN_MIGRATIONS=false`); rollback reverses it once **after** the code is rolled
+back. Every per-deploy migration must be backward-compatible (expand-only) -- destructive
+(contract) changes are a separate later release. This is enforced by the contract-direction
+guard (`scripts/check_migrations.py`).
+
+**Config you set (in addition to the target-agnostic table elsewhere in this README):**
+
+| Variable | Where | Meaning |
+| --- | --- | --- |
+| `DEPLOY_TARGET` | Environment variable | `compose-ssh` to use this turnkey target |
+| `DEPLOY_HOSTS` | Environment variable | space-separated app host list, e.g. `"10.0.0.1 10.0.0.2"` |
+| `APP_DATABASE_URL` | secret | the shared external Postgres |
+| `DEPLOY_SSH_USER` | Environment variable | ssh user (default `deploy`); needs an SSH key (secret) + docker access on each host |
+| `DEPLOY_PATH` | Environment variable | dir on each host for the compose file + release state (default `/opt/app`) |
+| `DEPLOY_HOST_PORT` | Environment variable | private app port the LB targets (default `8000`) |
+
+**Builder responsibilities (not shipped):** TLS at the LB; firewall the app port to the LB
+only; provision + back up the shared Postgres.
+
 ## What you implement (the only gaps in `strategy.sh`)
 
 | Hook | Must do |
