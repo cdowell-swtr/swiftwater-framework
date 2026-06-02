@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from framework_cli.review.agentic import _run_tool, run_agent_agentic
+from framework_cli.review.decisions import Decision
 from framework_cli.review.findings import Finding
 from framework_cli.review.registry import get_agent
 
@@ -228,6 +229,65 @@ def test_agentic_loop_finalizes_at_turn_cap(tmp_path):
     assert "tools" not in client.calls[3]
     # Still returns a (partial) findings list, never hangs or raises.
     assert findings == [Finding("x.py", 1, "high", "late")]
+
+
+def _make_decision() -> Decision:
+    return Decision(
+        id="DEC-1",
+        status="accepted",
+        agents=("architecture",),
+        concern="c",
+        premise="p",
+        body="b",
+        source="DEC-1.md",
+    )
+
+
+def test_agentic_decisions_block_inserted_before_prompt(tmp_path):
+    """A non-empty decisions tuple injects a decisions block immediately before the prompt."""
+    client = _ScriptedClient(
+        [
+            _Resp([_TextBlock("[]")]),
+        ]
+    )
+    run_agent_agentic(
+        "--- a/x.py\n+++ b/x.py\n",
+        tmp_path,
+        get_agent("architecture"),
+        client,
+        max_turns=12,
+        decisions=(_make_decision(),),
+    )
+    system = client.calls[0]["system"]
+    # diff block + decisions block + prompt block = 3
+    assert len(system) == 3
+    decisions_block = system[1]
+    assert "DEC-1" in decisions_block["text"]
+    assert "acknowledged:" in decisions_block["text"]
+    assert decisions_block["cache_control"] == {"type": "ephemeral"}
+    # Prompt must remain the last block
+    assert system[2]["text"] == get_agent("architecture").prompt
+
+
+def test_agentic_no_decisions_block_when_empty(tmp_path):
+    """An empty decisions tuple leaves the system blocks byte-identical to the no-decisions path."""
+    client = _ScriptedClient(
+        [
+            _Resp([_TextBlock("[]")]),
+        ]
+    )
+    run_agent_agentic(
+        "--- a/x.py\n+++ b/x.py\n",
+        tmp_path,
+        get_agent("architecture"),
+        client,
+        max_turns=12,
+    )
+    system = client.calls[0]["system"]
+    # Must be exactly diff + prompt — no extra block
+    assert len(system) == 2
+    assert system[0]["text"].startswith("Review this unified diff:")
+    assert system[1]["text"] == get_agent("architecture").prompt
 
 
 def test_cli_dispatches_agentic_strategy(monkeypatch, tmp_path):

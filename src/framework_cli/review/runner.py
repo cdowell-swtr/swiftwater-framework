@@ -5,6 +5,7 @@ from time import perf_counter
 from typing import Any
 
 from framework_cli.review.context import Bundle
+from framework_cli.review.decisions import render_decisions_block
 from framework_cli.review.findings import Finding, parse_findings
 from framework_cli.review.registry import AgentSpec
 
@@ -49,6 +50,11 @@ def run_agent(
                 "text": f"Relevant repository files for context:\n\n{joined}{note}",
                 "cache_control": {"type": "ephemeral"},
             }
+        )
+    block = render_decisions_block(list(bundle.decisions))
+    if block is not None:
+        system.append(
+            {"type": "text", "text": block, "cache_control": {"type": "ephemeral"}}
         )
     system.append({"type": "text", "text": spec.prompt})
 

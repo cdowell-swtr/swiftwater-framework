@@ -1,4 +1,5 @@
 from framework_cli.review.context import Bundle
+from framework_cli.review.decisions import Decision
 from framework_cli.review.findings import Finding
 from framework_cli.review.registry import get_agent
 from framework_cli.review.runner import run_agent
@@ -78,3 +79,43 @@ def test_truncation_note_added_when_truncated():
     bundle = Bundle(diff="D", context_files=(("a.py", "x"),), truncated=True)
     run_agent(bundle, get_agent("security"), client)
     assert "truncated" in client.messages.last_kwargs["system"][1]["text"].lower()
+
+
+def _make_decision() -> Decision:
+    return Decision(
+        id="DEC-1",
+        status="accepted",
+        agents=("security",),
+        concern="c",
+        premise="p",
+        body="b",
+        source="DEC-1.md",
+    )
+
+
+def test_run_agent_decisions_block_inserted_before_prompt():
+    """A non-empty Bundle.decisions injects a decisions block immediately before the prompt."""
+    client = _FakeClient("[]")
+    bundle = Bundle(diff="d", decisions=(_make_decision(),))
+    run_agent(bundle, get_agent("security"), client)
+    system = client.messages.last_kwargs["system"]
+    # diff block + decisions block + prompt block = 3
+    assert len(system) == 3
+    decisions_block = system[1]
+    assert "DEC-1" in decisions_block["text"]
+    assert "acknowledged:" in decisions_block["text"]
+    assert decisions_block["cache_control"] == {"type": "ephemeral"}
+    # Prompt must remain the last block
+    assert system[2]["text"] == get_agent("security").prompt
+
+
+def test_run_agent_no_decisions_block_when_empty():
+    """An empty Bundle.decisions leaves the system blocks byte-identical to the no-decisions path."""
+    client = _FakeClient("[]")
+    bundle = Bundle(diff="THE DIFF")
+    run_agent(bundle, get_agent("security"), client)
+    system = client.messages.last_kwargs["system"]
+    # Must be exactly diff + prompt — no extra block
+    assert len(system) == 2
+    assert system[0]["text"].startswith("Review this unified diff:")
+    assert system[1]["text"] == get_agent("security").prompt

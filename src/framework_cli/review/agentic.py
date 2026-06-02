@@ -5,6 +5,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+from framework_cli.review.decisions import Decision, render_decisions_block
 from framework_cli.review.findings import Finding, parse_findings
 
 
@@ -181,6 +182,7 @@ def run_agent_agentic(
     *,
     max_turns: int,
     report: dict | None = None,
+    decisions: tuple[Decision, ...] = (),
 ) -> list[Finding]:
     """Drive a tool-use loop letting `spec` explore the tree at `root`; return findings.
 
@@ -188,14 +190,19 @@ def run_agent_agentic(
     pull whatever cross-file context it needs. At `max_turns` tool rounds we force a final
     answer so the call always terminates with a (possibly partial) findings list.
     """
-    system = [
+    system: list[dict[str, Any]] = [
         {
             "type": "text",
             "text": f"Review this unified diff:\n\n{diff}",
             "cache_control": {"type": "ephemeral"},
         },
-        {"type": "text", "text": spec.prompt},
     ]
+    block = render_decisions_block(list(decisions))
+    if block is not None:
+        system.append(
+            {"type": "text", "text": block, "cache_control": {"type": "ephemeral"}}
+        )
+    system.append({"type": "text", "text": spec.prompt})
     messages: list[dict[str, Any]] = [{"role": "user", "content": _INITIAL_INSTRUCTION}]
     t0 = perf_counter()
     usage: dict[str, int] = {}
