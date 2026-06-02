@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from sqlalchemy import (
+    Boolean,
     CursorResult,
     DateTime,
     Integer,
@@ -37,21 +38,35 @@ class DeadLetterTask(Base):
     traceback: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("''")
     )
+    redacted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
     failed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 
 def record_failure(
-    session: Session, *, task_name: str, task_id: str, args_json: str, traceback: str
+    session: Session,
+    *,
+    task_name: str,
+    task_id: str,
+    args_json: str,
+    traceback: str,
+    redacted: bool,
 ) -> None:
-    """Persist a terminally-failed task. Commits its own transaction (called from on_failure)."""
+    """Persist a terminally-failed task. Commits its own transaction (called from on_failure).
+
+    `redacted` is True iff the task used the framework's default redact-by-default seams (so the
+    row holds no personal data); False means the task opted into raw storage — scope any erasure
+    with `WHERE redacted = false`."""
     session.add(
         DeadLetterTask(
             task_name=task_name,
             task_id=task_id,
             args_json=args_json,
             traceback=traceback,
+            redacted=redacted,
         )
     )
     session.commit()

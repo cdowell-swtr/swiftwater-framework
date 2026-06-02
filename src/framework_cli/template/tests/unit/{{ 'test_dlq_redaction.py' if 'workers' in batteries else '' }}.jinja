@@ -17,3 +17,19 @@ def test_dlq_args_json_can_be_overridden_to_redact():
     assert json.loads(Redacting().dlq_args_json(({"email": "a@b.c"},), {})) == [
         "<redacted>"
     ]
+
+
+def test_record_failure_persists_redacted_flag():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from {{ package_name }}.tasks import dead_letter
+
+    engine = create_engine("sqlite://")
+    dead_letter.DeadLetterTask.__table__.create(engine)
+    s = Session(engine)
+    dead_letter.record_failure(
+        s, task_name="t", task_id="1", args_json="{}", traceback="tb", redacted=False
+    )
+    row = dead_letter.list_recent(s)[0]
+    assert row.redacted is False

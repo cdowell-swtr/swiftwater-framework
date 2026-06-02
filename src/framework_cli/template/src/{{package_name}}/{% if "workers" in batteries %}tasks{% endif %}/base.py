@@ -50,4 +50,5 @@ class BaseTask(celery.Task):
                 task_id=task_id,
                 args_json=self.dlq_args_json(args, kwargs),
                 traceback=str(einfo),
+                redacted=True,
             )
