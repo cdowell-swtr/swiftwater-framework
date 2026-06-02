@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from framework_cli.review.decisions import Decision, relevant_decisions
 from framework_cli.review.diff import changed_files
 from framework_cli.review.registry import ContextPolicy
+
+_log = logging.getLogger(__name__)
 
 # Model context windows (input+output tokens). Unknown models use the default.
 _MODEL_CONTEXT_TOKENS: dict[str, int] = {
@@ -28,6 +32,8 @@ class Bundle:
         tuple[str, str], ...
     ] = ()  # (relative path, content), in order
     truncated: bool = False
+    # Decisions relevant to the reviewing agent; empty when agent is None or none match.
+    decisions: tuple[Decision, ...] = ()
 
 
 def context_budget_chars(model: str, *, override_tokens: int | None = None) -> int:
@@ -83,15 +89,37 @@ def framework_target(root: Path) -> ReviewTarget:
     return ReviewTarget(root=root, active=FRAMEWORK_AGENTS)
 
 
-def assemble(diff: str, root: Path, policy: ContextPolicy, *, model: str) -> Bundle:
+def assemble(
+    diff: str,
+    root: Path,
+    policy: ContextPolicy,
+    *,
+    model: str,
+    agent: str | None = None,
+) -> Bundle:
     """Assemble the review bundle for `policy` against the tree at `root`.
 
     Priority order under the budget: the diff (always), then full content of changed
     files, then files matching `context_globs`. On overflow we stop adding and mark the
     bundle truncated — the diff is never dropped.
+
+    If `agent` is given, `Bundle.decisions` is populated with the decisions relevant to
+    that agent (read from `docs/superpowers/decisions/`; see decisions.py). Defaults to an
+    empty tuple when `agent` is None. A malformed decisions file degrades to no decisions
+    (logged) rather than breaking the review.
     """
+    # Decisions live in docs/superpowers/decisions/*.md; a bad file must not break review.
+    decisions: tuple[Decision, ...] = ()
+    if agent:
+        try:
+            decisions = tuple(relevant_decisions(agent, root))
+        except Exception as exc:
+            _log.warning(
+                "decisions load failed for agent %s at %s: %s", agent, root, exc
+            )
+            decisions = ()
     if policy.strategy != "bundle":
-        return Bundle(diff=diff)
+        return Bundle(diff=diff, decisions=decisions)
 
     budget = context_budget_chars(model, override_tokens=policy.max_context_tokens)
     used = len(diff)
@@ -123,4 +151,6 @@ def assemble(diff: str, root: Path, policy: ContextPolicy, *, model: str) -> Bun
         files.append((rel, content))
         used += len(content)
 
-    return Bundle(diff=diff, context_files=tuple(files), truncated=truncated)
+    return Bundle(
+        diff=diff, context_files=tuple(files), truncated=truncated, decisions=decisions
+    )

@@ -113,3 +113,47 @@ def test_reviewtarget_defaults_active_to_empty(tmp_path: Path):
 def test_budget_opus_has_1m_window():
     assert context_budget_chars("claude-opus-4-8") == (1_000_000 - 4096 - 8_000) * 4
     assert context_budget_chars("claude-opus-4-7") == (1_000_000 - 4096 - 8_000) * 4
+
+
+def _decision(tmp_path: Path) -> None:
+    # Create a minimal accepted decision fixture at tmp_path/docs/superpowers/decisions/x.md.
+    dec = tmp_path / "docs" / "superpowers" / "decisions"
+    dec.mkdir(parents=True, exist_ok=True)
+    (dec / "x.md").write_text(
+        "---\nid: DEC-0001\nstatus: accepted\nagents: [security]\nconcern: c\n"
+        "premise: 'must hold'\ndate: 2026-06-01\n---\n\nbody\n"
+    )
+
+
+def test_assemble_without_agent_has_no_decisions(tmp_path: Path):
+    # A decision IS present, but with no `agent` assemble must not load it (no leak).
+    _decision(tmp_path)
+    b = assemble("diff", tmp_path, ContextPolicy("diff"), model="claude-opus-4-8")
+    assert b.decisions == ()
+
+
+def test_assemble_tolerates_malformed_decision_file(tmp_path: Path):
+    # A bad decisions file must degrade to no decisions, not break the review.
+    dec = tmp_path / "docs" / "superpowers" / "decisions"
+    dec.mkdir(parents=True)
+    (dec / "bad.md").write_text("---\nid: DEC-9\nstatus: accepted\n")  # no closing ---
+    b = assemble(
+        "diff",
+        tmp_path,
+        ContextPolicy("diff"),
+        model="claude-opus-4-8",
+        agent="security",
+    )
+    assert b.decisions == ()
+
+
+def test_assemble_with_agent_populates_relevant_decisions(tmp_path: Path):
+    _decision(tmp_path)
+    b = assemble(
+        "diff",
+        tmp_path,
+        ContextPolicy("diff"),
+        model="claude-opus-4-8",
+        agent="security",
+    )
+    assert tuple(d.id for d in b.decisions) == ("DEC-0001",)
