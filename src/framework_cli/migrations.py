@@ -46,9 +46,20 @@ def migration_down_revisions(batteries: Sequence[str]) -> dict[str, str]:
     return out
 
 
+def migration_head(batteries: Sequence[str]) -> str:
+    """The chain head: the revision of the last present migration-adding battery (canonical
+    order), else the baseline '0001'. A tail migration (e.g. the DLQ redacted flag) chains
+    off this so it runs after every battery migration."""
+    present = [b for b in MIGRATION_ORDER if b in batteries]
+    return REVISIONS[present[-1]] if present else "0001"
+
+
 def migration_context(batteries: Sequence[str]) -> dict[str, str]:
-    """Copier context vars `down_revision_<battery>` for each present migration battery."""
-    return {
+    """Copier context vars `down_revision_<battery>` for each present migration battery,
+    plus `down_revision_dlq_redacted` for the workers-gated DLQ redacted-flag tail migration."""
+    ctx = {
         f"down_revision_{b}": rev
         for b, rev in migration_down_revisions(batteries).items()
     }
+    ctx["down_revision_dlq_redacted"] = migration_head(batteries)
+    return ctx
