@@ -123,6 +123,20 @@ rollback() {
   APP_IMAGE="${image}" __target_place_image
 }
 
+# === OPTIONAL TURNKEY TARGET ========================================================
+# Set DEPLOY_TARGET to a file under targets/ to use a turnkey implementation of the __target_*
+# hooks (the framework ships `compose-ssh`; see infra/deploy/README.md). Unset = implement the
+# hooks yourself for your target. Sourced AFTER the _todo stubs so the target's definitions win.
+if [ -n "${DEPLOY_TARGET:-}" ]; then
+  _target_file="$(dirname "$0")/targets/${DEPLOY_TARGET}.sh"
+  if [ ! -f "${_target_file}" ]; then
+    echo "::error::DEPLOY_TARGET='${DEPLOY_TARGET}' but ${_target_file} does not exist." >&2
+    exit 1
+  fi
+  # shellcheck source=/dev/null
+  . "${_target_file}"
+fi
+
 operation="${1:-}"
 case "${operation}" in
   deploy)          deploy ;;
