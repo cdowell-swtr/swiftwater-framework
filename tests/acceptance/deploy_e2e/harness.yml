@@ -24,10 +24,13 @@ services:
     ports: ["8080:80"]
     depends_on: [host1, host2]
   controller:
-    build: { context: ., dockerfile: Dockerfile.host }
-    privileged: true
+    # The CI-runner stand-in: ssh-es into the hosts to run the real strategy. It needs uv +
+    # python (repo_head_revision -> `uv run alembic heads`) but NOT docker, so it has its own
+    # image (not Dockerfile.host). /work is rw so `uv run` can sync the project's .venv there,
+    # exactly like a CI checkout. The key is mounted as deploy's default identity (Wrinkle B).
+    build: { context: ., dockerfile: Dockerfile.controller }
     volumes:
-      - ${E2E_PROJECT_DIR}:/work:ro
+      - ${E2E_PROJECT_DIR}:/work:rw
       - ${E2E_KEY}:/home/deploy/.ssh/id_ed25519:ro
     working_dir: /work
     command: ["sleep", "infinity"]

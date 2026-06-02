@@ -1,0 +1,16 @@
+# The "CI runner" stand-in that runs the REAL deploy strategy (infra/deploy/strategy.sh).
+# Unlike the app hosts (Dockerfile.host: dind + sshd), the controller does NOT need docker —
+# compose-over-SSH runs `docker compose` ON the hosts over ssh. The controller needs:
+#   - openssh-client + scp  (ssh into the hosts)
+#   - bash + curl           (strategy.sh shell + health polling)
+#   - uv + python           (strategy.sh's repo_head_revision runs `uv run alembic heads`)
+# bookworm-slim (glibc) so the project's `.venv`, synced into the rw /work mount inside this
+# container, matches a real CI ubuntu runner. The `deploy` user owns the mounted key + runs the
+# strategy (Wrinkle B: strategy.sh ssh-es with the user's default identity, no -i).
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssh-client curl bash ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN useradd -m -s /bin/bash deploy \
+ && mkdir -p /home/deploy/.ssh && chmod 700 /home/deploy/.ssh \
+ && chown -R deploy:deploy /home/deploy/.ssh

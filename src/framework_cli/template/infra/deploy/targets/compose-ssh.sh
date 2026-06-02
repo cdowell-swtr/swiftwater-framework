@@ -35,8 +35,12 @@ _ssh() {
 _push_compose() {
   local host="$1"
   _ssh "${host}" "mkdir -p '${DEPLOY_PATH}'"
+  # No quotes around the remote path: modern OpenSSH (>=9) scp uses the SFTP protocol and does
+  # NOT run a remote shell over the destination, so embedded quotes are taken literally (the
+  # open fails). DEPLOY_PATH is an operator-set path without spaces, so an unquoted target is
+  # correct here (a remote path with spaces would need backslash-escaping, not quoting).
   scp -P "${DEPLOY_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
-    infra/compose/app-host.yml "${DEPLOY_SSH_USER}@${host}:'${DEPLOY_PATH}/app-host.yml'"
+    infra/compose/app-host.yml "${DEPLOY_SSH_USER}@${host}:${DEPLOY_PATH}/app-host.yml"
 }
 
 # Run an alembic command ONCE against the shared DB via a one-shot, no-deps container on the
