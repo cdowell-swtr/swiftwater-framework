@@ -229,6 +229,48 @@ def _add_expand_migration(project: Path) -> None:
     )
 
 
+def _compose_base(env: dict[str, str]) -> list[str]:
+    """The `docker compose -f harness.yml` prefix (used to exec into harness services)."""
+    return ["docker", "compose", "-f", str(HARNESS_YML)]
+
+
+def _column_exists(env: dict[str, str], table: str, col: str) -> bool:
+    """True iff `col` exists on `table` in the shared harness Postgres (creds app/app/app)."""
+    q = (
+        f"SELECT 1 FROM information_schema.columns "
+        f"WHERE table_name='{table}' AND column_name='{col}'"
+    )
+    out = subprocess.run(
+        [
+            *_compose_base(env),
+            "exec",
+            "-T",
+            "postgres",
+            "psql",
+            "-U",
+            "app",
+            "-d",
+            "app",
+            "-tAc",
+            q,
+        ],
+        cwd=str(HARNESS),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    return out.stdout.strip() == "1"
+
+
+def _current_release(env: dict[str, str], strat_env: dict[str, str]) -> str:
+    """`strategy.sh current-release` -> the most-recent release's image tag (stripped)."""
+    r = _strategy(env, strat_env, "current-release")
+    assert r.returncode == 0, (
+        f"current-release failed:\n--- stdout ---\n{r.stdout}\n--- stderr ---\n{r.stderr}"
+    )
+    return r.stdout.strip()
+
+
 def _resolve_pg_ip(env: dict[str, str]) -> str:
     """Wrinkle A: a nested app (inside host1/host2's dind) can't resolve the sibling harness
     service name `postgres` (different network), but it CAN reach postgres's harness-network IP
@@ -505,6 +547,194 @@ def test_deploy_e2e_rolling_update_has_no_downtime(disk_tmp: Path):
     finally:
         # The v1/v2 images were built on the OUTER docker (for `docker save` into the hosts);
         # remove them so reruns + CI don't accumulate dangling app images.
+        subprocess.run(
+            ["docker", "rmi", "-f", "acme:v1", "acme:v2"], capture_output=True
+        )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="docker required: the deploy e2e harness boots a multi-container dind fleet",
+)
+def test_deploy_e2e_rollback_reverts_code_and_schema(disk_tmp: Path):
+    """Headline proof: the REAL compose-over-SSH strategy ROLLS BACK code AND schema.
+
+    Deploy v1 (baseline, recorded revision 0001), then v2 (= v1 + an expand migration,
+    recorded revision 0099; the expand `items.note` is applied once). `strategy.sh
+    rollback` must then (a) roll the code back to v1 on all hosts AND (b) downgrade the
+    schema ONCE to v1's recorded revision (0001) — so the prior release serves and the
+    expand column is gone.
+
+    The recorded revisions are the crux: `deploy` records `repo_head_revision()` =
+    `alembic heads` in the controller's `/work` checkout AT DEPLOY TIME. So the v1 deploy
+    must run with `/work` carrying ONLY the baseline (head 0001), and the v2 deploy with
+    `/work` carrying the expand migration (head 0099). We stage `/work` (== the rendered
+    project dir, mounted rw into the controller) accordingly between deploys. The rollback
+    downgrade itself runs inside the recorded head image (acme:v2, which HAS the 0099
+    down-path), independent of the `/work` checkout state at rollback time.
+    """
+    project = disk_tmp / "app"
+    render_project(project, DATA)
+    _run(["uv", "lock"], cwd=project, timeout=600)
+
+    # Build v1 (baseline-only), then add the expand migration and build v2 (baseline + expand).
+    _build_app_image(project, "acme:v1")
+    _add_expand_migration(project)
+    _build_app_image(project, "acme:v2")
+
+    # CRITICAL /work staging: remove the expand migration from the render dir so the v1 deploy's
+    # controller checkout (== /work) heads at 0001 → v1's release row records revision 0001.
+    expand_mig = project / "migrations" / "versions" / "0099_e2e_expand.py"
+    expand_mig.unlink()
+
+    key = _gen_keypair(disk_tmp)
+    env = _compose_env(project_dir=project, key_path=key)
+
+    try:
+        with harness_up(env):
+            try:
+                assert _wait_pg_healthy(env), "postgres did not become healthy"
+                for host in APP_HOSTS:
+                    assert _controller_can_reach(env, host), (
+                        f"controller could not reach {host}"
+                    )
+
+                pg_ip = _resolve_pg_ip(env)
+                db_url = f"postgresql+psycopg://app:app@{pg_ip}:5432/app"
+
+                # Warm the controller's project venv (baseline /work: head must resolve to 0001).
+                warm = _compose(
+                    env,
+                    "exec",
+                    "-T",
+                    "-u",
+                    "deploy",
+                    "-w",
+                    "/work",
+                    "-e",
+                    "HOME=/home/deploy",
+                    "controller",
+                    "uv",
+                    "run",
+                    "alembic",
+                    "heads",
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                )
+                assert warm.returncode == 0 and "0001" in warm.stdout, (
+                    f"controller venv warm-up (baseline head 0001) failed:\n"
+                    f"{warm.stdout}\n{warm.stderr}"
+                )
+
+                _load_image_into_hosts(env, "acme:v1")
+                _load_image_into_hosts(env, "acme:v2")
+
+                base_strat_env = {
+                    "DEPLOY_TARGET": "compose-ssh",
+                    "DEPLOY_ENV": "prod",
+                    "DEPLOY_HOSTS": " ".join(APP_HOSTS),
+                    "DEPLOY_BASE_URL": "http://lb",
+                    "APP_DATABASE_URL": db_url,
+                    "APP_ALERT_WEBHOOK_URL": "http://x",
+                    "DEPLOY_AWAIT_TIMEOUT": "150",
+                    "DEPLOY_PATH": "/home/deploy/app",
+                }
+
+                # Deploy v1: /work heads at 0001 → release row records (acme:v1, 0001).
+                r1 = _strategy(
+                    env, {**base_strat_env, "APP_IMAGE": "acme:v1"}, "deploy"
+                )
+                assert r1.returncode == 0, (
+                    f"v1 deploy failed:\n--- stdout ---\n{r1.stdout}\n--- stderr ---\n{r1.stderr}"
+                )
+                assert _await_lb_healthy(), (
+                    "LB did not serve /health after the v1 deploy"
+                )
+                assert not _column_exists(env, "items", "note"), (
+                    "items.note already exists after the v1 (baseline) deploy — "
+                    "the v1 image should carry only the 0001 schema"
+                )
+
+                # CRITICAL /work staging: re-add the expand migration so the v2 deploy's controller
+                # checkout heads at 0099 → v2's release row records revision 0099.
+                _add_expand_migration(project)
+
+                # Deploy v2: /work heads at 0099 → release row records (acme:v2, 0099); the expand
+                # migration runs ONCE against the shared DB → items.note appears.
+                r2 = _strategy(
+                    env, {**base_strat_env, "APP_IMAGE": "acme:v2"}, "deploy"
+                )
+                assert r2.returncode == 0, (
+                    f"v2 deploy failed:\n--- stdout ---\n{r2.stdout}\n--- stderr ---\n{r2.stderr}"
+                )
+                assert _await_lb_healthy(), (
+                    "LB did not serve /health after the v2 deploy"
+                )
+
+                # PROOF (pre-rollback): the expand column is present after the v2 deploy.
+                assert _column_exists(env, "items", "note"), (
+                    "items.note missing after the v2 deploy — the expand migration "
+                    "did not apply, so the rollback proof would be meaningless"
+                )
+                assert _current_release(env, base_strat_env) == "acme:v2", (
+                    "current-release should be acme:v2 after the v2 deploy"
+                )
+
+                # ROLLBACK: reverse the schema to v1's recorded revision (0001), via the recorded
+                # head image (acme:v2, which has the 0099 down-path), THEN redeploy v1's image.
+                rb = _strategy(env, base_strat_env, "rollback")
+                assert rb.returncode == 0, (
+                    f"rollback failed:\n--- stdout ---\n{rb.stdout}\n--- stderr ---\n{rb.stderr}"
+                )
+                assert _await_lb_healthy(), (
+                    "LB did not serve /health after the rollback"
+                )
+
+                # PROOF (post-rollback): the prior release (acme:v1) serves AND the expand column
+                # is gone (a REAL downgrade ran 0099.downgrade() against the shared DB).
+                current = _current_release(env, base_strat_env)
+                assert current == "acme:v1", (
+                    f"rollback did not restore the prior release: current-release={current!r} "
+                    f"(expected 'acme:v1')"
+                )
+                note_after = _column_exists(env, "items", "note")
+                assert note_after is False, (
+                    "items.note STILL EXISTS after rollback — the schema was NOT reverted. "
+                    "Likely v1's release row recorded the wrong revision (0099 not 0001); "
+                    "inspect /home/deploy/app/releases-prod.tsv. Do NOT relax this assertion."
+                )
+                print(
+                    "\n[rollback] current-release=acme:v1; items.note before=True after=False"
+                )
+            except Exception:
+                _dump_logs(env)
+                # Surface the recorded release rows — the usual rollback-revision suspect.
+                rows = _compose(
+                    env,
+                    "exec",
+                    "-T",
+                    "-u",
+                    "deploy",
+                    "controller",
+                    "ssh",
+                    "-o",
+                    "StrictHostKeyChecking=no",
+                    "-o",
+                    "UserKnownHostsFile=/dev/null",
+                    "-i",
+                    "/home/deploy/.ssh/id_ed25519",
+                    "deploy@host1",
+                    "cat",
+                    "/home/deploy/app/releases-prod.tsv",
+                    capture_output=True,
+                    text=True,
+                )
+                print("\n===== releases-prod.tsv (host1) =====")
+                print(rows.stdout)
+                print(rows.stderr)
+                raise
+    finally:
         subprocess.run(
             ["docker", "rmi", "-f", "acme:v1", "acme:v2"], capture_output=True
         )

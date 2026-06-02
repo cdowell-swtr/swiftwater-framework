@@ -121,6 +121,11 @@ rollback() {
   __target_migrate "downgrade ${rev}"
   # shellcheck disable=SC2317  # reached once __target_migrate is implemented (not the _todo stub)
   APP_IMAGE="${image}" __target_place_image
+  # Record the rollback as the new live release so the durable history reflects what is now
+  # deployed (`current-release`/`releases` track live state, not just forward deploys). A later
+  # rollback then walks back from HERE (its prior = the release this rollback superseded).
+  # shellcheck disable=SC2317  # reached once the hooks are implemented (not the _todo stubs)
+  __target_record_release "${image}" "${rev}"
 }
 
 # === OPTIONAL TURNKEY TARGET ========================================================
