@@ -37,6 +37,9 @@ def prune_expired(session: Session, retention_days: int) -> int:
     deleted = cast(CursorResult, result).rowcount  # capture before commit
     session.commit()
     get_logger().info(
-        "webhook_inbox_pruned", rows_deleted=deleted, retention_days=retention_days
+        "webhook_inbox_pruned",
+        rows_deleted=deleted,
+        retention_days=retention_days,
+        triggered_by="prune_expired_records",
     )
     return deleted

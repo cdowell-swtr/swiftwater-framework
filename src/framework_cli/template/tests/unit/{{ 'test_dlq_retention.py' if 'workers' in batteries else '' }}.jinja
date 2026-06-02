@@ -62,6 +62,29 @@ def test_prune_expired_logs_summary():
     )
 
 
+def test_prune_logs_triggered_by():
+    s = _session()
+    _add(s, days_ago=40)
+    with structlog.testing.capture_logs() as logs:
+        dead_letter.prune_expired(s, retention_days=30)
+    assert any(
+        e.get("event") == "dlq_pruned" and e.get("triggered_by") == "prune_expired_records"
+        for e in logs
+    )
+
+
+def test_prune_expired_records_logs_failure(monkeypatch):
+    from {{ package_name }}.tasks import retention
+
+    def boom(session, retention_days):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(dead_letter, "prune_expired", boom)
+    with structlog.testing.capture_logs() as logs:
+        retention.prune_expired_records()
+    assert any(e.get("event") == "dlq_prune_failed" for e in logs)
+
+
 def test_retention_task_is_scheduled_daily():
     from celery import Celery
 

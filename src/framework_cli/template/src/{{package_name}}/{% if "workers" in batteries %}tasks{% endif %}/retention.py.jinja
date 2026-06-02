@@ -6,21 +6,30 @@ from __future__ import annotations
 
 from ..config.settings import get_settings
 from ..db.engine import SessionLocal
+from ..logging_config import get_logger
 from . import dead_letter
 from .app import app
 
 
 @app.task
 def prune_expired_records() -> None:
-    # prune_expired emits the audit log (dlq_pruned / webhook_inbox_pruned) itself, so the
-    # accountability trail lives in one place with one schema — see dead_letter.prune_expired.
+    # Each prune is independent + self-logging (dlq_pruned / webhook_inbox_pruned). A prune that
+    # raises is an operational/retention-compliance signal, so log it (dlq_prune_failed /
+    # webhook_inbox_prune_failed) rather than letting the beat task die silently.
     settings = get_settings()
+    log = get_logger()
     with SessionLocal() as session:
-        dead_letter.prune_expired(session, settings.dlq_retention_days)
+        try:
+            dead_letter.prune_expired(session, settings.dlq_retention_days)
+        except Exception as exc:
+            log.error("dlq_prune_failed", error=str(exc))
 {%- if "webhooks" in batteries %}
 
     from ..webhooks import inbox
 
     with SessionLocal() as session:
-        inbox.prune_expired(session, settings.webhook_inbox_retention_days)
+        try:
+            inbox.prune_expired(session, settings.webhook_inbox_retention_days)
+        except Exception as exc:
+            log.error("webhook_inbox_prune_failed", error=str(exc))
 {%- endif %}
