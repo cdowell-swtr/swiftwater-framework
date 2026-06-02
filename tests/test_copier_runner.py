@@ -3020,3 +3020,16 @@ def test_secrets_doc_renders_with_convention(tmp_path: Path):
     assert "demo" in secrets.lower()
     # the `{{ package_name | upper }}` filter inside a markdown table cell renders correctly
     assert "ANTHROPIC_DEMO_CI_RUNTIME" in secrets
+
+
+def test_app_host_compose_renders_app_only(tmp_path: Path):
+    dest = tmp_path / "proj"
+    render_project(dest, DATA)
+    compose = dest / "infra/compose/app-host.yml"
+    assert compose.exists(), "app-host.yml was not rendered"
+    text = compose.read_text()
+    # app-only: the app service on image:${APP_IMAGE}, migrations OFF, no postgres service.
+    assert "image: ${APP_IMAGE" in text
+    assert 'APP_RUN_MIGRATIONS: "false"' in text
+    assert "postgres:" not in text, "app-host.yml must not define a Postgres service"
+    assert "traefik" not in text.lower(), "app hosts serve plain HTTP behind the builder's LB"

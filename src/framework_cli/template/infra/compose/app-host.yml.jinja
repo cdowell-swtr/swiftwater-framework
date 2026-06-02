@@ -1,0 +1,23 @@
+# App-only host topology (Plan 5c-2 compose-over-SSH target). The deploy strategy
+# (infra/deploy/targets/compose-ssh.sh) scp's this to each app host and runs it there.
+# NO Postgres (the DB is the single shared external one via APP_DATABASE_URL). TLS and
+# health-draining are the builder-provided load balancer's job. Plain HTTP on the private
+# port the LB targets. The app does NOT self-migrate — the deploy migrates ONCE against the
+# shared DB (APP_RUN_MIGRATIONS=false). See infra/deploy/README.md.
+services:
+  app:
+    image: ${APP_IMAGE:?set APP_IMAGE to the pushed registry tag}
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+      APP_ENVIRONMENT: ${DEPLOY_ENV:-prod}
+      APP_DATABASE_URL: ${APP_DATABASE_URL:?set APP_DATABASE_URL to the shared Postgres}
+      APP_RUN_MIGRATIONS: "false"
+    ports:
+      - "${DEPLOY_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/heartbeat').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
