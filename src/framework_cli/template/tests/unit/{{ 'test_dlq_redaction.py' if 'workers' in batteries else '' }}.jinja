@@ -5,17 +5,19 @@ import json
 from {{ package_name }}.tasks.base import BaseTask
 
 
-def test_dlq_args_json_default_serializes_all_args():
-    assert json.loads(BaseTask().dlq_args_json((1, "x"), {})) == [1, "x"]
+def test_dlq_args_json_default_is_shape_not_values():
+    result = json.loads(BaseTask().dlq_args_json((1, "x"), {"k": "v"}))
+    # Default stores arg types + kwarg count, never actual values.
+    assert result == {"args": ["int", "str"], "kwargs": 1}
 
 
-def test_dlq_args_json_can_be_overridden_to_redact():
-    class Redacting(BaseTask):
+def test_dlq_args_json_can_be_overridden_to_store_full_args():
+    class RawArgs(BaseTask):
         def dlq_args_json(self, args, kwargs):
-            return json.dumps(["<redacted>"])
+            return json.dumps(list(args))
 
-    assert json.loads(Redacting().dlq_args_json(({"email": "a@b.c"},), {})) == [
-        "<redacted>"
+    assert json.loads(RawArgs().dlq_args_json(({"email": "a@b.c"},), {})) == [
+        {"email": "a@b.c"}
     ]
 
 
@@ -33,3 +35,57 @@ def test_record_failure_persists_redacted_flag():
     )
     row = dead_letter.list_recent(s)[0]
     assert row.redacted is False
+
+
+def test_dlq_args_json_default_is_shape_only():
+    from {{ package_name }}.tasks.base import BaseTask
+    out = BaseTask().dlq_args_json(("alice@example.com", {"ssn": "123"}), {"token": "x"})
+    assert "alice@example.com" not in out and "123" not in out and "token" not in out
+    import json as _j
+    assert _j.loads(out) == {"args": ["str", "dict"], "kwargs": 1}
+
+
+def test_dlq_traceback_default_redacts_message_keeps_type():
+    from {{ package_name }}.tasks.base import BaseTask
+    try:
+        raise ValueError("leak alice@example.com")
+    except ValueError as exc:
+        tb = BaseTask().dlq_traceback(exc, None)
+    assert "alice@example.com" not in tb
+    assert "ValueError: <redacted>" in tb
+    assert "test_dlq" in tb  # a stack frame is retained (debuggable)
+
+
+def test_on_failure_sets_redacted_true_for_default_task(monkeypatch):
+    import {{ package_name }}.tasks.base as base_mod
+    from {{ package_name }}.tasks import dead_letter
+    captured = {}
+    monkeypatch.setattr(dead_letter, "record_failure", lambda session, **kw: captured.update(kw))
+    class _SL:
+        def __enter__(self): return object()
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(base_mod, "SessionLocal", lambda: _SL())
+    try:
+        raise ValueError("x")
+    except ValueError as exc:
+        base_mod.BaseTask().on_failure(exc, "tid", ("a",), {}, einfo=None)
+    assert captured["redacted"] is True
+
+
+def test_on_failure_sets_redacted_false_when_seam_overridden(monkeypatch):
+    import {{ package_name }}.tasks.base as base_mod
+    from {{ package_name }}.tasks import dead_letter
+    captured = {}
+    monkeypatch.setattr(dead_letter, "record_failure", lambda session, **kw: captured.update(kw))
+    class _SL:
+        def __enter__(self): return object()
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(base_mod, "SessionLocal", lambda: _SL())
+    class RawTask(base_mod.BaseTask):
+        def dlq_args_json(self, args, kwargs):
+            return "full"
+    try:
+        raise ValueError("x")
+    except ValueError as exc:
+        RawTask().on_failure(exc, "tid", ("a",), {}, einfo=None)
+    assert captured["redacted"] is False
