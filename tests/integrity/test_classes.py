@@ -68,3 +68,9 @@ def test_rules_cover_both_tiers():
     assert set(GITIGNORED_EXISTENCE) == {
         r.path for r in rules() if r.tier == "gitignored"
     }
+
+
+def test_new_deploy_files_are_locked():
+    from framework_cli.integrity.classes import LOCKED_TRACKED
+    assert "infra/compose/app-host.yml" in LOCKED_TRACKED
+    assert "infra/deploy/targets/compose-ssh.sh" in LOCKED_TRACKED
