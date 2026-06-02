@@ -14,8 +14,9 @@ configure, you do not architect.
 | Fly.io / Render / Railway | the platform's deploy CLI pointed at `APP_IMAGE` |
 | Kubernetes | `kubectl set image` / a Helm release using `APP_IMAGE` |
 
-A turnkey default (compose-over-SSH + Traefik/ACME blue-green) ships as a follow-up; until
-then, implement the hooks below for your target.
+A turnkey **compose-over-SSH** target ships now — set `DEPLOY_TARGET=compose-ssh` (see the
+*Turnkey target* section below) instead of writing hooks. Otherwise implement the hooks below
+for your target. (A Traefik/ACME **blue-green** variant is a future follow-up.)
 
 ## Turnkey target: compose-over-SSH (1..N hosts)
 
@@ -66,7 +67,7 @@ only; provision + back up the shared Postgres.
 - **Release versioning** — each deploy records `(image, alembic-revision)`; `current-release`/`releases` read it.
 - **Migration-aware rollback** — `rollback` reverses migrations to the previous release's revision THEN redeploys its image (the image only ever upgrades, so the explicit downgrade is required), and records the rolled-back release so `current-release`/`releases` reflect what is now live. Rollback is **single-step**: it reverts to the immediately-prior release and records it, so running `rollback` twice in a row toggles back to the release you just left — to go back multiple releases, redeploy the desired tag explicitly.
 - **Health-gate** — `await-healthy` polls `/health` and refuses any `breached` SLO (the Phase-1 smoke rule).
-- **Guarantees:** versioned/addressable releases (a rollback target always exists), runtime secrets (never baked into images), the same image promoted staging → prod (no rebuild). No-downtime cutover is the target's job (blue-green via Traefik in the turnkey follow-up, or the platform's native rolling deploy) — see the turnkey follow-up.
+- **Guarantees:** versioned/addressable releases (a rollback target always exists), runtime secrets (never baked into images), the same image promoted staging → prod (no rebuild). No-downtime cutover is the target's job — the shipped `compose-ssh` target rolls with no downtime given a draining load balancer; other targets use the platform's native rolling deploy. (A Traefik/ACME blue-green variant is a future follow-up.)
 
 ## Config you set (GitHub Environment + the target)
 

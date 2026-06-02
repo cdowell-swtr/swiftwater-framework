@@ -31,8 +31,9 @@ migration discipline. In short:
 - Set `DEPLOY_BASE_URL` (Environment variable) and `POSTGRES_PASSWORD` + every var in
   `.env.example` **in the target's environment** (and as GitHub Environment secrets) — config
   and secrets are injected at runtime, never baked into the image.
-- A turnkey **compose-over-SSH + Traefik/ACME** reference strategy (no-downtime, blue-green)
-  ships as a follow-up; until then, implement `__target_place_image` for your target.
+- A turnkey **compose-over-SSH** reference strategy (no-downtime given a draining load
+  balancer) ships now — set `DEPLOY_TARGET=compose-ssh` (see below) instead of writing hooks.
+  A Traefik/ACME **blue-green** variant is a future follow-up.
 
 ### Single-host vs multi-host (turnkey compose-over-SSH)
 

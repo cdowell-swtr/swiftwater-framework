@@ -3032,7 +3032,9 @@ def test_app_host_compose_renders_app_only(tmp_path: Path):
     assert "image: ${APP_IMAGE" in text
     assert 'APP_RUN_MIGRATIONS: "false"' in text
     assert "postgres:" not in text, "app-host.yml must not define a Postgres service"
-    assert "traefik" not in text.lower(), "app hosts serve plain HTTP behind the builder's LB"
+    assert "traefik" not in text.lower(), (
+        "app hosts serve plain HTTP behind the builder's LB"
+    )
 
 
 def test_deploy_readme_documents_compose_ssh_target(tmp_path: Path):
@@ -3047,6 +3049,9 @@ def test_deploy_readme_documents_compose_ssh_target(tmp_path: Path):
 def test_deploy_workflows_pass_through_deploy_target(tmp_path: Path):
     dest = tmp_path / "proj"
     render_project(dest, DATA)
-    for wf in (".github/workflows/deploy-staging.yml", ".github/workflows/deploy-prod.yml"):
+    for wf in (
+        ".github/workflows/deploy-staging.yml",
+        ".github/workflows/deploy-prod.yml",
+    ):
         text = (dest / wf).read_text()
         assert "DEPLOY_TARGET" in text, f"{wf} does not pass through DEPLOY_TARGET"

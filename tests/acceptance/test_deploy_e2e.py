@@ -17,6 +17,7 @@ Later tasks (T8 rolling-deploy proof, T9 rollback proof) reuse the seams here:
 """
 
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -52,15 +53,23 @@ def _docker_available() -> bool:
     return result.returncode == 0
 
 
+# Secret-pattern env vars are stripped from the compose subprocess env: the docker CLI
+# doesn't need them, and pytest dumps function args (incl. `env`) in failure tracebacks —
+# carrying e.g. ANTHROPIC_*/API keys into CI logs. Strategy secrets are passed explicitly
+# via `_strategy`'s `-e` flags, not through this env.
+_SECRET_ENV_RE = re.compile(r"(API_KEY|TOKEN|SECRET|PASSWORD|ANTHROPIC)", re.IGNORECASE)
+
+
 def _compose_env(project_dir: Path, key_path: Path) -> dict[str, str]:
-    """Env for the harness compose: service-name-resolvable mounts + host UID/GID
-    so container-created bind writes are host-owned (no root-owned /tmp cruft)."""
+    """Env for the harness compose: the project dir + ssh key the controller mounts.
+    Renders live under disk_tmp (/var/tmp, disk-backed) and `down -v` reaps the dind
+    volumes, so there is no root-owned-/tmp cruft to guard against here. os.environ is
+    filtered of secret-pattern vars so a compose failure can't leak them into the log."""
+    base = {k: v for k, v in os.environ.items() if not _SECRET_ENV_RE.search(k)}
     return {
-        **os.environ,
+        **base,
         "E2E_PROJECT_DIR": str(project_dir),
         "E2E_KEY": str(key_path),
-        "UID": str(os.getuid()),
-        "GID": str(os.getgid()),
     }
 
 
@@ -161,8 +170,34 @@ def _controller_can_reach(
 @contextmanager
 def harness_up(env: dict[str, str]):
     """Bring the harness up (build) and always tear it down (volumes + authorized_keys)."""
+    # Defensive: clear any stale state from a prior (possibly aborted) run so a back-to-back
+    # `up` can't collide on the shared compose project name / published port 8080 when the
+    # whole e2e file runs sequentially (each test reuses the same project).
+    _compose(env, "down", "-v", "--remove-orphans", capture_output=True, text=True)
     try:
-        up = _compose(env, "up", "-d", "--build", capture_output=True, text=True)
+        up = _compose(
+            env,
+            "up",
+            "-d",
+            "--build",
+            "--remove-orphans",
+            capture_output=True,
+            text=True,
+        )
+        if up.returncode != 0:
+            # One retry after a clean down — handles a transient sequential-run collision.
+            _compose(
+                env, "down", "-v", "--remove-orphans", capture_output=True, text=True
+            )
+            up = _compose(
+                env,
+                "up",
+                "-d",
+                "--build",
+                "--remove-orphans",
+                capture_output=True,
+                text=True,
+            )
         if up.returncode != 0:
             print(up.stdout)
             print(up.stderr)
@@ -170,7 +205,7 @@ def harness_up(env: dict[str, str]):
             raise AssertionError("docker compose up failed")
         yield
     finally:
-        _compose(env, "down", "-v", capture_output=True, text=True)
+        _compose(env, "down", "-v", "--remove-orphans", capture_output=True, text=True)
         AUTHORIZED_KEYS.unlink(missing_ok=True)
 
 
