@@ -1,0 +1,80 @@
+"""Accepted design-decision records the review agents read (spec 2026-06-01).
+
+A decision lives as one markdown file with YAML frontmatter under
+docs/superpowers/decisions/. The code keys ONLY on an active allowlist; every other
+status (the open "no longer stands" family + typos) is inactive, fail-closed.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
+
+ACTIVE_STATUSES = frozenset({"accepted", "deferred"})
+
+
+@dataclass(frozen=True)
+class Decision:
+    id: str
+    status: str
+    agents: tuple[str, ...]
+    concern: str
+    premise: str
+    body: str
+    source: str  # filename, for reporting
+
+
+def _decisions_dir(root: Path) -> Path:
+    return Path(root) / "docs" / "superpowers" / "decisions"
+
+
+def _parse(path: Path) -> Decision:
+    text = path.read_text()
+    if not text.startswith("---"):
+        raise ValueError(f"{path.name}: missing YAML frontmatter")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        raise ValueError(f"{path.name}: malformed frontmatter (missing closing '---')")
+    _, fm, body = parts
+    meta = yaml.safe_load(fm) or {}
+    premise = str(meta.get("premise", "")).strip()
+    if not premise:
+        raise ValueError(f"{path.name}: decision is missing a non-empty `premise`")
+    agents = meta.get("agents") or []
+    return Decision(
+        id=str(meta["id"]),
+        status=str(meta.get("status", "")),
+        agents=tuple(str(a) for a in agents),
+        concern=str(meta.get("concern", "")),
+        premise=premise,
+        body=body.strip(),
+        source=path.name,
+    )
+
+
+def load_decisions(decisions_dir: Path) -> list[Decision]:
+    """Parse every *.md decision in `decisions_dir` (any status). Raises on a bad record."""
+    d = Path(decisions_dir)
+    if not d.is_dir():
+        return []
+    return [_parse(p) for p in sorted(d.glob("*.md"))]
+
+
+def relevant_decisions(agent: str, root: Path) -> list[Decision]:
+    """Active (accepted/deferred) decisions whose `agents` includes `agent` (short name)."""
+    return [
+        dec
+        for dec in load_decisions(_decisions_dir(root))
+        if dec.status in ACTIVE_STATUSES and agent in dec.agents
+    ]
+
+
+def active_decision_ids(root: Path) -> set[str]:
+    """Ids of all active decisions (for the verdict integrity guard)."""
+    return {
+        dec.id
+        for dec in load_decisions(_decisions_dir(root))
+        if dec.status in ACTIVE_STATUSES
+    }
