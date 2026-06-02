@@ -26,6 +26,8 @@ jobs:
       APP_IMAGE: ${{ github.event.inputs.image }}
       DEPLOY_ENV: prod
       DEPLOY_BASE_URL: ${{ vars.PROD_BASE_URL }}
+      DEPLOY_TARGET: ${{ vars.DEPLOY_TARGET }}
+      DEPLOY_HOSTS: ${{ vars.DEPLOY_HOSTS }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

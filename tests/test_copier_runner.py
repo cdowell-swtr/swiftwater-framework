@@ -3042,3 +3042,11 @@ def test_deploy_readme_documents_compose_ssh_target(tmp_path: Path):
     assert "DEPLOY_TARGET=compose-ssh" in readme
     assert "DEPLOY_HOSTS" in readme
     assert "load balancer" in readme.lower()
+
+
+def test_deploy_workflows_pass_through_deploy_target(tmp_path: Path):
+    dest = tmp_path / "proj"
+    render_project(dest, DATA)
+    for wf in (".github/workflows/deploy-staging.yml", ".github/workflows/deploy-prod.yml"):
+        text = (dest / wf).read_text()
+        assert "DEPLOY_TARGET" in text, f"{wf} does not pass through DEPLOY_TARGET"
