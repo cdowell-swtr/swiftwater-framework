@@ -21,6 +21,8 @@ def test_write_findings_round_trips(tmp_path):
                 "severity": "high",
                 "message": "boom",
                 "suggestion": "fix",
+                "acknowledged": None,
+                "stale": None,
             }
         ],
     }

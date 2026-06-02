@@ -19,6 +19,8 @@ class Finding:
     severity: Severity
     message: str
     suggestion: str | None = None
+    acknowledged: str | None = None
+    stale: str | None = None
 
 
 def severity_rank(severity: str) -> int:
@@ -50,6 +52,10 @@ def parse_findings(text: str) -> list[Finding]:
                 severity=item["severity"],
                 message=str(item["message"]),
                 suggestion=str(item["suggestion"]) if item.get("suggestion") else None,
+                acknowledged=str(item["acknowledged"])
+                if item.get("acknowledged")
+                else None,
+                stale=str(item["stale"]) if item.get("stale") else None,
             )
         )
     return findings
