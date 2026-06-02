@@ -7,10 +7,13 @@ status (the open "no longer stands" family + typos) is inactive, fail-closed.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+
+_log = logging.getLogger(__name__)
 
 ACTIVE_STATUSES = frozenset({"accepted", "deferred"})
 
@@ -62,22 +65,32 @@ def load_decisions(decisions_dir: Path) -> list[Decision]:
     return [_parse(p) for p in sorted(d.glob("*.md"))]
 
 
+def _safe_load(root: Path) -> list[Decision]:
+    """Load decisions for a LIVE review path, degrading to [] on any error (fail-open).
+
+    A malformed/half-edited decision file must never crash the gate or a review run. The
+    strict, raising path is `load_decisions` (used for explicit validation/tests)."""
+    try:
+        return load_decisions(_decisions_dir(root))
+    except Exception as exc:
+        _log.warning("decisions load failed at %s: %s", _decisions_dir(root), exc)
+        return []
+
+
 def relevant_decisions(agent: str, root: Path) -> list[Decision]:
-    """Active (accepted/deferred) decisions whose `agents` includes `agent` (short name)."""
+    """Active (accepted/deferred) decisions whose `agents` includes `agent` (short name).
+
+    Fail-open: a bad decisions file degrades to no decisions (logged), never breaks review."""
     return [
         dec
-        for dec in load_decisions(_decisions_dir(root))
+        for dec in _safe_load(root)
         if dec.status in ACTIVE_STATUSES and agent in dec.agents
     ]
 
 
 def active_decision_ids(root: Path) -> set[str]:
-    """Ids of all active decisions (for the verdict integrity guard)."""
-    return {
-        dec.id
-        for dec in load_decisions(_decisions_dir(root))
-        if dec.status in ACTIVE_STATUSES
-    }
+    """Ids of all active decisions (for the verdict integrity guard). Fail-open (see _safe_load)."""
+    return {dec.id for dec in _safe_load(root) if dec.status in ACTIVE_STATUSES}
 
 
 _PROTOCOL = (

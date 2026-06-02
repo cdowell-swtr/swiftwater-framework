@@ -306,13 +306,20 @@ def propose_thresholds(
     return out
 
 
-def acknowledged_findings(records: list[Record]) -> list[dict[str, Any]]:
+def acknowledged_findings(
+    records: list[Record], active_ids: set[str] | None = None
+) -> list[dict[str, Any]]:
     """Collect findings that carry an `acknowledged` tag, across all records.
-    Returns a list of dicts with keys: agent, path, line, severity, message, acknowledged."""
+
+    When `active_ids` is given, only findings acknowledged against an ACTIVE decision are
+    included — a tag citing an unknown/inactive id is omitted (that finding actually blocks,
+    so it must not be mislabeled as covered). Returns dicts with keys: agent, path, line,
+    severity, message, acknowledged."""
     out: list[dict[str, Any]] = []
     for r in records:
         for f in r.findings:
-            if f.get("acknowledged"):
+            ack = f.get("acknowledged")
+            if ack and (active_ids is None or ack in active_ids):
                 out.append(
                     {
                         "agent": r.agent,
@@ -320,15 +327,17 @@ def acknowledged_findings(records: list[Record]) -> list[dict[str, Any]]:
                         "line": f.get("line", 0),
                         "severity": f.get("severity", ""),
                         "message": f.get("message", ""),
-                        "acknowledged": f["acknowledged"],
+                        "acknowledged": ack,
                     }
                 )
     return out
 
 
-def render_acknowledged_section(records: list[Record]) -> str:
+def render_acknowledged_section(
+    records: list[Record], active_ids: set[str] | None = None
+) -> str:
     """Render the '## Acknowledged (covered by decisions)' section as Markdown lines."""
-    items = acknowledged_findings(records)
+    items = acknowledged_findings(records, active_ids)
     lines: list[str] = []
     lines.append("## Acknowledged (covered by decisions)")
     if not items:

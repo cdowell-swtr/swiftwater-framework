@@ -1756,7 +1756,11 @@ def _finalize_audit(
             tools = ", ".join(f"{t}×{d['counts'][t]}" for t in d["disallowed_tools"])
             md_lines.append(f"- ⚠ `{d['agent']}` — disallowed tools: {tools}")
     md_lines.append("")
-    md_lines.append(analyze.render_acknowledged_section(loaded))
+    from framework_cli.review.decisions import active_decision_ids
+
+    md_lines.append(
+        analyze.render_acknowledged_section(loaded, active_decision_ids(Path.cwd()))
+    )
     md_lines.append("")
     (out / "audit-report.md").write_text("\n".join(md_lines) + "\n")
 

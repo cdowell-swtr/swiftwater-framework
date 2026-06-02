@@ -84,3 +84,17 @@ def test_render_decisions_block_contains_records_and_protocol():
     assert block is not None
     assert "DEC-0001" in block and "only caller is the beat task" in block
     assert "acknowledged:" in block and "stale:" in block  # the protocol preamble
+
+
+def test_live_loaders_fail_open_on_malformed(tmp_path):
+    # load_decisions raises (validation), but the LIVE loaders degrade to empty so a bad
+    # decisions file never crashes the gate/review (the primary consumers).
+    dec = tmp_path / "docs" / "superpowers" / "decisions"
+    dec.mkdir(parents=True)
+    (dec / "bad.md").write_text(
+        "---\nid: DEC-1\nstatus: accepted\nagents: [security]\n"
+    )
+    with pytest.raises(ValueError):
+        load_decisions(dec)  # strict path still raises
+    assert relevant_decisions("security", tmp_path) == []  # fail-open
+    assert active_decision_ids(tmp_path) == set()  # fail-open

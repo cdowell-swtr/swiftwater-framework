@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from framework_cli.review.decisions import Decision, relevant_decisions
 from framework_cli.review.diff import changed_files
 from framework_cli.review.registry import ContextPolicy
-
-_log = logging.getLogger(__name__)
 
 # Model context windows (input+output tokens). Unknown models use the default.
 _MODEL_CONTEXT_TOKENS: dict[str, int] = {
@@ -108,16 +105,9 @@ def assemble(
     empty tuple when `agent` is None. A malformed decisions file degrades to no decisions
     (logged) rather than breaking the review.
     """
-    # Decisions live in docs/superpowers/decisions/*.md; a bad file must not break review.
-    decisions: tuple[Decision, ...] = ()
-    if agent:
-        try:
-            decisions = tuple(relevant_decisions(agent, root))
-        except Exception as exc:
-            _log.warning(
-                "decisions load failed for agent %s at %s: %s", agent, root, exc
-            )
-            decisions = ()
+    # Decisions live in docs/superpowers/decisions/*.md (see decisions.py); relevant_decisions
+    # is fail-open, so a malformed file degrades to no decisions rather than breaking review.
+    decisions = tuple(relevant_decisions(agent, root)) if agent else ()
     if policy.strategy != "bundle":
         return Bundle(diff=diff, decisions=decisions)
 
