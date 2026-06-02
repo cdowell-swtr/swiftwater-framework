@@ -295,7 +295,7 @@ def test_cli_dispatches_agentic_strategy(monkeypatch, tmp_path):
 
     called = {}
 
-    def fake_agentic(diff, root, spec, client, *, max_turns):
+    def fake_agentic(diff, root, spec, client, *, max_turns, decisions=()):
         called["root"] = root
         called["max_turns"] = max_turns
         return []

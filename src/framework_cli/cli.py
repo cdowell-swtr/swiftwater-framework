@@ -367,16 +367,23 @@ def _review_diff() -> str:
 
 def _review_run(diff: str, spec: object, force_agentic: bool = False) -> list:
     from framework_cli.review.context import assemble
+    from framework_cli.review.decisions import relevant_decisions
     from framework_cli.review.runner import run_agent
 
+    short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
     if force_agentic or spec.context.strategy == "agentic":  # type: ignore[attr-defined]
         from framework_cli.review.agentic import DEFAULT_MAX_TURNS, run_agent_agentic
 
         turns = spec.context.max_agentic_turns or DEFAULT_MAX_TURNS  # type: ignore[attr-defined]
         return run_agent_agentic(
-            diff, Path.cwd(), spec, default_client(RUNTIME_KEY_ENV), max_turns=turns
+            diff,
+            Path.cwd(),
+            spec,
+            default_client(RUNTIME_KEY_ENV),
+            max_turns=turns,
+            decisions=tuple(relevant_decisions(short, Path.cwd())),
         )
-    bundle = assemble(diff, Path.cwd(), spec.context, model=spec.model)  # type: ignore[attr-defined]
+    bundle = assemble(diff, Path.cwd(), spec.context, model=spec.model, agent=short)  # type: ignore[attr-defined]
     return run_agent(bundle, spec, default_client(RUNTIME_KEY_ENV))  # type: ignore[arg-type]
 
 
@@ -1413,12 +1420,20 @@ def _emit_audit_prep(
 
 def _build_audit_work_item(spec: object, diff: str, root: Path) -> dict:
     """Audit shape: one item per agent (no kind/case/repeat dimension)."""
+    from framework_cli.review.decisions import (
+        relevant_decisions,
+        render_decisions_block,
+    )
+
+    short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
+    dec_block = render_decisions_block(relevant_decisions(short, root))
+
     is_agentic = spec.context.strategy == "agentic"  # type: ignore[attr-defined]
     if is_agentic:
-        system_blocks = [
-            {"text": f"Review this unified diff:\n\n{diff}"},
-            {"text": spec.prompt},  # type: ignore[attr-defined]
-        ]
+        system_blocks = [{"text": f"Review this unified diff:\n\n{diff}"}]
+        if dec_block is not None:
+            system_blocks.append({"text": dec_block})
+        system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
         user_message = (
             f"You are reviewing the codebase rooted at: {root}\n\n"
             "Use the Read, Grep, and Glob tools (these only — do NOT use Bash, "
@@ -1432,7 +1447,6 @@ def _build_audit_work_item(spec: object, diff: str, root: Path) -> dict:
             "path you used for the tool call. The scoring layer matches on "
             "relative paths; absolute paths register as misses."
         )
-        short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
         return {
             "agent": short,
             "kind": "current",
@@ -1457,8 +1471,9 @@ def _build_audit_work_item(spec: object, diff: str, root: Path) -> dict:
         system_blocks.append(
             {"text": f"Relevant repository files for context:\n\n{joined}{note}"}
         )
+    if dec_block is not None:
+        system_blocks.append({"text": dec_block})
     system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
-    short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
     return {
         "agent": short,
         "kind": "current",

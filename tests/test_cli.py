@@ -2901,3 +2901,64 @@ def test_template_audit_command_is_framework_only():
     payload_dir = template_path() / ".claude/commands/reviewers"
     assert not (payload_dir / "template-audit.md.jinja").exists()
     assert not (payload_dir / "template-audit.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# _build_audit_work_item — decisions injection
+# ---------------------------------------------------------------------------
+
+
+def _make_decision_file(
+    dec_dir: Path, id: str, agents: list, status: str = "accepted"
+) -> None:
+    dec_dir.mkdir(parents=True, exist_ok=True)
+    (dec_dir / f"{id.lower()}.md").write_text(
+        f"---\nid: {id}\nstatus: {status}\nagents: {agents!r}\n"
+        f"concern: test concern\npremise: 'must hold'\ndate: 2026-06-01\n---\n\nbody text\n"
+    )
+
+
+def test_build_audit_work_item_injects_decisions_bundle(tmp_path):
+    """Bundle-strategy agent: a matching decision appears in the system_blocks."""
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.registry import get_agent
+
+    dec_dir = tmp_path / "docs" / "superpowers" / "decisions"
+    _make_decision_file(dec_dir, "DEC-0001", ["security"])
+
+    wi = cli_mod._build_audit_work_item(get_agent("security"), "diff", tmp_path)
+    texts = [b["text"] for b in wi["system_blocks"]]
+    assert any("DEC-0001" in t for t in texts)
+
+
+def test_build_audit_work_item_byte_identical_without_decisions(tmp_path):
+    """When no decisions exist, the system_blocks must not contain any decision text."""
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.registry import get_agent
+
+    wi = cli_mod._build_audit_work_item(get_agent("security"), "diff", tmp_path)
+    texts = "".join(b["text"] for b in wi["system_blocks"])
+    assert "DEC-" not in texts and "Accepted Decisions" not in texts
+
+
+def test_build_audit_work_item_injects_decisions_agentic(tmp_path):
+    """Agentic-strategy agent: a matching decision appears in the system_blocks."""
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.registry import get_agent
+
+    dec_dir = tmp_path / "docs" / "superpowers" / "decisions"
+    _make_decision_file(dec_dir, "DEC-0002", ["architecture"])
+
+    wi = cli_mod._build_audit_work_item(get_agent("architecture"), "diff", tmp_path)
+    texts = [b["text"] for b in wi["system_blocks"]]
+    assert any("DEC-0002" in t for t in texts)
+
+
+def test_build_audit_work_item_agentic_no_decisions_no_block(tmp_path):
+    """Agentic-strategy agent with no decisions: no decision block injected."""
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.registry import get_agent
+
+    wi = cli_mod._build_audit_work_item(get_agent("architecture"), "diff", tmp_path)
+    texts = "".join(b["text"] for b in wi["system_blocks"])
+    assert "DEC-" not in texts and "Accepted Decisions" not in texts

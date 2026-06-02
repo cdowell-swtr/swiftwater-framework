@@ -89,7 +89,7 @@ def test_review_run_force_agentic_uses_the_loop(monkeypatch, tmp_path):
 
     called = {}
 
-    def fake_agentic(diff, root, spec, client, *, max_turns):
+    def fake_agentic(diff, root, spec, client, *, max_turns, decisions=()):
         called["agent"] = spec.name
         return []
 
