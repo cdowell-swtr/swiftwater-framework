@@ -1756,6 +1756,8 @@ def _finalize_audit(
             tools = ", ".join(f"{t}×{d['counts'][t]}" for t in d["disallowed_tools"])
             md_lines.append(f"- ⚠ `{d['agent']}` — disallowed tools: {tools}")
     md_lines.append("")
+    md_lines.append(analyze.render_acknowledged_section(loaded))
+    md_lines.append("")
     (out / "audit-report.md").write_text("\n".join(md_lines) + "\n")
 
     # Determine current git SHA (full, not short).
@@ -1827,6 +1829,13 @@ def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) 
     # Load all records under findings_dir (works for regrade too).
     loaded = analyze.load_records(findings_dir)
 
+    # Resolve active decision ids once for the integrity guard. A finding tagged
+    # acknowledged: <id> is only non-blocking when <id> is an active (accepted/deferred)
+    # decision; an unknown or inactive id is ignored → finding blocks normally.
+    from framework_cli.review.decisions import active_decision_ids
+
+    active_ids = active_decision_ids(Path.cwd())
+
     # Compute verdict: any agent's findings include a finding at/above its block_threshold?
     failing = False
     summary_parts: list[str] = []
@@ -1842,6 +1851,8 @@ def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) 
                 f["severity"],
                 f["message"],
                 f.get("suggestion"),
+                acknowledged=f.get("acknowledged"),
+                stale=f.get("stale"),
             )
             for f in r.findings
         ]
@@ -1853,9 +1864,16 @@ def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) 
         # FAIL on real block_threshold agents only.
         if spec.block_threshold is None:
             continue
-        if flags(findings_objs, spec):
+        # Exclude findings that are acknowledged against an active decision
+        # (integrity guard: only active ids exempt; unknown/inactive ids block normally).
+        blocking = [
+            f
+            for f in findings_objs
+            if not (f.acknowledged and f.acknowledged in active_ids)
+        ]
+        if flags(blocking, spec):
             failing = True
-            summary_parts.append(f"{r.agent}:{len(findings_objs)}")
+            summary_parts.append(f"{r.agent}:{len(blocking)}")
     drifts = analyze.drift_check(loaded)
     drift_detected = bool(drifts)
     verdict = "FAIL" if failing or drift_detected else "PASS"

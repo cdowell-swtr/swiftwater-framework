@@ -244,6 +244,8 @@ def test_review_findings_out_writes_on_normal_path(tmp_path, monkeypatch):
             "severity": "low",
             "message": "m",
             "suggestion": None,
+            "acknowledged": None,
+            "stale": None,
         }
     ]
 
@@ -435,6 +437,8 @@ def test_eval_findings_out_writes_per_call_json(tmp_path, monkeypatch):
             "severity": "high",
             "message": "hardcoded secret",
             "suggestion": "use env var",
+            "acknowledged": None,
+            "stale": None,
         }
     ]
     assert _json.loads(good.read_text())["findings"] == []
@@ -2720,6 +2724,256 @@ def test_gate_finalize_regrade_skips_dispatch(tmp_path):
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
     assert marker["verdict"] == "PASS"  # empty findings → PASS
+
+
+def _seed_gate_decision(root: Path, decision_id: str, status: str) -> None:
+    """Write a minimal decision markdown file under root/docs/superpowers/decisions/."""
+    decisions_dir = root / "docs" / "superpowers" / "decisions"
+    decisions_dir.mkdir(parents=True, exist_ok=True)
+    (decisions_dir / f"{decision_id}.md").write_text(
+        f"---\n"
+        f"id: {decision_id}\n"
+        f"status: {status}\n"
+        f"agents:\n  - security\n"
+        f"concern: test concern\n"
+        f"premise: test premise\n"
+        f"---\n\nBody text.\n"
+    )
+
+
+def test_gate_finalize_acknowledged_active_decision_passes(tmp_path, monkeypatch):
+    """A high-severity finding with acknowledged: <id> where <id> is ACTIVE
+    (status=accepted) → the finding is excluded from the blocking set → verdict PASS.
+    The integrity guard requires the cited id to be active; here it is, so it passes.
+    """
+    monkeypatch.chdir(tmp_path)
+    _seed_gate_decision(tmp_path, "DEC-0001", "accepted")
+
+    out = tmp_path / "audit"
+    out.mkdir()
+    results = [
+        {
+            "agent": "security",
+            "findings": [
+                {
+                    "path": "a.py",
+                    "line": 1,
+                    "severity": "high",
+                    "message": "known issue covered by DEC-0001",
+                    "suggestion": None,
+                    "acknowledged": "DEC-0001",
+                },
+            ],
+            "usage": {},
+            "latency_ms": None,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+    ]
+    payload = {
+        "results": results,
+        "meta": {
+            "mode": "gate",
+            "staged_hash": "sha256:abc",
+            "agents_set": ["security"],
+        },
+    }
+    results_file = tmp_path / "results.json"
+    results_file.write_text(_json.dumps(payload))
+    result = runner.invoke(
+        app,
+        [
+            "gate-finalize",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    marker_path = out.parent / "marker.json"
+    marker = _json.loads(marker_path.read_text())
+    assert marker["verdict"] == "PASS", (
+        f"Acknowledged-active finding should not block; marker={marker}"
+    )
+    # The raw finding record must still be written (visible in report).
+    findings_file = out / "findings" / "security.json"
+    assert findings_file.is_file()
+    record = _json.loads(findings_file.read_text())
+    assert len(record["findings"]) == 1
+    assert record["findings"][0]["acknowledged"] == "DEC-0001"
+
+
+def test_gate_finalize_acknowledged_inactive_decision_blocks(tmp_path, monkeypatch):
+    """Integrity guard: acknowledged: <id> citing an INACTIVE decision (status=retired)
+    is ignored — the finding blocks normally → verdict FAIL.
+    """
+    monkeypatch.chdir(tmp_path)
+    _seed_gate_decision(tmp_path, "DEC-0002", "retired")
+
+    out = tmp_path / "audit"
+    out.mkdir()
+    results = [
+        {
+            "agent": "security",
+            "findings": [
+                {
+                    "path": "b.py",
+                    "line": 5,
+                    "severity": "high",
+                    "message": "should block because DEC-0002 is retired",
+                    "suggestion": None,
+                    "acknowledged": "DEC-0002",
+                },
+            ],
+            "usage": {},
+            "latency_ms": None,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+    ]
+    payload = {
+        "results": results,
+        "meta": {
+            "mode": "gate",
+            "staged_hash": "sha256:abc",
+            "agents_set": ["security"],
+        },
+    }
+    results_file = tmp_path / "results.json"
+    results_file.write_text(_json.dumps(payload))
+    result = runner.invoke(
+        app,
+        [
+            "gate-finalize",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    marker_path = out.parent / "marker.json"
+    marker = _json.loads(marker_path.read_text())
+    assert marker["verdict"] == "FAIL", (
+        f"Acknowledged-inactive finding must still block (integrity guard); marker={marker}"
+    )
+
+
+def test_gate_finalize_acknowledged_unknown_id_blocks(tmp_path, monkeypatch):
+    """Integrity guard: acknowledged: <id> citing an UNKNOWN decision id is ignored —
+    the finding blocks normally → verdict FAIL.
+    """
+    monkeypatch.chdir(tmp_path)
+    # No decision files at all — DEC-9999 is unknown.
+
+    out = tmp_path / "audit"
+    out.mkdir()
+    results = [
+        {
+            "agent": "security",
+            "findings": [
+                {
+                    "path": "c.py",
+                    "line": 10,
+                    "severity": "high",
+                    "message": "should block because DEC-9999 does not exist",
+                    "suggestion": None,
+                    "acknowledged": "DEC-9999",
+                },
+            ],
+            "usage": {},
+            "latency_ms": None,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+    ]
+    payload = {
+        "results": results,
+        "meta": {
+            "mode": "gate",
+            "staged_hash": "sha256:abc",
+            "agents_set": ["security"],
+        },
+    }
+    results_file = tmp_path / "results.json"
+    results_file.write_text(_json.dumps(payload))
+    result = runner.invoke(
+        app,
+        [
+            "gate-finalize",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    marker_path = out.parent / "marker.json"
+    marker = _json.loads(marker_path.read_text())
+    assert marker["verdict"] == "FAIL", (
+        f"Acknowledged-unknown finding must still block (integrity guard); marker={marker}"
+    )
+
+
+def test_gate_finalize_stale_finding_blocks(tmp_path, monkeypatch):
+    """A finding tagged stale: <id> (premise no longer holds) blocks normally → FAIL."""
+    monkeypatch.chdir(tmp_path)
+    _seed_gate_decision(tmp_path, "DEC-0003", "accepted")
+
+    out = tmp_path / "audit"
+    out.mkdir()
+    results = [
+        {
+            "agent": "security",
+            "findings": [
+                {
+                    "path": "d.py",
+                    "line": 3,
+                    "severity": "high",
+                    "message": "premise no longer holds for DEC-0003",
+                    "suggestion": None,
+                    "stale": "DEC-0003",
+                },
+            ],
+            "usage": {},
+            "latency_ms": None,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+    ]
+    payload = {
+        "results": results,
+        "meta": {
+            "mode": "gate",
+            "staged_hash": "sha256:abc",
+            "agents_set": ["security"],
+        },
+    }
+    results_file = tmp_path / "results.json"
+    results_file.write_text(_json.dumps(payload))
+    result = runner.invoke(
+        app,
+        [
+            "gate-finalize",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    marker_path = out.parent / "marker.json"
+    marker = _json.loads(marker_path.read_text())
+    assert marker["verdict"] == "FAIL", f"Stale finding must block; marker={marker}"
 
 
 def test_tune_finalize_fails_loudly_on_missing_results_file(tmp_path):

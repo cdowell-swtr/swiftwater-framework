@@ -306,6 +306,43 @@ def propose_thresholds(
     return out
 
 
+def acknowledged_findings(records: list[Record]) -> list[dict[str, Any]]:
+    """Collect findings that carry an `acknowledged` tag, across all records.
+    Returns a list of dicts with keys: agent, path, line, severity, message, acknowledged."""
+    out: list[dict[str, Any]] = []
+    for r in records:
+        for f in r.findings:
+            if f.get("acknowledged"):
+                out.append(
+                    {
+                        "agent": r.agent,
+                        "path": f.get("path", ""),
+                        "line": f.get("line", 0),
+                        "severity": f.get("severity", ""),
+                        "message": f.get("message", ""),
+                        "acknowledged": f["acknowledged"],
+                    }
+                )
+    return out
+
+
+def render_acknowledged_section(records: list[Record]) -> str:
+    """Render the '## Acknowledged (covered by decisions)' section as Markdown lines."""
+    items = acknowledged_findings(records)
+    lines: list[str] = []
+    lines.append("## Acknowledged (covered by decisions)")
+    if not items:
+        lines.append("_(none)_")
+    else:
+        for item in items:
+            lines.append(
+                f"- `{item['agent']}` `{item['path']}:{item['line']}` "
+                f"**{item['severity']}** — {item['message']} "
+                f"[{item['acknowledged']}]"
+            )
+    return "\n".join(lines)
+
+
 def render_markdown(
     records: list[Record],
     scores: list[AgentScore],
@@ -413,6 +450,8 @@ def render_markdown(
                 f"- ⚠ `{d['agent']}` / `{d['case']}` r{d['repeat']} — "
                 f"disallowed tools: {tools}"
             )
+    lines.append("")
+    lines.append(render_acknowledged_section(records))
     lines.append("")
     lines.append("## Proposed thresholds.yaml")
     lines.append("```yaml")
