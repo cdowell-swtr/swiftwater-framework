@@ -39,14 +39,19 @@ def test_record_failure_persists_redacted_flag():
 
 def test_dlq_args_json_default_is_shape_only():
     from {{ package_name }}.tasks.base import BaseTask
-    out = BaseTask().dlq_args_json(("alice@example.com", {"ssn": "123"}), {"token": "x"})
+
+    out = BaseTask().dlq_args_json(
+        ("alice@example.com", {"ssn": "123"}), {"token": "x"}
+    )
     assert "alice@example.com" not in out and "123" not in out and "token" not in out
     import json as _j
+
     assert _j.loads(out) == {"args": ["str", "dict"], "kwargs": 1}
 
 
 def test_dlq_traceback_default_redacts_message_keeps_type():
     from {{ package_name }}.tasks.base import BaseTask
+
     try:
         raise ValueError("leak alice@example.com")
     except ValueError as exc:
@@ -59,11 +64,19 @@ def test_dlq_traceback_default_redacts_message_keeps_type():
 def test_on_failure_sets_redacted_true_for_default_task(monkeypatch):
     import {{ package_name }}.tasks.base as base_mod
     from {{ package_name }}.tasks import dead_letter
+
     captured = {}
-    monkeypatch.setattr(dead_letter, "record_failure", lambda session, **kw: captured.update(kw))
+    monkeypatch.setattr(
+        dead_letter, "record_failure", lambda session, **kw: captured.update(kw)
+    )
+
     class _SL:
-        def __enter__(self): return object()
-        def __exit__(self, *a): return False
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *a):
+            return False
+
     monkeypatch.setattr(base_mod, "SessionLocal", lambda: _SL())
     try:
         raise ValueError("x")
@@ -75,15 +88,25 @@ def test_on_failure_sets_redacted_true_for_default_task(monkeypatch):
 def test_on_failure_sets_redacted_false_when_seam_overridden(monkeypatch):
     import {{ package_name }}.tasks.base as base_mod
     from {{ package_name }}.tasks import dead_letter
+
     captured = {}
-    monkeypatch.setattr(dead_letter, "record_failure", lambda session, **kw: captured.update(kw))
+    monkeypatch.setattr(
+        dead_letter, "record_failure", lambda session, **kw: captured.update(kw)
+    )
+
     class _SL:
-        def __enter__(self): return object()
-        def __exit__(self, *a): return False
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *a):
+            return False
+
     monkeypatch.setattr(base_mod, "SessionLocal", lambda: _SL())
+
     class RawTask(base_mod.BaseTask):
         def dlq_args_json(self, args, kwargs):
             return "full"
+
     try:
         raise ValueError("x")
     except ValueError as exc:

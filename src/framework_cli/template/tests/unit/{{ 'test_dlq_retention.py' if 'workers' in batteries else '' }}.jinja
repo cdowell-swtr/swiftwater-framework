@@ -68,7 +68,8 @@ def test_prune_logs_triggered_by():
     with structlog.testing.capture_logs() as logs:
         dead_letter.prune_expired(s, retention_days=30)
     assert any(
-        e.get("event") == "dlq_pruned" and e.get("triggered_by") == "prune_expired_records"
+        e.get("event") == "dlq_pruned"
+        and e.get("triggered_by") == "prune_expired_records"
         for e in logs
     )
 

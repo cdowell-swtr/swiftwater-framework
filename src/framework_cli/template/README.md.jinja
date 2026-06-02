@@ -88,7 +88,7 @@ separate, ephemeral Postgres (`postgres-test`, reset every run) for the full E2E
 
 ## Data retention
 
-Dead-letter rows are pruned after `APP_DLQ_RETENTION_DAYS` (default 30){% if "webhooks" in batteries %} and webhook-inbox dedup rows after `APP_WEBHOOK_INBOX_RETENTION_DAYS` (default 7; keep ≥ your provider's webhook redelivery window){% endif %} by the daily `prune_expired_records` task. The DLQ stores task args, which may contain PII — override `BaseTask.dlq_args_json` to redact sensitive fields before they're dead-lettered.
+Dead-letter rows are pruned after `APP_DLQ_RETENTION_DAYS` (default 30){% if "webhooks" in batteries %} and webhook-inbox dedup rows after `APP_WEBHOOK_INBOX_RETENTION_DAYS` (default 7; keep ≥ your provider's webhook redelivery window){% endif %} by the daily `prune_expired_records` task. The DLQ stores **no personal data by default**: task args are reduced to their shape (arg types + kwarg count) and the traceback keeps frame locations + the exception type with the message and source lines redacted. To store full args/traceback for a task you know is PII-free, override `BaseTask.dlq_args_json` / `BaseTask.dlq_traceback` — those rows are then flagged `redacted=false`, and you own any right-to-be-forgotten obligation (scope erasure with `WHERE redacted = false`). (The original exception may still reach your logs via Celery's own failure logging — log-surface scrubbing is a separate concern.)
 {%- endif %}
 {%- if "consumers" in batteries %}
 
