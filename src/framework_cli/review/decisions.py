@@ -78,3 +78,28 @@ def active_decision_ids(root: Path) -> set[str]:
         for dec in load_decisions(_decisions_dir(root))
         if dec.status in ACTIVE_STATUSES
     }
+
+
+_PROTOCOL = (
+    "Accepted Decisions (design choices already made and accepted for THIS repo).\n"
+    "For each finding you would raise, consult these:\n"
+    "- If it matches a decision's concern AND the decision's `premise` still holds given the "
+    'code -> still emit the finding, but add `acknowledged: "<id>"`.\n'
+    "- If it matches but the premise NO LONGER holds -> emit a normal finding with "
+    '`stale: "<id>"` and say which premise clause broke.\n'
+    "- Otherwise emit the finding normally.\n"
+)
+
+
+def render_decisions_block(decisions: list[Decision]) -> str | None:
+    """Render the protocol preamble + records as one text block, or None if no decisions."""
+    if not decisions:
+        return None
+    records = "\n\n".join(
+        f"[{d.id}] (agents: {', '.join(d.agents)})\n"
+        f"  concern: {d.concern}\n"
+        f"  premise (must hold, else STALE): {d.premise}\n"
+        f"  rationale: {d.body}"
+        for d in decisions
+    )
+    return f"{_PROTOCOL}\n{records}"

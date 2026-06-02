@@ -3,9 +3,11 @@ from pathlib import Path
 import pytest
 
 from framework_cli.review.decisions import (
+    Decision,
     active_decision_ids,
     load_decisions,
     relevant_decisions,
+    render_decisions_block,
 )
 
 
@@ -62,3 +64,23 @@ def test_malformed_frontmatter_is_rejected(tmp_path):
     )
     with pytest.raises(ValueError, match="frontmatter"):
         load_decisions(dec)
+
+
+def test_render_decisions_block_none_when_empty():
+    assert render_decisions_block([]) is None
+
+
+def test_render_decisions_block_contains_records_and_protocol():
+    d = Decision(
+        id="DEC-0001",
+        status="accepted",
+        agents=("data-integrity",),
+        concern="prune commits internally",
+        premise="only caller is the beat task",
+        body="rationale",
+        source="DEC-0001.md",
+    )
+    block = render_decisions_block([d])
+    assert block is not None
+    assert "DEC-0001" in block and "only caller is the beat task" in block
+    assert "acknowledged:" in block and "stale:" in block  # the protocol preamble
