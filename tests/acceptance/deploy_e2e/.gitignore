@@ -1,0 +1,3 @@
+# Generated transiently by test_deploy_e2e.py (the public half of an ephemeral
+# ed25519 keypair) and removed in teardown. Never commit it.
+authorized_keys

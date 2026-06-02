@@ -1,0 +1,21 @@
+# A simulated "app host": Docker-in-Docker (its own dockerd) + sshd, so the real
+# compose-over-SSH strategy can ssh in and run `docker compose`. Test-harness only.
+# docker:28-dind (Alpine 3.22). NOT docker:27-dind: that tag's preinstalled
+# openssh-*-9.9_p1-r2 conflicts with the apk repo's newer openssh-client-common
+# (breaks: openssh-client-default), so `apk add openssh` fails to resolve.
+FROM docker:28-dind
+RUN apk add --no-cache openssh-server openssh-keygen openssh-client bash curl
+RUN ssh-keygen -A \
+ && adduser -D -s /bin/bash deploy \
+ && addgroup deploy docker \
+ && mkdir -p /home/deploy/.ssh && chmod 700 /home/deploy/.ssh
+# `adduser -D` leaves the password locked (`!` in /etc/shadow); OpenSSH 10 refuses
+# key-auth login for locked accounts ("account is locked"). `passwd -u` won't unlock
+# a never-set password, so replace `!` with `*` (valid, unlocked, no password matches)
+# -> key-only auth is permitted.
+RUN sed -i 's/^deploy:!:/deploy:*:/' /etc/shadow
+COPY authorized_keys /home/deploy/.ssh/authorized_keys
+RUN chown -R deploy:deploy /home/deploy/.ssh && chmod 600 /home/deploy/.ssh/authorized_keys
+COPY host-entrypoint.sh /usr/local/bin/host-entrypoint.sh
+RUN chmod +x /usr/local/bin/host-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/host-entrypoint.sh"]
