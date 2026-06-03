@@ -18,5 +18,5 @@ This is Plan 14's acceptance test: the regression Plan 13 found (a fresh project
 ## Notes
 
 - Pinned `_commit: v0.1.4` for the integrity step-0 install (branch validation); `DOGFOOD_COMMIT` bumps to `v0.1.5` when this plan's release ships.
-- Known residual (deferred): the acceptance test `test_rendered_react_battery_passes` renders via `render_project` directly (not `framework new`), so it doesn't get `write_lockfile` — its docker `COPY uv.lock` still needs a lock generated in the test. Tracked separately; not in any regular CI gate.
+- Bonus (closed): `test_rendered_react_battery_passes` now calls `write_lockfile(dest)` before its multi-stage docker build, so the full `--with react` image build is validated in-session — closing the long-standing 8g "react image build never run end-to-end" residual.
 - Known edge (deferred, pre-existing): oasdiff hard-fails on the first PR that commits `openapi.json` (base branch lacks it) — mirror the graphql `|| skip` base-missing guard in a follow-up.
