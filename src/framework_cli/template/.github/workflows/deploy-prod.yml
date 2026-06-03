@@ -29,8 +29,8 @@ jobs:
       DEPLOY_TARGET: ${{ vars.DEPLOY_TARGET }}
       DEPLOY_HOSTS: ${{ vars.DEPLOY_HOSTS }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - name: resolve image to promote
         run: |

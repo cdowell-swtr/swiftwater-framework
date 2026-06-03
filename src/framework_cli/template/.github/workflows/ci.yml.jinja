@@ -18,8 +18,8 @@ jobs:
   integrity:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - name: install the framework CLI at the recorded version
         run: |
           ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
@@ -32,8 +32,8 @@ jobs:
     needs: integrity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run ruff format --check .
@@ -49,10 +49,10 @@ jobs:
     needs: integrity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - name: pip-audit (fail on known CVEs)
         run: uv run pip-audit
@@ -67,15 +67,15 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - name: unit + functional + e2e (contexts) + combined >=85% gate
         run: bash scripts/coverage.sh 85 unit functional e2e
       - name: coverage report with contexts
         if: always()
         run: uv run coverage json --show-contexts -o coverage-contexts.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: coverage-contexts
@@ -87,7 +87,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: docker build (app image)
         run: docker build -f infra/docker/Dockerfile -t {{ project_slug }}:ci .
 
@@ -102,8 +102,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
       - run: npm ci
@@ -128,8 +128,8 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - name: provider verification (Pact)
         run: uv run pytest tests/contract/test_provider_pact.py -q
@@ -146,10 +146,10 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - id: spec
         name: openapi.json — seed if absent, enforce if committed
@@ -225,8 +225,8 @@ jobs:
     outputs:
       agents: {% raw %}${{ steps.list.outputs.agents }}{% endraw %}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - name: install the framework CLI at the recorded version
         run: |
           ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
@@ -246,10 +246,10 @@ jobs:
       matrix:
         agent: {% raw %}${{ fromJSON(needs.review-plan.outputs.agents) }}{% endraw %}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
       - name: install the framework CLI at the recorded version
         run: |
           ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
@@ -261,7 +261,7 @@ jobs:
         run: framework review {% raw %}${{ matrix.agent }}{% endraw %} --findings-out findings/{% raw %}${{ matrix.agent }}{% endraw %}.json
       - name: upload findings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: review-findings-{% raw %}${{ matrix.agent }}{% endraw %}
           path: findings/
@@ -278,13 +278,13 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - name: install the framework CLI at the recorded version
         run: |
           ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
           uv tool install "git+https://github.com/cdowell-swtr/swiftwater-framework@${ref}"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: review-findings-*
           merge-multiple: true

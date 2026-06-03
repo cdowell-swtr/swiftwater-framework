@@ -19,7 +19,7 @@ jobs:
     outputs:
       image: ${{ steps.build.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: build + push image
@@ -42,8 +42,8 @@ jobs:
       DEPLOY_TARGET: ${{ vars.DEPLOY_TARGET }}
       DEPLOY_HOSTS: ${{ vars.DEPLOY_HOSTS }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - name: deploy (your configured strategy)
         run: bash infra/deploy/strategy.sh deploy
