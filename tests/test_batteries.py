@@ -104,7 +104,12 @@ def test_react_battery_registered():
 
     assert "react" in battery_names()
     assert get_battery("react").requires == ()
-    assert get_battery("react").gates_agents == ("accessibility", "usability")
+    assert get_battery("react").gates_agents == (
+        "accessibility",
+        "usability",
+        "observability-fe",
+    )
+    assert get_battery("react").obs == "in-process"
     assert resolve(["react"]) == ["react"]
 
 
@@ -149,7 +154,7 @@ def test_every_battery_declares_a_valid_obs_surface():
         ("pgvector", "rides-existing"),
         ("timescaledb", "rides-existing"),
         ("age", "rides-existing"),
-        ("react", "rides-existing"),
+        ("react", "in-process"),
         ("consumers", "rides-existing"),
     ],
 )

@@ -72,9 +72,9 @@ _BATTERIES: dict[str, BatterySpec] = {
     ),
     "react": BatterySpec(
         "react",
-        "React + TypeScript SPA served by FastAPI, with Vitest/Playwright/axe and accessibility/usability review",
-        gates_agents=("accessibility", "usability"),
-        obs="rides-existing",
+        "React + TypeScript SPA served by FastAPI, with Vitest/Playwright/axe and accessibility/usability/frontend-observability review",
+        gates_agents=("accessibility", "usability", "observability-fe"),
+        obs="in-process",
     ),
     "consumers": BatterySpec(
         "consumers",
