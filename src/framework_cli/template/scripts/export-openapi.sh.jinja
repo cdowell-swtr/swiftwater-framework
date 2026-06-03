@@ -4,12 +4,17 @@
 # any route or response model, then commit the result. Convenience: `task openapi:export`.
 set -euo pipefail
 
-uv run python - > openapi.json <<'PY'
+# Write the JSON directly to the file (not via a stdout redirect): creating the app can emit
+# startup log lines to stdout (e.g. the graphql IDE-config log), which would otherwise pollute
+# openapi.json and make the committed spec non-deterministic (the CI staleness check would then
+# always fail). Writing from Python keeps the file to exactly the schema.
+uv run python - <<'PY'
 import json
-import sys
+from pathlib import Path
 
 from {{ package_name }}.main import create_app
 
-json.dump(create_app().openapi(), sys.stdout, indent=2, sort_keys=True)
-sys.stdout.write("\n")
+Path("openapi.json").write_text(
+    json.dumps(create_app().openapi(), indent=2, sort_keys=True) + "\n"
+)
 PY

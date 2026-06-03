@@ -4,11 +4,12 @@
 # schema, then commit the result.
 set -euo pipefail
 
-uv run python - > schema.graphql <<'PY'
-import sys
+# Write directly to the file (not via a stdout redirect) so any stray stdout from importing
+# the schema module can't pollute the committed SDL (keeps the CI staleness check deterministic).
+uv run python - <<'PY'
+from pathlib import Path
 
 from {{ package_name }}.graphql.schema import schema
 
-sys.stdout.write(schema.as_str())
-sys.stdout.write("\n")
+Path("schema.graphql").write_text(schema.as_str() + "\n")
 PY
