@@ -118,8 +118,12 @@ def prepare_project(config: DogfoodConfig, project: Path) -> None:
 
 
 def expected_agents(config: DogfoodConfig) -> list[str]:
-    """The review-agent (== Check Run) names active on a PR for this config's batteries."""
-    return list(active_agents("pull_request", list(config.batteries)))
+    """The review-agent Check Run names active on a PR for this config's batteries. The
+    generated `framework review` posts each agent's check as `review-<agent>` (against
+    GITHUB_SHA, which on a pull_request is the merge commit — see merge_sha/fetch_checks)."""
+    return [
+        f"review-{a}" for a in active_agents("pull_request", list(config.batteries))
+    ]
 
 
 def log(msg: str) -> None:
@@ -265,10 +269,20 @@ def fetch_jobs(run_url: str) -> dict:
     )
 
 
-def fetch_checks(head_sha: str) -> dict:
+def fetch_checks(sha: str) -> dict:
     return json.loads(
-        sh(["gh", "api", f"repos/{REPO}/commits/{head_sha}/check-runs?per_page=100"])
+        sh(["gh", "api", f"repos/{REPO}/commits/{sha}/check-runs?per_page=100"])
     )
+
+
+def merge_sha(pr_url: str) -> str:
+    """The PR's merge commit sha. An on:pull_request run sets GITHUB_SHA to this merge
+    commit, so the review agents' `review-<agent>` check-runs attach here, NOT to the PR
+    head — query this sha for surface 2 (the head sha only carries the workflow-job checks)."""
+    num = pr_url.rstrip("/").split("/")[-1]
+    return sh(
+        ["gh", "api", f"repos/{REPO}/pulls/{num}", "-q", ".merge_commit_sha"]
+    ).strip()
 
 
 def set_secret() -> None:
@@ -324,10 +338,13 @@ def run_config(config: DogfoodConfig, with_key: bool) -> RunResult:
             f"PR opened: {pr_url}; waiting for the on:pull_request run (sha {pr_sha[:8]})"
         )
         pr_run_url = wait_for_run("pull_request", "dogfood-pr", pr_sha)
-        log(f"PR run done: {pr_run_url}; asserting both surfaces")
+        checks_sha = merge_sha(pr_url)  # review checks attach to the merge commit
+        log(
+            f"PR run done: {pr_run_url}; asserting both surfaces (checks @ {checks_sha[:8]})"
+        )
         verdict = assert_run(
             fetch_jobs(pr_run_url),
-            fetch_checks(pr_sha),
+            fetch_checks(checks_sha),
             config,
             expected_agents=agents,
             with_key=with_key,

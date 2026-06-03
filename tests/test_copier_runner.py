@@ -2364,10 +2364,15 @@ def test_preload_join_in_all_compose_files(tmp_path):
         assert "shared_preload_libraries=timescaledb,age" in text, (
             f"{f} is missing the joined preload 'shared_preload_libraries=timescaledb,age'"
         )
-    # conftest builds the testcontainer with the same joined preload
+    # conftest builds the testcontainer with the same joined preload — assigned to a
+    # `preload` var + interpolated, so the with_command line is a constant length and
+    # stays ruff-format-stable across preload combos (see conftest.py.jinja).
     conftest = (dest / "tests" / "conftest.py").read_text()
-    assert "shared_preload_libraries=timescaledb,age" in conftest, (
-        "tests/conftest.py is missing the joined preload 'shared_preload_libraries=timescaledb,age'"
+    assert 'preload = "timescaledb,age"' in conftest, (
+        "tests/conftest.py is missing the joined preload 'timescaledb,age'"
+    )
+    assert "shared_preload_libraries={preload}" in conftest, (
+        "tests/conftest.py is missing the shared_preload_libraries command"
     )
 
 

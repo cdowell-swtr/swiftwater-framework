@@ -46,7 +46,10 @@ def pg_url() -> Iterator[str]:
 {%- if "timescaledb" in batteries %}{% set _ = _preloads.append("timescaledb") %}{% endif %}
 {%- if "age" in batteries %}{% set _ = _preloads.append("age") %}{% endif %}
 {%- if _preloads %}
-        container = container.with_command("postgres -c shared_preload_libraries={{ _preloads | join(',') }}")
+        preload = "{{ _preloads | join(',') }}"
+        container = container.with_command(
+            f"postgres -c shared_preload_libraries={preload}"
+        )
 {%- endif %}
         container.start()
 {%- else %}
