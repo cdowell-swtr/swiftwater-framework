@@ -3216,3 +3216,39 @@ def test_build_audit_work_item_agentic_no_decisions_no_block(tmp_path):
     wi = cli_mod._build_audit_work_item(get_agent("architecture"), "diff", tmp_path)
     texts = "".join(b["text"] for b in wi["system_blocks"])
     assert "DEC-" not in texts and "Accepted Decisions" not in texts
+
+
+# ---------------------------------------------------------------------------
+# Task 2 (Plan 14): write_lockfile wired into `framework new`
+# ---------------------------------------------------------------------------
+
+
+def test_new_generates_uv_lock(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Make write_lockfile deterministic + offline: fake a successful `uv lock`.
+    import framework_cli.lockfile as lockmod
+
+    def fake_run(args, cwd=None, capture_output=False, text=False):
+        import subprocess
+
+        (Path(cwd) / "uv.lock").write_text("# lock\n")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(lockmod.shutil, "which", lambda _: "/usr/bin/uv")
+    monkeypatch.setattr(lockmod.subprocess, "run", fake_run)
+
+    result = runner.invoke(app, ["new", "Demo App"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "demo-app" / "uv.lock").exists()
+
+
+def test_new_succeeds_when_lock_generation_fails(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    import framework_cli.lockfile as lockmod
+
+    monkeypatch.setattr(lockmod.shutil, "which", lambda _: None)  # uv "missing" → warn
+
+    result = runner.invoke(app, ["new", "Demo App"])
+    assert result.exit_code == 0, result.output  # scaffold still succeeds
+    assert (tmp_path / "demo-app").exists()
+    assert not (tmp_path / "demo-app" / "uv.lock").exists()

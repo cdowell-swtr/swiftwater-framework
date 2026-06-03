@@ -13,6 +13,7 @@ from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
 from framework_cli.integrity.restore import restore_file
 from framework_cli.batteries import resolve as resolve_batteries
+from framework_cli.lockfile import write_lockfile
 from framework_cli.naming import derive_names
 from framework_cli.review.aggregate import write_findings
 from framework_cli.review.checks import neutral_payload, post_or_skip, to_check_run
@@ -88,6 +89,9 @@ def new(
     )
     write_manifest(dest, installed_framework_version())
     record_portable_source(dest, installed_framework_version())
+    write_lockfile(
+        dest
+    )  # ship a committed uv.lock so the first push's --frozen jobs pass
     msg = f"Created '{names.project_slug}' at {dest}"
     if batteries:
         msg += f" (batteries: {', '.join(batteries)})"
