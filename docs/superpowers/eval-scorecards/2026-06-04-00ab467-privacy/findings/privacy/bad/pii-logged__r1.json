@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 52,
+      "message": "PII logged: owner_email (an email address) is written to application logs in the 'item_created' event. The model definition in db/models.py explicitly annotates owner_email as PII that must not be included in logs. Email addresses in logs persist PII in log storage beyond its purpose and expose it to anyone with log access.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log call. Log only non-PII identifiers (e.g. log.info(\"item_created\", item_id=item.id)). If owner attribution is needed for auditing, log a non-reversible reference or a hashed/redacted form rather than the raw address."
+    },
+    {
+      "line": 44,
+      "message": "Unnecessary PII collection: ItemCreate accepts owner_email from the client, but create_item(session, payload.name) never persists it (the repository function ignores owner_email entirely). The email is collected only to be logged, which is not a legitimate stated purpose. Collecting PII that is not stored/used for the feature violates data-minimization.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Either remove owner_email from ItemCreate if it is not needed, or thread it through to create_item so it is stored for the stated purpose instead of merely being logged."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":52,\"severity\":\"high\",\"message\":\"PII logged: owner_email (an email address) is written to application logs in the 'item_created' event. The model definition in db/models.py explicitly annotates owner_email as PII that must not be included in logs. Email addresses in logs persist PII in log storage beyond its purpose and expose it to anyone with log access.\",\"suggestion\":\"Remove owner_email from the log call. Log only non-PII identifiers (e.g. log.info(\\\"item_created\\\", item_id=item.id)). If owner attribution is needed for auditing, log a non-reversible reference or a hashed/redacted form rather than the raw address.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"high\",\"message\":\"Unnecessary PII collection: ItemCreate accepts owner_email from the client, but create_item(session, payload.name) never persists it (the repository function ignores owner_email entirely). The email is collected only to be logged, which is not a legitimate stated purpose. Collecting PII that is not stored/used for the feature violates data-minimization.\",\"suggestion\":\"Either remove owner_email from ItemCreate if it is not needed, or thread it through to create_item so it is stored for the stated purpose instead of merely being logged.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

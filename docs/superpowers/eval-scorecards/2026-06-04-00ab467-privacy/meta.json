@@ -1,0 +1,11 @@
+{
+  "agent_count": 1,
+  "drift_detected": false,
+  "git_ref": "",
+  "mode": "tune",
+  "model_used": "",
+  "repeat": 3,
+  "run_duration_seconds": 0,
+  "slug": "00ab467-privacy",
+  "subagent_call_count": 12
+}

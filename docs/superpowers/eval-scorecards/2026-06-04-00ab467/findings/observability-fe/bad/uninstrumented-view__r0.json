@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "uninstrumented-view",
+  "findings": [
+    {
+      "line": 8,
+      "message": "New user-facing Dashboard view ships with no RUM/error instrumentation reachable from it. The fetch to /internal/summary has no .catch and no per-view error signal: a non-2xx response (e.g. 500) does not reject the promise, so r.json() resolves and the failure renders silently with no RUM signal. The user-visible behavior of this new view is unobserved.",
+      "path": "frontend/src/Dashboard.tsx",
+      "severity": "high",
+      "suggestion": "Check res.ok before parsing and emit an explicit RUM error/event on failure (e.g. push a {kind:'error'} event or increment the js-errors counter via the RUM beacon), and surface a visible error state instead of rendering JSON.stringify(null)."
+    },
+    {
+      "line": 10,
+      "message": "The fetch promise chain (.then(r => r.json()).then(setData)) has no error handling. While a hard network rejection would surface via the global unhandledrejection listener, a failed HTTP status (4xx/5xx) is not caught at all and produces no RUM error signal, so this new code path's failures are invisible to operability monitoring.",
+      "path": "frontend/src/Dashboard.tsx",
+      "severity": "high",
+      "suggestion": "Add a .catch that records a RUM error event and sets a visible error state, and reject on !res.ok so HTTP failures are observed."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Dashboard.tsx\",\"line\":8,\"severity\":\"high\",\"message\":\"New user-facing Dashboard view ships with no RUM/error instrumentation reachable from it. The fetch to /internal/summary has no .catch and no per-view error signal: a non-2xx response (e.g. 500) does not reject the promise, so r.json() resolves and the failure renders silently with no RUM signal. The user-visible behavior of this new view is unobserved.\",\"suggestion\":\"Check res.ok before parsing and emit an explicit RUM error/event on failure (e.g. push a {kind:'error'} event or increment the js-errors counter via the RUM beacon), and surface a visible error state instead of rendering JSON.stringify(null).\"},{\"path\":\"frontend/src/Dashboard.tsx\",\"line\":10,\"severity\":\"high\",\"message\":\"The fetch promise chain (.then(r => r.json()).then(setData)) has no error handling. While a hard network rejection would surface via the global unhandledrejection listener, a failed HTTP status (4xx/5xx) is not caught at all and produces no RUM error signal, so this new code path's failures are invisible to operability monitoring.\",\"suggestion\":\"Add a .catch that records a RUM error event and sets a visible error state, and reject on !res.ok so HTTP failures are observed.\"}]",
+  "repeat": 0,
+  "seeded_file": "frontend/src/Dashboard.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

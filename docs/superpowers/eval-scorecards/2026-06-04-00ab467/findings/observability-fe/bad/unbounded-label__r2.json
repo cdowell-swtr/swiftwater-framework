@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "unbounded-label",
+  "findings": [
+    {
+      "line": 108,
+      "message": "record_raw_path stores the raw full path (including query string) as a metric label key with no sanitization, no distinct-value cap, and no 'other' overflow bucket. Unlike every other label in this class (routes/attribution/referrers are all capped via _bump_capped, statuses/error-types/vital-names are fixed enums), this map grows without bound: one entry per unique URL+query string. This is unbounded/high-cardinality and will blow up Prometheus series counts.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Drop the query string and sanitize/route-normalize the path, then funnel through _bump_capped with a MAX cap and an 'other' overflow bucket, e.g. self._bump_capped(self._raw_paths, _san(full_path.split('?', 1)[0]), self.MAX_ROUTES). Or remove record_raw_path entirely and rely on the already-bounded record_page_view route label."
+    },
+    {
+      "line": 205,
+      "message": "app_frontend_raw_path_total emits one time series per raw full path with the unsanitized path value as a label (path=\"{p}\"). The values are never run through _san and the series list is never capped, so the metric family's cardinality is unbounded by URL/query-string variety. Every metric label must be a fixed enum or pass through a distinct-value cap with an 'other' overflow bucket.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Render from a bounded, sanitized store (see record_raw_path fix) or remove this counter family; the existing app_frontend_page_views_total route label already provides bounded per-route page-view counts."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":108,\"severity\":\"high\",\"message\":\"record_raw_path stores the raw full path (including query string) as a metric label key with no sanitization, no distinct-value cap, and no 'other' overflow bucket. Unlike every other label in this class (routes/attribution/referrers are all capped via _bump_capped, statuses/error-types/vital-names are fixed enums), this map grows without bound: one entry per unique URL+query string. This is unbounded/high-cardinality and will blow up Prometheus series counts.\",\"suggestion\":\"Drop the query string and sanitize/route-normalize the path, then funnel through _bump_capped with a MAX cap and an 'other' overflow bucket, e.g. self._bump_capped(self._raw_paths, _san(full_path.split('?', 1)[0]), self.MAX_ROUTES). Or remove record_raw_path entirely and rely on the already-bounded record_page_view route label.\"},{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":205,\"severity\":\"high\",\"message\":\"app_frontend_raw_path_total emits one time series per raw full path with the unsanitized path value as a label (path=\\\"{p}\\\"). The values are never run through _san and the series list is never capped, so the metric family's cardinality is unbounded by URL/query-string variety. Every metric label must be a fixed enum or pass through a distinct-value cap with an 'other' overflow bucket.\",\"suggestion\":\"Render from a bounded, sanitized store (see record_raw_path fix) or remove this counter family; the existing app_frontend_page_views_total route label already provides bounded per-route page-view counts.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/frontend_rum/metrics.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

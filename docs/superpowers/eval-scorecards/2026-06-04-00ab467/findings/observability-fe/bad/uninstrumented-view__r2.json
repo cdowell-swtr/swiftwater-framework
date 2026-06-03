@@ -1,0 +1,22 @@
+{
+  "agent": "observability-fe",
+  "case": "uninstrumented-view",
+  "findings": [
+    {
+      "line": 8,
+      "message": "New Dashboard view fetches /internal/summary with no error instrumentation: the fetch().then().then(setData) chain has no .catch and the component has no error boundary. A failed request (network error or non-ok response left unguarded) is silently swallowed, so this new user-visible code path is completely unobserved by RUM. The window error / unhandledrejection handlers in rum.ts will not reliably capture a rejection that React/await semantics may consume, and there is no js-errors signal tied to this view's failure mode.",
+      "path": "frontend/src/Dashboard.tsx",
+      "severity": "high",
+      "suggestion": "Add a .catch that surfaces the failure to the RUM error path (e.g. record a js-error / push a {kind:\"error\"} RUM event or rethrow so window.onunhandledrejection fires), and wrap the view in an error boundary so render/fetch failures produce an observable signal instead of a blank section."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Dashboard.tsx\",\"line\":8,\"severity\":\"high\",\"message\":\"New Dashboard view fetches /internal/summary with no error instrumentation: the fetch().then().then(setData) chain has no .catch and the component has no error boundary. A failed request (network error or non-ok response left unguarded) is silently swallowed, so this new user-visible code path is completely unobserved by RUM. The window error / unhandledrejection handlers in rum.ts will not reliably capture a rejection that React/await semantics may consume, and there is no js-errors signal tied to this view's failure mode.\",\"suggestion\":\"Add a .catch that surfaces the failure to the RUM error path (e.g. record a js-error / push a {kind:\\\"error\\\"} RUM event or rethrow so window.onunhandledrejection fires), and wrap the view in an error boundary so render/fetch failures produce an observable signal instead of a blank section.\"}]",
+  "repeat": 2,
+  "seeded_file": "frontend/src/Dashboard.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "ItemRead is the external API response schema (used as response_model for both GET /items and POST /items). Adding owner_email to it echoes PII in every external response. The Item model explicitly annotates this field: 'PII: owner email address \u2014 do not include in logs or external responses.' Exposing it in the response contract directly violates that stated purpose and leaks email addresses to every API client.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from ItemRead so the email is never serialized to clients. If a contact value must be surfaced, expose a masked/redacted form (e.g. partially obscured) and only to authorized callers, not in the general listing response."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"ItemRead is the external API response schema (used as response_model for both GET /items and POST /items). Adding owner_email to it echoes PII in every external response. The Item model explicitly annotates this field: 'PII: owner email address \u2014 do not include in logs or external responses.' Exposing it in the response contract directly violates that stated purpose and leaks email addresses to every API client.\",\"suggestion\":\"Remove owner_email from ItemRead so the email is never serialized to clients. If a contact value must be surfaced, expose a masked/redacted form (e.g. partially obscured) and only to authorized callers, not in the general listing response.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

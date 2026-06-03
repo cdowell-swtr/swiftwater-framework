@@ -1,0 +1,22 @@
+{
+  "agent": "observability-fe",
+  "case": "swallowed-error",
+  "findings": [
+    {
+      "line": 10,
+      "message": "loadItemsQuietly's catch block swallows the fetchItems rejection (returns [] with no rethrow and no telemetry). Because the error is caught inside an async function, it never surfaces as an unhandled promise rejection, so neither the window 'error' nor 'unhandledrejection' listeners in initRum (rum.ts lines 46-49) fire and the RUM js-errors counter never increments. The load failure is now invisible to monitoring \u2014 and since setError is never called, the user just sees an empty 'No items yet.' list instead of the error alert. This unobserves a user-facing fetch/API path.",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "suggestion": "Do not swallow the error. Restore propagation to RUM and the user, e.g. keep the original `fetchItems().then(setItems).catch(() => setError(true))`, or in the catch rethrow / report to RUM (window.dispatchEvent(new ErrorEvent('error')) or an explicit beacon push) before returning so the js-errors counter and the user-facing role=\"alert\" both fire."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":10,\"severity\":\"high\",\"message\":\"loadItemsQuietly's catch block swallows the fetchItems rejection (returns [] with no rethrow and no telemetry). Because the error is caught inside an async function, it never surfaces as an unhandled promise rejection, so neither the window 'error' nor 'unhandledrejection' listeners in initRum (rum.ts lines 46-49) fire and the RUM js-errors counter never increments. The load failure is now invisible to monitoring \u2014 and since setError is never called, the user just sees an empty 'No items yet.' list instead of the error alert. This unobserves a user-facing fetch/API path.\",\"suggestion\":\"Do not swallow the error. Restore propagation to RUM and the user, e.g. keep the original `fetchItems().then(setItems).catch(() => setError(true))`, or in the catch rethrow / report to RUM (window.dispatchEvent(new ErrorEvent('error')) or an explicit beacon push) before returning so the js-errors counter and the user-facing role=\\\"alert\\\" both fire.\"}]",
+  "repeat": 2,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

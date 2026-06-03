@@ -1,0 +1,30 @@
+diff --git a/frontend/src/Items.tsx b/frontend/src/Items.tsx
+index f94b2c6..173ef05 100644
+--- a/frontend/src/Items.tsx
++++ b/frontend/src/Items.tsx
+@@ -2,14 +2,22 @@ import { useEffect, useState } from "react";
+ 
+ import { fetchItems, type Item } from "./api";
+ 
++// Silently swallow load failures — the empty list hides the error from the user
++// AND from the RUM js-errors counter (window 'error' never fires).
++async function loadItemsQuietly(): Promise<Item[]> {
++  try {
++    return await fetchItems();
++  } catch {
++    return []; // error swallowed: no rethrow, no telemetry
++  }
++}
++
+ export function Items() {
+   const [items, setItems] = useState<Item[] | null>(null);
+   const [error, setError] = useState(false);
+ 
+   useEffect(() => {
+-    fetchItems()
+-      .then(setItems)
+-      .catch(() => setError(true));
++    loadItemsQuietly().then(setItems);
+   }, []);
+ 
+   if (error) return <p role="alert">Failed to load items.</p>;

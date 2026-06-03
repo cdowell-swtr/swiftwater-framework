@@ -1,0 +1,22 @@
+{
+  "agent": "observability-fe",
+  "case": "swallowed-error",
+  "findings": [
+    {
+      "line": 11,
+      "message": "loadItemsQuietly() catches the fetchItems() rejection and returns [] with no rethrow and no telemetry. The RUM js-errors counter is fed exclusively by the window 'error'/'unhandledrejection' listeners in observability/rum.ts (lines 46-49); a swallowed promise rejection fires neither, so a failed item load becomes completely invisible to monitoring. The user sees the 'No items yet.' empty state, and operators see no error signal.",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "suggestion": "Do not swallow the failure. Either let it reject so the unhandledrejection listener fires, or explicitly report it to RUM before returning a fallback, e.g. catch (e) { reportRumError(e); throw e; } and surface the existing error state (setError(true)) so the failure reaches both the user and the js-errors counter."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":11,\"severity\":\"high\",\"message\":\"loadItemsQuietly() catches the fetchItems() rejection and returns [] with no rethrow and no telemetry. The RUM js-errors counter is fed exclusively by the window 'error'/'unhandledrejection' listeners in observability/rum.ts (lines 46-49); a swallowed promise rejection fires neither, so a failed item load becomes completely invisible to monitoring. The user sees the 'No items yet.' empty state, and operators see no error signal.\",\"suggestion\":\"Do not swallow the failure. Either let it reject so the unhandledrejection listener fires, or explicitly report it to RUM before returning a fallback, e.g. catch (e) { reportRumError(e); throw e; } and surface the existing error state (setError(true)) so the failure reaches both the user and the js-errors counter.\"}]",
+  "repeat": 0,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

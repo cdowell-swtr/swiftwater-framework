@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "unbounded-label",
+  "findings": [
+    {
+      "line": 205,
+      "message": "New metric app_frontend_raw_path_total emits one Prometheus series per raw full path (including the query string) via path=\"{p}\" with no sanitization, no distinct-value cap, and no \"other\" overflow bucket. Raw paths are effectively unbounded, so this label has unbounded/high cardinality and will explode the Prometheus series count for this target. Every other label in this file (route, attribution, referrer) is sanitized and capped with an overflow bucket; this one breaks that contract.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Drop the query string and emit a sanitized, capped label. Reuse the existing pattern: strip the query string (path.split(\"?\")[0]), pass through _san(...), and bump via self._bump_capped(self._raw_paths, sanitized, self.MAX_ROUTES) so excess distinct paths collapse into an \"other\" bucket. Better yet, drop this metric entirely since app_frontend_page_views_total already tracks views by bounded route."
+    },
+    {
+      "line": 108,
+      "message": "record_raw_path stores the raw full_path (including query string) as the dict key with no sanitization, no cap, and no overflow bucket, feeding the unbounded-cardinality app_frontend_raw_path_total series. The bounded-by-construction guarantee documented in the module docstring (\"route and attribution labels are capped with an 'other' overflow bucket; all label values are sanitized; no free-text full URLs / query strings is ever stored\") is violated here.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Sanitize and cap at ingest: route = _san(full_path.split(\"?\")[0]) then self._bump_capped(self._raw_paths, route, self.MAX_ROUTES) inside the lock, matching record_page_view."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":205,\"severity\":\"high\",\"message\":\"New metric app_frontend_raw_path_total emits one Prometheus series per raw full path (including the query string) via path=\\\"{p}\\\" with no sanitization, no distinct-value cap, and no \\\"other\\\" overflow bucket. Raw paths are effectively unbounded, so this label has unbounded/high cardinality and will explode the Prometheus series count for this target. Every other label in this file (route, attribution, referrer) is sanitized and capped with an overflow bucket; this one breaks that contract.\",\"suggestion\":\"Drop the query string and emit a sanitized, capped label. Reuse the existing pattern: strip the query string (path.split(\\\"?\\\")[0]), pass through _san(...), and bump via self._bump_capped(self._raw_paths, sanitized, self.MAX_ROUTES) so excess distinct paths collapse into an \\\"other\\\" bucket. Better yet, drop this metric entirely since app_frontend_page_views_total already tracks views by bounded route.\"},{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":108,\"severity\":\"high\",\"message\":\"record_raw_path stores the raw full_path (including query string) as the dict key with no sanitization, no cap, and no overflow bucket, feeding the unbounded-cardinality app_frontend_raw_path_total series. The bounded-by-construction guarantee documented in the module docstring (\\\"route and attribution labels are capped with an 'other' overflow bucket; all label values are sanitized; no free-text full URLs / query strings is ever stored\\\") is violated here.\",\"suggestion\":\"Sanitize and cap at ingest: route = _san(full_path.split(\\\"?\\\")[0]) then self._bump_capped(self._raw_paths, route, self.MAX_ROUTES) inside the lock, matching record_page_view.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/frontend_rum/metrics.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

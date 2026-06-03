@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "unbounded-label",
+  "findings": [
+    {
+      "line": 104,
+      "message": "record_raw_path stores the raw full path (including query string) as the dict key with no sanitize, no distinct-value cap, and no 'other' overflow bucket. Every distinct URL+querystring becomes a new key, so the backing store grows unboundedly. Unlike record_page_view (capped routes/attribution via _bump_capped) and the fixed-enum counters, this signal has unbounded cardinality and will blow up the /metrics series count.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Sanitize and bucket the value before storing: extract the route portion (strip the query string), run it through _san(), and bump via _bump_capped(self._raw_paths, route, self.MAX_ROUTES, overflow='other') so distinct values are capped with an 'other' overflow bucket."
+    },
+    {
+      "line": 205,
+      "message": "render_prometheus emits app_frontend_raw_path_total with one series per raw full path (path=\"...\"), unsanitized and uncapped. This is an unbounded / high-cardinality label: every distinct full path (with query string) produces a separate Prometheus time series, which will overwhelm the scraper and TSDB. Every label here must be a fixed enum or pass through a distinct-value cap with an 'other' overflow, as the other counters in this file do.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Drop this raw-path counter, or first bound it at the ingest path (see record_raw_path) so the rendered series are limited to MAX_ROUTES sanitized routes plus an 'other' bucket."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":104,\"severity\":\"high\",\"message\":\"record_raw_path stores the raw full path (including query string) as the dict key with no sanitize, no distinct-value cap, and no 'other' overflow bucket. Every distinct URL+querystring becomes a new key, so the backing store grows unboundedly. Unlike record_page_view (capped routes/attribution via _bump_capped) and the fixed-enum counters, this signal has unbounded cardinality and will blow up the /metrics series count.\",\"suggestion\":\"Sanitize and bucket the value before storing: extract the route portion (strip the query string), run it through _san(), and bump via _bump_capped(self._raw_paths, route, self.MAX_ROUTES, overflow='other') so distinct values are capped with an 'other' overflow bucket.\"},{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":205,\"severity\":\"high\",\"message\":\"render_prometheus emits app_frontend_raw_path_total with one series per raw full path (path=\\\"...\\\"), unsanitized and uncapped. This is an unbounded / high-cardinality label: every distinct full path (with query string) produces a separate Prometheus time series, which will overwhelm the scraper and TSDB. Every label here must be a fixed enum or pass through a distinct-value cap with an 'other' overflow, as the other counters in this file do.\",\"suggestion\":\"Drop this raw-path counter, or first bound it at the ingest path (see record_raw_path) so the rendered series are limited to MAX_ROUTES sanitized routes plus an 'other' bucket.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/frontend_rum/metrics.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 52,
+      "message": "PII logged: the owner's email address (owner_email) is written into application logs via log.info(\"item_created\", ..., owner_email=payload.owner_email). Email is personal data, and the Item model explicitly documents that owner_email must not be included in logs. Logging it creates an unnecessary, persistent copy of PII in log storage, exceeding the stated audit purpose (which only needs to identify the item).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log the email. Log only non-PII identifiers, e.g. log.info(\"item_created\", item_id=item.id). If linking the creator to the audit event is required, log a non-reversible reference (a hashed/pseudonymized owner id) instead of the raw email."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":52,\"severity\":\"high\",\"message\":\"PII logged: the owner's email address (owner_email) is written into application logs via log.info(\\\"item_created\\\", ..., owner_email=payload.owner_email). Email is personal data, and the Item model explicitly documents that owner_email must not be included in logs. Logging it creates an unnecessary, persistent copy of PII in log storage, exceeding the stated audit purpose (which only needs to identify the item).\",\"suggestion\":\"Do not log the email. Log only non-PII identifiers, e.g. log.info(\\\"item_created\\\", item_id=item.id). If linking the creator to the audit event is required, log a non-reversible reference (a hashed/pseudonymized owner id) instead of the raw email.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

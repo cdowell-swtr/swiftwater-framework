@@ -1,0 +1,22 @@
+{
+  "agent": "observability-fe",
+  "case": "capped-label",
+  "findings": [
+    {
+      "line": 203,
+      "message": "New RUM signal `app_frontend_device_class_total` is exported but has no corresponding alert rule or Grafana dashboard panel. infra/observability/prometheus/alerts/frontend_alerts.yml covers only LCP and js_errors, and infra/observability/grafana/dashboards/frontend.json only panels web_vitals, js_errors, page_views, and rum_beacons. A new metric with no dashboard panel or alert is operationally invisible until someone manually queries it.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "medium",
+      "suggestion": "Add a panel to infra/observability/grafana/dashboards/frontend.json plotting app_frontend_device_class_total by device_class (and, if device-class skew is operationally meaningful, an alert in frontend_alerts.yml), so the new signal is observable alongside the other frontend RUM metrics."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":203,\"severity\":\"medium\",\"message\":\"New RUM signal `app_frontend_device_class_total` is exported but has no corresponding alert rule or Grafana dashboard panel. infra/observability/prometheus/alerts/frontend_alerts.yml covers only LCP and js_errors, and infra/observability/grafana/dashboards/frontend.json only panels web_vitals, js_errors, page_views, and rum_beacons. A new metric with no dashboard panel or alert is operationally invisible until someone manually queries it.\",\"suggestion\":\"Add a panel to infra/observability/grafana/dashboards/frontend.json plotting app_frontend_device_class_total by device_class (and, if device-class skew is operationally meaningful, an alert in frontend_alerts.yml), so the new signal is observable alongside the other frontend RUM metrics.\"}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

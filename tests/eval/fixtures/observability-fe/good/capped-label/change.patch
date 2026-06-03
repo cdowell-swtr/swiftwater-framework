@@ -1,0 +1,61 @@
+diff --git a/src/demo/frontend_rum/metrics.py b/src/demo/frontend_rum/metrics.py
+index 53e573e..83d5778 100644
+--- a/src/demo/frontend_rum/metrics.py
++++ b/src/demo/frontend_rum/metrics.py
+@@ -90,6 +90,7 @@ class FrontendMetrics:
+     MAX_ROUTES = 32
+     MAX_ATTRIBUTION = 64
+     MAX_REFERRERS = 32
++    MAX_DEVICE_CLASSES = 8
+ 
+     def __init__(self) -> None:
+         self._lock = threading.Lock()
+@@ -99,6 +100,7 @@ class FrontendMetrics:
+         self._attribution: dict[tuple[str, str, str], int] = {}
+         self._referrers: dict[str, int] = {}
+         self._beacons: dict[str, int] = {}
++        self._device_classes: dict[str, int] = {}
+ 
+     def observe_web_vital(self, name: str, value: float) -> None:
+         key = name.lower()
+@@ -117,8 +119,15 @@ class FrontendMetrics:
+     ) -> None:
+         route = _san(route)
+         attribution = tuple(_san(params.get(k, "")) for k in _ATTRIBUTION_KEYS)
++        # Device class is a new attribution dimension. Sanitized + capped via the
++        # shared _bump_capped mechanism (cap + "other" overflow), so cardinality
++        # stays bounded exactly like routes/attribution/referrers.
++        device_class = _san(params.get("device_class", "")) or "unknown"
+         with self._lock:
+             self._bump_capped(self._page_views, route, self.MAX_ROUTES)
++            self._bump_capped(
++                self._device_classes, device_class, self.MAX_DEVICE_CLASSES
++            )
+             if any(attribution):
+                 self._bump_capped(
+                     self._attribution,
+@@ -189,6 +198,16 @@ class FrontendMetrics:
+                     [(f'status="{s}"', n) for s, n in sorted(self._beacons.items())],
+                 )
+             )
++            parts.append(
++                self._render_counter(
++                    "app_frontend_device_class_total",
++                    "Frontend page views by device class (capped + sanitized)",
++                    [
++                        (f'device_class="{d}"', n)
++                        for d, n in sorted(self._device_classes.items())
++                    ],
++                )
++            )
+         return "".join(parts)
+ 
+     @staticmethod
+@@ -211,6 +230,7 @@ class FrontendMetrics:
+             self._attribution.clear()
+             self._referrers.clear()
+             self._beacons.clear()
++            self._device_classes.clear()
+ 
+ 
+ frontend_metrics = FrontendMetrics()

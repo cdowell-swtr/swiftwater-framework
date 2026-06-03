@@ -1,0 +1,12 @@
+diff --git a/src/demo/config/settings.py b/src/demo/config/settings.py
+index ba90cb0..c64097a 100644
+--- a/src/demo/config/settings.py
++++ b/src/demo/config/settings.py
+@@ -37,6 +37,7 @@ class Settings(BaseSettings):
+         "utm_campaign",
+         "utm_term",
+         "utm_content",
++        "email",  # collects the user's email from the query string into telemetry — PII
+     ]
+ 
+     @property

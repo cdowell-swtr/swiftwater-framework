@@ -1,0 +1,42 @@
+diff --git a/src/demo/frontend_rum/metrics.py b/src/demo/frontend_rum/metrics.py
+index 53e573e..2e62a54 100644
+--- a/src/demo/frontend_rum/metrics.py
++++ b/src/demo/frontend_rum/metrics.py
+@@ -99,6 +99,13 @@ class FrontendMetrics:
+         self._attribution: dict[tuple[str, str, str], int] = {}
+         self._referrers: dict[str, int] = {}
+         self._beacons: dict[str, int] = {}
++        self._raw_paths: dict[str, int] = {}
++
++    def record_raw_path(self, full_path: str) -> None:
++        # BUG: labels by the raw full path (incl. query string) with no cap or
++        # "other" overflow — unbounded cardinality will blow up Prometheus.
++        with self._lock:
++            self._raw_paths[full_path] = self._raw_paths.get(full_path, 0) + 1
+ 
+     def observe_web_vital(self, name: str, value: float) -> None:
+         key = name.lower()
+@@ -189,6 +196,15 @@ class FrontendMetrics:
+                     [(f'status="{s}"', n) for s, n in sorted(self._beacons.items())],
+                 )
+             )
++            parts.append(
++                self._render_counter(
++                    "app_frontend_raw_path_total",
++                    "Frontend page views by raw full path",
++                    # BUG: emits one series per raw full path (no sanitize, no cap) —
++                    # unbounded label cardinality.
++                    [(f'path="{p}"', n) for p, n in sorted(self._raw_paths.items())],
++                )
++            )
+         return "".join(parts)
+ 
+     @staticmethod
+@@ -211,6 +227,7 @@ class FrontendMetrics:
+             self._attribution.clear()
+             self._referrers.clear()
+             self._beacons.clear()
++            self._raw_paths.clear()
+ 
+ 
+ frontend_metrics = FrontendMetrics()

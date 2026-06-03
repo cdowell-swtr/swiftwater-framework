@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "uninstrumented-view",
+  "findings": [
+    {
+      "line": 5,
+      "message": "New user-facing view `Dashboard` ships with no RUM/error instrumentation reachable from it. Unlike the RUM-wired app shell, this component renders a brand-new fetch-backed view whose load success/failure produces no RUM signal \u2014 the view's behavior is entirely unobserved.",
+      "path": "frontend/src/Dashboard.tsx",
+      "severity": "high",
+      "suggestion": "Wrap the view in an error boundary (or surface failures through the js-errors path) and emit a RUM signal for the view load so the new user-visible behavior is observable, matching the instrumentation the rest of the app relies on via observability/rum.ts."
+    },
+    {
+      "line": 8,
+      "message": "New fetch path `fetch(\"/internal/summary\")` has no error handling and no `res.ok` check (contrast api.ts which throws on non-ok). A non-2xx response does not reject, so the promise chain at lines 8-11 swallows the failure: `r.json()` is parsed/assigned with no error reaching the js-errors counter or window error handler. The failure becomes invisible \u2014 no RUM error signal is recorded for a failed dashboard load.",
+      "path": "frontend/src/Dashboard.tsx",
+      "severity": "high",
+      "suggestion": "Check `res.ok` and throw on failure (as fetchItems does), and add a `.catch` that records a RUM error / re-throws to the unhandledrejection handler so failed loads of this view increment the js-errors counter instead of being silently dropped."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Dashboard.tsx\",\"line\":5,\"severity\":\"high\",\"message\":\"New user-facing view `Dashboard` ships with no RUM/error instrumentation reachable from it. Unlike the RUM-wired app shell, this component renders a brand-new fetch-backed view whose load success/failure produces no RUM signal \u2014 the view's behavior is entirely unobserved.\",\"suggestion\":\"Wrap the view in an error boundary (or surface failures through the js-errors path) and emit a RUM signal for the view load so the new user-visible behavior is observable, matching the instrumentation the rest of the app relies on via observability/rum.ts.\"},{\"path\":\"frontend/src/Dashboard.tsx\",\"line\":8,\"severity\":\"high\",\"message\":\"New fetch path `fetch(\\\"/internal/summary\\\")` has no error handling and no `res.ok` check (contrast api.ts which throws on non-ok). A non-2xx response does not reject, so the promise chain at lines 8-11 swallows the failure: `r.json()` is parsed/assigned with no error reaching the js-errors counter or window error handler. The failure becomes invisible \u2014 no RUM error signal is recorded for a failed dashboard load.\",\"suggestion\":\"Check `res.ok` and throw on failure (as fetchItems does), and add a `.catch` that records a RUM error / re-throws to the unhandledrejection handler so failed loads of this view increment the js-errors counter instead of being silently dropped.\"}]",
+  "repeat": 1,
+  "seeded_file": "frontend/src/Dashboard.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

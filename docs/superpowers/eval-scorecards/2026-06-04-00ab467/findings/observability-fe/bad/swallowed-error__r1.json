@@ -1,0 +1,22 @@
+{
+  "agent": "observability-fe",
+  "case": "swallowed-error",
+  "findings": [
+    {
+      "line": 11,
+      "message": "loadItemsQuietly() catches the fetchItems() rejection in an empty `catch` that returns [] without rethrowing or emitting any telemetry. The RUM js-errors counter is driven solely by the window 'error'/'unhandledrejection' listeners in observability/rum.ts; a swallowed promise rejection fires neither, so a /items load failure is completely invisible to monitoring (and, because it returns an empty list rather than setting error state, invisible to the user too). The failure mode of a user-facing fetch path is unobserved.",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "suggestion": "Do not swallow the error. Either let it propagate as an unhandled rejection (so the 'unhandledrejection' listener increments the js-errors counter) by rethrowing in the catch, or explicitly report it before recovering, and restore the user-visible error state (setError(true)) in the component's .catch. For example, drop loadItemsQuietly and revert to fetchItems().then(setItems).catch(() => setError(true)), or have the catch call a RUM error-reporting hook prior to returning a fallback."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":11,\"severity\":\"high\",\"message\":\"loadItemsQuietly() catches the fetchItems() rejection in an empty `catch` that returns [] without rethrowing or emitting any telemetry. The RUM js-errors counter is driven solely by the window 'error'/'unhandledrejection' listeners in observability/rum.ts; a swallowed promise rejection fires neither, so a /items load failure is completely invisible to monitoring (and, because it returns an empty list rather than setting error state, invisible to the user too). The failure mode of a user-facing fetch path is unobserved.\",\"suggestion\":\"Do not swallow the error. Either let it propagate as an unhandled rejection (so the 'unhandledrejection' listener increments the js-errors counter) by rethrowing in the catch, or explicitly report it before recovering, and restore the user-visible error state (setError(true)) in the component's .catch. For example, drop loadItemsQuietly and revert to fetchItems().then(setItems).catch(() => setError(true)), or have the catch call a RUM error-reporting hook prior to returning a fallback.\"}]",
+  "repeat": 1,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

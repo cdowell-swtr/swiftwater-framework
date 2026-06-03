@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "rum-allowlists-pii",
+  "findings": [
+    {
+      "line": 40,
+      "message": "Adding \"email\" to the frontend RUM query-param allowlist causes the user's email address to be captured from the URL query string into telemetry/RUM data. Email is PII and is not needed for the stated attribution purpose (the rest of the allowlist is UTM campaign attribution params). This collects PII into telemetry that is then persisted and re-applied by the backend on ingest, exceeding the stated purpose.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Remove the \"email\" entry from frontend_rum_allowed_query_params so the attribution allowlist stays limited to the non-PII UTM parameters."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":40,\"severity\":\"high\",\"message\":\"Adding \\\"email\\\" to the frontend RUM query-param allowlist causes the user's email address to be captured from the URL query string into telemetry/RUM data. Email is PII and is not needed for the stated attribution purpose (the rest of the allowlist is UTM campaign attribution params). This collects PII into telemetry that is then persisted and re-applied by the backend on ingest, exceeding the stated purpose.\",\"suggestion\":\"Remove the \\\"email\\\" entry from frontend_rum_allowed_query_params so the attribution allowlist stays limited to the non-PII UTM parameters.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

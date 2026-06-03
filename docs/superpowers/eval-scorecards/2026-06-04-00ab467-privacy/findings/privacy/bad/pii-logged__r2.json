@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 52,
+      "message": "owner_email (PII) is written to logs via log.info(\"item_created\", ..., owner_email=payload.owner_email). The Item model explicitly comments that owner_email must not be included in logs. Logging the email address exposes PII in log storage and any downstream log aggregation/retention systems.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log the email. Log a non-identifying audit field instead, e.g. log.info(\"item_created\", item_id=item.id), or hash/redact the email if a correlation key is truly required."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":52,\"severity\":\"high\",\"message\":\"owner_email (PII) is written to logs via log.info(\\\"item_created\\\", ..., owner_email=payload.owner_email). The Item model explicitly comments that owner_email must not be included in logs. Logging the email address exposes PII in log storage and any downstream log aggregation/retention systems.\",\"suggestion\":\"Do not log the email. Log a non-identifying audit field instead, e.g. log.info(\\\"item_created\\\", item_id=item.id), or hash/redact the email if a correlation key is truly required.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

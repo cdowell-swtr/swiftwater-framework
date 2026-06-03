@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "rum-allowlists-pii",
+  "findings": [
+    {
+      "line": 40,
+      "message": "The RUM query-param allowlist (frontend_rum_allowed_query_params) captures attribution params into telemetry. Adding \"email\" collects the user's email address from the query string into telemetry/RUM data. This is PII collection not needed for the stated purpose (UTM campaign attribution), causing PII to be ingested and likely retained in observability/telemetry stores.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Remove \"email\" from the allowlist. Keep the list restricted to non-PII attribution params (utm_*). If a user identifier is genuinely required, use a pseudonymous/hashed token rather than a raw email, and document the purpose and retention."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":40,\"severity\":\"high\",\"message\":\"The RUM query-param allowlist (frontend_rum_allowed_query_params) captures attribution params into telemetry. Adding \\\"email\\\" collects the user's email address from the query string into telemetry/RUM data. This is PII collection not needed for the stated purpose (UTM campaign attribution), causing PII to be ingested and likely retained in observability/telemetry stores.\",\"suggestion\":\"Remove \\\"email\\\" from the allowlist. Keep the list restricted to non-PII attribution params (utm_*). If a user identifier is genuinely required, use a pseudonymous/hashed token rather than a raw email, and document the purpose and retention.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

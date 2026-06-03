@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "owner_email is added to the ItemRead response schema, which is the external API contract serialized for both GET /items and POST /items. The model definition explicitly marks owner_email as PII that must not be included in external responses (src/demo/db/models.py:16). This echoes the owner's email address to all API clients.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from ItemRead so the email PII is never serialized into external responses. If a client truly needs owner contact, restrict it to an authenticated/authorized endpoint with a documented purpose, or mask the value."
+    },
+    {
+      "line": 43,
+      "message": "ItemCreate collects owner_email from external clients, but create_item only persists name (owner_email is silently dropped). Collecting PII that is not used for the stated purpose violates data-minimization; it sets up an interface that invites future storage/echo of the email.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Drop owner_email from ItemCreate unless there is a concrete, documented need to store it. If it is needed, pass it through to create_item intentionally and ensure it is excluded from response/log surfaces."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"owner_email is added to the ItemRead response schema, which is the external API contract serialized for both GET /items and POST /items. The model definition explicitly marks owner_email as PII that must not be included in external responses (src/demo/db/models.py:16). This echoes the owner's email address to all API clients.\",\"suggestion\":\"Remove owner_email from ItemRead so the email PII is never serialized into external responses. If a client truly needs owner contact, restrict it to an authenticated/authorized endpoint with a documented purpose, or mask the value.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"high\",\"message\":\"ItemCreate collects owner_email from external clients, but create_item only persists name (owner_email is silently dropped). Collecting PII that is not used for the stated purpose violates data-minimization; it sets up an interface that invites future storage/echo of the email.\",\"suggestion\":\"Drop owner_email from ItemCreate unless there is a concrete, documented need to store it. If it is needed, pass it through to create_item intentionally and ensure it is excluded from response/log surfaces.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

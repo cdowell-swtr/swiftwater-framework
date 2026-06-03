@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "ItemRead is the API response schema (used as response_model for both GET /items and POST /items), and now includes owner_email. This echoes owner email PII to external clients on every read, directly contradicting the data model's own warning in models.py: 'PII: owner email address \u2014 do not include in logs or external responses.'",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the ItemRead response schema so the public API contract does not expose the owner's email. If a client genuinely needs contact info, gate it behind an authorized/internal-only schema and access control rather than the default item read."
+    },
+    {
+      "line": 43,
+      "message": "ItemCreate collects owner_email from request payloads, but create_item(session, payload.name) never uses or persists it \u2014 the PII is collected with no stated purpose served (data minimization violation). The endpoint docstring ('Create a new item with optional owner email') is also misleading since the email is silently dropped.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Drop owner_email from ItemCreate unless there is a defined, necessary purpose for storing it. If it is needed, persist it explicitly and document the purpose, retention, and access restrictions; otherwise do not accept it at all."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"ItemRead is the API response schema (used as response_model for both GET /items and POST /items), and now includes owner_email. This echoes owner email PII to external clients on every read, directly contradicting the data model's own warning in models.py: 'PII: owner email address \u2014 do not include in logs or external responses.'\",\"suggestion\":\"Remove owner_email from the ItemRead response schema so the public API contract does not expose the owner's email. If a client genuinely needs contact info, gate it behind an authorized/internal-only schema and access control rather than the default item read.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"high\",\"message\":\"ItemCreate collects owner_email from request payloads, but create_item(session, payload.name) never uses or persists it \u2014 the PII is collected with no stated purpose served (data minimization violation). The endpoint docstring ('Create a new item with optional owner email') is also misleading since the email is silently dropped.\",\"suggestion\":\"Drop owner_email from ItemCreate unless there is a defined, necessary purpose for storing it. If it is needed, persist it explicitly and document the purpose, retention, and access restrictions; otherwise do not accept it at all.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}
