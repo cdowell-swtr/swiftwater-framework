@@ -8,7 +8,9 @@ runs, and asserts: (surface 1) every workflow job succeeded; (surface 2) the rev
 Check Runs are neutral by default. --with-review-key sets the repo secret for the paid
 full review path. Writes a dated scorecard.
 
-Prerequisites: gh authed (scopes repo+workflow); the DOGFOOD_COMMIT tag pushed; run from the repo root.
+Prerequisites: gh authed (scopes repo+workflow; delete_repo for teardown); the DOGFOOD_COMMIT
+tag pushed. Run via `uv run python scripts/dogfood_e2e.py` from the repo root (bare `python3`
+lacks the `copier` dependency).
 NOT a hermetic test — talks to real GitHub Actions. See docs/dogfood-e2e.md.
 """
 
