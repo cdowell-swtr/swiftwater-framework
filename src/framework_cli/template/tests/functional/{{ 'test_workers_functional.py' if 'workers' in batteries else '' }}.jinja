@@ -37,6 +37,7 @@ def test_record_failure_and_count(db_session):
         task_id="abc",
         args_json=json.dumps([1, 2]),
         traceback="boom",
+        redacted=True,
     )
     assert dead_letter.count(db_session) == 1
     assert dead_letter.list_recent(db_session)[0].task_name == "t"
@@ -53,6 +54,7 @@ def test_render_dlq_metrics_reflects_depth(db_session):
         task_id="abc",
         args_json=json.dumps([1]),
         traceback="boom",
+        redacted=True,
     )
     assert dead_letter.render_dlq_metrics(db_session).strip().endswith("1")
 
@@ -107,7 +109,13 @@ def test_failing_task_lands_in_dead_letter_queue(db_session, monkeypatch):
     rows = dl.list_recent(db_session)
     assert any(r.task_name == "always_fails" for r in rows)
     failed = next(r for r in rows if r.task_name == "always_fails")
-    assert "boom" in failed.traceback
+    # Redact-by-default (DLQ-PII): on_failure stores the frame trace + exception TYPE but
+    # scrubs the exception MESSAGE (which can carry interpolated PII), and flags the row
+    # redacted. So the message "boom" must NOT survive, while the type/frame do.
+    assert failed.redacted is True
+    assert "boom" not in failed.traceback
+    assert "ValueError" in failed.traceback
+    assert "always_fails" in failed.traceback
 
 
 def test_metrics_endpoint_exposes_dlq_gauge(http_client: TestClient):
