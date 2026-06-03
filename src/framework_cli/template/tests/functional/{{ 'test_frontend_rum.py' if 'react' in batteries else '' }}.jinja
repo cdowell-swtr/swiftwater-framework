@@ -1,0 +1,24 @@
+from fastapi.testclient import TestClient
+
+from {{ package_name }}.main import create_app
+
+
+def test_frontend_metrics_round_trip_through_metrics_endpoint() -> None:
+    from {{ package_name }}.frontend_rum.metrics import frontend_metrics
+
+    frontend_metrics.reset()
+    client = TestClient(create_app())
+    client.post(
+        "/internal/rum",
+        json={
+            "events": [
+                {"kind": "vital", "name": "cls", "value": 0.05},
+                {"kind": "pageview", "path": "/", "params": {}, "referrer": None},
+            ]
+        },
+    )
+    body = client.get("/metrics").text
+    # frontend series appear alongside the always-present app metrics
+    assert "app_frontend_web_vitals_cls_count 1" in body
+    assert 'app_frontend_page_views_total{route="/"} 1' in body
+    assert "app_" in body  # base metrics still present
