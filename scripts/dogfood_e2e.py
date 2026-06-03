@@ -93,7 +93,6 @@ def render(config: DogfoodConfig, dest: Path) -> None:
         {
             "project_name": names.project_name,
             "project_slug": names.project_slug,
-            "out": str(dest),
             "package_name": names.package_name,
             "batteries": list(config.batteries),
             "alert_channels": ["webhook"],
