@@ -38,6 +38,7 @@ def test_every_agent_has_an_explicit_context_strategy():
         "api-design",
         "observability-infra",
         "observability-db",
+        "observability-fe",
         "contracts",
     }
     for name in agent_names():

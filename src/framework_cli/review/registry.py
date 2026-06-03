@@ -144,6 +144,14 @@ _SPECS: dict[str, AgentSpec] = {
         ),
         context=ContextPolicy("agentic"),
     ),
+    "observability-fe": AgentSpec(
+        "review-observability-fe",
+        _prompt("observability-fe"),
+        "high",
+        "battery",
+        AGENTIC_MODEL,
+        context=ContextPolicy("agentic"),
+    ),
     "test-quality": AgentSpec(
         "review-test-quality",
         _prompt("test-quality"),

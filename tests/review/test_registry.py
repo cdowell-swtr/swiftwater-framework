@@ -27,7 +27,13 @@ _EXPECTED_PR = sorted(
 )
 _EXPECTED_PUSH = sorted(["security", "data-integrity", "data-lineage", "observability"])
 # Battery-gated agents (active_when="battery") — excluded from the always-on sets above.
-_EXPECTED_BATTERY = ["accessibility", "api-design", "contracts", "usability"]
+_EXPECTED_BATTERY = [
+    "accessibility",
+    "api-design",
+    "contracts",
+    "observability-fe",
+    "usability",
+]
 
 
 def test_security_agent_spec():
@@ -211,6 +217,19 @@ def test_observability_split_infra():
     assert "observability-infra" in active_agents("pull_request")
     # not on push (file-trigger, on_push defaults False) — keeps the curated push subset.
     assert "observability-infra" not in active_agents("push")
+
+
+def test_observability_fe_registered_and_battery_gated():
+    from framework_cli.review.registry import active_agents, get_agent
+
+    spec = get_agent("observability-fe")
+    assert spec.name == "review-observability-fe"
+    assert spec.active_when == "battery"
+    assert spec.block_threshold == "high"
+    assert spec.context.strategy == "agentic"
+    # inactive without the react battery; active with it (PR event)
+    assert "observability-fe" not in active_agents("pull_request", batteries=[])
+    assert "observability-fe" in active_agents("pull_request", batteries=["react"])
 
 
 def test_observability_split_db():
