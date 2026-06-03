@@ -1,6 +1,9 @@
 """Frontend RUM battery — unit tests for the in-process metrics (hermetic)."""
 
+from fastapi.testclient import TestClient
+
 from {{ package_name }}.frontend_rum.metrics import FrontendMetrics
+from {{ package_name }}.main import create_app
 
 
 def test_web_vital_histograms_observe_and_render() -> None:
@@ -100,3 +103,126 @@ def test_reset_clears() -> None:
     out = m.render_prometheus()
     assert "app_frontend_web_vitals_lcp_milliseconds_count 0" in out
     assert "app_frontend_js_errors_total" not in out  # no error labels after reset
+
+
+def _client() -> TestClient:
+    from {{ package_name }}.frontend_rum.metrics import frontend_metrics
+
+    frontend_metrics.reset()
+    return TestClient(create_app())
+
+
+def test_ingest_accepts_and_folds_events() -> None:
+    client = _client()
+    resp = client.post(
+        "/internal/rum",
+        json={
+            "events": [
+                {"kind": "vital", "name": "lcp", "value": 1800.0},
+                {"kind": "error", "type": "unhandledrejection"},
+                {
+                    "kind": "pageview",
+                    "path": "/items",
+                    "params": {"utm_source": "google"},
+                    "referrer": "ex.com",
+                },
+            ]
+        },
+    )
+    assert resp.status_code == 204
+    body = client.get("/metrics").text
+    assert "app_frontend_web_vitals_lcp_milliseconds_count 1" in body
+    assert 'app_frontend_js_errors_total{type="unhandledrejection"} 1' in body
+    assert 'app_frontend_page_views_total{route="/items"} 1' in body
+    assert 'app_frontend_rum_beacons_total{status="accepted"} 1' in body
+
+
+def test_ingest_strips_query_string_from_path() -> None:
+    client = _client()
+    client.post(
+        "/internal/rum",
+        json={
+            "events": [
+                {
+                    "kind": "pageview",
+                    "path": "/search?q=secret",
+                    "params": {},
+                    "referrer": None,
+                },
+            ]
+        },
+    )
+    body = client.get("/metrics").text
+    assert 'route="/search"' in body
+    assert "secret" not in body  # query string never enters the series
+
+
+def test_ingest_drops_non_allowlisted_params() -> None:
+    client = _client()
+    client.post(
+        "/internal/rum",
+        json={
+            "events": [
+                {
+                    "kind": "pageview",
+                    "path": "/",
+                    "params": {"utm_source": "google", "email": "a@b.co"},
+                    "referrer": None,
+                },
+            ]
+        },
+    )
+    body = client.get("/metrics").text
+    assert 'utm_source="google"' in body
+    assert "a@b.co" not in body  # email is not in the allowlist -> dropped
+
+
+def test_ingest_rejects_malformed_without_500() -> None:
+    client = _client()
+    resp = client.post("/internal/rum", content=b"not json")
+    assert resp.status_code == 204  # never leak a 5xx to the browser
+    assert (
+        'app_frontend_rum_beacons_total{status="rejected"} 1'
+        in client.get("/metrics").text
+    )
+
+
+def test_ingest_caps_event_count() -> None:
+    client = _client()
+    resp = client.post(
+        "/internal/rum",
+        json={"events": [{"kind": "error", "type": "error"} for _ in range(200)]},
+    )
+    assert resp.status_code == 204  # over-long batch is rejected, not processed
+    assert (
+        'app_frontend_rum_beacons_total{status="rejected"} 1'
+        in client.get("/metrics").text
+    )
+
+
+def test_ingest_folds_into_singleton_directly() -> None:
+    from {{ package_name }}.frontend_rum.metrics import frontend_metrics
+
+    frontend_metrics.reset()
+    client = TestClient(create_app())
+    resp = client.post(
+        "/internal/rum",
+        json={
+            "events": [
+                {
+                    "kind": "pageview",
+                    "path": "/x?utm_source=g&drop=me",
+                    "params": {"utm_source": "g", "drop": "me"},
+                    "referrer": None,
+                },
+                {"kind": "error", "type": "error"},
+            ]
+        },
+    )
+    assert resp.status_code == 204
+    out = frontend_metrics.render_prometheus()
+    assert 'app_frontend_page_views_total{route="/x"} 1' in out  # query stripped
+    assert (
+        'utm_source="g"' in out and "drop" not in out
+    )  # allowlist applied server-side
+    assert 'app_frontend_js_errors_total{type="error"} 1' in out

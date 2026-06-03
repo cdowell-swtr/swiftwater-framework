@@ -65,6 +65,19 @@ class Settings(BaseSettings):
     # Downstream inventory service (Pact consumer demo). Override per environment.
     inventory_url: str = "http://inventory:8080"
 {%- endif %}
+{%- if "react" in batteries %}
+
+    # Frontend RUM: query-string params captured for attribution (fail-closed allowlist).
+    # Defaults to the UTM set; the backend re-applies this on ingest (never trusts the browser).
+    # Adding a PII-bearing key here (e.g. "email") is flagged by review-privacy.
+    frontend_rum_allowed_query_params: list[str] = [
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+    ]
+{%- endif %}
 
     @property
     def resolved_log_level(self) -> str:

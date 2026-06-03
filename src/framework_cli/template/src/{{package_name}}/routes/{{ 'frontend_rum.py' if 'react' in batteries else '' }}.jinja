@@ -1,0 +1,51 @@
+"""Frontend RUM ingest. A public, unauthenticated beacon endpoint (browsers hit it before
+any login), so it is hardened: strict schema + bounded event count, no free-text stored, a
+fail-closed query-param allowlist re-applied here (the browser is never trusted), and malformed
+payloads are counted + dropped rather than 500'd. Auto-discovered by routes/__init__.py."""
+
+from fastapi import APIRouter, Request, Response
+from pydantic import BaseModel, Field
+
+from {{ package_name }}.frontend_rum.metrics import frontend_metrics
+
+router = APIRouter()
+
+_MAX_EVENTS = 64
+
+
+class RumEvent(BaseModel):
+    model_config = {"extra": "ignore"}
+
+    kind: str
+    name: str | None = None
+    value: float | None = None
+    type: str | None = None
+    path: str | None = None
+    params: dict[str, str] = Field(default_factory=dict)
+    referrer: str | None = None
+
+
+class RumBeacon(BaseModel):
+    events: list[RumEvent] = Field(default_factory=list, max_length=_MAX_EVENTS)
+
+
+@router.post("/internal/rum", status_code=204)
+async def ingest_rum(request: Request) -> Response:
+    allow = set(request.app.state.settings.frontend_rum_allowed_query_params)
+    try:
+        beacon = RumBeacon.model_validate(await request.json())
+    except Exception:
+        frontend_metrics.record_beacon("rejected")
+        return Response(status_code=204)
+
+    for ev in beacon.events:
+        if ev.kind == "vital" and ev.name and ev.value is not None:
+            frontend_metrics.observe_web_vital(ev.name, ev.value)
+        elif ev.kind == "error" and ev.type:
+            frontend_metrics.record_error(ev.type)
+        elif ev.kind == "pageview":
+            path = (ev.path or "/").split("?", 1)[0].split("#", 1)[0]
+            params = {k: v for k, v in ev.params.items() if k in allow}
+            frontend_metrics.record_page_view(path, params, ev.referrer)
+    frontend_metrics.record_beacon("accepted")
+    return Response(status_code=204)
