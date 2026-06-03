@@ -2188,7 +2188,9 @@ def test_render_timescaledb_battery(tmp_path):
     assert "create_hypertable" in mig
     assert 'down_revision = "0001"' in mig
     df = (dest / "infra" / "docker" / "postgres.Dockerfile").read_text()
-    assert "timescaledb-2-postgresql-17" in df
+    # timescaledb is COPYed from the pinned -ha image (no packagecloud apt) — Plan 15
+    assert "COPY --from=timescale/timescaledb-ha:pg17.10-ts2.27.1" in df
+    assert "packagecloud.io" not in df  # the flaky apt source is gone
     dev = (dest / "infra" / "compose" / "dev.yml").read_text()
     assert "shared_preload_libraries=timescaledb" in dev
     # prod + staging carry the same shared_preload_libraries command (regression guard)
@@ -3085,18 +3087,20 @@ def test_timescaledb_copies_from_prebuilt_image_no_packagecloud(tmp_path):
     dest = tmp_path / "p"
     render_project(dest, {**DATA, "batteries": ["timescaledb"]})
     df = (dest / "infra" / "docker" / "postgres.Dockerfile").read_text()
-    assert "COPY --from=timescale/timescaledb-ha:pg17" in df  # timescaledb COPY'd from prebuilt
-    assert "packagecloud.io" not in df                        # the flaky apt is gone
-    assert "FROM postgres:17" in df                           # base unchanged (COPY, not a swap)
+    assert (
+        "COPY --from=timescale/timescaledb-ha:pg17" in df
+    )  # timescaledb COPY'd from prebuilt
+    assert "packagecloud.io" not in df  # the flaky apt is gone
+    assert "FROM postgres:17" in df  # base unchanged (COPY, not a swap)
 
 
 def test_non_timescaledb_extension_keeps_postgres_base(tmp_path):
     dest = tmp_path / "p"
     render_project(dest, {**DATA, "batteries": ["pgvector"]})
     df = (dest / "infra" / "docker" / "postgres.Dockerfile").read_text()
-    assert "FROM postgres:17" in df               # unchanged for non-timescaledb
+    assert "FROM postgres:17" in df  # unchanged for non-timescaledb
     assert "timescaledb-ha" not in df
-    assert "postgresql-17-pgvector" in df          # pgvector PGDG apt retained
+    assert "postgresql-17-pgvector" in df  # pgvector PGDG apt retained
 
 
 def test_age_copy_present_on_both_bases(tmp_path):
