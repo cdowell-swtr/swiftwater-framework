@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from framework_cli.copier_runner import render_project  # noqa: E402
 from framework_cli.integrity.generate import write_manifest  # noqa: E402
+from framework_cli.lockfile import write_lockfile  # noqa: E402
 from framework_cli.naming import derive_names  # noqa: E402
 from framework_cli.dogfood import (  # noqa: E402
     ALL_BATTERIES,
@@ -101,19 +102,7 @@ def render(config: DogfoodConfig, dest: Path) -> None:
     version = DOGFOOD_COMMIT.lstrip("v")
     write_manifest(dest, version)  # generates .framework/integrity.lock
     record_portable_source(dest, version)  # pins _commit to the published tag
-
-
-def prepare_project(config: DogfoodConfig, project: Path) -> None:
-    """Replicate the builder's documented pre-push setup so the committed tree matches what
-    the generated ci.yml's `uv sync --frozen` / openapi-staleness / graphql-staleness checks
-    require: `uv sync` (-> uv.lock) + export openapi.json (+ schema.graphql for graphql).
-    `framework new` does not (yet) generate these — that push-readiness gap is a tracked
-    follow-up; the dogfood proves the pipeline green for a correctly-set-up project."""
-    log("preparing project: uv sync + export openapi (+ graphql) schema")
-    sh(["uv", "sync"], cwd=str(project))
-    sh(["bash", "scripts/export-openapi.sh"], cwd=str(project))
-    if "graphql" in config.batteries:
-        sh(["bash", "scripts/export-graphql-schema.sh"], cwd=str(project))
+    write_lockfile(dest)  # mirror `framework new`: ship a committed uv.lock
 
 
 def expected_agents(config: DogfoodConfig) -> list[str]:
@@ -316,7 +305,6 @@ def run_config(config: DogfoodConfig, with_key: bool) -> RunResult:
         project = Path(tmp) / "render"
         log(f"rendering {config.name} ({len(config.batteries)} batteries) at {project}")
         render(config, project)
-        prepare_project(config, project)
         ensure_repo()
         reset_repo()  # idempotent pre-clean: close any stale dogfood-pr from a crashed run
         if with_key:
