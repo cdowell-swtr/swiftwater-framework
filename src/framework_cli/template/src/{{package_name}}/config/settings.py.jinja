@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://otel-collector:4317"
 
+    # Serve the built SPA (frontend/dist) at "/" when present (react battery). The mount is a
+    # catch-all, so set this False in tests/headless that register routes after create_app()
+    # to keep those routes from being shadowed.
+    serve_spa: bool = True
+
     # Database connection (SQLAlchemy URL). The Compose stack injects the in-network URL
     # via APP_DATABASE_URL; host tooling (alembic) uses the localhost form; tests use a
     # testcontainers Postgres (overridden per session).

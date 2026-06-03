@@ -43,7 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from pathlib import Path
 
     _dist = Path("frontend/dist")
-    if _dist.exists():
+    if settings.serve_spa and _dist.exists():
         from fastapi.staticfiles import StaticFiles
 
         # Serve the built SPA at / (index.html fallback for client-side routing). Mounted last so

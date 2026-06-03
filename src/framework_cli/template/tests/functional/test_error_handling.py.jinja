@@ -18,7 +18,12 @@ class _Positive(BaseModel):
 
 
 def _app_with_failing_routes() -> FastAPI:
-    app = create_app()
+    from {{ package_name }}.config.settings import Settings
+
+    # serve_spa=False so the SPA "/" catch-all is never mounted — otherwise a built
+    # frontend/dist (e.g. from a prior `npm run build` in this tree) would shadow the
+    # routes registered below.
+    app = create_app(Settings(serve_spa=False))
 
     @app.get("/boom")
     def boom() -> None:
@@ -37,6 +42,18 @@ def _app_with_failing_routes() -> FastAPI:
         return {"n": body.n}
 
     return app
+
+
+def test_built_spa_does_not_shadow_error_routes(tmp_path, monkeypatch):
+    # Regression: the SPA static mount is a "/" catch-all that, if present, would shadow API
+    # and error routes registered on the app. Gating it on settings.serve_spa keeps the
+    # handlers reachable even when a built frontend/dist exists (e.g. build-then-test in one
+    # tree). Simulate a built SPA, then confirm error handling still resolves.
+    (tmp_path / "frontend" / "dist").mkdir(parents=True)
+    (tmp_path / "frontend" / "dist" / "index.html").write_text("<!doctype html>")
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(_app_with_failing_routes(), raise_server_exceptions=False)
+    assert client.get("/boom").status_code == 500
 
 
 def test_unhandled_exception_returns_problem_json():
