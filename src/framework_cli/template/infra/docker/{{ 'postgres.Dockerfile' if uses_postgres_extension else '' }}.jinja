@@ -12,20 +12,14 @@ RUN apt-get -o Acquire::Retries=5 update \
 {%- endif %}
 {%- if "timescaledb" in batteries %}
 
-# TimescaleDB — hypertables / time-series (Timescale apt repo; not in PGDG). Requires
-# shared_preload_libraries=timescaledb at runtime (set via the compose `command:`).
-# Acquire::Retries + wget --tries harden against transient packagecloud/apt hiccups (the
-# Timescale apt repo intermittently 5xx/times-out, which would otherwise fail the image build).
-RUN apt-get -o Acquire::Retries=5 update \
- && apt-get -o Acquire::Retries=5 install -y --no-install-recommends gnupg wget lsb-release ca-certificates \
- && echo "deb [signed-by=/etc/apt/trusted.gpg.d/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" \
-      > /etc/apt/sources.list.d/timescaledb.list \
- && wget --quiet --tries=3 --retry-connrefused --waitretry=2 -O - https://packagecloud.io/timescale/timescaledb/gpgkey \
-      | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescaledb.gpg \
- && apt-get -o Acquire::Retries=5 update \
- && apt-get -o Acquire::Retries=5 install -y --no-install-recommends timescaledb-2-postgresql-17 \
- && apt-get purge -y --auto-remove gnupg wget lsb-release \
- && rm -rf /var/lib/apt/lists/*
+# TimescaleDB — COPY the prebuilt extension from the official Timescale HA image (pinned) instead
+# of the flaky build-time packagecloud apt. The .so are built on the -ha image's older glibc
+# (Ubuntu 22.04 / 2.35) and load fine on this newer postgres:17 base (glibc is backward-compatible).
+# Requires shared_preload_libraries=timescaledb at runtime (set via the compose `command:`).
+COPY --from=timescale/timescaledb-ha:pg17.10-ts2.27.1 /usr/lib/postgresql/17/lib/timescaledb.so /usr/lib/postgresql/17/lib/
+COPY --from=timescale/timescaledb-ha:pg17.10-ts2.27.1 /usr/lib/postgresql/17/lib/timescaledb-*.so /usr/lib/postgresql/17/lib/
+COPY --from=timescale/timescaledb-ha:pg17.10-ts2.27.1 /usr/share/postgresql/17/extension/timescaledb.control /usr/share/postgresql/17/extension/
+COPY --from=timescale/timescaledb-ha:pg17.10-ts2.27.1 /usr/share/postgresql/17/extension/timescaledb--*.sql /usr/share/postgresql/17/extension/
 {%- endif %}
 {%- if "age" in batteries %}
 

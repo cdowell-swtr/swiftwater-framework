@@ -3079,3 +3079,29 @@ def test_contract_job_self_seeds_graphql_schema_when_untracked(tmp_path: Path):
     ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
     assert "git ls-files --error-unmatch schema.graphql" in ci
     assert "steps.gqlspec.outputs.schema_tracked == 'true'" in ci
+
+
+def test_timescaledb_copies_from_prebuilt_image_no_packagecloud(tmp_path):
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": ["timescaledb"]})
+    df = (dest / "infra" / "docker" / "postgres.Dockerfile").read_text()
+    assert "COPY --from=timescale/timescaledb-ha:pg17" in df  # timescaledb COPY'd from prebuilt
+    assert "packagecloud.io" not in df                        # the flaky apt is gone
+    assert "FROM postgres:17" in df                           # base unchanged (COPY, not a swap)
+
+
+def test_non_timescaledb_extension_keeps_postgres_base(tmp_path):
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": ["pgvector"]})
+    df = (dest / "infra" / "docker" / "postgres.Dockerfile").read_text()
+    assert "FROM postgres:17" in df               # unchanged for non-timescaledb
+    assert "timescaledb-ha" not in df
+    assert "postgresql-17-pgvector" in df          # pgvector PGDG apt retained
+
+
+def test_age_copy_present_on_both_bases(tmp_path):
+    for bats in (["age"], ["timescaledb", "age"]):
+        dest = tmp_path / ("p_" + "_".join(bats))
+        render_project(dest, {**DATA, "batteries": bats})
+        df = (dest / "infra" / "docker" / "postgres.Dockerfile").read_text()
+        assert "apache/age:release_PG17_1.6.0" in df
