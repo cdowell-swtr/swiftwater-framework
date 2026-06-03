@@ -40,10 +40,11 @@ It reuses the framework's own render path to generate projects and the `gh` CLI 
 | Decision | Choice |
 |---|---|
 | Deliverable form | Operator-run harness + dated scorecard (Option A). |
-| Configs dogfooded | **Two**: `baseline` + `all-batteries`. |
+| Configs dogfooded | **Two**: `baseline` + `all-batteries` (maximal: react + consumers + graphql + workers + webhooks + websockets + the db-paradigm batteries). |
 | Review-matrix secret | **Configurable, default no-key.** Default run → review jobs neutral; `--with-review-key` sets the repo secret for a deliberate paid full-path run. |
 | Repo strategy | **One dedicated public repo** `swiftwater-dogfood` under `cdowell-swtr`, reset between the two configs. Public → free unlimited GHA minutes. |
 | gitleaks | Runs free (personal account, no `GITLEAKS_LICENSE` needed) → expected `success`. |
+| Release tag | **Cut & push `v0.1.1` first** (plan task 0): push current `master` to origin, tag `v0.1.1`, push the tag (`release.yml` publishes it). Harness pins `_commit: v0.1.1` so it dogfoods the *current* template — a green run proves today's code. |
 
 ## End-to-end flow
 
@@ -59,40 +60,50 @@ This proves **both** the `on: push` and `on: pull_request` paths.
 
 ## Assertion model
 
-Per run, each job is classified by its expected conclusion:
+The "neutral" the review path produces lives in the **GitHub Check Runs**, *not* the workflow-job conclusions. Verified in `cli.py::review`: with no key the command posts a **neutral Check Run** but `raise typer.Exit(0)`, so the workflow **job** concludes `success`; with a key and blocking findings it `Exit(1)` → job `failure`. So the harness asserts on **two surfaces**:
 
-- **Expected `success`** — always-on: `integrity`, `lint`, `security` (gitleaks free on personal account), `test`, `build`, `contract`. Plus, when the config includes the battery: `frontend` (react), `contracts` (consumers/Pact).
-- **Expected `neutral` / `skipped`** by default (no key): the `review` matrix jobs and `review-aggregate`. With `--with-review-key`, the harness sets the `ANTHROPIC_SWIFTWATER_DOGFOOD_CI_RUNTIME` repo secret (from the operator's local `ANTHROPIC_RUNTIME_API_KEY`) and these flip to **expected `success`**.
+**Surface 1 — workflow jobs** (`gh run view --json jobs`): every expected job is **present and `success`**.
+- Always-on: `integrity`, `lint`, `security` (gitleaks free on a personal account), `test`, `build`, `contract`, `review-plan`, the `review (<agent>)` matrix jobs, `review-aggregate`.
+- Conditional (all-batteries only): `frontend` (react), `contracts` (consumers/Pact).
+- Any expected job missing, or any job not `success`, → **fail loudly** (print job name + GHA log URL).
 
-The harness **fails loudly** if any expected-`success` job is not green, or if any review job concluded `failure` (rather than the allowed neutral/skip). It prints the offending job name and a link to its GHA logs. Note the push run does not include the PR-only jobs (oasdiff/graphql breaking-change steps, full review matrix) — the expected-job set is **per-trigger** (push vs pull_request) as well as per-config.
+**Surface 2 — review Check Runs** (`gh api .../commits/<sha>/check-runs` or `gh pr checks`): the `review-*` checks prove the secret-gated behavior.
+- **Default (no key):** every `review-*` check is **`neutral`** (the graceful no-key path). A `failure` here is a real regression of that path → fail loudly.
+- **`--with-review-key`:** the harness sets the `ANTHROPIC_SWIFTWATER_DOGFOOD_CI_RUNTIME` repo secret from the operator's local `ANTHROPIC_RUNTIME_API_KEY`; the `review-*` checks are then `success` or `neutral` (no blocking findings expected on a benign README diff). A `failure` means an agent flagged the benign change as blocking — surfaced as a warning for the operator to inspect, not a harness hard-fail.
+
+Both the push-triggered run and the PR-triggered run are watched and asserted (surface 1 on both; surface 2 on the PR run, where the full matrix + posted checks live). The PR-only oasdiff/graphql breaking-change logic lives in *steps inside* the `contract` job (guarded `if: github.event_name == 'pull_request'`), so it is exercised by the PR run without adding a distinct job name.
 
 ## Module decomposition
 
-Designed for isolation and a clean TDD boundary (pure logic tested hermetically; imperative shell exercised live).
+Refines the brainstorm's `scripts/dogfood_e2e/{config,verdict,gh}.py` layout: the **pure** logic lives in `src/framework_cli/dogfood.py` (following the `devmatrix.py` precedent — framework-internal dogfooding logic that lives in the CLI package and therefore gets the repo's mypy/ruff/pytest rigor), and the **imperative** orchestrator + `gh`/git shell live in `scripts/dogfood_e2e.py`. Clean TDD boundary: pure logic tested hermetically in the normal suite; the shell exercised by the live run.
 
-- `scripts/dogfood_e2e/config.py` — the two `DogfoodConfig`s: battery list, the per-trigger expected job sets, and which jobs are secret-gated. Pure data + small helpers.
-- `scripts/dogfood_e2e/verdict.py` — **pure** assertion logic: `(jobs_json, config, trigger, with_key) -> Verdict`. No I/O. Fully unit-tested against captured `gh run view --json` fixtures, including a neutral-review payload and a synthetic red-job payload.
-- `scripts/dogfood_e2e/gh.py` — thin imperative shell over `gh` + `git` subprocess calls: render, ensure-repo, force-reset+push, open-PR, watch-run, set/clear repo secret, reset/cleanup. Not unit-tested; exercised by the live run.
-- `scripts/dogfood_e2e.py` — the orchestrator: argument parsing, the per-config loop, scorecard emission.
+- `src/framework_cli/dogfood.py` — **pure, fully unit-tested:**
+  - `DogfoodConfig` (battery list + the expected workflow-job set incl. conditionals) and the two instances `BASELINE` + `ALL_BATTERIES`.
+  - `parse_jobs(gh_run_json) -> list[Job]` and `parse_checks(gh_checks_json) -> list[CheckRun]` — normalize the `gh ... --json` payloads.
+  - `classify_jobs(jobs, config) -> JobVerdict` — surface 1: every expected job present + `success`.
+  - `classify_review_checks(checks, with_key) -> CheckVerdict` — surface 2: `review-*` checks neutral (no key) / success-or-neutral (with key).
+  - `render_scorecard(results) -> str` — the dated-scorecard markdown.
+  - `Verdict`/`JobVerdict`/`CheckVerdict` dataclasses (`ok: bool`, `failures: list[str]`, `warnings: list[str]`).
+- `scripts/dogfood_e2e.py` — the imperative orchestrator + thin `gh`/git shell: argument parsing, render (`render_project` + `record_portable_source(dest, "0.1.1")`), ensure-repo, force-reset+push, open benign-no-op PR, watch both runs, fetch jobs + check-runs JSON, set/clear the review secret, reset/cleanup, and write the scorecard. Pure helpers (argv construction, the benign-edit) get light unit tests; the network I/O is exercised by the live run.
 
 ## TDD boundary
 
 The working agreement requires TDD. Network / `gh` orchestration cannot be hermetically tested, so the boundary is explicit:
 
-- **Full TDD** for `config.py` + `verdict.py` (failing test first, against captured-fixture job payloads — neutral-review, all-green, and a synthetic red-job case; plus per-trigger expected-set computation). These tests run in the normal hermetic suite.
-- The `gh.py` shell + orchestrator are validated by the **live run itself** — the harness *is* the test of the generated pipeline. The first green live run is recorded in a dated scorecard.
+- **Full TDD** for `framework_cli/dogfood.py` (failing test first, against captured-fixture `gh` payloads — all-green jobs, a synthetic red-job, neutral-review checks, with-key success checks, and a missing-expected-job case). These tests run in the normal hermetic suite (`tests/test_dogfood.py`) and are covered by the repo's mypy/ruff gates.
+- The `scripts/dogfood_e2e.py` shell + orchestrator are validated by the **live run itself** — the harness *is* the test of the generated pipeline. The first green live run is recorded in a dated scorecard.
 
 ## Deliverables
 
-- `scripts/dogfood_e2e.py` + the `scripts/dogfood_e2e/` package (`config.py`, `verdict.py`, `gh.py`).
-- Hermetic unit tests for `verdict.py` / `config.py` (in the normal suite).
+- `src/framework_cli/dogfood.py` (pure logic) + `scripts/dogfood_e2e.py` (orchestrator + `gh`/git shell).
+- Hermetic unit tests `tests/test_dogfood.py` (in the normal suite).
 - A short runbook under `docs/` (or the scorecard README): prerequisites (`gh` auth with `repo` + `workflow` scopes; the `swiftwater-dogfood` repo; `v0.1.0` reachable on origin), how to run, the `--with-review-key` opt-in, and cost notes (free by default; paid only on the opt-in review run).
 - The first dated green scorecard under `docs/superpowers/eval-scorecards/dogfood-e2e-<date>/` (run URLs + per-job conclusions for both configs, both triggers) — the proof-of-green artifact.
 - Meta-plan status-table + CLAUDE.md Current State updates on merge.
 
 ## Risks / open edges
 
-- **`v0.1.0` integrity match.** Integrity step-0 installs the framework at `v0.1.0` and runs `framework integrity --ci`. The rendered project's integrity manifest must match what the *installed `v0.1.0` CLI* expects. If the bundled template has drifted from `v0.1.0` since the tag, a fresh render at `HEAD` could mismatch. Mitigation: render with the `v0.1.0`-bundled template path, or accept that the first dogfood run validates exactly the `v0.1.0` contract and bump the pin when a newer tag ships. The plan resolves the exact render source as task 1.
+- **Integrity tag match (resolved).** Integrity step-0 installs the framework at the recorded `_commit` tag and runs `framework integrity --ci`; the rendered manifest must match what the *installed* CLI expects. Resolved by **plan task 0**: push current `master` to origin and cut+push **`v0.1.1`** so the installed CLI and the rendered template are the same code — the harness renders at `HEAD` and pins `_commit: v0.1.1`. A green run therefore proves today's template (covers Plan 12), not a stale tag.
 - **GHA minutes / wall-clock.** All-batteries adds Playwright browser downloads + a Docker image build; runs can take many minutes. The harness polls with a generous timeout and surfaces the run URL so the operator can watch.
 - **Benign-change correctness.** The PR's no-op edit must not perturb `openapi.json` / `schema.graphql` (else the contract staleness check fails for the wrong reason). A comment-only edit to a non-route Python file satisfies this; the plan pins the exact file/edit.
 - **Secret hygiene.** `--with-review-key` reads `ANTHROPIC_RUNTIME_API_KEY` from the operator's env and sets it as a repo secret via `gh secret set` (never echoed). The harness does not print key material. The repo being public does not expose the secret (GitHub secrets are not readable from a public repo's logs/forks).
