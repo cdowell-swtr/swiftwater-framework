@@ -1386,6 +1386,11 @@ def test_rendered_react_battery_passes(tmp_path: Path):
 
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["react"]})
+    # `framework new` ships a uv.lock (write_lockfile); mirror that here so the multi-stage
+    # Dockerfile's `COPY uv.lock` + `uv sync --frozen` work in the prod image build below.
+    from framework_cli.lockfile import write_lockfile
+
+    assert write_lockfile(dest), "uv lock failed in the rendered react project"
     assert (dest / "frontend" / "package.json").exists()
     if shutil.which("npm"):
         assert subprocess.run(["npm", "ci"], cwd=dest / "frontend").returncode == 0
