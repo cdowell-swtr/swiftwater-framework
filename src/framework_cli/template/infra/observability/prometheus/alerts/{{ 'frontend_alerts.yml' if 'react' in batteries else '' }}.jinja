@@ -1,0 +1,20 @@
+groups:
+- name: frontend
+  rules:
+  - alert: FrontendLCPDegraded
+    # p75 Largest Contentful Paint over the 2.5s "good" threshold for 15m. histogram_quantile
+    # over the bucket rate; app-specific default — tune the budget or remove.
+    expr: histogram_quantile(0.75, sum(rate(app_frontend_web_vitals_lcp_milliseconds_bucket[10m])) by (le)) > 2500
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: Frontend LCP p75 over 2.5s for 15m (slow loads for real users) — tune the budget or remove
+  - alert: FrontendErrorSpike
+    # Uncaught JS error rate elevated. The floor avoids firing on a single stray error.
+    expr: sum(rate(app_frontend_js_errors_total[5m])) > 0.2
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Frontend uncaught JS error rate elevated for 10m — investigate a recent deploy; tune the threshold or remove

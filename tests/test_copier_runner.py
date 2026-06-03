@@ -1003,6 +1003,27 @@ def test_render_with_websockets_battery(tmp_path: Path):
     assert "router" in (dest / "src" / "demo" / "routes" / "websockets.py").read_text()
 
 
+def test_render_frontend_obs_artifacts(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    alerts = dest / "infra/observability/prometheus/alerts/frontend_alerts.yml"
+    dash = dest / "infra/observability/grafana/dashboards/frontend.json"
+    assert alerts.is_file()
+    assert "FrontendLCPDegraded" in alerts.read_text()
+    assert dash.is_file()
+    assert '"uid": "frontend"' in dash.read_text()
+    # in-process surface: no new scrape job
+    prom = (dest / "infra/observability/prometheus/prometheus.yml").read_text()
+    assert "job_name: frontend" not in prom
+
+
+def test_render_without_react_has_no_frontend_obs(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / "infra/observability/prometheus/alerts/frontend_alerts.yml").exists()
+    assert not (dest / "infra/observability/grafana/dashboards/frontend.json").exists()
+
+
 def test_render_without_webhooks_battery(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
