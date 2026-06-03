@@ -10,6 +10,7 @@ sanitized. No free-text (error messages, full URLs, query strings) is ever store
 
 from __future__ import annotations
 
+import math
 import re
 import threading
 
@@ -102,7 +103,9 @@ class FrontendMetrics:
 
     def observe_web_vital(self, name: str, value: float) -> None:
         key = name.lower()
-        if key not in self._vitals:
+        # Drop unknown vitals and non-finite values (inf/nan would poison the histogram
+        # _sum irrecoverably — this is a public endpoint, never trust the submitted number).
+        if key not in self._vitals or not math.isfinite(value):
             return
         with self._lock:
             self._vitals[key].observe(value)
