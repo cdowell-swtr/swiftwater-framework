@@ -27,5 +27,5 @@ by two tests that raw-scan every `uses:` on both surfaces:
 
 ## Verified versions (2026-06-04)
 
-checkout@v5 · setup-uv@v6 · setup-node@v6 · upload-artifact@v6 · download-artifact@v7 ·
+checkout@v5 · setup-uv@v7 · setup-node@v6 · upload-artifact@v6 · download-artifact@v7 ·
 action-gh-release@v3 · arduino/setup-task@v2 (node20-forced) · oasdiff/gitleaks (docker).

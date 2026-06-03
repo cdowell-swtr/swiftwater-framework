@@ -43,7 +43,7 @@ jobs:
       DEPLOY_HOSTS: ${{ vars.DEPLOY_HOSTS }}
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --frozen
       - name: deploy (your configured strategy)
         run: bash infra/deploy/strategy.sh deploy

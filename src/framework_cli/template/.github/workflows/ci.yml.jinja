@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: install the framework CLI at the recorded version
         run: |
           ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run ruff format --check .
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --frozen
       - name: pip-audit (fail on known CVEs)
         run: uv run pip-audit
@@ -68,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --frozen
       - name: unit + functional + e2e (contexts) + combined >=85% gate
         run: bash scripts/coverage.sh 85 unit functional e2e
@@ -129,7 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --frozen
       - name: provider verification (Pact)
         run: uv run pytest tests/contract/test_provider_pact.py -q
@@ -149,7 +149,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --frozen
       - id: spec
         name: openapi.json — seed if absent, enforce if committed
@@ -226,7 +226,7 @@ jobs:
       agents: {% raw %}${{ steps.list.outputs.agents }}{% endraw %}
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: install the framework CLI at the recorded version
         run: |
           ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
@@ -249,7 +249,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: install the framework CLI at the recorded version
         run: |
           ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"
@@ -279,7 +279,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: install the framework CLI at the recorded version
         run: |
           ref="$(awk '/^_commit:/ {print $2}' .copier-answers.yml)"

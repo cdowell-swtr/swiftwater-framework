@@ -21,7 +21,7 @@ jobs:
       agents: ${{ steps.list.outputs.agents }}
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync
       - id: list
         run: echo "agents=$(uv run framework review-agents --target framework)" >> "$GITHUB_OUTPUT"
@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync
       - name: review ${{ matrix.agent }} --target framework
         env:
@@ -65,7 +65,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync
       - uses: actions/download-artifact@v7
         with:

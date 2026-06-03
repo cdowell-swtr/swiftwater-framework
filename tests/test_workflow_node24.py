@@ -20,7 +20,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #                     Tracked exception — revisit before the 2026-09-16 Node-20 removal.
 APPROVED_ACTIONS: dict[str, dict] = {
     "actions/checkout": {"runtime": "node", "min_major": 5},
-    "astral-sh/setup-uv": {"runtime": "node", "min_major": 6},
+    "astral-sh/setup-uv": {
+        "runtime": "node",
+        "min_major": 7,
+    },  # node24 only from v7 (v6 is node20)
     "actions/setup-node": {"runtime": "node", "min_major": 6},
     "actions/upload-artifact": {"runtime": "node", "min_major": 6},
     "actions/download-artifact": {"runtime": "node", "min_major": 7},
