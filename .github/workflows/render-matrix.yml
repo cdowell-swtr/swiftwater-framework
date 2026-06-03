@@ -22,8 +22,8 @@ jobs:
     outputs:
       combos: ${{ steps.gen.outputs.combos }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - run: uv sync
       - id: gen
         env:
@@ -43,15 +43,15 @@ jobs:
         combo: ${{ fromJSON(needs.generate-matrix.outputs.combos) }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - uses: arduino/setup-task@v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Node (react combos only)
         if: contains(matrix.combo.batteries, 'react')
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
       - run: uv sync
