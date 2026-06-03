@@ -30,7 +30,7 @@ def pg_url() -> Iterator[str]:
     """A real Postgres started for the test session. Fails (not skips) without Docker.
 
     The image build + container start is retried with backoff so a transient
-    image-registry / apt-mirror hiccup (Docker Hub or packagecloud 5xx/timeout) doesn't
+    image-registry / apt-mirror hiccup (Docker Hub pull or PGDG apt 5xx/timeout) doesn't
     flake CI — only a persistent failure (no Docker, broken image) actually fails."""
     from testcontainers.postgres import PostgresContainer
 {%- if uses_postgres_extension %}

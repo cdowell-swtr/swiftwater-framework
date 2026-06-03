@@ -1299,7 +1299,7 @@ def test_rendered_timescaledb_battery_passes(tmp_path: Path):
     reason="uv + docker required: builds the all-extension Postgres image (pgvector+timescaledb+age)",
 )
 def test_rendered_all_extensions_chain_passes(tmp_path: Path):
-    # The custom image installs pgvector (apt) + timescaledb (apt) + AGE (multi-stage COPY) together,
+    # The custom image installs pgvector (apt) + timescaledb (multi-stage COPY) + AGE (multi-stage COPY) together,
     # alembic walks 0001->0004(pgvector)->0005(timescaledb)->0006(age create_graph), and all three
     # functional tests (vectors, timeseries, graph) run against the one live image.
     dest = tmp_path / "demo"
