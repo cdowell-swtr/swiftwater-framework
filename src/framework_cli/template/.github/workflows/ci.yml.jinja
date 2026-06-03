@@ -166,8 +166,13 @@ jobs:
             echo "openapi_tracked=false" >> "$GITHUB_OUTPUT"
             echo "::notice::openapi.json is not committed — generated for this run. Commit it to track the API contract and enable breaking-change diffs."
           fi
+          if curl -sfI "https://raw.githubusercontent.com/{% raw %}${{ github.repository }}/${{ github.base_ref }}{% endraw %}/openapi.json" >/dev/null 2>&1; then
+            echo "base_has_openapi=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "base_has_openapi=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: breaking-change check (oasdiff)
-        if: {% raw %}${{ github.event_name == 'pull_request' && steps.spec.outputs.openapi_tracked == 'true' }}{% endraw %}
+        if: {% raw %}${{ github.event_name == 'pull_request' && steps.spec.outputs.openapi_tracked == 'true' && steps.spec.outputs.base_has_openapi == 'true' }}{% endraw %}
         uses: oasdiff/oasdiff-action/breaking@v0.0.21
         with:
           base: https://raw.githubusercontent.com/{% raw %}${{ github.repository }}/${{ github.base_ref }}{% endraw %}/openapi.json

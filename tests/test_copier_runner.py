@@ -3105,3 +3105,12 @@ def test_age_copy_present_on_both_bases(tmp_path):
         render_project(dest, {**DATA, "batteries": bats})
         df = (dest / "infra" / "docker" / "postgres.Dockerfile").read_text()
         assert "apache/age:release_PG17_1.6.0" in df
+
+
+def test_oasdiff_gated_on_base_spec_existence(tmp_path):
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": []})
+    ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
+    assert "base_has_openapi=true" in ci and "base_has_openapi=false" in ci
+    assert "curl -sfI" in ci  # probes the base branch's openapi.json over HTTP
+    assert "steps.spec.outputs.base_has_openapi == 'true'" in ci  # oasdiff gated on it
