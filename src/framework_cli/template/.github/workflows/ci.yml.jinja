@@ -151,32 +151,46 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
-      - name: fail if openapi.json is missing or stale
+      - id: spec
+        name: openapi.json — seed if absent, enforce if committed
         run: |
           bash scripts/export-openapi.sh
-          if [ -n "$(git status --porcelain -- openapi.json)" ]; then
-            echo "::error::openapi.json is missing or out of date. Run 'task openapi:export' and commit it."
-            git --no-pager diff -- openapi.json
-            exit 1
+          if git ls-files --error-unmatch openapi.json >/dev/null 2>&1; then
+            echo "openapi_tracked=true" >> "$GITHUB_OUTPUT"
+            if [ -n "$(git status --porcelain -- openapi.json)" ]; then
+              echo "::error::openapi.json is out of date. Run 'task openapi:export' and commit it."
+              git --no-pager diff -- openapi.json
+              exit 1
+            fi
+          else
+            echo "openapi_tracked=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::openapi.json is not committed — generated for this run. Commit it to track the API contract and enable breaking-change diffs."
           fi
       - name: breaking-change check (oasdiff)
-        if: {% raw %}${{ github.event_name == 'pull_request' }}{% endraw %}
+        if: {% raw %}${{ github.event_name == 'pull_request' && steps.spec.outputs.openapi_tracked == 'true' }}{% endraw %}
         uses: oasdiff/oasdiff-action/breaking@v0.0.21
         with:
           base: https://raw.githubusercontent.com/{% raw %}${{ github.repository }}/${{ github.base_ref }}{% endraw %}/openapi.json
           revision: openapi.json
           fail-on: ERR
 {%- if "graphql" in batteries %}
-      - name: fail if schema.graphql is missing or stale
+      - id: gqlspec
+        name: schema.graphql — seed if absent, enforce if committed
         run: |
           bash scripts/export-graphql-schema.sh
-          if [ -n "$(git status --porcelain -- schema.graphql)" ]; then
-            echo "::error::schema.graphql is missing or out of date. Run scripts/export-graphql-schema.sh and commit it."
-            git --no-pager diff -- schema.graphql
-            exit 1
+          if git ls-files --error-unmatch schema.graphql >/dev/null 2>&1; then
+            echo "schema_tracked=true" >> "$GITHUB_OUTPUT"
+            if [ -n "$(git status --porcelain -- schema.graphql)" ]; then
+              echo "::error::schema.graphql is out of date. Run scripts/export-graphql-schema.sh and commit it."
+              git --no-pager diff -- schema.graphql
+              exit 1
+            fi
+          else
+            echo "schema_tracked=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::schema.graphql is not committed — generated for this run. Commit it to track the schema and enable breaking-change diffs."
           fi
       - name: graphql breaking-change check (graphql-core)
-        if: {% raw %}${{ github.event_name == 'pull_request' }}{% endraw %}
+        if: {% raw %}${{ github.event_name == 'pull_request' && steps.gqlspec.outputs.schema_tracked == 'true' }}{% endraw %}
         run: |
           git show "origin/{% raw %}${{ github.base_ref }}{% endraw %}:schema.graphql" > /tmp/base.graphql 2>/dev/null || { echo "no base schema — skipping"; exit 0; }
           uv run python - <<'PY'

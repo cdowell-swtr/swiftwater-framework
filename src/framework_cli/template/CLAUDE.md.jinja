@@ -55,6 +55,7 @@ Coverage gates by stage (spec §6): **pre-commit** runs unit+functional at **>=7
 - `task ci` — full local pre-flight (lint, the 85% gate, pip-audit, OpenAPI export) against your working tree. Run it before pushing.
 - `task push` — pushes; GitHub Actions (`.github/workflows/ci.yml`) runs the authoritative pipeline (the canonical green badge). `task ci` makes that run more likely to pass first try; it does not replace it.
 - Updating a route or response model requires re-exporting the API contract: `task openapi:export`, then commit `openapi.json` — CI fails if it is stale or a change is breaking.
+- Commit `openapi.json` (run `task openapi:export`{% if "graphql" in batteries %} and `schema.graphql`{% endif %}) to track your API contract — once committed, CI enforces it's current and diffs it for breaking changes. Until then CI generates it per-run and passes.
 - `task audit` — scan dependencies for known CVEs (also a CI gate).
 - Deploy is a contract: the CD workflows orchestrate build→push→deploy→smoke→sniff→E2E→load→rollback; you implement the deploy *mechanism* in `infra/deploy/strategy.sh` for your target (see `DEPLOY.md`). Validation tiers: `tests/smoke/` (Phase 1), `tests/sniff/` (Phase 2), `tests/e2e/` with `E2E_TARGET` (Phase 3), `tests/non_functional/load.js` (Phase 4). Add a sniff probe per critical path; never run E2E/load writes against prod.
 

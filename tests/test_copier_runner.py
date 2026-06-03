@@ -3060,3 +3060,22 @@ def test_deploy_workflows_pass_through_deploy_target(tmp_path: Path):
     ):
         text = (dest / wf).read_text()
         assert "DEPLOY_TARGET" in text, f"{wf} does not pass through DEPLOY_TARGET"
+
+
+def test_contract_job_self_seeds_openapi_when_untracked(tmp_path: Path):
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": []})
+    ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
+    # tracked-vs-untracked branch + the tracked guard
+    assert "git ls-files --error-unmatch openapi.json" in ci
+    assert "openapi_tracked=true" in ci and "openapi_tracked=false" in ci
+    # oasdiff is gated on tracked-ness (won't 404 on base for a never-committed spec)
+    assert "steps.spec.outputs.openapi_tracked == 'true'" in ci
+
+
+def test_contract_job_self_seeds_graphql_schema_when_untracked(tmp_path: Path):
+    dest = tmp_path / "p"
+    render_project(dest, {**DATA, "batteries": ["graphql"]})
+    ci = (dest / ".github" / "workflows" / "ci.yml").read_text()
+    assert "git ls-files --error-unmatch schema.graphql" in ci
+    assert "steps.gqlspec.outputs.schema_tracked == 'true'" in ci
