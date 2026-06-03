@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
@@ -26,13 +27,18 @@ def _reset_recoverability() -> Iterator[None]:
 
 @pytest.fixture(scope="session")
 def pg_url() -> Iterator[str]:
-    """A real Postgres started for the test session. Fails (not skips) without Docker."""
+    """A real Postgres started for the test session. Fails (not skips) without Docker.
+
+    The image build + container start is retried with backoff so a transient
+    image-registry / apt-mirror hiccup (Docker Hub or packagecloud 5xx/timeout) doesn't
+    flake CI — only a persistent failure (no Docker, broken image) actually fails."""
     from testcontainers.postgres import PostgresContainer
-
-    try:
 {%- if uses_postgres_extension %}
-        from testcontainers.core.image import DockerImage
+    from testcontainers.core.image import DockerImage
+{%- endif %}
 
+    def _build_and_start() -> PostgresContainer:
+{%- if uses_postgres_extension %}
         # Build the same custom image the compose stack uses, so tests exercise the real
         # extension install (not a prebuilt pull). cwd is the project root under pytest.
         image = DockerImage(
@@ -51,15 +57,25 @@ def pg_url() -> Iterator[str]:
             f"postgres -c shared_preload_libraries={preload}"
         )
 {%- endif %}
-        container.start()
 {%- else %}
         container = PostgresContainer("postgres:17", driver="psycopg")
-        container.start()
 {%- endif %}
-    except Exception as exc:  # Docker unavailable, image pull failed, etc.
+        container.start()
+        return container
+
+    container = None
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            container = _build_and_start()
+            break
+        except Exception as exc:  # transient registry/apt hiccup — back off and retry
+            last_exc = exc
+            time.sleep(2**attempt)
+    if container is None:
         pytest.fail(
             "Database tests need Docker (a Postgres test container). "
-            f"Install/start Docker and retry. Underlying error: {exc}"
+            f"Install/start Docker and retry. Underlying error: {last_exc}"
         )
     try:
         yield container.get_connection_url()
