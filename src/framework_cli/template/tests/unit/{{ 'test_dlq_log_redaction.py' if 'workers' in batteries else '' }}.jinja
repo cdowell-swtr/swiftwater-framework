@@ -1,0 +1,119 @@
+"""Celery failure-log PII scrubbing: a deterministic filter on celery.app.trace (hermetic)."""
+
+import logging
+
+from {{ package_name }}.tasks.log_redaction import RedactCeleryFailureFilter
+
+
+def _trace_record(context: dict) -> logging.LogRecord:
+    # Mirrors Celery's celery.app.trace call: logger.log(severity, FORMAT, context_dict).
+    return logging.LogRecord(
+        "celery.app.trace", logging.ERROR, __file__, 0, "%(exc)s", context, None
+    )
+
+
+def test_filter_redacts_pii_keys_and_keeps_identity():
+    rec = _trace_record(
+        {
+            "id": "task-1",
+            "name": "demo.tasks.tasks.charge",
+            "description": "raised unexpected",
+            "exc": "ValueError('alice@example.com')",
+            "traceback": "Traceback ... alice@example.com ...",
+            "args": "('alice@example.com',)",
+            "kwargs": "{'ssn': '123'}",
+        }
+    )
+    assert RedactCeleryFailureFilter().filter(rec) is True
+    ctx = rec.args
+    assert ctx["exc"] == "<redacted>"
+    assert ctx["traceback"] == "<redacted>"
+    assert ctx["args"] == "<redacted>"
+    assert ctx["kwargs"] == "<redacted>"
+    # Operational/identity fields survive — the failure stays observable.
+    assert ctx["id"] == "task-1"
+    assert ctx["name"] == "demo.tasks.tasks.charge"
+    assert ctx["description"] == "raised unexpected"
+    # Rendered message carries no PII.
+    assert "alice@example.com" not in rec.getMessage()
+
+
+def test_filter_leaves_non_trace_records_untouched():
+    rec = logging.LogRecord(
+        "demo", logging.INFO, __file__, 0, "hello %s", ("world",), None
+    )
+    assert RedactCeleryFailureFilter().filter(rec) is True
+    assert rec.args == ("world",)
+
+
+def test_setup_signal_installs_filter_on_trace_logger():
+    import logging
+
+    from celery.signals import after_setup_task_logger
+
+    from {{ package_name }}.tasks import app as app_mod
+
+    trace = logging.getLogger("celery.app.trace")
+    trace.filters = [
+        f for f in trace.filters if not isinstance(f, RedactCeleryFailureFilter)
+    ]
+    after_setup_task_logger.send(sender=None)  # fire the wiring
+    assert any(isinstance(f, RedactCeleryFailureFilter) for f in trace.filters)
+
+
+def test_install_is_idempotent():
+    import logging
+
+    from {{ package_name }}.tasks.app import install_failure_log_redaction
+
+    trace = logging.getLogger("celery.app.trace")
+    trace.filters = [
+        f for f in trace.filters if not isinstance(f, RedactCeleryFailureFilter)
+    ]
+    install_failure_log_redaction()
+    install_failure_log_redaction()
+    count = sum(isinstance(f, RedactCeleryFailureFilter) for f in trace.filters)
+    assert count == 1  # shared instance ⇒ addFilter dedupes
+
+
+def test_celery_failure_log_is_redacted_end_to_end():
+    """Trigger a real eager task failure and assert celery.app.trace logs no PII.
+
+    Pins the Celery-internal coupling: that terminal failures route through
+    celery.app.trace with the context dict our filter targets. If a future Celery
+    changes the log policy, this fails loudly instead of silently leaking.
+    """
+    import logging
+
+    from {{ package_name }}.tasks.app import app as celery_app
+    from {{ package_name }}.tasks.app import install_failure_log_redaction
+
+    install_failure_log_redaction()
+    # The autouse eager fixture sets task_eager_propagates=True (re-raise); for the LOG
+    # path we want eager mode to catch + log the failure instead.
+    celery_app.conf.task_eager_propagates = False
+
+    @celery_app.task(name="demo._pii_boom", bind=False)
+    def _boom(secret):
+        raise ValueError(f"leak {secret}")
+
+    records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    trace = logging.getLogger("celery.app.trace")
+    handler = _Capture()
+    trace.addHandler(handler)
+    trace.setLevel(logging.ERROR)
+    try:
+        _boom.apply(args=("alice@example.com",))
+    finally:
+        trace.removeHandler(handler)
+        celery_app.conf.task_eager_propagates = True  # restore the fixture default
+
+    rendered = " ".join(r.getMessage() for r in records)
+    assert records, "expected a celery.app.trace failure log to be emitted"
+    assert "alice@example.com" not in rendered
+    assert "<redacted>" in rendered

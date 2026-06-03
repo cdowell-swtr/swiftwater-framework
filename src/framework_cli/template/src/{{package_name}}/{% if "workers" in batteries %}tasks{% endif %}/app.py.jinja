@@ -8,11 +8,18 @@ not through the FastAPI app. The only worker metric on the app's /metrics is DLQ
 
 from __future__ import annotations
 
+import logging
+
 from celery import Celery
-from celery.signals import worker_process_init
+from celery.signals import (
+    after_setup_logger,
+    after_setup_task_logger,
+    worker_process_init,
+)
 
 from ..config.settings import get_settings
 from ..observability.tracing import configure_worker_tracing
+from .log_redaction import RedactCeleryFailureFilter
 
 _settings = get_settings()
 
@@ -33,6 +40,23 @@ app.conf.update(
     enable_utc=True,
     task_default_queue="{{ package_name }}",
 )
+
+
+# A single shared instance ⇒ a double-attach via addFilter is a no-op.
+_FAILURE_LOG_REDACTION = RedactCeleryFailureFilter()
+
+
+def install_failure_log_redaction(**_kwargs: object) -> None:
+    """Attach the PII-redacting filter to Celery's failure logger (celery.app.trace).
+
+    Connected to both logger-setup signals so it installs whichever logging path a worker
+    takes; the shared instance makes a double-attach a no-op.
+    """
+    logging.getLogger("celery.app.trace").addFilter(_FAILURE_LOG_REDACTION)
+
+
+after_setup_logger.connect(install_failure_log_redaction)
+after_setup_task_logger.connect(install_failure_log_redaction)
 
 
 @worker_process_init.connect
