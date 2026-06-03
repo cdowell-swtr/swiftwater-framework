@@ -1020,7 +1020,9 @@ def test_render_frontend_obs_artifacts(tmp_path: Path):
 def test_render_without_react_has_no_frontend_obs(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
-    assert not (dest / "infra/observability/prometheus/alerts/frontend_alerts.yml").exists()
+    assert not (
+        dest / "infra/observability/prometheus/alerts/frontend_alerts.yml"
+    ).exists()
     assert not (dest / "infra/observability/grafana/dashboards/frontend.json").exists()
 
 
