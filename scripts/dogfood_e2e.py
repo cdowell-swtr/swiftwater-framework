@@ -104,6 +104,19 @@ def render(config: DogfoodConfig, dest: Path) -> None:
     record_portable_source(dest, version)  # pins _commit to the published tag
 
 
+def prepare_project(config: DogfoodConfig, project: Path) -> None:
+    """Replicate the builder's documented pre-push setup so the committed tree matches what
+    the generated ci.yml's `uv sync --frozen` / openapi-staleness / graphql-staleness checks
+    require: `uv sync` (-> uv.lock) + export openapi.json (+ schema.graphql for graphql).
+    `framework new` does not (yet) generate these — that push-readiness gap is a tracked
+    follow-up; the dogfood proves the pipeline green for a correctly-set-up project."""
+    log("preparing project: uv sync + export openapi (+ graphql) schema")
+    sh(["uv", "sync"], cwd=str(project))
+    sh(["bash", "scripts/export-openapi.sh"], cwd=str(project))
+    if "graphql" in config.batteries:
+        sh(["bash", "scripts/export-graphql-schema.sh"], cwd=str(project))
+
+
 def expected_agents(config: DogfoodConfig) -> list[str]:
     """The review-agent (== Check Run) names active on a PR for this config's batteries."""
     return list(active_agents("pull_request", list(config.batteries)))
@@ -290,6 +303,7 @@ def run_config(config: DogfoodConfig, with_key: bool) -> RunResult:
         project = Path(tmp) / "render"
         log(f"rendering {config.name} ({len(config.batteries)} batteries) at {project}")
         render(config, project)
+        prepare_project(config, project)
         ensure_repo()
         reset_repo()  # idempotent pre-clean: close any stale dogfood-pr from a crashed run
         if with_key:
