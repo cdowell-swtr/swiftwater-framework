@@ -1,6 +1,6 @@
 [project]
 name = "framework-cli"
-version = "0.1.7"
+version = "0.1.8"
 description = "CLI scaffold framework for solid, observable, testable Python projects"
 requires-python = ">=3.12"
 dependencies = [
