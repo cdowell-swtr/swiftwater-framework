@@ -200,13 +200,23 @@ leaking.
 
 ## Integrity / manifest impact
 
-`infra/compose/dev.yml.jinja` is already **LOCKED** (Plan 9 shifted it). The worker/beat `user:`
-edits and the frontend command edit change that LOCKED file → a **one-time baseline integrity
-manifest bump**, the same class and handling as Plan 9. No new files are added to the locked set
-(the entrypoint was dropped). The new `tasks/log_redaction.py` renders only under `--with
-workers`; confirm it does **not** force a manifest shift for the baseline (no-workers) render
-(it is conditional payload, like the rest of `tasks/`). Integrity must stay green across battery
-combos both ways (new + downskill).
+**Correction (confirmed during implementation): there is NO baseline manifest shift.** Although
+`infra/compose/dev.yml.jinja` is LOCKED, every edit lives *inside* the `{% if "workers" %}` /
+`{% if "react" %}` conditional blocks (worker/beat `user:`; frontend `npm ci`), so the **baseline
+(no-battery) `dev.yml` renders byte-identical** — verified: the baseline render has exactly one
+`user:` line (the pre-existing `app` service). Only the `--with workers` / `--with react` renders
+change, and those manifests regenerate per render (no committed hash to hand-edit). The new
+`tasks/log_redaction.py` (workers-gated) and `frontend/node_modules/.gitkeep` (react-gated,
+gitignored in the generated project) are conditional payload that doesn't touch the baseline.
+Integrity stays green across battery combos both ways (new + downskill) with no framework version
+bump.
+
+**Implementation note — the `node_modules` mount-point fix.** The frontend live guard surfaced a
+real defect the design didn't anticipate: Docker creates the host-side `frontend/node_modules`
+named-volume **mount point** as root when it doesn't already exist (independent of `npm ci`). The
+fix ships a gitignored `frontend/node_modules/.gitkeep` so Copier pre-creates that directory
+host-owned. This vindicates the live-guard-as-tripwire decision — `npm ci` alone would not have
+prevented this root-owned directory.
 
 ## Non-goals
 

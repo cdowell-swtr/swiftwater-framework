@@ -51,7 +51,9 @@ def test_setup_signal_installs_filter_on_trace_logger():
 
     from celery.signals import after_setup_task_logger
 
-    from {{ package_name }}.tasks import app as app_mod
+    # Import app.py for its side effect: its module-level `.connect()` registers the
+    # receiver this test fires. (Imported for the side effect, not a binding.)
+    import {{ package_name }}.tasks.app  # noqa: F401
 
     trace = logging.getLogger("celery.app.trace")
     trace.filters = [
