@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Operator-run dogfood e2e harness (Plan 13).
 
-Renders the baseline + all-batteries projects pinned to _commit: v0.1.1, pushes each to
+Renders the baseline + all-batteries projects pinned to _commit: DOGFOOD_COMMIT, pushes each to
 the dedicated public repo cdowell-swtr/swiftwater-dogfood (reset between configs), seeds
 main (-> on:push run) and opens a benign-no-op PR (-> on:pull_request run), watches both
 runs, and asserts: (surface 1) every workflow job succeeded; (surface 2) the review-*
 Check Runs are neutral by default. --with-review-key sets the repo secret for the paid
 full review path. Writes a dated scorecard.
 
-Prerequisites: gh authed (scopes repo+workflow); v0.1.1 pushed; run from the repo root.
+Prerequisites: gh authed (scopes repo+workflow); the DOGFOOD_COMMIT tag pushed; run from the repo root.
 NOT a hermetic test — talks to real GitHub Actions. See docs/dogfood-e2e.md.
 """
 
@@ -99,6 +99,11 @@ def render(config: DogfoodConfig, dest: Path) -> None:
 def expected_agents(config: DogfoodConfig) -> list[str]:
     """The review-agent (== Check Run) names active on a PR for this config's batteries."""
     return list(active_agents("pull_request", list(config.batteries)))
+
+
+def log(msg: str) -> None:
+    """Emit a progress line (flushed) — this harness runs for many minutes per config."""
+    print(f"[dogfood] {msg}", flush=True)
 
 
 def ensure_repo() -> None:
@@ -214,6 +219,7 @@ def wait_for_run(event: str, branch: str, sha: str, timeout_s: int = 2400) -> st
         rows = json.loads(out or "[]")
         match = next((r for r in rows if r.get("headSha") == sha), None)
         if match:
+            log(f"  found {event} run {match['databaseId']}; watching {match['url']}")
             sh(
                 [
                     "gh",
@@ -271,8 +277,10 @@ def reset_repo() -> None:
 
 
 def run_config(config: DogfoodConfig, with_key: bool) -> RunResult:
+    log(f"=== config '{config.name}' (with_key={with_key}) ===")
     with tempfile.TemporaryDirectory(dir="/var/tmp") as tmp:
         project = Path(tmp) / "render"
+        log(f"rendering {config.name} ({len(config.batteries)} batteries) at {project}")
         render(config, project)
         ensure_repo()
         reset_repo()  # idempotent pre-clean: close any stale dogfood-pr from a crashed run
@@ -280,11 +288,21 @@ def run_config(config: DogfoodConfig, with_key: bool) -> RunResult:
             set_secret()
         else:
             clear_secret()
+        log("seeding main (force-push the rendered project)")
         seed_sha = seed_main(project)
+        log(
+            f"waiting for the on:push run (sha {seed_sha[:8]}) — watching to completion"
+        )
         push_url = wait_for_run("push", "main", seed_sha)
+        log(f"push run done: {push_url}")
         agents = expected_agents(config)
+        log(f"opening benign-no-op PR ({len(agents)} review agents expected)")
         pr_url, pr_sha = open_benign_pr(project)
+        log(
+            f"PR opened: {pr_url}; waiting for the on:pull_request run (sha {pr_sha[:8]})"
+        )
         pr_run_url = wait_for_run("pull_request", "dogfood-pr", pr_sha)
+        log(f"PR run done: {pr_run_url}; asserting both surfaces")
         verdict = assert_run(
             fetch_jobs(pr_run_url),
             fetch_checks(pr_sha),
