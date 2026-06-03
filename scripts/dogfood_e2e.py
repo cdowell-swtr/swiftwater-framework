@@ -28,6 +28,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from framework_cli.copier_runner import render_project  # noqa: E402
+from framework_cli.integrity.generate import write_manifest  # noqa: E402
+from framework_cli.naming import derive_names  # noqa: E402
 from framework_cli.dogfood import (  # noqa: E402
     ALL_BATTERIES,
     BASELINE,
@@ -82,18 +84,24 @@ def assert_run(
 
 
 def render(config: DogfoodConfig, dest: Path) -> None:
+    """Render exactly like `framework new`: render_project -> write_manifest (the
+    .framework/integrity.lock the integrity step-0 verifies) -> record_portable_source.
+    Omitting write_manifest makes the generated integrity job fail on GHA."""
+    names = derive_names("Swiftwater Dogfood")
     render_project(
         dest,
         {
-            "project_name": "Swiftwater Dogfood",
+            "project_name": names.project_name,
+            "project_slug": names.project_slug,
             "out": str(dest),
-            "package_name": "dogfood",
+            "package_name": names.package_name,
             "batteries": list(config.batteries),
             "alert_channels": ["webhook"],
         },
     )
-    # Pin the integrity step-0 install to the published tag.
-    record_portable_source(dest, DOGFOOD_COMMIT.lstrip("v"))
+    version = DOGFOOD_COMMIT.lstrip("v")
+    write_manifest(dest, version)  # generates .framework/integrity.lock
+    record_portable_source(dest, version)  # pins _commit to the published tag
 
 
 def expected_agents(config: DogfoodConfig) -> list[str]:
