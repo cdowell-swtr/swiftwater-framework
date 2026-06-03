@@ -1543,3 +1543,184 @@ def test_rendered_project_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Pa
     me = os.getuid()
     bad = [p for p in (dest / "src").rglob("*") if p.stat().st_uid != me]
     assert not bad, f"root/non-host-owned files left behind: {bad[:5]}"
+
+
+def test_frontend_dev_command_uses_npm_ci_not_install(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    assert "npm ci" in dev, (
+        "frontend dev command must use `npm ci` (frozen lockfile, no host-bind write)"
+    )
+    assert "npm install" not in dev, (
+        "frontend must not use `npm install` — it rewrites package-lock.json into the host "
+        "bind as root"
+    )
+    # node_modules must stay a named volume so npm's writes never land on the host.
+    assert "frontend_node_modules:/app/frontend/node_modules" in dev
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: brings up the workers dev stack to check file ownership",
+)
+def test_rendered_workers_dev_stack_leaves_no_root_owned_files(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    # Mirror `task dev`'s real merge order (base + observability + dev). observability.yml
+    # supplies grafana's image (dev.yml's grafana is an image-less anonymous-auth override);
+    # without it, `--profile dev` config-validation rejects the incomplete grafana service.
+    # We only `up` worker/beat (+ their deps), so the obs containers never start.
+    obs = "infra/compose/observability.yml"
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        obs,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+        "up",
+        "-d",
+        "--build",
+        "worker",
+        "beat",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        obs,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+        "down",
+        "-v",
+    ]
+    env = _compose_env()
+    # Liveness signal: the worker imports the package on startup, writing __pycache__ into
+    # the bind-mounted /app/src. Wait for that to appear (proves the scan is non-vacuous).
+    pycache = dest / "src" / "demo" / "tasks" / "__pycache__"
+    ran = False
+    bad: list[Path] = []
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            if pycache.exists():
+                ran = True
+                break
+            time.sleep(2)
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        # Capture ownership state BEFORE reclaiming (so the assertion below is meaningful).
+        me = os.getuid()
+        bad = [p for p in (dest / "src").rglob("*") if p.stat().st_uid != me]
+        # Reclaim any root-owned residue (the red state) so pytest can clean tmp_path.
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{dest}:/work",
+                "alpine",
+                "chown",
+                "-R",
+                f"{os.getuid()}:{os.getgid()}",
+                "/work",
+            ]
+        )
+    assert ran, (
+        "worker never wrote __pycache__ within 120s — ownership check would be vacuous"
+    )
+    assert not bad, f"root/non-host-owned files left behind by worker/beat: {bad[:5]}"
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker (+ network for npm ci) required: brings up the frontend dev service",
+)
+def test_rendered_frontend_dev_stack_leaves_no_root_owned_files(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    # Mirror `task dev`'s merge (base + observability + dev); only `up` the frontend (+deps).
+    obs = "infra/compose/observability.yml"
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        obs,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+        "up",
+        "-d",
+        "--build",
+        "frontend",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        obs,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+        "down",
+        "-v",
+    ]
+    env = _compose_env()
+    served = False
+    bad: list[Path] = []
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        # npm ci over the network + vite startup; wait for the dev server (non-vacuous).
+        deadline = time.time() + 240
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen("http://localhost:5173", timeout=3) as resp:
+                    if resp.status == 200:
+                        served = True
+                        break
+            except OSError:
+                time.sleep(3)
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        # Capture ownership BEFORE reclaiming, so the assertion is meaningful.
+        me = os.getuid()
+        bad = [p for p in (dest / "frontend").rglob("*") if p.stat().st_uid != me]
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{dest}:/work",
+                "alpine",
+                "chown",
+                "-R",
+                f"{os.getuid()}:{os.getgid()}",
+                "/work",
+            ]
+        )
+    assert served, (
+        "frontend dev server did not serve on :5173 within 240s — scan would be vacuous"
+    )
+    assert not bad, f"root/non-host-owned files left in frontend/: {bad[:5]}"
