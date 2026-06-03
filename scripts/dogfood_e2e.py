@@ -299,6 +299,15 @@ def reset_repo() -> None:
     )
 
 
+def teardown_repo() -> None:
+    """Delete the dogfood repo entirely (true teardown); ensure_repo recreates it fresh next
+    run. Best-effort: needs the `delete_repo` gh scope (`gh auth refresh -s delete_repo`).
+    Without it `gh repo delete` exits non-zero and the repo is left in place — non-fatal,
+    since the run already finished (we just couldn't clean up)."""
+    log(f"tearing down {REPO} (gh repo delete; needs the delete_repo scope)")
+    sh(["gh", "repo", "delete", REPO, "--yes"], check=False)
+
+
 def run_config(config: DogfoodConfig, with_key: bool) -> RunResult:
     log(f"=== config '{config.name}' (with_key={with_key}) ===")
     with tempfile.TemporaryDirectory(dir="/var/tmp") as tmp:
@@ -360,6 +369,11 @@ def main() -> int:
         action="store_true",
         help="Set the repo runtime secret for the paid full review path.",
     )
+    parser.add_argument(
+        "--keep",
+        action="store_true",
+        help="Skip teardown — keep the dogfood repo after the run (for inspection).",
+    )
     args = parser.parse_args()
 
     results = [
@@ -367,7 +381,13 @@ def main() -> int:
     ]
     scorecard = render_scorecard(results, commit=DOGFOOD_COMMIT)
     print(scorecard)
-    return 0 if all(r.ok for r in results) else 1
+    ok = all(r.ok for r in results)
+    # Tear down on success; keep a failed run's repo for debugging (or --keep to always keep).
+    if ok and not args.keep:
+        teardown_repo()
+    elif not ok:
+        log(f"run RED — keeping {REPO} for inspection (delete manually when done)")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

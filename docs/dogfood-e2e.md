@@ -42,7 +42,7 @@ Costs paid Anthropic API (one call per active agent per config). The secret is c
 next default run.
 
 ## Notes
-- The dogfood repo is **reset, not deleted** (the `gh` token lacks `delete_repo`).
+- **Teardown:** a GREEN run **deletes** the dogfood repo at the end (`gh repo delete`); `ensure_repo` recreates it fresh next run. A RED run **keeps** the repo for inspection, as does `--keep`. Teardown needs the `delete_repo` gh scope — grant it once with `gh auth refresh -h github.com -s delete_repo`; without it, deletion is skipped (best-effort, non-fatal) and the repo persists. Note: deleting the repo removes its GHA run history, so the durable proof is the committed scorecard's verdict, not the run links.
 - All-batteries adds Playwright browser downloads + a Docker image build; expect long runs. The
   harness polls with a generous timeout and head-SHA-guards run selection (the repo is reused, so
   a stale prior-config run must not be mistaken for the current one).
