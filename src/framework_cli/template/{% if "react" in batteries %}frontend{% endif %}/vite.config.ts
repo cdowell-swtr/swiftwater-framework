@@ -5,7 +5,15 @@ import { configDefaults } from "vitest/config";
 // In the compose `frontend` service the backend is the in-network `app`; from a host-run
 // `task fe:dev` it's the published localhost port (set via VITE_PROXY_TARGET).
 const backend = process.env.VITE_PROXY_TARGET ?? "http://app:8000";
-const apiPaths = ["/items", "/health", "/heartbeat", "/metrics", "/docs", "/openapi.json"];
+const apiPaths = [
+  "/items",
+  "/health",
+  "/heartbeat",
+  "/metrics",
+  "/internal/rum",
+  "/docs",
+  "/openapi.json",
+];
 
 export default defineConfig({
   plugins: [react()],
