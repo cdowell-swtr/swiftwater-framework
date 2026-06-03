@@ -34,7 +34,9 @@
 
 ## Task 1: Spike — validate the `timescale/timescaledb-ha` base (controller-driven, investigative)
 
-Discovery, not TDD. Produces the exact `-ha`-branch Dockerfile + a pinned tag + a go/no-go. Run locally (Docker available).
+> ✅ **DONE (2026-06-03) — GO, with a pivot.** `FROM -ha` is blocked (`-ha` = Ubuntu 22.04/glibc 2.35; AGE `age.so` needs 2.38 → won't load). Validated the cleaner alternative instead: **COPY timescaledb from `-ha` onto the unchanged `postgres:17` base** (glibc-safe; all three extensions create on the all-batteries combo). Pinned tag `pg17.10-ts2.27.1`. Findings + the validated Dockerfile: `docs/superpowers/eval-scorecards/ci-flake-resilience-spike-2026-06-03.md`. Task 2 below reflects this COPY approach.
+
+Discovery, not TDD. Produced the exact Dockerfile change + a pinned tag + the go/no-go above. Run locally (Docker available).
 
 - [ ] **Step 1: Pick a pinned `-ha` tag with timescaledb + pgvector**
 
@@ -83,13 +85,13 @@ Write `docs/superpowers/eval-scorecards/ci-flake-resilience-spike-<date>.md` wit
 
 ```python
 # tests/test_copier_runner.py (append)
-def test_timescaledb_uses_prebuilt_ha_base_no_packagecloud(tmp_path):
+def test_timescaledb_copies_from_prebuilt_image_no_packagecloud(tmp_path):
     dest = tmp_path / "p"
     render_project(dest, {**DATA, "batteries": ["timescaledb"]})
     df = (dest / "infra" / "docker" / "postgres.Dockerfile").read_text()
-    assert "timescale/timescaledb-ha:pg17" in df  # prebuilt base, pinned pg17.x-ts2.x
-    assert "packagecloud.io" not in df            # the flaky apt is gone
-    assert "FROM postgres:17" not in df           # timescaledb branch swaps the base
+    assert "COPY --from=timescale/timescaledb-ha:pg17" in df  # timescaledb COPY'd from prebuilt
+    assert "packagecloud.io" not in df                        # the flaky apt is gone
+    assert "FROM postgres:17" in df                           # base unchanged (COPY, not a swap)
 
 
 def test_non_timescaledb_extension_keeps_postgres_base(tmp_path):
@@ -111,49 +113,34 @@ def test_age_copy_present_on_both_bases(tmp_path):
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `uv run pytest tests/test_copier_runner.py -q -k "ha_base or postgres_base or age_copy"`
+Run: `uv run pytest tests/test_copier_runner.py -q -k "copies_from_prebuilt or postgres_base or age_copy"`
 Expected: FAIL (current Dockerfile is always `FROM postgres:17` + packagecloud).
 
-- [ ] **Step 3: Rewrite the Dockerfile `FROM` + drop the timescaledb apt** (apply the spike-validated form)
+- [ ] **Step 3: Replace the timescaledb packagecloud apt block with a multi-stage COPY** (the spike-validated form — `docs/superpowers/eval-scorecards/ci-flake-resilience-spike-2026-06-03.md`)
 
-Replace the leading `FROM postgres:17` + the pgvector and timescaledb blocks with the conditional base. The candidate below is the expected form **if the spike confirms `-ha` bundles timescaledb + pgvector**; use the exact tag + pgvector handling the spike validated:
+Keep `FROM postgres:17` and the pgvector + AGE blocks **unchanged**. Replace ONLY the `{%- if "timescaledb" in batteries %}` packagecloud `RUN` block (the `wget gpgkey | gpg | apt-get install timescaledb-2-postgresql-17 …`) with a COPY from the pinned prebuilt Timescale image:
 
 ```jinja
-# Custom Postgres image — installs/bundles the active extension batteries so they are available
-# on EVERY stack (dev/test/prod compose + testcontainers). Rendered only when an extension
-# battery is present.
 {%- if "timescaledb" in batteries %}
-# timescaledb (+ pgvector) come preinstalled on the official Timescale HA image — pinned, so we
-# never depend on the flaky build-time packagecloud apt. (shared_preload_libraries is set at
-# runtime via the compose `command:`.)
-FROM timescale/timescaledb-ha:pg17.6-ts2.18.2
-{%- else %}
-FROM postgres:17
-{%- endif %}
-{%- if "pgvector" in batteries and "timescaledb" not in batteries %}
 
-# pgvector — vector similarity search (PGDG apt). Only needed when NOT on the HA base (which
-# bundles pgvector). Acquire::Retries hardens against transient apt hiccups.
-RUN apt-get -o Acquire::Retries=5 update \
- && apt-get -o Acquire::Retries=5 install -y --no-install-recommends postgresql-17-pgvector \
- && rm -rf /var/lib/apt/lists/*
-{%- endif %}
-{%- if "age" in batteries %}
-
-# Apache AGE — openCypher graph queries (multi-stage COPY of the prebuilt PG17 extension; no apt
-# package). Requires shared_preload_libraries=age at runtime.
-COPY --from=apache/age:release_PG17_1.6.0 /usr/lib/postgresql/17/lib/age.so /usr/lib/postgresql/17/lib/age.so
-COPY --from=apache/age:release_PG17_1.6.0 /usr/share/postgresql/17/extension/age--1.6.0.sql /usr/share/postgresql/17/extension/age--1.6.0.sql
-COPY --from=apache/age:release_PG17_1.6.0 /usr/share/postgresql/17/extension/age.control /usr/share/postgresql/17/extension/age.control
+# TimescaleDB — COPY the prebuilt extension from the official Timescale HA image (pinned) instead
+# of the flaky build-time packagecloud apt. The .so are built on the -ha image's older glibc
+# (Ubuntu 22.04 / 2.35) and load fine on this newer postgres:17 base (glibc is backward-compatible).
+# Requires shared_preload_libraries=timescaledb at runtime (set via the compose `command:`).
+COPY --from=timescale/timescaledb-ha:pg17.10-ts2.27.1 /usr/lib/postgresql/17/lib/timescaledb.so /usr/lib/postgresql/17/lib/
+COPY --from=timescale/timescaledb-ha:pg17.10-ts2.27.1 /usr/lib/postgresql/17/lib/timescaledb-*.so /usr/lib/postgresql/17/lib/
+COPY --from=timescale/timescaledb-ha:pg17.10-ts2.27.1 /usr/share/postgresql/17/extension/timescaledb.control /usr/share/postgresql/17/extension/
+COPY --from=timescale/timescaledb-ha:pg17.10-ts2.27.1 /usr/share/postgresql/17/extension/timescaledb--*.sql /usr/share/postgresql/17/extension/
 {%- endif %}
 ```
-(If the spike found pgvector is NOT bundled on `-ha`, keep a pgvector install path for the timescaledb+pgvector combo per the spike's finding instead of the simple `and "timescaledb" not in batteries` exclusion.)
+
+Notes: `timescaledb-*.so` matches the versioned/`-tsl`/`-invalidations` libs but **not** `timescaledb_toolkit*` (underscore) — toolkit isn't a battery. `timescaledb--*.sql` is the install/upgrade scripts (not `timescaledb_toolkit--`). The pgvector PGDG apt block and the AGE COPY block stay exactly as they are (pgvector's PGDG apt was never the flaky part; AGE needs trixie's glibc 2.38, which `postgres:17` has but `-ha` does not — the reason the base swap was rejected).
 
 - [ ] **Step 4: Run content tests + render sanity**
 
 Run:
 ```bash
-uv run pytest tests/test_copier_runner.py -q -k "ha_base or postgres_base or age_copy or preload"
+uv run pytest tests/test_copier_runner.py -q -k "copies_from_prebuilt or postgres_base or age_copy or preload"
 for b in "timescaledb" "timescaledb,pgvector" "timescaledb,age" "pgvector"; do
   uv run python -c "from pathlib import Path; from framework_cli.copier_runner import render_project; render_project(Path('/var/tmp/p15_$b'.replace(',','_')), {'project_name':'D','out':'/var/tmp/p15','package_name':'demo','batteries':'$b'.split(','),'alert_channels':['webhook']})" 2>/dev/null
 done

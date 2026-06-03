@@ -19,11 +19,13 @@ Make generated-project CI (and the framework render-matrix) **reliably green wit
 
 ## Approach (chosen)
 
-### Part A — conditional prebuilt timescaledb base image (spike-first)
+### Part A — drop the packagecloud apt by COPYing timescaledb from a prebuilt image
 
-In `infra/docker/postgres.Dockerfile.jinja`, make the base **conditional**:
-- `timescaledb` in batteries → `FROM timescale/timescaledb-ha:pg17-<pinned>` (Debian; timescaledb preinstalled). The entire flaky packagecloud apt block is **dropped**.
-- otherwise → the current `FROM postgres:17` (pgvector PGDG apt / AGE COPY unchanged). Non-timescaledb extension combos have **zero** blast radius.
+> **Spike outcome (2026-06-03, supersedes the base-swap design below).** The spike found `FROM timescale/timescaledb-ha` is **blocked**: `-ha` is Ubuntu 22.04 / glibc 2.35, but the AGE `age.so` (`apache/age:release_PG17_1.6.0`) needs glibc 2.38 → it won't load on `-ha` → the `timescaledb+age` combo can't start. So instead of swapping the base, **COPY timescaledb from `-ha` onto the unchanged `postgres:17` base** (the same multi-stage pattern already used for AGE) — glibc-safe in this direction (a 2.35-built `.so` runs on trixie's 2.41), and validated end-to-end (all three extensions create on the all-batteries combo). See `docs/superpowers/eval-scorecards/ci-flake-resilience-spike-2026-06-03.md`.
+
+**The implemented approach:** in `infra/docker/postgres.Dockerfile.jinja`, keep `FROM postgres:17` and replace **only** the flaky timescaledb packagecloud apt block with a multi-stage `COPY --from=timescale/timescaledb-ha:pg17.10-ts2.27.1` of timescaledb's `.so` + extension files. pgvector (PGDG apt — reliable, never the flaky part) and AGE (COPY) are unchanged; non-timescaledb combos are untouched. The pinned `-ha` tag (`pg17.10-ts2.27.1`, not floating `pg17`) can't drift.
+
+**Original base-swap design (superseded — kept for context):** `timescaledb` → `FROM timescale/timescaledb-ha:pg17-<pinned>`; otherwise `FROM postgres:17`. Dropped because of the AGE glibc incompatibility above.
 
 **Pinned, not floating:** the `-ha` base uses a specific tag/digest (e.g. `pg17.x-ts2.x`), never a floating `pg17` — the root cause of this whole saga was `postgres:17` floating to Debian trixie ahead of packagecloud. A pinned `-ha` tag cannot drift.
 
