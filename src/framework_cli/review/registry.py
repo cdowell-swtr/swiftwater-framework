@@ -152,6 +152,17 @@ _SPECS: dict[str, AgentSpec] = {
         AGENTIC_MODEL,
         context=ContextPolicy("agentic"),
     ),
+    # `infra/*` is shared with observability-infra by design — both run on infra changes,
+    # each scoped to its own concern (obs parity vs service/env-var parity). Do not "dedup".
+    "env-parity": AgentSpec(
+        "review-env-parity",
+        _prompt("env-parity"),
+        "high",
+        "file-trigger",
+        AGENTIC_MODEL,
+        trigger_globs=("infra/*", ".env.example", "src/*/config/settings.py"),
+        context=ContextPolicy("agentic"),
+    ),
     "test-quality": AgentSpec(
         "review-test-quality",
         _prompt("test-quality"),

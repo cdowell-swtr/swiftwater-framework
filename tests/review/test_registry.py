@@ -16,6 +16,7 @@ _EXPECTED_PR = sorted(
         "observability",
         "observability-infra",
         "observability-db",
+        "env-parity",
         "test-quality",
         "architecture",
         "performance",
@@ -248,3 +249,26 @@ def test_observability_split_db():
     assert not matches_globs(["infra/compose/dev.yml"], spec.trigger_globs)
     assert "observability-db" in active_agents("pull_request")
     assert "observability-db" not in active_agents("push")
+
+
+def test_env_parity_agent_spec():
+    from framework_cli.review.registry import AGENTIC_MODEL
+
+    spec = get_agent("env-parity")
+    assert spec.name == "review-env-parity"
+    assert spec.block_threshold == "high"
+    assert spec.active_when == "file-trigger"
+    assert spec.model == AGENTIC_MODEL
+    assert spec.on_push is False
+    assert spec.context.strategy == "agentic"
+    assert spec.trigger_globs is not None
+    assert set(spec.trigger_globs) == {
+        "infra/*",
+        ".env.example",
+        "src/*/config/settings.py",
+    }
+    assert "JSON" in spec.prompt
+    assert "dev-only" in spec.prompt.lower() or "parity" in spec.prompt.lower()
+    # The composition-oracle must be in the prompt (the whole reason the agent is agentic) —
+    # a tighter check than "parity", which guards against a prompt swap.
+    assert "base.yml" in spec.prompt and "Taskfile.yml" in spec.prompt
