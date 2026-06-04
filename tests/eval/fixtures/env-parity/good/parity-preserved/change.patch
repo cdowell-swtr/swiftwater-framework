@@ -1,0 +1,39 @@
+diff --git a/.env.example b/.env.example
+index 27db54c..3769b19 100644
+--- a/.env.example
++++ b/.env.example
+@@ -16,6 +16,8 @@ APP_DATABASE_URL=postgresql+psycopg://app:app@localhost:5432/app
+ # file on deploy). Configured channels: webhook.
+ GRAFANA_ADMIN_PASSWORD=
+ APP_ALERT_WEBHOOK_URL=
++# Widget service base URL (set per environment).
++APP_WIDGET_API_URL=http://widget:9000
+ # FRAMEWORK:END
+ 
+ # Your app's config below.
+diff --git a/infra/compose/base.yml b/infra/compose/base.yml
+index 89ddc59..19a9ea8 100644
+--- a/infra/compose/base.yml
++++ b/infra/compose/base.yml
+@@ -8,6 +8,7 @@ services:
+     environment:
+       TZ: UTC
+       APP_ENVIRONMENT: dev
++      APP_WIDGET_API_URL: "${APP_WIDGET_API_URL}"
+     healthcheck:
+       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/heartbeat').status==200 else 1)"]
+       interval: 5s
+diff --git a/src/demo/config/settings.py b/src/demo/config/settings.py
+index e6fb558..2140afd 100644
+--- a/src/demo/config/settings.py
++++ b/src/demo/config/settings.py
+@@ -19,6 +19,9 @@ class Settings(BaseSettings):
+     slo_request_latency_p99_ms: float = 200.0
+     slo_error_rate_pct: float = 1.0
+ 
++    # Widget service base URL.
++    widget_api_url: str = "http://widget:9000"
++
+     # OpenTelemetry tracing (off unless enabled; the dev Compose app turns it on).
+     otel_enabled: bool = False
+     otel_exporter_otlp_endpoint: str = "http://otel-collector:4317"

@@ -1,0 +1,19 @@
+diff --git a/infra/compose/dev.yml b/infra/compose/dev.yml
+index 950f2a2..17db0b5 100644
+--- a/infra/compose/dev.yml
++++ b/infra/compose/dev.yml
+@@ -1,5 +1,14 @@
+ # dev profile: app (hot reload) + Traefik HTTPS. `dev:lite` runs the app alone.
+ services:
++  widgetizer:
++    image: ghcr.io/acme/widgetizer:1.4.0
++    profiles: ["dev"]
++    environment:
++      WIDGETIZER_DB_URL: "postgresql+psycopg://app:app@postgres:5432/app"
++    depends_on:
++      postgres:
++        condition: service_healthy
++
+   app:
+     profiles: ["dev", "lite"]
+     # Run as the invoking host user so bind-mounted --reload writes (__pycache__ in /app/src)

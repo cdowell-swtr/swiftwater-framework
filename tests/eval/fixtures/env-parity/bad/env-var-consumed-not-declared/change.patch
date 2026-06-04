@@ -1,0 +1,14 @@
+diff --git a/src/demo/config/settings.py b/src/demo/config/settings.py
+index e6fb558..fe6f33c 100644
+--- a/src/demo/config/settings.py
++++ b/src/demo/config/settings.py
+@@ -19,6 +19,9 @@ class Settings(BaseSettings):
+     slo_request_latency_p99_ms: float = 200.0
+     slo_error_rate_pct: float = 1.0
+ 
++    # Widget service call timeout (seconds).
++    widget_timeout_s: float = 5.0
++
+     # OpenTelemetry tracing (off unless enabled; the dev Compose app turns it on).
+     otel_enabled: bool = False
+     otel_exporter_otlp_endpoint: str = "http://otel-collector:4317"
