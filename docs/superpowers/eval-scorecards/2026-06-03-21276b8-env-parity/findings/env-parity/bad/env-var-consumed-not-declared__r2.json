@@ -4,15 +4,15 @@
   "findings": [
     {
       "line": 23,
-      "message": "New pydantic field `widget_timeout_s` is consumed under the `APP_` prefix (env var `APP_WIDGET_TIMEOUT_S`) but is not declared in `.env.example`. Operators copying `.env.example` to `.env` get no signal that this knob exists, so staging/prod silently fall back to the hardcoded default of 5.0 with no documented way to tune it \u2014 an env-var parity gap across DEV\u2192CI\u2192STAGE\u2192PROD.",
+      "message": "New pydantic field `widget_timeout_s` (env var `APP_WIDGET_TIMEOUT_S` under the APP_ prefix) is consumed in src/demo/config/settings.py but is not declared in .env.example. The framework-managed env surface lists every other APP_ field (APP_ENVIRONMENT, APP_SLO_*, APP_DATABASE_URL, etc.) but omits this one, so the variable is undiscoverable when copying .env.example -> .env and silently relies on the in-code default across DEV->CI->STAGE->PROD instead of being an explicit, per-environment-overridable part of the environment surface.",
       "path": "src/demo/config/settings.py",
       "severity": "high",
-      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` (with a brief comment) to the framework-managed block of `.env.example` so the variable is discoverable and overridable per environment, matching the `settings.py` field name."
+      "suggestion": "Add `# APP_WIDGET_TIMEOUT_S=5.0` (widget service call timeout in seconds) to .env.example so the field is declared on the environment surface and can be overridden per environment."
     }
   ],
   "kind": "bad",
   "latency_ms": null,
-  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":23,\"severity\":\"high\",\"message\":\"New pydantic field `widget_timeout_s` is consumed under the `APP_` prefix (env var `APP_WIDGET_TIMEOUT_S`) but is not declared in `.env.example`. Operators copying `.env.example` to `.env` get no signal that this knob exists, so staging/prod silently fall back to the hardcoded default of 5.0 with no documented way to tune it \u2014 an env-var parity gap across DEV\u2192CI\u2192STAGE\u2192PROD.\",\"suggestion\":\"Add `APP_WIDGET_TIMEOUT_S=5.0` (with a brief comment) to the framework-managed block of `.env.example` so the variable is discoverable and overridable per environment, matching the `settings.py` field name.\"}]",
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":23,\"severity\":\"high\",\"message\":\"New pydantic field `widget_timeout_s` (env var `APP_WIDGET_TIMEOUT_S` under the APP_ prefix) is consumed in src/demo/config/settings.py but is not declared in .env.example. The framework-managed env surface lists every other APP_ field (APP_ENVIRONMENT, APP_SLO_*, APP_DATABASE_URL, etc.) but omits this one, so the variable is undiscoverable when copying .env.example -> .env and silently relies on the in-code default across DEV->CI->STAGE->PROD instead of being an explicit, per-environment-overridable part of the environment surface.\",\"suggestion\":\"Add `# APP_WIDGET_TIMEOUT_S=5.0` (widget service call timeout in seconds) to .env.example so the field is declared on the environment surface and can be overridden per environment.\"}]",
   "repeat": 2,
   "seeded_file": "src/demo/config/settings.py",
   "stop_reason": "end_turn",

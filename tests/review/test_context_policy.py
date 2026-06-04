@@ -40,6 +40,7 @@ def test_every_agent_has_an_explicit_context_strategy():
         "observability-db",
         "observability-fe",
         "contracts",
+        "env-parity",
     }
     for name in agent_names():
         strat = get_agent(name).context.strategy

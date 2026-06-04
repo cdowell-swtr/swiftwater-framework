@@ -103,7 +103,7 @@ file `src/framework_cli/review/agents/env-parity.md`:
 
 | Field | Value | Rationale |
 |---|---|---|
-| registry key | `env-parity` | short name; decision files target `review-env-parity` |
+| registry key | `env-parity` | short name; decision files target the SHORT name `env-parity` (the runner strips the `review-` prefix before matching) |
 | `name` | `review-env-parity` | |
 | `block_threshold` | `high` | a genuine parity gap blocks the gate (§ Plan-17 decision) |
 | `active_when` | `file-trigger` | parity can only break when the parity surface changes |
@@ -127,14 +127,14 @@ existing, agent-agnostic decisions mechanism (`src/framework_cli/review/decision
 
 - `runner.py` injects the decisions protocol block into **every** agent's prompt.
 - An `accepted` (or `deferred`) decision file under `docs/superpowers/decisions/` with
-  `agents: [review-env-parity]` and a `premise` is matched by the agent: when the premise still
+  `agents: [env-parity]` and a `premise` is matched by the agent: when the premise still
   holds it **still emits** the finding but tags it `acknowledged: "<id>"`; `analyze.py` segregates
   acknowledged findings into a non-actionable section, so they **don't block and don't re-surface**.
 - If the **premise breaks** (the acknowledged dev-only service later acquires a prod dependency),
   the agent re-emits a normal blocking finding tagged `stale: "<id>"`. Self-healing suppression.
 
 **Example.** Traefik is intentionally dev-only (the platform LB terminates TLS in prod). Record one
-decision: `agents: [review-env-parity]`, `concern: traefik dev-only`, `premise: "prod TLS is
+decision: `agents: [env-parity]`, `concern: traefik dev-only`, `premise: "prod TLS is
 terminated by the platform load balancer, not an in-stack reverse proxy"`. Thereafter the reviewer
 acknowledges Traefik silently — and re-fires if a future change makes the app depend on Traefik in a
 deployed environment.

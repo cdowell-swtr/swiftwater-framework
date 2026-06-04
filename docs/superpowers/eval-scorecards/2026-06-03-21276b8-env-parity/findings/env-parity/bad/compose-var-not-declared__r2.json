@@ -4,15 +4,15 @@
   "findings": [
     {
       "line": 11,
-      "message": "base.yml interpolates ${APP_WIDGET_API_URL} for the app service, but APP_WIDGET_API_URL is not declared in .env.example. Because base.yml reaches every environment (dev, test, staging, prod all compose base.yml), this undeclared variable resolves to empty across the entire DEV->CI->STAGE->PROD chain, breaking env-var parity. There is no APP_WIDGET_API_URL entry in .env.example (nor a corresponding widget_api_url pydantic field in src/demo/config/settings.py).",
+      "message": "base.yml interpolates ${APP_WIDGET_API_URL} for the app service, but APP_WIDGET_API_URL is not declared in .env.example (and has no corresponding APP_-prefixed pydantic field in src/demo/config/settings.py). A ${APP_*} interpolation with no .env.example declaration breaks env-var parity: the variable resolves to empty across dev/test (and anywhere it gets wired), with no documented source of truth for what value each environment should supply.",
       "path": "infra/compose/base.yml",
       "severity": "high",
-      "suggestion": "Declare APP_WIDGET_API_URL in the FRAMEWORK-managed section of .env.example (e.g. APP_WIDGET_API_URL=) so the interpolation resolves in all environments, and add a corresponding widget_api_url field under the APP_ prefix in src/demo/config/settings.py if the app consumes it."
+      "suggestion": "Add an APP_WIDGET_API_URL entry to the framework-managed block of .env.example documenting its expected value per environment (and, if the app actually consumes it, add a matching widget_api_url field under the APP_ prefix in src/demo/config/settings.py so the name maps cleanly)."
     }
   ],
   "kind": "bad",
   "latency_ms": null,
-  "raw_text": "[{\"path\":\"infra/compose/base.yml\",\"line\":11,\"severity\":\"high\",\"message\":\"base.yml interpolates ${APP_WIDGET_API_URL} for the app service, but APP_WIDGET_API_URL is not declared in .env.example. Because base.yml reaches every environment (dev, test, staging, prod all compose base.yml), this undeclared variable resolves to empty across the entire DEV->CI->STAGE->PROD chain, breaking env-var parity. There is no APP_WIDGET_API_URL entry in .env.example (nor a corresponding widget_api_url pydantic field in src/demo/config/settings.py).\",\"suggestion\":\"Declare APP_WIDGET_API_URL in the FRAMEWORK-managed section of .env.example (e.g. APP_WIDGET_API_URL=) so the interpolation resolves in all environments, and add a corresponding widget_api_url field under the APP_ prefix in src/demo/config/settings.py if the app consumes it.\"}]",
+  "raw_text": "[{\"path\":\"infra/compose/base.yml\",\"line\":11,\"severity\":\"high\",\"message\":\"base.yml interpolates ${APP_WIDGET_API_URL} for the app service, but APP_WIDGET_API_URL is not declared in .env.example (and has no corresponding APP_-prefixed pydantic field in src/demo/config/settings.py). A ${APP_*} interpolation with no .env.example declaration breaks env-var parity: the variable resolves to empty across dev/test (and anywhere it gets wired), with no documented source of truth for what value each environment should supply.\",\"suggestion\":\"Add an APP_WIDGET_API_URL entry to the framework-managed block of .env.example documenting its expected value per environment (and, if the app actually consumes it, add a matching widget_api_url field under the APP_ prefix in src/demo/config/settings.py so the name maps cleanly).\"}]",
   "repeat": 2,
   "seeded_file": "infra/compose/base.yml",
   "stop_reason": "end_turn",

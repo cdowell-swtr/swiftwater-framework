@@ -4,15 +4,15 @@
   "findings": [
     {
       "line": 23,
-      "message": "New pydantic setting `widget_timeout_s` (env var `APP_WIDGET_TIMEOUT_S` under the `APP_` prefix) is consumed in config/settings.py but is not declared in `.env.example`. The operator-facing env surface diverges from the consumed config, so this knob is undiscoverable when configuring CI/staging/prod and silently falls back to the hardcoded default.",
+      "message": "New pydantic field `widget_timeout_s` (env var `APP_WIDGET_TIMEOUT_S` under the `APP_` prefix) is consumed by Settings but is not declared in `.env.example`. The framework-managed surface in `.env.example` declares APP_ENVIRONMENT, APP_LOG_LEVEL, APP_SLO_*, APP_DATABASE_URL, and APP_ALERT_WEBHOOK_URL, but has no entry for this new variable. A consumed-but-undeclared variable breaks DEV->CI->STAGE->PROD env-var parity: operators have no documented knob to override the timeout per environment.",
       "path": "src/demo/config/settings.py",
       "severity": "high",
-      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` to `.env.example` (in the framework-managed section alongside the other `APP_*` SLO/runtime vars) so the variable is declared everywhere it is consumed."
+      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` (with a brief comment) to the framework-managed block of `.env.example` so the variable is discoverable and overridable across all environments."
     }
   ],
   "kind": "bad",
   "latency_ms": null,
-  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":23,\"severity\":\"high\",\"message\":\"New pydantic setting `widget_timeout_s` (env var `APP_WIDGET_TIMEOUT_S` under the `APP_` prefix) is consumed in config/settings.py but is not declared in `.env.example`. The operator-facing env surface diverges from the consumed config, so this knob is undiscoverable when configuring CI/staging/prod and silently falls back to the hardcoded default.\",\"suggestion\":\"Add `APP_WIDGET_TIMEOUT_S=5.0` to `.env.example` (in the framework-managed section alongside the other `APP_*` SLO/runtime vars) so the variable is declared everywhere it is consumed.\"}]",
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":23,\"severity\":\"high\",\"message\":\"New pydantic field `widget_timeout_s` (env var `APP_WIDGET_TIMEOUT_S` under the `APP_` prefix) is consumed by Settings but is not declared in `.env.example`. The framework-managed surface in `.env.example` declares APP_ENVIRONMENT, APP_LOG_LEVEL, APP_SLO_*, APP_DATABASE_URL, and APP_ALERT_WEBHOOK_URL, but has no entry for this new variable. A consumed-but-undeclared variable breaks DEV->CI->STAGE->PROD env-var parity: operators have no documented knob to override the timeout per environment.\",\"suggestion\":\"Add `APP_WIDGET_TIMEOUT_S=5.0` (with a brief comment) to the framework-managed block of `.env.example` so the variable is discoverable and overridable across all environments.\"}]",
   "repeat": 0,
   "seeded_file": "src/demo/config/settings.py",
   "stop_reason": "end_turn",
