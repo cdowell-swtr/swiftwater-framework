@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "env-var-consumed-not-declared",
+  "findings": [
+    {
+      "line": 23,
+      "message": "New pydantic setting `widget_timeout_s` (env var `APP_WIDGET_TIMEOUT_S` under the `APP_` prefix) is consumed in config/settings.py but is not declared in `.env.example`. The operator-facing env surface diverges from the consumed config, so this knob is undiscoverable when configuring CI/staging/prod and silently falls back to the hardcoded default.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` to `.env.example` (in the framework-managed section alongside the other `APP_*` SLO/runtime vars) so the variable is declared everywhere it is consumed."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":23,\"severity\":\"high\",\"message\":\"New pydantic setting `widget_timeout_s` (env var `APP_WIDGET_TIMEOUT_S` under the `APP_` prefix) is consumed in config/settings.py but is not declared in `.env.example`. The operator-facing env surface diverges from the consumed config, so this knob is undiscoverable when configuring CI/staging/prod and silently falls back to the hardcoded default.\",\"suggestion\":\"Add `APP_WIDGET_TIMEOUT_S=5.0` to `.env.example` (in the framework-managed section alongside the other `APP_*` SLO/runtime vars) so the variable is declared everywhere it is consumed.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

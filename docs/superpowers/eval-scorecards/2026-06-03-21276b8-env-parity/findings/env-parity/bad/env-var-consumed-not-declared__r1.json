@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "env-var-consumed-not-declared",
+  "findings": [
+    {
+      "line": 23,
+      "message": "New pydantic field `widget_timeout_s` (env prefix `APP_`, so consumed as `APP_WIDGET_TIMEOUT_S`) is added to Settings but is not declared in `.env.example`. A variable consumed in config/settings.py but absent from `.env.example` is an env-var parity gap: deployers across DEV\u2192CI\u2192STAGE\u2192PROD have no documented surface for overriding the widget service timeout, and the value silently falls back to the in-code default everywhere.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` to `.env.example` (in the framework-managed block alongside the other APP_ settings) so the variable is declared and overridable per environment."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":23,\"severity\":\"high\",\"message\":\"New pydantic field `widget_timeout_s` (env prefix `APP_`, so consumed as `APP_WIDGET_TIMEOUT_S`) is added to Settings but is not declared in `.env.example`. A variable consumed in config/settings.py but absent from `.env.example` is an env-var parity gap: deployers across DEV\u2192CI\u2192STAGE\u2192PROD have no documented surface for overriding the widget service timeout, and the value silently falls back to the in-code default everywhere.\",\"suggestion\":\"Add `APP_WIDGET_TIMEOUT_S=5.0` to `.env.example` (in the framework-managed block alongside the other APP_ settings) so the variable is declared and overridable per environment.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "service-dev-only",
+  "findings": [
+    {
+      "line": 3,
+      "message": "New runtime service `widgetizer` is defined only in the dev-scoped overlay `dev.yml` (profiles: [\"dev\"]). Staging/prod compose `base.yml + <env>.yml + services.yml + observability.yml` and never include `dev.yml`, so `widgetizer` reaches dev only and is silently omitted from staging/prod. This is a real application service (a versioned image wired to the app database via WIDGETIZER_DB_URL), not local-developer-experience tooling (Traefik/mailcatcher/DB admin UI), so it should reach prod.",
+      "path": "infra/compose/dev.yml",
+      "severity": "high",
+      "suggestion": "Move the `widgetizer` service to `base.yml` (or to `services.yml` if it is a battery data-store/worker-class component) so it is composed into staging/prod, rather than defining it dev-only. If dev-only is genuinely intended, record that decision in the decisions log instead of silently omitting it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/dev.yml\",\"line\":3,\"severity\":\"high\",\"message\":\"New runtime service `widgetizer` is defined only in the dev-scoped overlay `dev.yml` (profiles: [\\\"dev\\\"]). Staging/prod compose `base.yml + <env>.yml + services.yml + observability.yml` and never include `dev.yml`, so `widgetizer` reaches dev only and is silently omitted from staging/prod. This is a real application service (a versioned image wired to the app database via WIDGETIZER_DB_URL), not local-developer-experience tooling (Traefik/mailcatcher/DB admin UI), so it should reach prod.\",\"suggestion\":\"Move the `widgetizer` service to `base.yml` (or to `services.yml` if it is a battery data-store/worker-class component) so it is composed into staging/prod, rather than defining it dev-only. If dev-only is genuinely intended, record that decision in the decisions log instead of silently omitting it.\"}]",
+  "repeat": 1,
+  "seeded_file": "infra/compose/dev.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

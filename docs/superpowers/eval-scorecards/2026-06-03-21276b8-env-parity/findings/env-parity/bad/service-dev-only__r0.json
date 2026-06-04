@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "service-dev-only",
+  "findings": [
+    {
+      "line": 3,
+      "message": "New runtime service `widgetizer` is defined only in `dev.yml`, a dev-scoped overlay. Per Taskfile.yml the dev environments compose base.yml + observability.yml + dev.yml (and dev:lite = base.yml + dev.yml), while infra/deploy/strategy.sh composes staging/prod from base.yml + <env>.yml + services.yml + observability.yml \u2014 `dev.yml` is never merged into staging or prod. As written, `widgetizer` runs locally but silently never reaches staging/prod. It is a real backing service (pinned image ghcr.io/acme/widgetizer:1.4.0, a Postgres dependency, and a WIDGETIZER_DB_URL), not local-developer-experience tooling (Traefik/mailcatcher/DB admin UI), so it should reach production. This is the costly twice-shipped parity defect.",
+      "path": "infra/compose/dev.yml",
+      "severity": "high",
+      "suggestion": "Move the `widgetizer` service to a prod-reaching overlay: `infra/compose/base.yml` (reaches every environment) or `infra/compose/services.yml` if it is a battery-style data store/worker (reaches staging/prod alongside the other backing services). If it is genuinely intended to stay dev-only, record that exception in the decisions log rather than leaving it silently absent from staging/prod."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/dev.yml\",\"line\":3,\"severity\":\"high\",\"message\":\"New runtime service `widgetizer` is defined only in `dev.yml`, a dev-scoped overlay. Per Taskfile.yml the dev environments compose base.yml + observability.yml + dev.yml (and dev:lite = base.yml + dev.yml), while infra/deploy/strategy.sh composes staging/prod from base.yml + <env>.yml + services.yml + observability.yml \u2014 `dev.yml` is never merged into staging or prod. As written, `widgetizer` runs locally but silently never reaches staging/prod. It is a real backing service (pinned image ghcr.io/acme/widgetizer:1.4.0, a Postgres dependency, and a WIDGETIZER_DB_URL), not local-developer-experience tooling (Traefik/mailcatcher/DB admin UI), so it should reach production. This is the costly twice-shipped parity defect.\",\"suggestion\":\"Move the `widgetizer` service to a prod-reaching overlay: `infra/compose/base.yml` (reaches every environment) or `infra/compose/services.yml` if it is a battery-style data store/worker (reaches staging/prod alongside the other backing services). If it is genuinely intended to stay dev-only, record that exception in the decisions log rather than leaving it silently absent from staging/prod.\"}]",
+  "repeat": 0,
+  "seeded_file": "infra/compose/dev.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

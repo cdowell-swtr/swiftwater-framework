@@ -1,0 +1,11 @@
+{
+  "agent_count": 1,
+  "drift_detected": false,
+  "git_ref": "",
+  "mode": "tune",
+  "model_used": "",
+  "repeat": 3,
+  "run_duration_seconds": 0,
+  "slug": "21276b8-env-parity",
+  "subagent_call_count": 12
+}

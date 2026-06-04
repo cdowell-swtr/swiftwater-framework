@@ -41,6 +41,13 @@ dependency:
 documentation:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
+env-parity:
+  # Recall-first: a missed parity gap is the dev-only-not-prod defect that shipped twice
+  # (OBS-PROD, SVC-PROD) — protect recall; the greedy posture is safe because intentional
+  # dev-only choices are acknowledged via the decisions log. fp_max may rise toward 0.43 if
+  # the greedy posture later trips a good fixture under variance.
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
 observability:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00

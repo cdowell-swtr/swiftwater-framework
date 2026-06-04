@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "compose-var-not-declared",
+  "findings": [
+    {
+      "line": 11,
+      "message": "base.yml interpolates ${APP_WIDGET_API_URL} for the app service, but APP_WIDGET_API_URL is not declared in .env.example. Because base.yml reaches every environment (dev, test, staging, prod all compose base.yml), this undeclared variable resolves to empty across the entire DEV->CI->STAGE->PROD chain, breaking env-var parity. There is no APP_WIDGET_API_URL entry in .env.example (nor a corresponding widget_api_url pydantic field in src/demo/config/settings.py).",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "suggestion": "Declare APP_WIDGET_API_URL in the FRAMEWORK-managed section of .env.example (e.g. APP_WIDGET_API_URL=) so the interpolation resolves in all environments, and add a corresponding widget_api_url field under the APP_ prefix in src/demo/config/settings.py if the app consumes it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/base.yml\",\"line\":11,\"severity\":\"high\",\"message\":\"base.yml interpolates ${APP_WIDGET_API_URL} for the app service, but APP_WIDGET_API_URL is not declared in .env.example. Because base.yml reaches every environment (dev, test, staging, prod all compose base.yml), this undeclared variable resolves to empty across the entire DEV->CI->STAGE->PROD chain, breaking env-var parity. There is no APP_WIDGET_API_URL entry in .env.example (nor a corresponding widget_api_url pydantic field in src/demo/config/settings.py).\",\"suggestion\":\"Declare APP_WIDGET_API_URL in the FRAMEWORK-managed section of .env.example (e.g. APP_WIDGET_API_URL=) so the interpolation resolves in all environments, and add a corresponding widget_api_url field under the APP_ prefix in src/demo/config/settings.py if the app consumes it.\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/compose/base.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

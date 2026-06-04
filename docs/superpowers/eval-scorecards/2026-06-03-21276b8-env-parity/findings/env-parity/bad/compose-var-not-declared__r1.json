@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "compose-var-not-declared",
+  "findings": [
+    {
+      "line": 11,
+      "message": "base.yml interpolates ${APP_WIDGET_API_URL} for the prod-reaching `app` service, but APP_WIDGET_API_URL is not declared in .env.example. Because base.yml is composed by every environment (dev, test, staging, prod), this variable is consumed across all of them yet has no authoritative declaration. On any host where the var is unset, Compose substitutes an empty string, so APP_WIDGET_API_URL silently degrades to \"\" in CI/stage/prod \u2014 a parity gap that the host environment will not surface.",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "suggestion": "Add an APP_WIDGET_API_URL declaration to .env.example (with a sensible default or a clearly-marked placeholder) so the variable is documented and present for every environment that composes base.yml. If the app actually consumes it, also add a matching `widget_api_url` field under the APP_ prefix in src/demo/config/settings.py."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/base.yml\",\"line\":11,\"severity\":\"high\",\"message\":\"base.yml interpolates ${APP_WIDGET_API_URL} for the prod-reaching `app` service, but APP_WIDGET_API_URL is not declared in .env.example. Because base.yml is composed by every environment (dev, test, staging, prod), this variable is consumed across all of them yet has no authoritative declaration. On any host where the var is unset, Compose substitutes an empty string, so APP_WIDGET_API_URL silently degrades to \\\"\\\" in CI/stage/prod \u2014 a parity gap that the host environment will not surface.\",\"suggestion\":\"Add an APP_WIDGET_API_URL declaration to .env.example (with a sensible default or a clearly-marked placeholder) so the variable is documented and present for every environment that composes base.yml. If the app actually consumes it, also add a matching `widget_api_url` field under the APP_ prefix in src/demo/config/settings.py.\"}]",
+  "repeat": 1,
+  "seeded_file": "infra/compose/base.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

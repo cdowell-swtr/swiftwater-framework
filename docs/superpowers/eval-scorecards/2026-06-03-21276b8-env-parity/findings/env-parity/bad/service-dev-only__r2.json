@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "service-dev-only",
+  "findings": [
+    {
+      "line": 3,
+      "message": "New runtime service `widgetizer` is defined only in `dev.yml` (profiles: [\"dev\"]). Per Taskfile.yml and infra/deploy/strategy.sh, dev composes base.yml + observability.yml + dev.yml, while staging/prod compose base.yml + <env>.yml + services.yml + observability.yml \u2014 they never include dev.yml. So `widgetizer` reaches dev only and is silently absent from staging/prod, the costly twice-shipped parity defect. It is a genuine workload service (its own image plus WIDGETIZER_DB_URL against postgres), not local-developer-experience tooling (Traefik/mailcatcher/DB-admin-UI), so it should reach prod.",
+      "path": "infra/compose/dev.yml",
+      "severity": "high",
+      "suggestion": "Move the `widgetizer` service to a prod-reaching overlay: `base.yml` (shared by all environments) or `services.yml` (the battery data-store/worker home merged into staging/prod). If it is intentionally dev-only, record that decision in the decisions log rather than leaving it silently omitted from staging/prod."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/dev.yml\",\"line\":3,\"severity\":\"high\",\"message\":\"New runtime service `widgetizer` is defined only in `dev.yml` (profiles: [\\\"dev\\\"]). Per Taskfile.yml and infra/deploy/strategy.sh, dev composes base.yml + observability.yml + dev.yml, while staging/prod compose base.yml + <env>.yml + services.yml + observability.yml \u2014 they never include dev.yml. So `widgetizer` reaches dev only and is silently absent from staging/prod, the costly twice-shipped parity defect. It is a genuine workload service (its own image plus WIDGETIZER_DB_URL against postgres), not local-developer-experience tooling (Traefik/mailcatcher/DB-admin-UI), so it should reach prod.\",\"suggestion\":\"Move the `widgetizer` service to a prod-reaching overlay: `base.yml` (shared by all environments) or `services.yml` (the battery data-store/worker home merged into staging/prod). If it is intentionally dev-only, record that decision in the decisions log rather than leaving it silently omitted from staging/prod.\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/compose/dev.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

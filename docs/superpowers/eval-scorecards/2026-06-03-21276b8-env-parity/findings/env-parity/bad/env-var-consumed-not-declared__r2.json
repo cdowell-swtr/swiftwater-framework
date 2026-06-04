@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "env-var-consumed-not-declared",
+  "findings": [
+    {
+      "line": 23,
+      "message": "New pydantic field `widget_timeout_s` is consumed under the `APP_` prefix (env var `APP_WIDGET_TIMEOUT_S`) but is not declared in `.env.example`. Operators copying `.env.example` to `.env` get no signal that this knob exists, so staging/prod silently fall back to the hardcoded default of 5.0 with no documented way to tune it \u2014 an env-var parity gap across DEV\u2192CI\u2192STAGE\u2192PROD.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` (with a brief comment) to the framework-managed block of `.env.example` so the variable is discoverable and overridable per environment, matching the `settings.py` field name."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":23,\"severity\":\"high\",\"message\":\"New pydantic field `widget_timeout_s` is consumed under the `APP_` prefix (env var `APP_WIDGET_TIMEOUT_S`) but is not declared in `.env.example`. Operators copying `.env.example` to `.env` get no signal that this knob exists, so staging/prod silently fall back to the hardcoded default of 5.0 with no documented way to tune it \u2014 an env-var parity gap across DEV\u2192CI\u2192STAGE\u2192PROD.\",\"suggestion\":\"Add `APP_WIDGET_TIMEOUT_S=5.0` (with a brief comment) to the framework-managed block of `.env.example` so the variable is discoverable and overridable per environment, matching the `settings.py` field name.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

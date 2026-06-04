@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "compose-var-not-declared",
+  "findings": [
+    {
+      "line": 11,
+      "message": "The compose interpolation `APP_WIDGET_API_URL: \"${APP_WIDGET_API_URL}\"` references a variable that is not declared in `.env.example`. `.env.example` defines APP_ENVIRONMENT, APP_LOG_LEVEL, APP_SLO_*, APP_DATABASE_URL, GRAFANA_ADMIN_PASSWORD, and APP_ALERT_WEBHOOK_URL, but has no APP_WIDGET_API_URL entry. Because base.yml is composed by every environment (dev, test, staging, prod), the unset variable will interpolate to an empty string everywhere, breaking DEV->CI->STAGE->PROD parity for this setting.",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "suggestion": "Declare APP_WIDGET_API_URL in the framework-managed block of `.env.example` (e.g. `APP_WIDGET_API_URL=`) so the compose interpolation has an authoritative default and the variable is documented across all environments."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/base.yml\",\"line\":11,\"severity\":\"high\",\"message\":\"The compose interpolation `APP_WIDGET_API_URL: \\\"${APP_WIDGET_API_URL}\\\"` references a variable that is not declared in `.env.example`. `.env.example` defines APP_ENVIRONMENT, APP_LOG_LEVEL, APP_SLO_*, APP_DATABASE_URL, GRAFANA_ADMIN_PASSWORD, and APP_ALERT_WEBHOOK_URL, but has no APP_WIDGET_API_URL entry. Because base.yml is composed by every environment (dev, test, staging, prod), the unset variable will interpolate to an empty string everywhere, breaking DEV->CI->STAGE->PROD parity for this setting.\",\"suggestion\":\"Declare APP_WIDGET_API_URL in the framework-managed block of `.env.example` (e.g. `APP_WIDGET_API_URL=`) so the compose interpolation has an authoritative default and the variable is documented across all environments.\"}]",
+  "repeat": 0,
+  "seeded_file": "infra/compose/base.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

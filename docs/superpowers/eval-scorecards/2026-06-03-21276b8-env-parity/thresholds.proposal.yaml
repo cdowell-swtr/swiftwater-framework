@@ -1,0 +1,3 @@
+env-parity:
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
