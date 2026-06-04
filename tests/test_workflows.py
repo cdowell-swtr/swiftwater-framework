@@ -111,3 +111,13 @@ def test_agent_evals_triggers_cover_all_agent_prompts():
     have = {p.stem for p in prompts}
     assert {"contracts", "observability-infra", "observability-db"} <= have
     assert any("agents" in p for p in push_paths)
+
+
+def test_agent_evals_supports_manual_dispatch():
+    """The paid eval anchor (Slice E3) must be fireable on demand via
+    workflow_dispatch — so the ANTHROPIC_FRAMEWORK_CI_EVAL secret can be set
+    transiently for one deliberate run, rather than only firing on the next
+    fixture/prompt push or the weekly schedule."""
+    wf = yaml.safe_load(_WF.read_text())
+    triggers = wf[True] if True in wf else wf["on"]
+    assert "workflow_dispatch" in triggers
