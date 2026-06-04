@@ -1,0 +1,36 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "line": 37,
+      "message": "count_items is a public API endpoint with no docstring. Unlike get_items above it, there is no explanation of what the endpoint does, its constraints, or any caveats (e.g. that it calls list_items with the default page-size cap rather than a true COUNT query, so the result may be silently wrong for tables larger than DEFAULT_PAGE_SIZE).",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a docstring, e.g.: \"\"\"Return the total number of items in the database.\n\nNOTE: delegates to list_items which is capped at MAX_PAGE_SIZE; for large tables use a SQL COUNT query instead.\"\"\""
+    },
+    {
+      "line": 38,
+      "message": "No response_model is declared on the route, so FastAPI/OpenAPI emits no schema for the response body. The return annotation is the bare dict type, which provides no machine-readable contract for consumers or the OpenAPI spec.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Declare a small Pydantic model (e.g. class ItemCount(BaseModel): count: int) and pass it as response_model=ItemCount so the OpenAPI spec documents the response shape."
+    },
+    {
+      "line": 96,
+      "message": "The Endpoints section lists GET /items but does not mention the newly added GET /items/count endpoint. The API spec (README + openapi.json) is now stale.",
+      "path": "README.md",
+      "severity": "info",
+      "suggestion": "Add '- `GET /items/count` \u2014 total item count' to the Endpoints section and regenerate openapi.json with `task openapi:export` before pushing."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"low\",\"message\":\"count_items is a public API endpoint with no docstring. Unlike get_items above it, there is no explanation of what the endpoint does, its constraints, or any caveats (e.g. that it calls list_items with the default page-size cap rather than a true COUNT query, so the result may be silently wrong for tables larger than DEFAULT_PAGE_SIZE).\",\"suggestion\":\"Add a docstring, e.g.: \\\"\\\"\\\"Return the total number of items in the database.\\n\\nNOTE: delegates to list_items which is capped at MAX_PAGE_SIZE; for large tables use a SQL COUNT query instead.\\\"\\\"\\\"\"},{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"low\",\"message\":\"No response_model is declared on the route, so FastAPI/OpenAPI emits no schema for the response body. The return annotation is the bare dict type, which provides no machine-readable contract for consumers or the OpenAPI spec.\",\"suggestion\":\"Declare a small Pydantic model (e.g. class ItemCount(BaseModel): count: int) and pass it as response_model=ItemCount so the OpenAPI spec documents the response shape.\"},{\"path\":\"README.md\",\"line\":96,\"severity\":\"info\",\"message\":\"The Endpoints section lists GET /items but does not mention the newly added GET /items/count endpoint. The API spec (README + openapi.json) is now stale.\",\"suggestion\":\"Add '- `GET /items/count` \u2014 total item count' to the Endpoints section and regenerate openapi.json with `task openapi:export` before pushing.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

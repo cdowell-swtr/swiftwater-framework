@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 52,
+      "message": "PII logged: owner_email (an email address) is written to the application log in the item_created event. The model in db/models.py explicitly annotates owner_email as PII that must not be included in logs. Email addresses in logs create a durable, replicated copy of personal data outside its purpose and are a data-protection/retention risk.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from the log call. Log only non-PII identifiers, e.g. log.info(\"item_created\", item_id=item.id). If owner attribution in audit logs is required, log a non-reversible reference (e.g. a hashed owner id) rather than the raw email."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":52,\"severity\":\"high\",\"message\":\"PII logged: owner_email (an email address) is written to the application log in the item_created event. The model in db/models.py explicitly annotates owner_email as PII that must not be included in logs. Email addresses in logs create a durable, replicated copy of personal data outside its purpose and are a data-protection/retention risk.\",\"suggestion\":\"Remove owner_email from the log call. Log only non-PII identifiers, e.g. log.info(\\\"item_created\\\", item_id=item.id). If owner attribution in audit logs is required, log a non-reversible reference (e.g. a hashed owner id) rather than the raw email.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

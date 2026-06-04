@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 50,
+      "message": "post_item() accepts user-supplied input and writes it to the database via the bare create_item(), bypassing create_item_normalized(). The repository explicitly designates create_item_normalized() as the canonical entry-point for user-supplied names (\"Callers that accept user input MUST go through this function, not the bare create_item()\"), and create_item()'s own docstring says \"Use create_item_normalized for user-supplied input.\" This route is the canonical user-input path yet deliberately skips the strip+lowercase normalization, so user names enter the persistent store untransformed. The result is an inconsistent data store: 'Foo', ' foo ', and 'foo' all persist as distinct values, breaking the stated casing/whitespace consistency invariant and any downstream uniqueness/lookup logic that assumes normalized names.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Call create_item_normalized(session, payload.name) instead of create_item(session, payload.name) so user-supplied names are normalized before they reach the store, per the repository's documented contract."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":50,\"severity\":\"high\",\"message\":\"post_item() accepts user-supplied input and writes it to the database via the bare create_item(), bypassing create_item_normalized(). The repository explicitly designates create_item_normalized() as the canonical entry-point for user-supplied names (\\\"Callers that accept user input MUST go through this function, not the bare create_item()\\\"), and create_item()'s own docstring says \\\"Use create_item_normalized for user-supplied input.\\\" This route is the canonical user-input path yet deliberately skips the strip+lowercase normalization, so user names enter the persistent store untransformed. The result is an inconsistent data store: 'Foo', ' foo ', and 'foo' all persist as distinct values, breaking the stated casing/whitespace consistency invariant and any downstream uniqueness/lookup logic that assumes normalized names.\",\"suggestion\":\"Call create_item_normalized(session, payload.name) instead of create_item(session, payload.name) so user-supplied names are normalized before they reach the store, per the repository's documented contract.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

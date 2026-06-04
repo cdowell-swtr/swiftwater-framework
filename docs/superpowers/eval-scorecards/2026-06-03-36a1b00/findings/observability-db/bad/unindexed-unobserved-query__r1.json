@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 35,
+      "message": "New datastore read path `get_item_by_name` issues a `select(Item).where(Item.name == name)` query with no observability: there is no latency/duration metric, no span/trace around the query, and no row-count or error signal. A failure or slow lookup here is invisible to monitoring, and any error is not logged with a correlation id.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the query in a span/timer and emit a duration (and outcome) metric, e.g. record latency via a histogram and a span around the `session.scalars(...).first()` call, and log any exception with the request/correlation id before re-raising."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":35,\"severity\":\"high\",\"message\":\"New datastore read path `get_item_by_name` issues a `select(Item).where(Item.name == name)` query with no observability: there is no latency/duration metric, no span/trace around the query, and no row-count or error signal. A failure or slow lookup here is invisible to monitoring, and any error is not logged with a correlation id.\",\"suggestion\":\"Wrap the query in a span/timer and emit a duration (and outcome) metric, e.g. record latency via a histogram and a span around the `session.scalars(...).first()` call, and log any exception with the request/correlation id before re-raising.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: the `Item.name` field was renamed to `title` with no compatibility path. Existing GraphQL clients querying `name` will get a validation error since the field no longer exists. This is a backwards-incompatible removal/rename, not an additive change.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Keep `name` (optionally `@deprecated`) and add `title` alongside it, or expose `title` as a resolver that aliases the same underlying `row.name` while retaining `name` until clients migrate."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: the `Item.name` field was renamed to `title` with no compatibility path. Existing GraphQL clients querying `name` will get a validation error since the field no longer exists. This is a backwards-incompatible removal/rename, not an additive change.\",\"suggestion\":\"Keep `name` (optionally `@deprecated`) and add `title` alongside it, or expose `title` as a resolver that aliases the same underlying `row.name` while retaining `name` until clients migrate.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

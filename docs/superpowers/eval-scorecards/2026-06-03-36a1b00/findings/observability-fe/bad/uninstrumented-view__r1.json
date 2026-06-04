@@ -1,0 +1,22 @@
+{
+  "agent": "observability-fe",
+  "case": "uninstrumented-view",
+  "findings": [
+    {
+      "line": 8,
+      "message": "New user-facing Dashboard view fetches /internal/summary with no RUM/error instrumentation reachable from it. The fetch chain (fetch -> r.json() -> setData) has no .catch and the component has no error boundary, so a failed or non-2xx /internal/summary response is silently swallowed: a non-ok HTTP status does not reject the promise, and r.json()/setData failures never reach the js-errors counter or any RUM signal. The view's failure behavior is completely unobserved.",
+      "path": "frontend/src/Dashboard.tsx",
+      "severity": "high",
+      "suggestion": "Add an explicit error path that surfaces the failure to RUM: check res.ok and on failure (and in a .catch) increment the frontend js-errors signal / rethrow so the window 'error'/'unhandledrejection' handler in observability/rum.ts records app_frontend_js_errors_total, and wrap the view in an error boundary so render failures are observed."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Dashboard.tsx\",\"line\":8,\"severity\":\"high\",\"message\":\"New user-facing Dashboard view fetches /internal/summary with no RUM/error instrumentation reachable from it. The fetch chain (fetch -> r.json() -> setData) has no .catch and the component has no error boundary, so a failed or non-2xx /internal/summary response is silently swallowed: a non-ok HTTP status does not reject the promise, and r.json()/setData failures never reach the js-errors counter or any RUM signal. The view's failure behavior is completely unobserved.\",\"suggestion\":\"Add an explicit error path that surfaces the failure to RUM: check res.ok and on failure (and in a .catch) increment the frontend js-errors signal / rethrow so the window 'error'/'unhandledrejection' handler in observability/rum.ts records app_frontend_js_errors_total, and wrap the view in an error boundary so render failures are observed.\"}]",
+  "repeat": 1,
+  "seeded_file": "frontend/src/Dashboard.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 50,
+      "message": "The post_item endpoint persists user-supplied input through the bare create_item(), bypassing create_item_normalized() \u2014 the documented canonical entry-point for user input. Both repository docstrings state that callers accepting user input MUST go through create_item_normalized (strip + lowercase). Routing this user-facing write through create_item breaks the data-store's normalization invariant: names enter the items table with arbitrary casing and surrounding whitespace, diverging from every name written via the canonical path. The data flow (HTTP payload -> ItemCreate.name -> create_item -> Item.name) has no consistency strategy, so the same logical name (e.g. ' Apple ' vs 'apple') is stored as distinct values, corrupting downstream reads, lookups, and any uniqueness assumptions.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Call create_item_normalized(session, payload.name) instead of create_item, so the user-supplied name follows the documented strip+lowercase normalization before it reaches the store."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":50,\"severity\":\"high\",\"message\":\"The post_item endpoint persists user-supplied input through the bare create_item(), bypassing create_item_normalized() \u2014 the documented canonical entry-point for user input. Both repository docstrings state that callers accepting user input MUST go through create_item_normalized (strip + lowercase). Routing this user-facing write through create_item breaks the data-store's normalization invariant: names enter the items table with arbitrary casing and surrounding whitespace, diverging from every name written via the canonical path. The data flow (HTTP payload -> ItemCreate.name -> create_item -> Item.name) has no consistency strategy, so the same logical name (e.g. ' Apple ' vs 'apple') is stored as distinct values, corrupting downstream reads, lookups, and any uniqueness assumptions.\",\"suggestion\":\"Call create_item_normalized(session, payload.name) instead of create_item, so the user-supplied name follows the documented strip+lowercase normalization before it reaches the store.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "line": 14,
+      "message": "get_stock now reads data[\"reserved_count\"] from the inventory response, but the consumer Pact interaction in tests/functional/test_consumer_inventory.py (will_respond_with body {\"item_id\": match.int(1), \"in_stock\": match.int(5)}) does not declare reserved_count. The consumer contract therefore does not pin a field the consumer now hard-depends on: the published pact tells the provider only in_stock/item_id are needed, so provider verification stays green even if the provider never sends (or later drops) reserved_count, while the real client raises KeyError. This is an uncovered consumer dependency / weakened contract for reserved_count.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Add reserved_count to the consumer pact interaction so the contract covers the field the client reads, e.g. .with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5), \"reserved_count\": match.int(0)}), and update the test assertion accordingly; then regenerate and publish the pact."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":14,\"severity\":\"high\",\"message\":\"get_stock now reads data[\\\"reserved_count\\\"] from the inventory response, but the consumer Pact interaction in tests/functional/test_consumer_inventory.py (will_respond_with body {\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5)}) does not declare reserved_count. The consumer contract therefore does not pin a field the consumer now hard-depends on: the published pact tells the provider only in_stock/item_id are needed, so provider verification stays green even if the provider never sends (or later drops) reserved_count, while the real client raises KeyError. This is an uncovered consumer dependency / weakened contract for reserved_count.\",\"suggestion\":\"Add reserved_count to the consumer pact interaction so the contract covers the field the client reads, e.g. .with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5), \\\"reserved_count\\\": match.int(0)}), and update the test assertion accordingly; then regenerate and publish the pact.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

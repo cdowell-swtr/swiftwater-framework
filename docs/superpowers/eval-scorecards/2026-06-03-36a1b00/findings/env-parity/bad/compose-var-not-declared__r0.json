@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "compose-var-not-declared",
+  "findings": [
+    {
+      "line": 11,
+      "message": "`APP_WIDGET_API_URL` is interpolated as `${APP_WIDGET_API_URL}` in base.yml but is not declared in `.env.example`. With no declaration, the interpolation resolves to empty in every environment that composes base.yml (dev/test), breaking the env-var parity contract that every `${APP_*}` referenced by an overlay must have a corresponding entry in `.env.example`.",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "suggestion": "Add `APP_WIDGET_API_URL=` (with an appropriate default/placeholder) to `.env.example` so the variable is declared and documented, matching the compose interpolation."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/base.yml\",\"line\":11,\"severity\":\"high\",\"message\":\"`APP_WIDGET_API_URL` is interpolated as `${APP_WIDGET_API_URL}` in base.yml but is not declared in `.env.example`. With no declaration, the interpolation resolves to empty in every environment that composes base.yml (dev/test), breaking the env-var parity contract that every `${APP_*}` referenced by an overlay must have a corresponding entry in `.env.example`.\",\"suggestion\":\"Add `APP_WIDGET_API_URL=` (with an appropriate default/placeholder) to `.env.example` so the variable is declared and documented, matching the compose interpolation.\"}]",
+  "repeat": 0,
+  "seeded_file": "infra/compose/base.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

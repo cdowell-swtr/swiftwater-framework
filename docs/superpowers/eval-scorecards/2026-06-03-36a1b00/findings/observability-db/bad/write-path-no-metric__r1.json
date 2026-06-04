@@ -1,0 +1,29 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New data-layer write path `delete_items_by_prefix` performs a select-then-bulk-delete against the datastore with no span or metric instrumentation. The delete (and its row count / latency) is invisible to observability \u2014 operators cannot see how often it runs, how long it takes, or how many rows it removes.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the query/delete in a tracing span and emit metrics: a latency histogram and a deleted-row-count counter (e.g. via OpenTelemetry/Prometheus), so the bulk-delete path is observable. Log datastore errors with the request correlation id."
+    },
+    {
+      "line": 38,
+      "message": "The `select(Item).where(Item.name.startswith(prefix))` query is unbounded (no limit/pagination) and materialized into a list, yet has no latency or row-count metric around it. A large prefix match can load and delete an unbounded number of rows with no observability signal.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add a row-count/latency metric around the query and consider batching/limiting the delete, mirroring the bounded read convention already used in `list_items` (MAX_PAGE_SIZE)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New data-layer write path `delete_items_by_prefix` performs a select-then-bulk-delete against the datastore with no span or metric instrumentation. The delete (and its row count / latency) is invisible to observability \u2014 operators cannot see how often it runs, how long it takes, or how many rows it removes.\",\"suggestion\":\"Wrap the query/delete in a tracing span and emit metrics: a latency histogram and a deleted-row-count counter (e.g. via OpenTelemetry/Prometheus), so the bulk-delete path is observable. Log datastore errors with the request correlation id.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":38,\"severity\":\"high\",\"message\":\"The `select(Item).where(Item.name.startswith(prefix))` query is unbounded (no limit/pagination) and materialized into a list, yet has no latency or row-count metric around it. A large prefix match can load and delete an unbounded number of rows with no observability signal.\",\"suggestion\":\"Add a row-count/latency metric around the query and consider batching/limiting the delete, mirroring the bounded read convention already used in `list_items` (MAX_PAGE_SIZE).\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

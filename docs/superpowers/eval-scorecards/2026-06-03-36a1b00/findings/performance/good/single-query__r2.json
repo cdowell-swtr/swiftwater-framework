@@ -1,0 +1,22 @@
+{
+  "agent": "performance",
+  "case": "single-query",
+  "findings": [
+    {
+      "line": 43,
+      "message": "Unbounded query: `select(Item.name)` has no LIMIT, so it will load every name in the table into memory and return it all in a single response. The existing `get_items` endpoint caps reads at MAX_PAGE_SIZE=100; this endpoint removes that guard entirely. As the table grows this becomes an OOM and DB-load risk.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add pagination (limit/offset) mirroring `get_items`, or at minimum apply `.limit(MAX_PAGE_SIZE)` to the query: `select(Item.name).order_by(Item.id).limit(MAX_PAGE_SIZE)`. Expose limit/offset query params if callers genuinely need to page through names."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"high\",\"message\":\"Unbounded query: `select(Item.name)` has no LIMIT, so it will load every name in the table into memory and return it all in a single response. The existing `get_items` endpoint caps reads at MAX_PAGE_SIZE=100; this endpoint removes that guard entirely. As the table grows this becomes an OOM and DB-load risk.\",\"suggestion\":\"Add pagination (limit/offset) mirroring `get_items`, or at minimum apply `.limit(MAX_PAGE_SIZE)` to the query: `select(Item.name).order_by(Item.id).limit(MAX_PAGE_SIZE)`. Expose limit/offset query params if callers genuinely need to page through names.\"}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: the `Item.name` field was renamed to `title` with no backwards-compatible path. Any existing GraphQL client selecting `name` will now get a validation error, and the field's data simply moved under a new name. This is a removal-by-rename of a public schema field.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Keep `name` and add `title` as an additive field (e.g. expose both, with `title` resolving from the same source), or deprecate `name` via `@strawberry.field(deprecation_reason=...)` before removing it in a later, announced breaking release. Avoid renaming public fields in place."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: the `Item.name` field was renamed to `title` with no backwards-compatible path. Any existing GraphQL client selecting `name` will now get a validation error, and the field's data simply moved under a new name. This is a removal-by-rename of a public schema field.\",\"suggestion\":\"Keep `name` and add `title` as an additive field (e.g. expose both, with `title` resolving from the same source), or deprecate `name` via `@strawberry.field(deprecation_reason=...)` before removing it in a later, announced breaking release. Avoid renaming public fields in place.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

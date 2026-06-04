@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "The client now sends a query parameter `include_location=true` on GET /inventory/{item_id}, but the committed consumer pact (tests/functional/test_consumer_inventory.py) declares `with_request(\"GET\", \"/inventory/1\")` with no query parameters. The real request shape has diverged from the contracted request, so the consumer pact no longer matches what the client actually sends and the provider has never agreed to honor this parameter. The pact must be regenerated/republished with the new request, or the parameter removed.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Update the consumer pact test to include the query parameter (e.g. .with_query_parameter(\"include_location\", \"true\")) and re-publish the pact, or drop the include_location param until the provider contract supports it."
+    },
+    {
+      "line": 18,
+      "message": "The client now reads `data.get(\"location\")` from the inventory response, but no consumer pact contracts a `location` field (the pact body in test_consumer_inventory.py is only {\"item_id\", \"in_stock\"}). The client's expectation of the provider response has changed without a corresponding pact update, so the provider can drop/rename `location` with no contract test catching it.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Add `location` to the consumer pact's expected response body (will_respond_with body) and re-generate the pact so the provider-verification job pins the field this consumer now depends on."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"high\",\"message\":\"The client now sends a query parameter `include_location=true` on GET /inventory/{item_id}, but the committed consumer pact (tests/functional/test_consumer_inventory.py) declares `with_request(\\\"GET\\\", \\\"/inventory/1\\\")` with no query parameters. The real request shape has diverged from the contracted request, so the consumer pact no longer matches what the client actually sends and the provider has never agreed to honor this parameter. The pact must be regenerated/republished with the new request, or the parameter removed.\",\"suggestion\":\"Update the consumer pact test to include the query parameter (e.g. .with_query_parameter(\\\"include_location\\\", \\\"true\\\")) and re-publish the pact, or drop the include_location param until the provider contract supports it.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":18,\"severity\":\"high\",\"message\":\"The client now reads `data.get(\\\"location\\\")` from the inventory response, but no consumer pact contracts a `location` field (the pact body in test_consumer_inventory.py is only {\\\"item_id\\\", \\\"in_stock\\\"}). The client's expectation of the provider response has changed without a corresponding pact update, so the provider can drop/rename `location` with no contract test catching it.\",\"suggestion\":\"Add `location` to the consumer pact's expected response body (will_respond_with body) and re-generate the pact so the provider-verification job pins the field this consumer now depends on.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

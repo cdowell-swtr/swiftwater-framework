@@ -1,0 +1,29 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 41,
+      "message": "New archive_item endpoint has no structured log on any code path. The 404 error branch raises HTTPException without logging the item_id or a correlation ID, making it impossible to correlate archive failures in logs. The success branch is also silent.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Inject a logger (e.g. `log = get_logger()`) and emit a structured log on both the not-found path (`log.warning('archive_item_not_found', item_id=item_id)`) and the success path (`log.info('item_archived', item_id=item_id)`) so operations are traceable via correlation ID."
+    },
+    {
+      "line": 37,
+      "message": "archive_item is a state-mutating endpoint with no business-level metric. The ObservabilityMiddleware records generic request counts/latency, but there is no counter for archive operations, making it impossible to alert on or graph archive volume or failure rate separately.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add a dedicated counter (e.g. via the app's MetricsRegistry or a module-level counter) incremented on each successful archive and on 404s, so archive-specific SLO monitoring is possible."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"New archive_item endpoint has no structured log on any code path. The 404 error branch raises HTTPException without logging the item_id or a correlation ID, making it impossible to correlate archive failures in logs. The success branch is also silent.\",\"suggestion\":\"Inject a logger (e.g. `log = get_logger()`) and emit a structured log on both the not-found path (`log.warning('archive_item_not_found', item_id=item_id)`) and the success path (`log.info('item_archived', item_id=item_id)`) so operations are traceable via correlation ID.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"high\",\"message\":\"archive_item is a state-mutating endpoint with no business-level metric. The ObservabilityMiddleware records generic request counts/latency, but there is no counter for archive operations, making it impossible to alert on or graph archive volume or failure rate separately.\",\"suggestion\":\"Add a dedicated counter (e.g. via the app's MetricsRegistry or a module-level counter) incremented on each successful archive and on 404s, so archive-specific SLO monitoring is possible.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

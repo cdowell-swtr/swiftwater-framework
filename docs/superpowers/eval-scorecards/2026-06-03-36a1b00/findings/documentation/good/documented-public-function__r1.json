@@ -1,0 +1,22 @@
+{
+  "agent": "documentation",
+  "case": "documented-public-function",
+  "findings": [
+    {
+      "line": 49,
+      "message": "The `count_items` docstring claims to return 'the total number of items in the catalogue', but the implementation calls `list_items(session)` with no explicit limit, which defaults to `DEFAULT_PAGE_SIZE=50` and is capped at `MAX_PAGE_SIZE=100`. For catalogues with more than 50 items, the returned count will be silently incorrect.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Either use a SQL COUNT query (e.g. `session.scalar(select(func.count()).select_from(Item))`) for a true total, or update the docstring to document the bounded behaviour and its limit."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":49,\"severity\":\"low\",\"message\":\"The `count_items` docstring claims to return 'the total number of items in the catalogue', but the implementation calls `list_items(session)` with no explicit limit, which defaults to `DEFAULT_PAGE_SIZE=50` and is capped at `MAX_PAGE_SIZE=100`. For catalogues with more than 50 items, the returned count will be silently incorrect.\",\"suggestion\":\"Either use a SQL COUNT query (e.g. `session.scalar(select(func.count()).select_from(Item))`) for a true total, or update the docstring to document the bounded behaviour and its limit.\"}]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

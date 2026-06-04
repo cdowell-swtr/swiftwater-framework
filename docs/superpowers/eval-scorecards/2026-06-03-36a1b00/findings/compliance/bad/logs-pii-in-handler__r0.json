@@ -1,0 +1,22 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 51,
+      "message": "PII logged without pseudonymisation or retention control: the caller's email address is written to the application log at INFO level with no audit trail, no pseudonymisation, and no deletion/erasure path. Under GDPR this constitutes unlawful processing of personal data in logs \u2014 log data is typically retained for weeks or months, far beyond the immediate request, with no mechanism to honour a right-to-erasure request against log sinks.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove the email from the log statement entirely, or replace it with a one-way hash (e.g. hashlib.sha256(email.encode()).hexdigest()[:8]) so the log entry is pseudonymous and non-reversible. If an audit trail of 'who searched' is a compliance requirement, write it to a dedicated, access-controlled audit store (not the application log) with a documented retention period and an erasure procedure."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":51,\"severity\":\"high\",\"message\":\"PII logged without pseudonymisation or retention control: the caller's email address is written to the application log at INFO level with no audit trail, no pseudonymisation, and no deletion/erasure path. Under GDPR this constitutes unlawful processing of personal data in logs \u2014 log data is typically retained for weeks or months, far beyond the immediate request, with no mechanism to honour a right-to-erasure request against log sinks.\",\"suggestion\":\"Remove the email from the log statement entirely, or replace it with a one-way hash (e.g. hashlib.sha256(email.encode()).hexdigest()[:8]) so the log entry is pseudonymous and non-reversible. If an audit trail of 'who searched' is a compliance requirement, write it to a dedicated, access-controlled audit store (not the application log) with a documented retention period and an erasure procedure.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

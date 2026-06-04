@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 46,
+      "message": "The create_item mutation accepts a new required `description: str` argument but the resolver body silently drops it: it calls `repository.create_item(session, name)` and never passes `description`. The input is accepted, validated as required, then discarded \u2014 clients believe they are persisting a description that is never stored (the repository signature is `create_item(session, name)` and the Item model has no description column).",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Either thread the value through (`repository.create_item(session, name, description)` plus a corresponding `description` column on the Item model and a `description` field on the `Item` GraphQL type), or remove the unused argument until the storage path supports it."
+    },
+    {
+      "line": 43,
+      "message": "Adding a non-null `description: str` argument to the existing create_item mutation is a breaking schema change with no compatible path. Previously-valid client operations that call `create_item(name: ...)` will now fail GraphQL validation because the new argument is required and has no default.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Make the new argument nullable with a default (`description: str | None = None`) so existing clients keep working, then deprecate/migrate before tightening to non-null."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":46,\"severity\":\"high\",\"message\":\"The create_item mutation accepts a new required `description: str` argument but the resolver body silently drops it: it calls `repository.create_item(session, name)` and never passes `description`. The input is accepted, validated as required, then discarded \u2014 clients believe they are persisting a description that is never stored (the repository signature is `create_item(session, name)` and the Item model has no description column).\",\"suggestion\":\"Either thread the value through (`repository.create_item(session, name, description)` plus a corresponding `description` column on the Item model and a `description` field on the `Item` GraphQL type), or remove the unused argument until the storage path supports it.\"},{\"path\":\"src/demo/graphql/schema.py\",\"line\":43,\"severity\":\"high\",\"message\":\"Adding a non-null `description: str` argument to the existing create_item mutation is a breaking schema change with no compatible path. Previously-valid client operations that call `create_item(name: ...)` will now fail GraphQL validation because the new argument is required and has no default.\",\"suggestion\":\"Make the new argument nullable with a default (`description: str | None = None`) so existing clients keep working, then deprecate/migrate before tightening to non-null.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

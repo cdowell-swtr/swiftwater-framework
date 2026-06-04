@@ -1,0 +1,22 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 44,
+      "message": "N+1 query pattern: the endpoint first fetches all item IDs with one query, then issues a separate `session.get(Item, iid)` for every ID in a loop. For a table with N rows this executes N+1 queries. Unlike `GET /items` there is no pagination limit, so the query count is unbounded and grows linearly with table size.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace the two-step fetch with a single query that selects only the name column: `return list(session.scalars(select(Item.name)))`. This returns all names in one round-trip and avoids loading the full ORM object for each row."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"high\",\"message\":\"N+1 query pattern: the endpoint first fetches all item IDs with one query, then issues a separate `session.get(Item, iid)` for every ID in a loop. For a table with N rows this executes N+1 queries. Unlike `GET /items` there is no pagination limit, so the query count is unbounded and grows linearly with table size.\",\"suggestion\":\"Replace the two-step fetch with a single query that selects only the name column: `return list(session.scalars(select(Item.name)))`. This returns all names in one round-trip and avoids loading the full ORM object for each row.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

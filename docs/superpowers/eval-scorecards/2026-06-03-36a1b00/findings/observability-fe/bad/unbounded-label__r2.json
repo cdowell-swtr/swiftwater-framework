@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "unbounded-label",
+  "findings": [
+    {
+      "line": 109,
+      "message": "record_raw_path stores the raw full path (including query string) as the metric key with no sanitize, no distinct-value cap, and no \"other\" overflow bucket. Every distinct URL+query becomes a new series, producing unbounded label cardinality that will blow up Prometheus. This is inconsistent with every sibling signal in this class, which is bounded via _san + _bump_capped (MAX_ROUTES/MAX_ATTRIBUTION/MAX_REFERRERS).",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Strip the query string, sanitize via _san(), and bump through _bump_capped(self._raw_paths, route, MAX_ROUTES, overflow=\"other\") so the label is a sanitized, capped enum with an overflow bucket. Better still, drop this signal entirely since app_frontend_page_views_total already records views by bounded route."
+    },
+    {
+      "line": 208,
+      "message": "app_frontend_raw_path_total emits one series per raw full path with the value rendered directly into the path=\"...\" label (no sanitize, no cap). Unbounded high-cardinality label: a single crawler or campaign with varying query strings yields unlimited series and unbounded /metrics growth.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Render from a sanitized, capped store (see record_raw_path fix) so the path label is a fixed-size set with an \"other\" overflow series, or remove this counter in favor of the existing bounded app_frontend_page_views_total."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":109,\"severity\":\"high\",\"message\":\"record_raw_path stores the raw full path (including query string) as the metric key with no sanitize, no distinct-value cap, and no \\\"other\\\" overflow bucket. Every distinct URL+query becomes a new series, producing unbounded label cardinality that will blow up Prometheus. This is inconsistent with every sibling signal in this class, which is bounded via _san + _bump_capped (MAX_ROUTES/MAX_ATTRIBUTION/MAX_REFERRERS).\",\"suggestion\":\"Strip the query string, sanitize via _san(), and bump through _bump_capped(self._raw_paths, route, MAX_ROUTES, overflow=\\\"other\\\") so the label is a sanitized, capped enum with an overflow bucket. Better still, drop this signal entirely since app_frontend_page_views_total already records views by bounded route.\"},{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":208,\"severity\":\"high\",\"message\":\"app_frontend_raw_path_total emits one series per raw full path with the value rendered directly into the path=\\\"...\\\" label (no sanitize, no cap). Unbounded high-cardinality label: a single crawler or campaign with varying query strings yields unlimited series and unbounded /metrics growth.\",\"suggestion\":\"Render from a sanitized, capped store (see record_raw_path fix) so the path label is a fixed-size set with an \\\"other\\\" overflow series, or remove this counter in favor of the existing bounded app_frontend_page_views_total.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/frontend_rum/metrics.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

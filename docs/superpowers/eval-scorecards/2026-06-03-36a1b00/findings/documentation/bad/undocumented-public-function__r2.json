@@ -1,0 +1,43 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "line": 40,
+      "message": "Public route handler `count_items` lacks a docstring. All other route handlers in this file (e.g. `get_items`) have docstrings that describe behaviour, constraints, and serialization details. FastAPI also surfaces docstrings in the OpenAPI UI.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a docstring such as: \"\"\"Return the total number of items in the database.\"\"\""
+    },
+    {
+      "line": 39,
+      "message": "`@router.get(\"/items/count\")` does not declare a `response_model`, so OpenAPI will not generate a typed schema for the response. The sibling `get_items` uses `response_model=list[ItemRead]`.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add `response_model=dict[str, int]` (or a small Pydantic schema) to the decorator so the OpenAPI spec stays accurate."
+    },
+    {
+      "line": 42,
+      "message": "`list_items(session)` is called without a `limit`, so it fetches up to `DEFAULT_PAGE_SIZE` (50) items and returns `len()` of that \u2014 not the true total count if there are more than 50 items. This silent semantic limitation is undocumented.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "suggestion": "Either pass `limit=MAX_PAGE_SIZE` (and document the cap), or use a `SELECT COUNT(*)` query for a true total. Add a comment explaining whichever choice is made."
+    },
+    {
+      "line": 96,
+      "message": "The `## Endpoints` section documents `GET /items` but the newly added `GET /items/count` endpoint is not listed, leaving the README stale.",
+      "path": "README.md",
+      "severity": "info",
+      "suggestion": "Add `- \\`GET /items/count\\` \u2014 total number of items in the database` to the Endpoints section."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":40,\"severity\":\"low\",\"message\":\"Public route handler `count_items` lacks a docstring. All other route handlers in this file (e.g. `get_items`) have docstrings that describe behaviour, constraints, and serialization details. FastAPI also surfaces docstrings in the OpenAPI UI.\",\"suggestion\":\"Add a docstring such as: \\\"\\\"\\\"Return the total number of items in the database.\\\"\\\"\\\"\"},{\"path\":\"src/demo/routes/items.py\",\"line\":39,\"severity\":\"low\",\"message\":\"`@router.get(\\\"/items/count\\\")` does not declare a `response_model`, so OpenAPI will not generate a typed schema for the response. The sibling `get_items` uses `response_model=list[ItemRead]`.\",\"suggestion\":\"Add `response_model=dict[str, int]` (or a small Pydantic schema) to the decorator so the OpenAPI spec stays accurate.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":42,\"severity\":\"info\",\"message\":\"`list_items(session)` is called without a `limit`, so it fetches up to `DEFAULT_PAGE_SIZE` (50) items and returns `len()` of that \u2014 not the true total count if there are more than 50 items. This silent semantic limitation is undocumented.\",\"suggestion\":\"Either pass `limit=MAX_PAGE_SIZE` (and document the cap), or use a `SELECT COUNT(*)` query for a true total. Add a comment explaining whichever choice is made.\"},{\"path\":\"README.md\",\"line\":96,\"severity\":\"info\",\"message\":\"The `## Endpoints` section documents `GET /items` but the newly added `GET /items/count` endpoint is not listed, leaving the README stale.\",\"suggestion\":\"Add `- \\\\`GET /items/count\\\\` \u2014 total number of items in the database` to the Endpoints section.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

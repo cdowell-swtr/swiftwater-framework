@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "ItemRead is the external API response schema (used by both GET /items and POST /items). Adding owner_email here echoes the owner's email address \u2014 explicitly annotated as PII that must NOT be included in external responses (see models.py: 'PII: owner email address \u2014 do not include in logs or external responses.') \u2014 back to every API client. This exposes PII in external responses against the documented policy.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Drop owner_email from ItemRead so the email is never serialized to clients. If a contact must be surfaced, return a masked/redacted value or expose it only through a separate authorized/admin schema."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"ItemRead is the external API response schema (used by both GET /items and POST /items). Adding owner_email here echoes the owner's email address \u2014 explicitly annotated as PII that must NOT be included in external responses (see models.py: 'PII: owner email address \u2014 do not include in logs or external responses.') \u2014 back to every API client. This exposes PII in external responses against the documented policy.\",\"suggestion\":\"Drop owner_email from ItemRead so the email is never serialized to clients. If a contact must be surfaced, return a masked/redacted value or expose it only through a separate authorized/admin schema.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

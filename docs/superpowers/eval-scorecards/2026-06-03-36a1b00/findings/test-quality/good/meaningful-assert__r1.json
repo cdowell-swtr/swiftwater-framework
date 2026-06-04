@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "meaningful-assert",
+  "findings": [
+    {
+      "line": 57,
+      "message": "test_resolved_log_level_production_is_not_debug uses environment=\"production\" which is not a recognised environment value (the codebase uses \"prod\"). Since resolved_log_level returns \"INFO\" for any environment string that is not \"dev\", passing any unrecognised string such as \"production\" trivially satisfies != \"DEBUG\" \u2014 the test cannot fail even if the logic regresses. The guard it purports to add is already provided by the existing parametrise covering \"prod\".",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Either use environment=\"prod\" to test the actual production key, or remove this test as it duplicates existing coverage. If the intent is to check that an unrecognised env defaults to INFO (not DEBUG), add an explicit comment and rename accordingly, but note the assertion is still trivially true by construction."
+    },
+    {
+      "line": 48,
+      "message": "test_slo_request_latency_default_is_reasonable asserts a wide range (100 <= x <= 5000) that overlaps almost entirely with the exact value already pinned in test_defaults (200.0). The range is so wide it would pass even for values that likely violate the intended SLO contract, making it a weak guard. It adds no regression protection beyond what test_defaults already provides.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "low",
+      "suggestion": "Remove this test or replace it with a behaviour-focused assertion (e.g. verifying that the default value is accepted without validation errors, or that an out-of-range value is rejected), rather than re-checking a range that the exact-equality test already covers."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":57,\"severity\":\"high\",\"message\":\"test_resolved_log_level_production_is_not_debug uses environment=\\\"production\\\" which is not a recognised environment value (the codebase uses \\\"prod\\\"). Since resolved_log_level returns \\\"INFO\\\" for any environment string that is not \\\"dev\\\", passing any unrecognised string such as \\\"production\\\" trivially satisfies != \\\"DEBUG\\\" \u2014 the test cannot fail even if the logic regresses. The guard it purports to add is already provided by the existing parametrise covering \\\"prod\\\".\",\"suggestion\":\"Either use environment=\\\"prod\\\" to test the actual production key, or remove this test as it duplicates existing coverage. If the intent is to check that an unrecognised env defaults to INFO (not DEBUG), add an explicit comment and rename accordingly, but note the assertion is still trivially true by construction.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":48,\"severity\":\"low\",\"message\":\"test_slo_request_latency_default_is_reasonable asserts a wide range (100 <= x <= 5000) that overlaps almost entirely with the exact value already pinned in test_defaults (200.0). The range is so wide it would pass even for values that likely violate the intended SLO contract, making it a weak guard. It adds no regression protection beyond what test_defaults already provides.\",\"suggestion\":\"Remove this test or replace it with a behaviour-focused assertion (e.g. verifying that the default value is accepted without validation errors, or that an out-of-range value is rejected), rather than re-checking a range that the exact-equality test already covers.\"}]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

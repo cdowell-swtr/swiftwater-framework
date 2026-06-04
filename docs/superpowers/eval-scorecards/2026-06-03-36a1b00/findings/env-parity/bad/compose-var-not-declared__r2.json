@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "compose-var-not-declared",
+  "findings": [
+    {
+      "line": 11,
+      "message": "`APP_WIDGET_API_URL` is interpolated as `${APP_WIDGET_API_URL}` in base.yml but is not declared in `.env.example`. An undeclared interpolation variable breaks env-var parity: Compose resolves it to an empty string (with a warning) in every environment that composes base.yml, and there is no authoritative declaration documenting the variable for dev/CI/stage/prod operators.",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "suggestion": "Add `APP_WIDGET_API_URL=` (with a dev default value or an empty placeholder) to `.env.example` so the variable is declared on the managed environment surface, matching the `${APP_WIDGET_API_URL}` interpolation in infra/compose/base.yml."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/base.yml\",\"line\":11,\"severity\":\"high\",\"message\":\"`APP_WIDGET_API_URL` is interpolated as `${APP_WIDGET_API_URL}` in base.yml but is not declared in `.env.example`. An undeclared interpolation variable breaks env-var parity: Compose resolves it to an empty string (with a warning) in every environment that composes base.yml, and there is no authoritative declaration documenting the variable for dev/CI/stage/prod operators.\",\"suggestion\":\"Add `APP_WIDGET_API_URL=` (with a dev default value or an empty placeholder) to `.env.example` so the variable is declared on the managed environment surface, matching the `${APP_WIDGET_API_URL}` interpolation in infra/compose/base.yml.\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/compose/base.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

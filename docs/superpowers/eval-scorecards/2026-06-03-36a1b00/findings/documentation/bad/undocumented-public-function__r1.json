@@ -1,0 +1,29 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "line": 38,
+      "message": "`count_items` is a public API endpoint with no docstring. Every other route handler in the codebase (e.g. `get_items`, `heartbeat`, `health`, `metrics`) has a docstring describing its purpose and behaviour.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Add a docstring, e.g.: \"\"\"Return the total number of items in the database.\"\"\""
+    },
+    {
+      "line": 97,
+      "message": "The README's 'Endpoints' section lists `GET /items` but does not mention the new `GET /items/count` route added in this diff. The API spec is now stale.",
+      "path": "README.md",
+      "severity": "info",
+      "suggestion": "Add `- \\`GET /items/count\\` \u2014 total item count` to the Endpoints section of README.md."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"low\",\"message\":\"`count_items` is a public API endpoint with no docstring. Every other route handler in the codebase (e.g. `get_items`, `heartbeat`, `health`, `metrics`) has a docstring describing its purpose and behaviour.\",\"suggestion\":\"Add a docstring, e.g.: \\\"\\\"\\\"Return the total number of items in the database.\\\"\\\"\\\"\"},{\"path\":\"README.md\",\"line\":97,\"severity\":\"info\",\"message\":\"The README's 'Endpoints' section lists `GET /items` but does not mention the new `GET /items/count` route added in this diff. The API spec is now stale.\",\"suggestion\":\"Add `- \\\\`GET /items/count\\\\` \u2014 total item count` to the Endpoints section of README.md.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

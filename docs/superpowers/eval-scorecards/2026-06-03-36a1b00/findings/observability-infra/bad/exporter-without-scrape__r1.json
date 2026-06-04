@@ -1,0 +1,22 @@
+{
+  "agent": "observability-infra",
+  "case": "exporter-without-scrape",
+  "findings": [
+    {
+      "line": 94,
+      "message": "New `redis-exporter` service (oliver006/redis_exporter, metrics on :9121) is added with no matching Prometheus scrape job. `infra/observability/prometheus/prometheus.yml` has scrape_configs for app, prometheus, otel-collector, and postgres only \u2014 nothing targets `redis-exporter:9121`, so the exporter's metrics are never collected. The new exporter is dead weight: no scrape, and consequently no alert rule (infra/observability/prometheus/alerts/) and no Grafana dashboard for Redis. Either the scrape target is missing or the exporter should not have been added.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add a scrape job to infra/observability/prometheus/prometheus.yml, e.g.:\n  - job_name: redis\n    static_configs:\n      - targets: [\"redis-exporter:9121\"]\nand follow up with a Redis alert rule (infra/observability/prometheus/alerts/redis_alerts.yml) and a Grafana dashboard so the new surface is actually observable."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"New `redis-exporter` service (oliver006/redis_exporter, metrics on :9121) is added with no matching Prometheus scrape job. `infra/observability/prometheus/prometheus.yml` has scrape_configs for app, prometheus, otel-collector, and postgres only \u2014 nothing targets `redis-exporter:9121`, so the exporter's metrics are never collected. The new exporter is dead weight: no scrape, and consequently no alert rule (infra/observability/prometheus/alerts/) and no Grafana dashboard for Redis. Either the scrape target is missing or the exporter should not have been added.\",\"suggestion\":\"Add a scrape job to infra/observability/prometheus/prometheus.yml, e.g.:\\n  - job_name: redis\\n    static_configs:\\n      - targets: [\\\"redis-exporter:9121\\\"]\\nand follow up with a Redis alert rule (infra/observability/prometheus/alerts/redis_alerts.yml) and a Grafana dashboard so the new surface is actually observable.\"}]",
+  "repeat": 1,
+  "seeded_file": "infra/compose/observability.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

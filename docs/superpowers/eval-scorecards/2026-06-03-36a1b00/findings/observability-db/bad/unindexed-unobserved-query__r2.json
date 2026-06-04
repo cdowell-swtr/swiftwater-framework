@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [
+    {
+      "line": 35,
+      "message": "New data-access path get_item_by_name filters on Item.name, which has no index (see models.py / migration 0001_initial \u2014 only id is a primary key, name is a plain String(255) column). This equality lookup is a sequential scan, and unlike the rest of the request path it carries no per-query latency or row-count metric: the HTTP middleware only records whole-request latency and SQLAlchemy auto-instrumentation only emits a generic span, so a slow scan on a growing items table is invisible to the metrics layer. name is also not unique, so .first() silently returns one of N matches with no observability into how many rows the predicate actually touched.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add an index on items.name (e.g. index=True on the mapped_column plus an Alembic migration with op.create_index), and surface the query's latency / matched-row count to the metrics registry (or at minimum log it with the correlation id) so the scan cost on this unindexed lookup is observable."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":35,\"severity\":\"high\",\"message\":\"New data-access path get_item_by_name filters on Item.name, which has no index (see models.py / migration 0001_initial \u2014 only id is a primary key, name is a plain String(255) column). This equality lookup is a sequential scan, and unlike the rest of the request path it carries no per-query latency or row-count metric: the HTTP middleware only records whole-request latency and SQLAlchemy auto-instrumentation only emits a generic span, so a slow scan on a growing items table is invisible to the metrics layer. name is also not unique, so .first() silently returns one of N matches with no observability into how many rows the predicate actually touched.\",\"suggestion\":\"Add an index on items.name (e.g. index=True on the mapped_column plus an Alembic migration with op.create_index), and surface the query's latency / matched-row count to the metrics registry (or at minimum log it with the correlation id) so the scan cost on this unindexed lookup is observable.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

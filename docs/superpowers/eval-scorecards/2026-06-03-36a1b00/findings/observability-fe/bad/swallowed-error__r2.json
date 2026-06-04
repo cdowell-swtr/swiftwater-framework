@@ -1,0 +1,22 @@
+{
+  "agent": "observability-fe",
+  "case": "swallowed-error",
+  "findings": [
+    {
+      "line": 10,
+      "message": "loadItemsQuietly() catches the fetchItems() rejection and returns [] with no rethrow and no telemetry. Because the rejection is caught here, the promise never rejects, so the global 'unhandledrejection' handler in observability/rum.ts (the only path into the RUM js-errors counter) never fires. The component also no longer calls setError(true), so the load failure is invisible to both the user and RUM \u2014 a failed API path renders as an empty 'No items yet.' state with zero observability.",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "suggestion": "Do not swallow the error. Either remove loadItemsQuietly and restore the .catch(() => setError(true)) handler so the failure is surfaced to the user, and/or emit telemetry (e.g. rethrow so 'unhandledrejection' fires, or push an {kind:'error'} RUM event / increment the js-errors counter) before returning the empty fallback so the failure reaches the RUM error signal."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":10,\"severity\":\"high\",\"message\":\"loadItemsQuietly() catches the fetchItems() rejection and returns [] with no rethrow and no telemetry. Because the rejection is caught here, the promise never rejects, so the global 'unhandledrejection' handler in observability/rum.ts (the only path into the RUM js-errors counter) never fires. The component also no longer calls setError(true), so the load failure is invisible to both the user and RUM \u2014 a failed API path renders as an empty 'No items yet.' state with zero observability.\",\"suggestion\":\"Do not swallow the error. Either remove loadItemsQuietly and restore the .catch(() => setError(true)) handler so the failure is surfaced to the user, and/or emit telemetry (e.g. rethrow so 'unhandledrejection' fires, or push an {kind:'error'} RUM event / increment the js-errors counter) before returning the empty fallback so the failure reaches the RUM error signal.\"}]",
+  "repeat": 2,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

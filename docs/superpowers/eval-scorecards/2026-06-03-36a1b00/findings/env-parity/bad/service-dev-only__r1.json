@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "service-dev-only",
+  "findings": [
+    {
+      "line": 3,
+      "message": "New runtime service `widgetizer` is defined only in `dev.yml`, a dev-scoped overlay (dev = base.yml + observability.yml + dev.yml). Staging/prod compose `<env>.yml` + services.yml + observability.yml and never include dev.yml, so this service reaches dev only and is silently absent from staging/prod. It is a real runtime dependency (image ghcr.io/acme/widgetizer:1.4.0 with a Postgres connection via WIDGETIZER_DB_URL and depends_on postgres), not local-developer-experience tooling (not TLS termination, a mail catcher, or a DB admin UI).",
+      "path": "infra/compose/dev.yml",
+      "severity": "high",
+      "suggestion": "Move `widgetizer` to `infra/compose/services.yml` (the battery overlay staging/prod compose) so it reaches all deployed environments, or define it in the deployed `staging.yml`/`prod.yml` overlays. If the dev-only placement is intentional, record the decision in the decisions log rather than leaving it as a silent omission. Note `base.yml` is also dev/test-only, so it is not a valid home for a prod-reaching service."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/dev.yml\",\"line\":3,\"severity\":\"high\",\"message\":\"New runtime service `widgetizer` is defined only in `dev.yml`, a dev-scoped overlay (dev = base.yml + observability.yml + dev.yml). Staging/prod compose `<env>.yml` + services.yml + observability.yml and never include dev.yml, so this service reaches dev only and is silently absent from staging/prod. It is a real runtime dependency (image ghcr.io/acme/widgetizer:1.4.0 with a Postgres connection via WIDGETIZER_DB_URL and depends_on postgres), not local-developer-experience tooling (not TLS termination, a mail catcher, or a DB admin UI).\",\"suggestion\":\"Move `widgetizer` to `infra/compose/services.yml` (the battery overlay staging/prod compose) so it reaches all deployed environments, or define it in the deployed `staging.yml`/`prod.yml` overlays. If the dev-only placement is intentional, record the decision in the decisions log rather than leaving it as a silent omission. Note `base.yml` is also dev/test-only, so it is not a valid home for a prod-reaching service.\"}]",
+  "repeat": 1,
+  "seeded_file": "infra/compose/dev.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

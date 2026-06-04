@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "service-dev-only",
+  "findings": [
+    {
+      "line": 3,
+      "message": "New runtime service `widgetizer` is defined only in `dev.yml`, a dev-scoped overlay. Per the composition, dev = base.yml + observability.yml + dev.yml, while staging/prod = `<env>.yml` + services.yml + observability.yml (dev.yml is not composed). So `widgetizer` reaches dev but is silently absent from staging and prod. It is a real application service (a containerized image consuming the Postgres DB via WIDGETIZER_DB_URL), not local-developer-experience tooling (Traefik/mailcatcher/DB-admin UI), so the dev-only placement is a parity defect.",
+      "path": "infra/compose/dev.yml",
+      "severity": "high",
+      "suggestion": "Move the `widgetizer` service to `infra/compose/services.yml` (the battery overlay staging/prod compose) or define it in the deployed `<env>.yml` overlays so it reaches staging/prod. If it is intentionally dev-only, record that in the decisions log rather than leaving it silently omitted."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/dev.yml\",\"line\":3,\"severity\":\"high\",\"message\":\"New runtime service `widgetizer` is defined only in `dev.yml`, a dev-scoped overlay. Per the composition, dev = base.yml + observability.yml + dev.yml, while staging/prod = `<env>.yml` + services.yml + observability.yml (dev.yml is not composed). So `widgetizer` reaches dev but is silently absent from staging and prod. It is a real application service (a containerized image consuming the Postgres DB via WIDGETIZER_DB_URL), not local-developer-experience tooling (Traefik/mailcatcher/DB-admin UI), so the dev-only placement is a parity defect.\",\"suggestion\":\"Move the `widgetizer` service to `infra/compose/services.yml` (the battery overlay staging/prod compose) or define it in the deployed `<env>.yml` overlays so it reaches staging/prod. If it is intentionally dev-only, record that in the decisions log rather than leaving it silently omitted.\"}]",
+  "repeat": 0,
+  "seeded_file": "infra/compose/dev.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

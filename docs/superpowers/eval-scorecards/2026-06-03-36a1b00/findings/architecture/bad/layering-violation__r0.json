@@ -1,0 +1,22 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 44,
+      "message": "Layering violation: the create_item route handler opens its own DB session via SessionLocal and manipulates the ORM directly (Item(...), session.add, session.refresh), bypassing both the get_session dependency used everywhere else in this file and the repository layer. db/repository.py already provides a create_item(session, name) function that performs this write correctly (including session.commit()). The route should depend on get_session and delegate to the repository rather than reaching into db.engine and the ORM itself.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Use the session dependency and the repository: `def create_item(payload: ItemCreate, session: SessionDep) -> Item: return repository.create_item(session, payload.name)`, and drop the `SessionLocal` import from db.engine."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"high\",\"message\":\"Layering violation: the create_item route handler opens its own DB session via SessionLocal and manipulates the ORM directly (Item(...), session.add, session.refresh), bypassing both the get_session dependency used everywhere else in this file and the repository layer. db/repository.py already provides a create_item(session, name) function that performs this write correctly (including session.commit()). The route should depend on get_session and delegate to the repository rather than reaching into db.engine and the ORM itself.\",\"suggestion\":\"Use the session dependency and the repository: `def create_item(payload: ItemCreate, session: SessionDep) -> Item: return repository.create_item(session, payload.name)`, and drop the `SessionLocal` import from db.engine.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

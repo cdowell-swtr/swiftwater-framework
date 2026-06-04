@@ -1,0 +1,29 @@
+{
+  "agent": "documentation",
+  "case": "documented-public-function",
+  "findings": [
+    {
+      "line": 52,
+      "message": "count_items calls list_items(session) without a limit, performing a full table scan to count rows. The docstring does not mention this behavior or its scalability implication. Consider noting the scan cost, especially since list_items defaults to MAX_PAGE_SIZE=100 via DEFAULT_PAGE_SIZE \u2014 here called with no limit arg so it uses the default, meaning the count will be capped at 100, not the true total.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "suggestion": "Add a note in the docstring that the count is bounded by MAX_PAGE_SIZE (via list_items default) and therefore may not reflect the true total for large catalogues. If a true count is needed, consider a SELECT COUNT(*) query instead."
+    },
+    {
+      "line": 78,
+      "message": "A new route was added but the diff does not include an updated openapi.json. The README and CI configuration both require running `task openapi:export` and committing the updated spec after any route change \u2014 CI fails on a stale spec.",
+      "path": "README.md",
+      "severity": "info",
+      "suggestion": "Run `task openapi:export` and commit the updated openapi.json alongside this change."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":52,\"severity\":\"info\",\"message\":\"count_items calls list_items(session) without a limit, performing a full table scan to count rows. The docstring does not mention this behavior or its scalability implication. Consider noting the scan cost, especially since list_items defaults to MAX_PAGE_SIZE=100 via DEFAULT_PAGE_SIZE \u2014 here called with no limit arg so it uses the default, meaning the count will be capped at 100, not the true total.\",\"suggestion\":\"Add a note in the docstring that the count is bounded by MAX_PAGE_SIZE (via list_items default) and therefore may not reflect the true total for large catalogues. If a true count is needed, consider a SELECT COUNT(*) query instead.\"},{\"path\":\"README.md\",\"line\":78,\"severity\":\"info\",\"message\":\"A new route was added but the diff does not include an updated openapi.json. The README and CI configuration both require running `task openapi:export` and committing the updated spec after any route change \u2014 CI fails on a stale spec.\",\"suggestion\":\"Run `task openapi:export` and commit the updated openapi.json alongside this change.\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

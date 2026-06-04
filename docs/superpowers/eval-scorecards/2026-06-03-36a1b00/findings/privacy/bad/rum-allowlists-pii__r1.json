@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "rum-allowlists-pii",
+  "findings": [
+    {
+      "line": 45,
+      "message": "Adding \"email\" to frontend_rum_allowed_query_params causes the user's email address to be captured from the URL query string into RUM telemetry. This is PII collection not needed for attribution/RUM purposes (the surrounding allowlist is UTM attribution params only), and emails captured in query strings end up persisted in telemetry/analytics stores and access logs.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Remove the \"email\" entry from frontend_rum_allowed_query_params; keep the allowlist limited to non-PII attribution keys (utm_*). If a user identifier is genuinely required, use a non-PII pseudonymous ID rather than a raw email."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":45,\"severity\":\"high\",\"message\":\"Adding \\\"email\\\" to frontend_rum_allowed_query_params causes the user's email address to be captured from the URL query string into RUM telemetry. This is PII collection not needed for attribution/RUM purposes (the surrounding allowlist is UTM attribution params only), and emails captured in query strings end up persisted in telemetry/analytics stores and access logs.\",\"suggestion\":\"Remove the \\\"email\\\" entry from frontend_rum_allowed_query_params; keep the allowlist limited to non-PII attribution keys (utm_*). If a user identifier is genuinely required, use a non-PII pseudonymous ID rather than a raw email.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

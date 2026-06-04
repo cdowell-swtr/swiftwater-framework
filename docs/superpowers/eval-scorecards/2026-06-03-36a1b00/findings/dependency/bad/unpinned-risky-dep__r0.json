@@ -1,0 +1,36 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 16,
+      "message": "New dependency 'requests' is added without any version constraint. Every other runtime dependency in this manifest specifies a minimum version (e.g., '>=2.x'). An unpinned 'requests' allows the resolver to select any version, including old releases with known CVEs (e.g., credential leakage via redirects, SSRF via malformed URLs).",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Add a minimum version floor, e.g. \"requests>=2.32\" (the first release that addresses the urllib3 CVE-2024-37891 / requests CVE-2024-35195 credential-leakage chain)."
+    },
+    {
+      "line": 16,
+      "message": "'requests' is a synchronous HTTP library; this project is an async FastAPI service. Blocking calls to 'requests' inside async route handlers or Celery-less background tasks will block the event loop. 'httpx' (already present in the dev group) supports both sync and async modes and is the idiomatic choice for async FastAPI services.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Consider replacing 'requests' with 'httpx>=0.28' promoted to the runtime dependencies group, unless 'requests' is intentionally restricted to a non-async context (e.g., a CLI script or a Celery worker task that runs in its own thread)."
+    },
+    {
+      "line": 16,
+      "message": "No justification is provided for why 'requests' was added. All other dependencies in the manifest map to clearly identifiable framework roles (ORM, observability, circuit-breaker, etc.). Without a comment or PR description explaining the use case, it is difficult to assess whether an existing dependency (httpx, FastAPI's TestClient which wraps requests, etc.) already covers the need.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Add an inline comment (e.g., '# used for <use-case>') or confirm in the PR description what functionality requires 'requests' that 'httpx' or another existing dependency cannot provide."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":16,\"severity\":\"low\",\"message\":\"New dependency 'requests' is added without any version constraint. Every other runtime dependency in this manifest specifies a minimum version (e.g., '>=2.x'). An unpinned 'requests' allows the resolver to select any version, including old releases with known CVEs (e.g., credential leakage via redirects, SSRF via malformed URLs).\",\"suggestion\":\"Add a minimum version floor, e.g. \\\"requests>=2.32\\\" (the first release that addresses the urllib3 CVE-2024-37891 / requests CVE-2024-35195 credential-leakage chain).\"},{\"path\":\"pyproject.toml\",\"line\":16,\"severity\":\"info\",\"message\":\"'requests' is a synchronous HTTP library; this project is an async FastAPI service. Blocking calls to 'requests' inside async route handlers or Celery-less background tasks will block the event loop. 'httpx' (already present in the dev group) supports both sync and async modes and is the idiomatic choice for async FastAPI services.\",\"suggestion\":\"Consider replacing 'requests' with 'httpx>=0.28' promoted to the runtime dependencies group, unless 'requests' is intentionally restricted to a non-async context (e.g., a CLI script or a Celery worker task that runs in its own thread).\"},{\"path\":\"pyproject.toml\",\"line\":16,\"severity\":\"info\",\"message\":\"No justification is provided for why 'requests' was added. All other dependencies in the manifest map to clearly identifiable framework roles (ORM, observability, circuit-breaker, etc.). Without a comment or PR description explaining the use case, it is difficult to assess whether an existing dependency (httpx, FastAPI's TestClient which wraps requests, etc.) already covers the need.\",\"suggestion\":\"Add an inline comment (e.g., '# used for <use-case>') or confirm in the PR description what functionality requires 'requests' that 'httpx' or another existing dependency cannot provide.\"}]",
+  "repeat": 0,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

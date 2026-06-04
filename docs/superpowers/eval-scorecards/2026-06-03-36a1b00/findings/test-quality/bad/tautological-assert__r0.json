@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 56,
+      "message": "Tautological assertion: `assert s is s` always passes because any object is identical to itself. This test can never fail regardless of the implementation and provides zero coverage signal.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful assertion, e.g. `assert isinstance(s, Settings)` or check a specific attribute like `assert s.environment == 'dev'`."
+    },
+    {
+      "line": 64,
+      "message": "Over-mocked test: `resolved_log_level` is monkeypatched away and then the mock return value is asserted. The test exercises the mock, not the real implementation \u2014 it passes even if `resolved_log_level` is completely broken.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Remove the patch and test the real behaviour, e.g. `assert Settings(environment='dev').resolved_log_level == 'DEBUG'` (already covered by `test_resolved_log_level_is_debug_in_dev`). Delete this test or cover a missing edge case without mocking the method under test."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":56,\"severity\":\"high\",\"message\":\"Tautological assertion: `assert s is s` always passes because any object is identical to itself. This test can never fail regardless of the implementation and provides zero coverage signal.\",\"suggestion\":\"Replace with a meaningful assertion, e.g. `assert isinstance(s, Settings)` or check a specific attribute like `assert s.environment == 'dev'`.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":64,\"severity\":\"high\",\"message\":\"Over-mocked test: `resolved_log_level` is monkeypatched away and then the mock return value is asserted. The test exercises the mock, not the real implementation \u2014 it passes even if `resolved_log_level` is completely broken.\",\"suggestion\":\"Remove the patch and test the real behaviour, e.g. `assert Settings(environment='dev').resolved_log_level == 'DEBUG'` (already covered by `test_resolved_log_level_is_debug_in_dev`). Delete this test or cover a missing edge case without mocking the method under test.\"}]",
+  "repeat": 0,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

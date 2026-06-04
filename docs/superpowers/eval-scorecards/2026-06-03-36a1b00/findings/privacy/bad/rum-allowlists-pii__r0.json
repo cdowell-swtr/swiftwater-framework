@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "rum-allowlists-pii",
+  "findings": [
+    {
+      "line": 45,
+      "message": "Adding \"email\" to frontend_rum_allowed_query_params captures the user's email address from the query string into RUM telemetry. This allowlist governs which query-string params are collected for attribution (the rest are UTM tracking params); an email is PII and is not needed for the stated attribution purpose. Capturing it into telemetry/traces is unnecessary PII collection and risks PII landing in observability backends and logs with no retention bound.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Remove the \"email\" entry from frontend_rum_allowed_query_params so the fail-closed allowlist keeps only the non-PII UTM attribution params. If a user identifier is genuinely required for analytics, use a pseudonymous/hashed id collected through a consented path rather than the raw email from the query string."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":45,\"severity\":\"high\",\"message\":\"Adding \\\"email\\\" to frontend_rum_allowed_query_params captures the user's email address from the query string into RUM telemetry. This allowlist governs which query-string params are collected for attribution (the rest are UTM tracking params); an email is PII and is not needed for the stated attribution purpose. Capturing it into telemetry/traces is unnecessary PII collection and risks PII landing in observability backends and logs with no retention bound.\",\"suggestion\":\"Remove the \\\"email\\\" entry from frontend_rum_allowed_query_params so the fail-closed allowlist keeps only the non-PII UTM attribution params. If a user identifier is genuinely required for analytics, use a pseudonymous/hashed id collected through a consented path rather than the raw email from the query string.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

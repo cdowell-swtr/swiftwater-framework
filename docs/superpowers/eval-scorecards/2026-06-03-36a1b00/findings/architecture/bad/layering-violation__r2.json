@@ -1,0 +1,22 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 44,
+      "message": "Layering violation: the new create_item route handler bypasses the repository layer. It opens its own DB session via SessionLocal() and performs raw ORM work (Item(...), session.add, session.refresh) directly in the route. The rest of this layer obtains a session through the get_session FastAPI dependency, and the repository module already provides repository.create_item(session, name) for exactly this. Routes reaching directly into the DB engine/ORM couples the HTTP layer to persistence details and breaks the established route -> repository boundary (the read path correctly delegates to list_items).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Use the SessionDep dependency and delegate to the repository: `def create_item(payload: ItemCreate, session: SessionDep) -> Item: return repository.create_item(session, payload.name)`. Drop the SessionLocal import from the routes module. (Note: the inline handler also never commits, so the insert would be rolled back when the session closes; repository.create_item already commits.)"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"high\",\"message\":\"Layering violation: the new create_item route handler bypasses the repository layer. It opens its own DB session via SessionLocal() and performs raw ORM work (Item(...), session.add, session.refresh) directly in the route. The rest of this layer obtains a session through the get_session FastAPI dependency, and the repository module already provides repository.create_item(session, name) for exactly this. Routes reaching directly into the DB engine/ORM couples the HTTP layer to persistence details and breaks the established route -> repository boundary (the read path correctly delegates to list_items).\",\"suggestion\":\"Use the SessionDep dependency and delegate to the repository: `def create_item(payload: ItemCreate, session: SessionDep) -> Item: return repository.create_item(session, payload.name)`. Drop the SessionLocal import from the routes module. (Note: the inline handler also never commits, so the insert would be rolled back when the session closes; repository.create_item already commits.)\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

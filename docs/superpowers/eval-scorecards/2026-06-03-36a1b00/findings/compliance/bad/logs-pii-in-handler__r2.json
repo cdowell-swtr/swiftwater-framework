@@ -1,0 +1,36 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 51,
+      "message": "PII logged in plaintext: the caller's email address is passed directly to logging.info() at INFO level with no pseudonymisation, hashing, or masking. Under GDPR, email addresses are personal data; logging them verbatim into application logs (which may be shipped to log aggregators, stored indefinitely, and accessed by ops staff) constitutes uncontrolled processing of personal data without a clear retention or deletion path.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove the email from the log line, or replace it with a pseudonymous identifier (e.g. a stable hash: hashlib.sha256(email.encode()).hexdigest()[:12]). Ensure log retention policies are defined and deletion of personal data from logs is covered in the erasure workflow."
+    },
+    {
+      "line": 41,
+      "message": "Email address accepted as a query parameter with no audit trail: the endpoint collects a user's email (personal data) as a plain query string and uses it for personalisation, but there is no audit log recording who accessed what data on whose behalf. GDPR Article 5(2) (accountability) and Article 30 (records of processing) require that access to personal data in sensitive operations is traceable.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Emit a structured audit event (distinct from the application debug log) recording the operation, a pseudonymous user identifier, and timestamp. Do not include the raw email in the audit record; use a stable pseudonymous ID linked to the email only in a controlled identity store."
+    },
+    {
+      "line": 41,
+      "message": "Personal data (email) collected with no retention or erasure path: the email parameter drives personalisation but is not persisted in a way that is covered by a right-to-erasure (GDPR Article 17) workflow. If any downstream processing or logging retains this value, there is no deletion mechanism declared.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Document the data flow for the email parameter and ensure any retained copies (logs, caches, derived records) are included in the service's erasure procedure. If personalisation does not require storing the email beyond the request, state that explicitly in the handler and ensure logs are scrubbed."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":51,\"severity\":\"high\",\"message\":\"PII logged in plaintext: the caller's email address is passed directly to logging.info() at INFO level with no pseudonymisation, hashing, or masking. Under GDPR, email addresses are personal data; logging them verbatim into application logs (which may be shipped to log aggregators, stored indefinitely, and accessed by ops staff) constitutes uncontrolled processing of personal data without a clear retention or deletion path.\",\"suggestion\":\"Remove the email from the log line, or replace it with a pseudonymous identifier (e.g. a stable hash: hashlib.sha256(email.encode()).hexdigest()[:12]). Ensure log retention policies are defined and deletion of personal data from logs is covered in the erasure workflow.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Email address accepted as a query parameter with no audit trail: the endpoint collects a user's email (personal data) as a plain query string and uses it for personalisation, but there is no audit log recording who accessed what data on whose behalf. GDPR Article 5(2) (accountability) and Article 30 (records of processing) require that access to personal data in sensitive operations is traceable.\",\"suggestion\":\"Emit a structured audit event (distinct from the application debug log) recording the operation, a pseudonymous user identifier, and timestamp. Do not include the raw email in the audit record; use a stable pseudonymous ID linked to the email only in a controlled identity store.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"Personal data (email) collected with no retention or erasure path: the email parameter drives personalisation but is not persisted in a way that is covered by a right-to-erasure (GDPR Article 17) workflow. If any downstream processing or logging retains this value, there is no deletion mechanism declared.\",\"suggestion\":\"Document the data flow for the email parameter and ensure any retained copies (logs, caches, derived records) are included in the service's erasure procedure. If personalisation does not require storing the email beyond the request, state that explicitly in the handler and ensure logs are scrubbed.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

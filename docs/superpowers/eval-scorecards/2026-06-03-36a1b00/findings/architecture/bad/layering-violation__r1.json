@@ -1,0 +1,22 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "line": 46,
+      "message": "Layering violation: create_item opens its own SessionLocal() and performs the ORM write inline, bypassing both the get_session request-scoped dependency and the existing repository.create_item() seam. The sibling get_items route uses SessionDep (Depends(get_session)) and delegates to list_items(); this route breaks that established routes -> repository boundary by importing SessionLocal directly from db.engine (line 7) and talking to the database itself.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Inject the session via the SessionDep dependency and delegate the write to the repository, e.g. `def create_item(payload: ItemCreate, session: SessionDep) -> Item: return repository.create_item(session, payload.name)`. Drop the `SessionLocal` import. Note repository.create_item already commits; the inline version omits session.commit() before refresh, so the row would never be persisted."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":46,\"severity\":\"high\",\"message\":\"Layering violation: create_item opens its own SessionLocal() and performs the ORM write inline, bypassing both the get_session request-scoped dependency and the existing repository.create_item() seam. The sibling get_items route uses SessionDep (Depends(get_session)) and delegates to list_items(); this route breaks that established routes -> repository boundary by importing SessionLocal directly from db.engine (line 7) and talking to the database itself.\",\"suggestion\":\"Inject the session via the SessionDep dependency and delegate the write to the repository, e.g. `def create_item(payload: ItemCreate, session: SessionDep) -> Item: return repository.create_item(session, payload.name)`. Drop the `SessionLocal` import. Note repository.create_item already commits; the inline version omits session.commit() before refresh, so the row would never be persisted.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

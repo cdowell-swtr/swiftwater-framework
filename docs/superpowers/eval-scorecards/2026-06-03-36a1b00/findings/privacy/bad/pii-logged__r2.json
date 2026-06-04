@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 52,
+      "message": "The owner's email address (PII) is written to application logs via log.info(\"item_created\", ..., owner_email=payload.owner_email). The Item model explicitly annotates owner_email as PII with the instruction 'do not include in logs or external responses', yet this audit log emits it in plaintext. Logging PII risks long-term retention in log aggregation systems beyond the data's purpose and exposes it to anyone with log access.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Do not log the raw email. Log only non-PII identifiers (e.g. item_id), or if an owner reference is required for auditing, log a stable hash/pseudonymized token instead of the plaintext address: log.info(\"item_created\", item_id=item.id)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":52,\"severity\":\"high\",\"message\":\"The owner's email address (PII) is written to application logs via log.info(\\\"item_created\\\", ..., owner_email=payload.owner_email). The Item model explicitly annotates owner_email as PII with the instruction 'do not include in logs or external responses', yet this audit log emits it in plaintext. Logging PII risks long-term retention in log aggregation systems beyond the data's purpose and exposes it to anyone with log access.\",\"suggestion\":\"Do not log the raw email. Log only non-PII identifiers (e.g. item_id), or if an owner reference is required for auditing, log a stable hash/pseudonymized token instead of the plaintext address: log.info(\\\"item_created\\\", item_id=item.id).\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

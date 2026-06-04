@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "line": 18,
+      "message": "Breaking schema change: the `name` field on the `Item` GraphQL type was renamed to `title` with no compatible path. Existing clients querying `item.name` will break, since `name` is removed rather than deprecated/aliased. Renames in GraphQL are breaking changes.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Keep the existing `name: str` field (optionally with `@strawberry.field(deprecation_reason=...)`) alongside the new `title` field so clients can migrate before `name` is removed, e.g. expose both `name` and `title` resolving from `row.name`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"Breaking schema change: the `name` field on the `Item` GraphQL type was renamed to `title` with no compatible path. Existing clients querying `item.name` will break, since `name` is removed rather than deprecated/aliased. Renames in GraphQL are breaking changes.\",\"suggestion\":\"Keep the existing `name: str` field (optionally with `@strawberry.field(deprecation_reason=...)`) alongside the new `title` field so clients can migrate before `name` is removed, e.g. expose both `name` and `title` resolving from `row.name`.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,36 @@
+{
+  "agent": "observability-infra",
+  "case": "exporter-without-scrape",
+  "findings": [
+    {
+      "line": 94,
+      "message": "New `redis-exporter` Compose service exposes Redis metrics on :9121 but nothing scrapes it: infra/observability/prometheus/prometheus.yml has no `redis` scrape job (only app, prometheus, otel-collector, postgres). The exporter runs in every environment via this overlay, so this is a prod runtime surface (Redis) with zero observability \u2014 Prometheus never collects the metrics, making the exporter dead weight. Contrast postgres-exporter, which has a matching scrape job, alert rules, and dashboard.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add a scrape job to prometheus.yml, e.g.\n  - job_name: redis\n    static_configs:\n      - targets: [\"redis-exporter:9121\"]"
+    },
+    {
+      "line": 94,
+      "message": "The added redis-exporter has no corresponding Prometheus alert rule. Every other monitored surface ships an alerts file (postgres_alerts.yml, otel_collector_alerts.yml, prometheus_alerts.yml, slo_alerts.yml) under infra/observability/prometheus/alerts/, but there is no redis_alerts.yml. Redis availability/memory issues would go unalerted.",
+      "path": "infra/compose/observability.yml",
+      "severity": "medium",
+      "suggestion": "Add infra/observability/prometheus/alerts/redis_alerts.yml with rules on redis_up / redis_memory_used_bytes to match the coverage of the other exporters."
+    },
+    {
+      "line": 94,
+      "message": "The added redis-exporter has no Grafana dashboard. infra/observability/grafana/dashboards/ contains postgres.json, otel-collector.json, prometheus.json, and slo.json but no redis.json, so the newly collected Redis metrics would not be visualized for the same surface its peers cover.",
+      "path": "infra/compose/observability.yml",
+      "severity": "medium",
+      "suggestion": "Add infra/observability/grafana/dashboards/redis.json so the new Redis surface has a panel, consistent with postgres/otel-collector/prometheus."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"New `redis-exporter` Compose service exposes Redis metrics on :9121 but nothing scrapes it: infra/observability/prometheus/prometheus.yml has no `redis` scrape job (only app, prometheus, otel-collector, postgres). The exporter runs in every environment via this overlay, so this is a prod runtime surface (Redis) with zero observability \u2014 Prometheus never collects the metrics, making the exporter dead weight. Contrast postgres-exporter, which has a matching scrape job, alert rules, and dashboard.\",\"suggestion\":\"Add a scrape job to prometheus.yml, e.g.\\n  - job_name: redis\\n    static_configs:\\n      - targets: [\\\"redis-exporter:9121\\\"]\"},{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"medium\",\"message\":\"The added redis-exporter has no corresponding Prometheus alert rule. Every other monitored surface ships an alerts file (postgres_alerts.yml, otel_collector_alerts.yml, prometheus_alerts.yml, slo_alerts.yml) under infra/observability/prometheus/alerts/, but there is no redis_alerts.yml. Redis availability/memory issues would go unalerted.\",\"suggestion\":\"Add infra/observability/prometheus/alerts/redis_alerts.yml with rules on redis_up / redis_memory_used_bytes to match the coverage of the other exporters.\"},{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"medium\",\"message\":\"The added redis-exporter has no Grafana dashboard. infra/observability/grafana/dashboards/ contains postgres.json, otel-collector.json, prometheus.json, and slo.json but no redis.json, so the newly collected Redis metrics would not be visualized for the same surface its peers cover.\",\"suggestion\":\"Add infra/observability/grafana/dashboards/redis.json so the new Redis surface has a panel, consistent with postgres/otel-collector/prometheus.\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/compose/observability.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

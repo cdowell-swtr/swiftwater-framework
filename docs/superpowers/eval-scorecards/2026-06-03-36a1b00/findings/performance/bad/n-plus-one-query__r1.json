@@ -1,0 +1,29 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 49,
+      "message": "N+1 query pattern: `get_item_names` first fetches all item IDs in one query (line 45), then issues a separate `session.get(Item, iid)` query for every row in the loop. On a table with N rows this executes N+1 database round-trips. The endpoint has no pagination limit, so the number of queries is unbounded and scales linearly with table size.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace the two-step ID fetch + per-row load with a single query that projects only the `name` column: `return list(session.scalars(select(Item.name)))`. This reduces the total query count from N+1 to 1 and avoids loading full ORM objects when only one field is needed. If the result set must be bounded, apply `.limit(MAX_PAGE_SIZE)` consistent with the existing `list_items` repository pattern."
+    },
+    {
+      "line": 45,
+      "message": "Unbounded read with no pagination: `select(Item.id)` fetches every ID in the table with no LIMIT or OFFSET. Combined with the N+1 loop below, this means the endpoint will issue one query per row in the entire `items` table, making it a denial-of-service vector on large tables.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Apply a hard cap (e.g. `.limit(MAX_PAGE_SIZE)`) on the initial ID query, or \u2014 preferably \u2014 rewrite as a single `select(Item.name).limit(MAX_PAGE_SIZE)` query consistent with how `list_items` in the repository bounds its reads."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":49,\"severity\":\"high\",\"message\":\"N+1 query pattern: `get_item_names` first fetches all item IDs in one query (line 45), then issues a separate `session.get(Item, iid)` query for every row in the loop. On a table with N rows this executes N+1 database round-trips. The endpoint has no pagination limit, so the number of queries is unbounded and scales linearly with table size.\",\"suggestion\":\"Replace the two-step ID fetch + per-row load with a single query that projects only the `name` column: `return list(session.scalars(select(Item.name)))`. This reduces the total query count from N+1 to 1 and avoids loading full ORM objects when only one field is needed. If the result set must be bounded, apply `.limit(MAX_PAGE_SIZE)` consistent with the existing `list_items` repository pattern.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"Unbounded read with no pagination: `select(Item.id)` fetches every ID in the table with no LIMIT or OFFSET. Combined with the N+1 loop below, this means the endpoint will issue one query per row in the entire `items` table, making it a denial-of-service vector on large tables.\",\"suggestion\":\"Apply a hard cap (e.g. `.limit(MAX_PAGE_SIZE)`) on the initial ID query, or \u2014 preferably \u2014 rewrite as a single `select(Item.name).limit(MAX_PAGE_SIZE)` query consistent with how `list_items` in the repository bounds its reads.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

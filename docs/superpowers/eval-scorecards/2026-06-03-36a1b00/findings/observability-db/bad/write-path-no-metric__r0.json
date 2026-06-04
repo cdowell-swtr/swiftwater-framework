@@ -1,0 +1,22 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New data-layer write path `delete_items_by_prefix` performs a SELECT plus a bulk delete and commit with no span or metric around it. The deletion (including the number of rows removed and the operation latency) is invisible to observability, breaking the pattern used elsewhere in the service. A new datastore write path with no instrumentation cannot be monitored, alerted on, or correlated to a trace.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the delete in an explicit span (e.g. tracer.start_as_current_span(\"db.delete_items_by_prefix\")) and record a metric for the operation \u2014 at minimum a latency histogram and a deleted-row-count counter/gauge (return value len(rows)) \u2014 mirroring how other instrumented paths emit metrics/spans."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New data-layer write path `delete_items_by_prefix` performs a SELECT plus a bulk delete and commit with no span or metric around it. The deletion (including the number of rows removed and the operation latency) is invisible to observability, breaking the pattern used elsewhere in the service. A new datastore write path with no instrumentation cannot be monitored, alerted on, or correlated to a trace.\",\"suggestion\":\"Wrap the delete in an explicit span (e.g. tracer.start_as_current_span(\\\"db.delete_items_by_prefix\\\")) and record a metric for the operation \u2014 at minimum a latency histogram and a deleted-row-count counter/gauge (return value len(rows)) \u2014 mirroring how other instrumented paths emit metrics/spans.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

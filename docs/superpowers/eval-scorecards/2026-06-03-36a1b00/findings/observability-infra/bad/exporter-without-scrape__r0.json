@@ -1,0 +1,36 @@
+{
+  "agent": "observability-infra",
+  "case": "exporter-without-scrape",
+  "findings": [
+    {
+      "line": 94,
+      "message": "New `redis-exporter` service exposes Redis metrics on :9121 but `prometheus.yml` has no matching scrape job (existing jobs: app, prometheus, otel-collector, postgres). The exporter is deployed but Prometheus never scrapes it, so no Redis metrics are ever collected and this prod surface is unobserved.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add a scrape job to infra/observability/prometheus/prometheus.yml, e.g.\n  - job_name: redis\n    static_configs:\n      - targets: [\"redis-exporter:9121\"]"
+    },
+    {
+      "line": 94,
+      "message": "The new redis-exporter has no corresponding alert rules. infra/observability/prometheus/alerts/ contains app/otel/postgres/prometheus/slo/alertmanager rules but nothing for Redis (e.g. RedisDown, high memory/eviction). The postgres-exporter ships with postgres_alerts.yml; the redis exporter should follow the same pattern.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add infra/observability/prometheus/alerts/redis_alerts.yml with at least a RedisDown alert keyed on the new scrape target (up{job=\"redis\"} == 0)."
+    },
+    {
+      "line": 94,
+      "message": "The new redis-exporter has no Grafana dashboard. infra/observability/grafana/dashboards/ has otel-collector/postgres/prometheus/slo dashboards but no redis panel. The established pattern (postgres-exporter -> postgres.json) is not followed, so Redis metrics would be uncharted.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "suggestion": "Add infra/observability/grafana/dashboards/redis.json with core Redis panels (connections, memory, hit rate, evictions) sourced from the redis_exporter metrics."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"New `redis-exporter` service exposes Redis metrics on :9121 but `prometheus.yml` has no matching scrape job (existing jobs: app, prometheus, otel-collector, postgres). The exporter is deployed but Prometheus never scrapes it, so no Redis metrics are ever collected and this prod surface is unobserved.\",\"suggestion\":\"Add a scrape job to infra/observability/prometheus/prometheus.yml, e.g.\\n  - job_name: redis\\n    static_configs:\\n      - targets: [\\\"redis-exporter:9121\\\"]\"},{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"The new redis-exporter has no corresponding alert rules. infra/observability/prometheus/alerts/ contains app/otel/postgres/prometheus/slo/alertmanager rules but nothing for Redis (e.g. RedisDown, high memory/eviction). The postgres-exporter ships with postgres_alerts.yml; the redis exporter should follow the same pattern.\",\"suggestion\":\"Add infra/observability/prometheus/alerts/redis_alerts.yml with at least a RedisDown alert keyed on the new scrape target (up{job=\\\"redis\\\"} == 0).\"},{\"path\":\"infra/compose/observability.yml\",\"line\":94,\"severity\":\"high\",\"message\":\"The new redis-exporter has no Grafana dashboard. infra/observability/grafana/dashboards/ has otel-collector/postgres/prometheus/slo dashboards but no redis panel. The established pattern (postgres-exporter -> postgres.json) is not followed, so Redis metrics would be uncharted.\",\"suggestion\":\"Add infra/observability/grafana/dashboards/redis.json with core Redis panels (connections, memory, hit rate, evictions) sourced from the redis_exporter metrics.\"}]",
+  "repeat": 0,
+  "seeded_file": "infra/compose/observability.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

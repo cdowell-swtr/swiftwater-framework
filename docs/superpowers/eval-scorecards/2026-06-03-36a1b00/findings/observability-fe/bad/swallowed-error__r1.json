@@ -1,0 +1,22 @@
+{
+  "agent": "observability-fe",
+  "case": "swallowed-error",
+  "findings": [
+    {
+      "line": 10,
+      "message": "loadItemsQuietly() catches the fetchItems() rejection and returns [] with no rethrow and no telemetry. The RUM js-errors counter is fed only by window 'error' / 'unhandledrejection' listeners (rum.ts lines 46-49); a caught promise rejection fires neither, so a failed /items load is now completely invisible to RUM. The previous code at least surfaced it to the user via setError(true); the new code drops even that, rendering the empty-state 'No items yet.' on failure. A backend or network outage of /items will show zero error signal.",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "suggestion": "Do not swallow the error silently. Either rethrow after recording (so the unhandledrejection listener fires), or report it explicitly to RUM and surface it to the user, e.g. catch the error in the effect and call setError(true) (restoring the .catch(() => setError(true))) and/or emit an error beacon, so the failure reaches the js-errors counter."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":10,\"severity\":\"high\",\"message\":\"loadItemsQuietly() catches the fetchItems() rejection and returns [] with no rethrow and no telemetry. The RUM js-errors counter is fed only by window 'error' / 'unhandledrejection' listeners (rum.ts lines 46-49); a caught promise rejection fires neither, so a failed /items load is now completely invisible to RUM. The previous code at least surfaced it to the user via setError(true); the new code drops even that, rendering the empty-state 'No items yet.' on failure. A backend or network outage of /items will show zero error signal.\",\"suggestion\":\"Do not swallow the error silently. Either rethrow after recording (so the unhandledrejection listener fires), or report it explicitly to RUM and surface it to the user, e.g. catch the error in the effect and call setError(true) (restoring the .catch(() => setError(true))) and/or emit an error beacon, so the failure reaches the js-errors counter.\"}]",
+  "repeat": 1,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

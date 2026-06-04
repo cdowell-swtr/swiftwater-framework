@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "unbounded-label",
+  "findings": [
+    {
+      "line": 208,
+      "message": "New metric `app_frontend_raw_path_total` labels by the raw full path (including the query string) with no sanitization, no distinct-value cap, and no \"other\" overflow bucket. Every unique URL+query string becomes a new Prometheus series, so this label is unbounded / high-cardinality and will blow up the TSDB (the rest of the module is careful: routes/attribution/referrers all go through _bump_capped + _san).",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Drop the query string and sanitize, then cap the distinct values with an overflow bucket like the other labels. Route the value through _san(route_without_query) and store via _bump_capped(self._raw_paths, value, self.MAX_ROUTES) so the label collapses to a fixed-size set with an \"other\" bucket. Better yet, reuse the existing bounded app_frontend_page_views_total route label and drop this series entirely."
+    },
+    {
+      "line": 105,
+      "message": "record_raw_path() stores the raw full_path (incl. query string) verbatim as a metric key with no cap or \"other\" overflow, the source of the unbounded cardinality emitted by app_frontend_raw_path_total. Unlike record_page_view, it bypasses _san and _bump_capped.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Strip the query string, sanitize with _san, and store via _bump_capped(self._raw_paths, value, self.MAX_ROUTES, overflow=\"other\") so the series count stays bounded."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":208,\"severity\":\"high\",\"message\":\"New metric `app_frontend_raw_path_total` labels by the raw full path (including the query string) with no sanitization, no distinct-value cap, and no \\\"other\\\" overflow bucket. Every unique URL+query string becomes a new Prometheus series, so this label is unbounded / high-cardinality and will blow up the TSDB (the rest of the module is careful: routes/attribution/referrers all go through _bump_capped + _san).\",\"suggestion\":\"Drop the query string and sanitize, then cap the distinct values with an overflow bucket like the other labels. Route the value through _san(route_without_query) and store via _bump_capped(self._raw_paths, value, self.MAX_ROUTES) so the label collapses to a fixed-size set with an \\\"other\\\" bucket. Better yet, reuse the existing bounded app_frontend_page_views_total route label and drop this series entirely.\"},{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":105,\"severity\":\"high\",\"message\":\"record_raw_path() stores the raw full_path (incl. query string) verbatim as a metric key with no cap or \\\"other\\\" overflow, the source of the unbounded cardinality emitted by app_frontend_raw_path_total. Unlike record_page_view, it bypasses _san and _bump_capped.\",\"suggestion\":\"Strip the query string, sanitize with _san, and store via _bump_capped(self._raw_paths, value, self.MAX_ROUTES, overflow=\\\"other\\\") so the series count stays bounded.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/frontend_rum/metrics.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

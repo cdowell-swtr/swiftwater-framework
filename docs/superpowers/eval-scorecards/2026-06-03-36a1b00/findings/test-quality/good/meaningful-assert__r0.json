@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "meaningful-assert",
+  "findings": [
+    {
+      "line": 48,
+      "message": "test_slo_request_latency_default_is_reasonable uses a wide range assertion (100\u20135000) that is strictly weaker than the exact assertion in test_defaults (slo_request_latency_p99_ms == 200.0). The new test adds no safety the existing test does not already provide and could mask a regression if the default drifts to an extreme-but-in-range value.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "low",
+      "suggestion": "Remove this test or replace the range with an exact equality assertion matching test_defaults. If the intent is a separate guard on 'reasonableness', at minimum tighten the bounds (e.g. 150\u2013300) so the test fails on a surprising drift."
+    },
+    {
+      "line": 57,
+      "message": "test_resolved_log_level_production_is_not_debug calls Settings(environment='production') but the canonical production environment string in this codebase is 'prod' (used in test_resolved_log_level_is_info_outside_dev and test_explicit_log_level_overrides_resolution). 'production' is an unrecognised/non-canonical value; because resolved_log_level returns INFO for any string that is not 'dev', the assertion passes trivially on any unknown string. The test provides false confidence: it does not cover the actual production environment.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "medium",
+      "suggestion": "Change environment='production' to environment='prod' to match the canonical value used throughout the codebase and in the parametrised existing test. Optionally also assert the return value equals 'INFO' rather than != 'DEBUG' so the test fails if a new unexpected level is introduced."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":48,\"severity\":\"low\",\"message\":\"test_slo_request_latency_default_is_reasonable uses a wide range assertion (100\u20135000) that is strictly weaker than the exact assertion in test_defaults (slo_request_latency_p99_ms == 200.0). The new test adds no safety the existing test does not already provide and could mask a regression if the default drifts to an extreme-but-in-range value.\",\"suggestion\":\"Remove this test or replace the range with an exact equality assertion matching test_defaults. If the intent is a separate guard on 'reasonableness', at minimum tighten the bounds (e.g. 150\u2013300) so the test fails on a surprising drift.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":57,\"severity\":\"medium\",\"message\":\"test_resolved_log_level_production_is_not_debug calls Settings(environment='production') but the canonical production environment string in this codebase is 'prod' (used in test_resolved_log_level_is_info_outside_dev and test_explicit_log_level_overrides_resolution). 'production' is an unrecognised/non-canonical value; because resolved_log_level returns INFO for any string that is not 'dev', the assertion passes trivially on any unknown string. The test provides false confidence: it does not cover the actual production environment.\",\"suggestion\":\"Change environment='production' to environment='prod' to match the canonical value used throughout the codebase and in the parametrised existing test. Optionally also assert the return value equals 'INFO' rather than != 'DEBUG' so the test fails if a new unexpected level is introduced.\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

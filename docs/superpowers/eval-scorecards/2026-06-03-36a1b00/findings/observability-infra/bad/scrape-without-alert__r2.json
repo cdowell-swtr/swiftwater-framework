@@ -1,0 +1,36 @@
+{
+  "agent": "observability-infra",
+  "case": "scrape-without-alert",
+  "findings": [
+    {
+      "line": 23,
+      "message": "New Prometheus scrape job `redis` targets `redis-exporter:9121`, but no `redis-exporter` service exists in any Compose file (infra/compose/observability.yml, services.yml, etc.). The scrape target is unroutable and will produce a permanently-down target. Compare to `postgres`, whose `postgres-exporter` is defined in infra/compose/observability.yml.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "suggestion": "Add a `redis-exporter` service (e.g. oliver006/redis_exporter) to infra/compose/observability.yml wired to the Redis instance, or remove the `redis` scrape job until the exporter exists."
+    },
+    {
+      "line": 21,
+      "message": "New `redis` scrape job has no matching alert rule. Every other scrape surface has a rule file in infra/observability/prometheus/alerts/ (postgres_alerts.yml, otel_collector_alerts.yml, prometheus_alerts.yml), but there is no redis_alerts.yml. Redis being scraped without any alert means failures (target down, high memory, evictions) go unnoticed.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "suggestion": "Add infra/observability/prometheus/alerts/redis_alerts.yml with at least an up/availability alert (and ideally memory/eviction rules) for the redis job."
+    },
+    {
+      "line": 21,
+      "message": "New `redis` scrape job has no corresponding Grafana dashboard. Every other surface has a dashboard in infra/observability/grafana/dashboards/ (postgres.json, otel-collector.json, prometheus.json, slo.json), but there is no redis.json. Redis metrics are collected but not visualizable.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "medium",
+      "suggestion": "Add infra/observability/grafana/dashboards/redis.json with panels for the redis_exporter metrics, mirroring the postgres dashboard."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":23,\"severity\":\"high\",\"message\":\"New Prometheus scrape job `redis` targets `redis-exporter:9121`, but no `redis-exporter` service exists in any Compose file (infra/compose/observability.yml, services.yml, etc.). The scrape target is unroutable and will produce a permanently-down target. Compare to `postgres`, whose `postgres-exporter` is defined in infra/compose/observability.yml.\",\"suggestion\":\"Add a `redis-exporter` service (e.g. oliver006/redis_exporter) to infra/compose/observability.yml wired to the Redis instance, or remove the `redis` scrape job until the exporter exists.\"},{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"high\",\"message\":\"New `redis` scrape job has no matching alert rule. Every other scrape surface has a rule file in infra/observability/prometheus/alerts/ (postgres_alerts.yml, otel_collector_alerts.yml, prometheus_alerts.yml), but there is no redis_alerts.yml. Redis being scraped without any alert means failures (target down, high memory, evictions) go unnoticed.\",\"suggestion\":\"Add infra/observability/prometheus/alerts/redis_alerts.yml with at least an up/availability alert (and ideally memory/eviction rules) for the redis job.\"},{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"medium\",\"message\":\"New `redis` scrape job has no corresponding Grafana dashboard. Every other surface has a dashboard in infra/observability/grafana/dashboards/ (postgres.json, otel-collector.json, prometheus.json, slo.json), but there is no redis.json. Redis metrics are collected but not visualizable.\",\"suggestion\":\"Add infra/observability/grafana/dashboards/redis.json with panels for the redis_exporter metrics, mirroring the postgres dashboard.\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/observability/prometheus/prometheus.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

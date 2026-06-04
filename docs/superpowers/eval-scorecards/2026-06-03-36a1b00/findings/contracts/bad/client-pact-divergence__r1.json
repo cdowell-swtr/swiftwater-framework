@@ -1,0 +1,22 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "The client now sends params={\"include_location\": \"true\"} on GET /inventory/{item_id}, but the consumer Pact test (tests/functional/test_consumer_inventory.py) declares with_request(\"GET\", \"/inventory/1\") with NO query parameters. The committed consumer contract and the real client request have diverged: the Pact mock server is set up to match a request with no query string, so either the consumer contract test now fails on a request mismatch, or the pact must be regenerated to include include_location=true (an added request expectation the provider verification must now satisfy). The pact's with_request was not updated to reflect the new query parameter.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Update the consumer pact in tests/functional/test_consumer_inventory.py to express the new request shape (e.g. .with_request(\"GET\", \"/inventory/1\").with_query_parameter(\"include_location\", \"true\")) and regenerate/publish the pact so the contract matches the client, and so the provider is verified against the include_location query. Confirm the provider actually honors include_location before adding it as a contracted expectation."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"high\",\"message\":\"The client now sends params={\\\"include_location\\\": \\\"true\\\"} on GET /inventory/{item_id}, but the consumer Pact test (tests/functional/test_consumer_inventory.py) declares with_request(\\\"GET\\\", \\\"/inventory/1\\\") with NO query parameters. The committed consumer contract and the real client request have diverged: the Pact mock server is set up to match a request with no query string, so either the consumer contract test now fails on a request mismatch, or the pact must be regenerated to include include_location=true (an added request expectation the provider verification must now satisfy). The pact's with_request was not updated to reflect the new query parameter.\",\"suggestion\":\"Update the consumer pact in tests/functional/test_consumer_inventory.py to express the new request shape (e.g. .with_request(\\\"GET\\\", \\\"/inventory/1\\\").with_query_parameter(\\\"include_location\\\", \\\"true\\\")) and regenerate/publish the pact so the contract matches the client, and so the provider is verified against the include_location query. Confirm the provider actually honors include_location before adding it as a contracted expectation.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

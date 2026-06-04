@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "env-var-consumed-not-declared",
+  "findings": [
+    {
+      "line": 23,
+      "message": "New pydantic setting `widget_timeout_s` (env_prefix `APP_` => `APP_WIDGET_TIMEOUT_S`) is consumed by the application but is not declared in `.env.example`. The framework-managed env surface lists every other `APP_*` field (ENVIRONMENT, LOG_LEVEL, SLO_*, DATABASE_URL, ALERT_WEBHOOK_URL) but omits this one, so the variable is undocumented and untracked across DEV->CI->STAGE->PROD, breaking env-var parity.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` (with a short comment) to the framework-managed section of `.env.example` so the consumed variable is declared and reaches every environment's env surface."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":23,\"severity\":\"high\",\"message\":\"New pydantic setting `widget_timeout_s` (env_prefix `APP_` => `APP_WIDGET_TIMEOUT_S`) is consumed by the application but is not declared in `.env.example`. The framework-managed env surface lists every other `APP_*` field (ENVIRONMENT, LOG_LEVEL, SLO_*, DATABASE_URL, ALERT_WEBHOOK_URL) but omits this one, so the variable is undocumented and untracked across DEV->CI->STAGE->PROD, breaking env-var parity.\",\"suggestion\":\"Add `APP_WIDGET_TIMEOUT_S=5.0` (with a short comment) to the framework-managed section of `.env.example` so the consumed variable is declared and reaches every environment's env surface.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,36 @@
+{
+  "agent": "architecture",
+  "case": "duplicate-data-layer",
+  "findings": [
+    {
+      "line": 8,
+      "message": "Duplicate data-access layer: the route imports `add_item`/`fetch_all_items` from a new `..db.item_service` module that persists the same `Item` model already served by `..db.repository`. The repository already exposes a `create_item(session, name)` (and `list_items`), so `item_service` is a redundant parallel persistence abstraction over the same entity. This fragments the data layer \u2014 two modules now own Item reads/writes, with divergent commit semantics (repository.create_item commits internally; item_service.add_item only flushes, forcing the route to commit/refresh itself).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Drop the `item_service` import and call the existing `create_item` from `..db.repository` (which already encapsulates session.add/commit/refresh). Remove `src/demo/db/item_service.py` so there is a single canonical repository for the Item entity, or consolidate any genuinely new helpers into `repository.py`."
+    },
+    {
+      "line": 47,
+      "message": "The new create endpoint routes persistence through `item_service.add_item` instead of the existing `repository.create_item`, then re-implements commit/refresh inline. This duplicates the create path that already lives in the repository and couples the route to a second data-access module, defeating the repository boundary the rest of the file follows (list_items).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace `item = add_item(session, payload.name); session.commit(); session.refresh(item)` with `item = create_item(session, payload.name)` from `..db.repository`, keeping all Item persistence behind a single layer."
+    },
+    {
+      "line": 8,
+      "message": "`fetch_all_items` is imported from `..db.item_service` but never used in this module.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Remove the unused `fetch_all_items` import (and prefer consolidating on the repository module per the layering finding above)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":8,\"severity\":\"high\",\"message\":\"Duplicate data-access layer: the route imports `add_item`/`fetch_all_items` from a new `..db.item_service` module that persists the same `Item` model already served by `..db.repository`. The repository already exposes a `create_item(session, name)` (and `list_items`), so `item_service` is a redundant parallel persistence abstraction over the same entity. This fragments the data layer \u2014 two modules now own Item reads/writes, with divergent commit semantics (repository.create_item commits internally; item_service.add_item only flushes, forcing the route to commit/refresh itself).\",\"suggestion\":\"Drop the `item_service` import and call the existing `create_item` from `..db.repository` (which already encapsulates session.add/commit/refresh). Remove `src/demo/db/item_service.py` so there is a single canonical repository for the Item entity, or consolidate any genuinely new helpers into `repository.py`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":47,\"severity\":\"high\",\"message\":\"The new create endpoint routes persistence through `item_service.add_item` instead of the existing `repository.create_item`, then re-implements commit/refresh inline. This duplicates the create path that already lives in the repository and couples the route to a second data-access module, defeating the repository boundary the rest of the file follows (list_items).\",\"suggestion\":\"Replace `item = add_item(session, payload.name); session.commit(); session.refresh(item)` with `item = create_item(session, payload.name)` from `..db.repository`, keeping all Item persistence behind a single layer.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":8,\"severity\":\"low\",\"message\":\"`fetch_all_items` is imported from `..db.item_service` but never used in this module.\",\"suggestion\":\"Remove the unused `fetch_all_items` import (and prefer consolidating on the repository module per the layering finding above).\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

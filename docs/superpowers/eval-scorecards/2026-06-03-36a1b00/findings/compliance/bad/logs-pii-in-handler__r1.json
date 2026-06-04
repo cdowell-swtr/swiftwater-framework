@@ -1,0 +1,36 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "line": 53,
+      "message": "PII logged in plaintext: the caller's email address is passed directly to logging.info() with no pseudonymisation, hashing, or masking. Email addresses are personal data under GDPR Art. 4(1); logging them at INFO level sends them to every log sink (stdout, log aggregators, SIEM) with no retention limit or deletion path, violating the storage-limitation principle (Art. 5(1)(e)) and making right-to-erasure (Art. 17) compliance impractical.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Never log raw email addresses. Use a one-way hash (e.g. hashlib.sha256(email.encode()).hexdigest()[:12]) or a stable pseudonym for correlation. Move sensitive-operation records to a dedicated audit log with a defined retention and erasure policy rather than the application INFO stream."
+    },
+    {
+      "line": 38,
+      "message": "Email address accepted as a plain query parameter: query parameters appear in access logs, reverse-proxy logs, browser history, and Referer headers, creating additional uncontrolled PII sinks beyond the explicit logging call. Passing PII in a URL query string violates data-minimisation and confidentiality expectations (GDPR Art. 5(1)(c) and (f)).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Accept user identity via a request header (e.g. X-User-ID carrying an opaque internal identifier) or a JWT claim rather than a raw email query parameter. Avoid placing PII in URLs."
+    },
+    {
+      "line": 37,
+      "message": "Sensitive search operation has no audit log: the endpoint performs a personalised search tied to a user identity but records it only to the application INFO stream, not to a tamper-evident audit log. GDPR Art. 30 (records of processing) and Art. 5(2) (accountability) require that processing of personal data be demonstrably documented; an INFO log with no retention policy, integrity controls, or deletion-audit path does not satisfy this.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Emit a structured audit event to a dedicated audit sink (separate logger or audit table) capturing a pseudonymous user identifier, the operation, and a timestamp. Define and enforce a retention window with an erasure procedure that can be triggered on a right-to-erasure request."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":53,\"severity\":\"high\",\"message\":\"PII logged in plaintext: the caller's email address is passed directly to logging.info() with no pseudonymisation, hashing, or masking. Email addresses are personal data under GDPR Art. 4(1); logging them at INFO level sends them to every log sink (stdout, log aggregators, SIEM) with no retention limit or deletion path, violating the storage-limitation principle (Art. 5(1)(e)) and making right-to-erasure (Art. 17) compliance impractical.\",\"suggestion\":\"Never log raw email addresses. Use a one-way hash (e.g. hashlib.sha256(email.encode()).hexdigest()[:12]) or a stable pseudonym for correlation. Move sensitive-operation records to a dedicated audit log with a defined retention and erasure policy rather than the application INFO stream.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"high\",\"message\":\"Email address accepted as a plain query parameter: query parameters appear in access logs, reverse-proxy logs, browser history, and Referer headers, creating additional uncontrolled PII sinks beyond the explicit logging call. Passing PII in a URL query string violates data-minimisation and confidentiality expectations (GDPR Art. 5(1)(c) and (f)).\",\"suggestion\":\"Accept user identity via a request header (e.g. X-User-ID carrying an opaque internal identifier) or a JWT claim rather than a raw email query parameter. Avoid placing PII in URLs.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"high\",\"message\":\"Sensitive search operation has no audit log: the endpoint performs a personalised search tied to a user identity but records it only to the application INFO stream, not to a tamper-evident audit log. GDPR Art. 30 (records of processing) and Art. 5(2) (accountability) require that processing of personal data be demonstrably documented; an INFO log with no retention policy, integrity controls, or deletion-audit path does not satisfy this.\",\"suggestion\":\"Emit a structured audit event to a dedicated audit sink (separate logger or audit table) capturing a pseudonymous user identifier, the operation, and a timestamp. Define and enforce a retention window with an erasure procedure that can be triggered on a right-to-erasure request.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

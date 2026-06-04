@@ -1,0 +1,29 @@
+{
+  "agent": "dependency",
+  "case": "pinned-reputable-dep",
+  "findings": [
+    {
+      "line": 19,
+      "message": "httpx is a reputable, actively maintained HTTP client (Encode/Tom Christie) with good supply-chain hygiene; the upper bound <1.0 is appropriate to guard against breaking changes in the upcoming stable release.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": null
+    },
+    {
+      "line": 19,
+      "message": "httpx already appears in [dependency-groups].dev at >=0.28, but the new production constraint allows >=0.27. In practice uv/pip will resolve the intersection, but the floor mismatch could cause confusion \u2014 consider aligning the production floor to >=0.28 to match dev.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Change to \"httpx>=0.28,<1.0\" to keep the production floor consistent with the dev group."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":19,\"severity\":\"info\",\"message\":\"httpx is a reputable, actively maintained HTTP client (Encode/Tom Christie) with good supply-chain hygiene; the upper bound <1.0 is appropriate to guard against breaking changes in the upcoming stable release.\",\"suggestion\":null},{\"path\":\"pyproject.toml\",\"line\":19,\"severity\":\"low\",\"message\":\"httpx already appears in [dependency-groups].dev at >=0.28, but the new production constraint allows >=0.27. In practice uv/pip will resolve the intersection, but the floor mismatch could cause confusion \u2014 consider aligning the production floor to >=0.28 to match dev.\",\"suggestion\":\"Change to \\\"httpx>=0.28,<1.0\\\" to keep the production floor consistent with the dev group.\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

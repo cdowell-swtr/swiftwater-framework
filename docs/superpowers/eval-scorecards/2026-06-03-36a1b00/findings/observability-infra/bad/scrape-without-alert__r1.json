@@ -1,0 +1,36 @@
+{
+  "agent": "observability-infra",
+  "case": "scrape-without-alert",
+  "findings": [
+    {
+      "line": 23,
+      "message": "New `redis` scrape job targets `redis-exporter:9121`, but no `redis-exporter` service is defined in any Compose file (only `postgres-exporter` and `otel-collector` exist in infra/compose/observability.yml). The scrape target has no corresponding exporter, so Prometheus will permanently fail to scrape this job (target DOWN). The self-hosted Redis data store in infra/compose/services.yml is not instrumented.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "suggestion": "Add a `redis-exporter` service (e.g. oliver006/redis_exporter) to infra/compose/observability.yml wired to the Redis instance, or remove this scrape job if Redis metrics are not yet exported."
+    },
+    {
+      "line": 21,
+      "message": "New `redis` Prometheus scrape job is added with no matching alert rule. Every other scraped surface has a dedicated alert file (postgres_alerts.yml, prometheus_alerts.yml, otel_collector_alerts.yml, slo_alerts.yml), but there is no redis_alerts.yml under infra/observability/prometheus/alerts/. Redis can fail (e.g. exporter down, memory pressure, replication break) with no alert firing.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "suggestion": "Add infra/observability/prometheus/alerts/redis_alerts.yml with at least an exporter-up / RedisDown alert and a memory/eviction alert, matching the pattern of the other surfaces."
+    },
+    {
+      "line": 21,
+      "message": "New `redis` scrape job has no corresponding Grafana dashboard. The dashboards directory (infra/observability/grafana/dashboards/) contains postgres.json, prometheus.json, otel-collector.json, and slo.json, but no redis.json, so the scraped Redis metrics are not visualized for any operator.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "medium",
+      "suggestion": "Add infra/observability/grafana/dashboards/redis.json with the key Redis panels (memory, hit rate, connected clients, ops/sec) to match the per-surface dashboard pattern."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":23,\"severity\":\"high\",\"message\":\"New `redis` scrape job targets `redis-exporter:9121`, but no `redis-exporter` service is defined in any Compose file (only `postgres-exporter` and `otel-collector` exist in infra/compose/observability.yml). The scrape target has no corresponding exporter, so Prometheus will permanently fail to scrape this job (target DOWN). The self-hosted Redis data store in infra/compose/services.yml is not instrumented.\",\"suggestion\":\"Add a `redis-exporter` service (e.g. oliver006/redis_exporter) to infra/compose/observability.yml wired to the Redis instance, or remove this scrape job if Redis metrics are not yet exported.\"},{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"high\",\"message\":\"New `redis` Prometheus scrape job is added with no matching alert rule. Every other scraped surface has a dedicated alert file (postgres_alerts.yml, prometheus_alerts.yml, otel_collector_alerts.yml, slo_alerts.yml), but there is no redis_alerts.yml under infra/observability/prometheus/alerts/. Redis can fail (e.g. exporter down, memory pressure, replication break) with no alert firing.\",\"suggestion\":\"Add infra/observability/prometheus/alerts/redis_alerts.yml with at least an exporter-up / RedisDown alert and a memory/eviction alert, matching the pattern of the other surfaces.\"},{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"medium\",\"message\":\"New `redis` scrape job has no corresponding Grafana dashboard. The dashboards directory (infra/observability/grafana/dashboards/) contains postgres.json, prometheus.json, otel-collector.json, and slo.json, but no redis.json, so the scraped Redis metrics are not visualized for any operator.\",\"suggestion\":\"Add infra/observability/grafana/dashboards/redis.json with the key Redis panels (memory, hit rate, connected clients, ops/sec) to match the per-surface dashboard pattern.\"}]",
+  "repeat": 1,
+  "seeded_file": "infra/observability/prometheus/prometheus.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

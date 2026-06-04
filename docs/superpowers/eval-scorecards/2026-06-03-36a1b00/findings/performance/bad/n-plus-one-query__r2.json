@@ -1,0 +1,22 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "line": 44,
+      "message": "N+1 query: `get_item_names` issues one SELECT per item ID \u2014 first fetches all IDs with `select(Item.id)` (unbounded, no LIMIT), then calls `session.get(Item, iid)` in a loop, producing N+1 round-trips to the database for every request. On a table with many rows this degrades linearly and can saturate the connection pool.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace the loop with a single column query: `return list(session.scalars(select(Item.name)))`. If the table is large, add pagination (LIMIT/OFFSET) consistent with the existing `list_items` pattern."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"high\",\"message\":\"N+1 query: `get_item_names` issues one SELECT per item ID \u2014 first fetches all IDs with `select(Item.id)` (unbounded, no LIMIT), then calls `session.get(Item, iid)` in a loop, producing N+1 round-trips to the database for every request. On a table with many rows this degrades linearly and can saturate the connection pool.\",\"suggestion\":\"Replace the loop with a single column query: `return list(session.scalars(select(Item.name)))`. If the table is large, add pagination (LIMIT/OFFSET) consistent with the existing `list_items` pattern.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

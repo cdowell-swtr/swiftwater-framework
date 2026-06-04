@@ -1,0 +1,22 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 45,
+      "message": "Falsy check `if not item:` incorrectly triggers 404 for item_id=0. SQLAlchemy's `session.get()` returns `None` when the row doesn't exist, but a loaded ORM object with a zero or otherwise falsy primary key may also evaluate as falsy depending on the model's `__bool__`. The correct sentinel for a missing row is an identity check against `None`.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace `if not item:` with `if item is None:` to correctly distinguish a missing row from a row whose primary key or other attributes happen to be falsy."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":45,\"severity\":\"high\",\"message\":\"Falsy check `if not item:` incorrectly triggers 404 for item_id=0. SQLAlchemy's `session.get()` returns `None` when the row doesn't exist, but a loaded ORM object with a zero or otherwise falsy primary key may also evaluate as falsy depending on the model's `__bool__`. The correct sentinel for a missing row is an identity check against `None`.\",\"suggestion\":\"Replace `if not item:` with `if item is None:` to correctly distinguish a missing row from a row whose primary key or other attributes happen to be falsy.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

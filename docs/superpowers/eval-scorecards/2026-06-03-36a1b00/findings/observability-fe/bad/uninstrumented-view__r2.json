@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "uninstrumented-view",
+  "findings": [
+    {
+      "line": 8,
+      "message": "New Dashboard view introduces a fetch/API path to /internal/summary that ships with no RUM or error instrumentation reachable from it. The fetched-summary behavior (and its load failures) is entirely unobserved \u2014 no vital, error, or view-level RUM signal is emitted for this user-facing code path.",
+      "path": "frontend/src/Dashboard.tsx",
+      "severity": "high",
+      "suggestion": "Instrument this view: emit a RUM signal on render/fetch and, on failure, route the error into the js-errors counter (e.g. report via the RUM error path) so the view's load behavior is observable."
+    },
+    {
+      "line": 10,
+      "message": "The fetch chain (.then(r => r.json()).then(setData)) has no .catch. A failed fetch or JSON parse rejects silently \u2014 the error is swallowed and never reaches the js-errors counter, so the failure is invisible. Relying on the global unhandledrejection listener is fragile and yields no signal tied to this view.",
+      "path": "frontend/src/Dashboard.tsx",
+      "severity": "high",
+      "suggestion": "Add a .catch that surfaces the failure into RUM/the js-errors counter (and renders an error state), mirroring the .catch(() => setError(true)) pattern used in Items.tsx, so the failure is observed rather than swallowed."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Dashboard.tsx\",\"line\":8,\"severity\":\"high\",\"message\":\"New Dashboard view introduces a fetch/API path to /internal/summary that ships with no RUM or error instrumentation reachable from it. The fetched-summary behavior (and its load failures) is entirely unobserved \u2014 no vital, error, or view-level RUM signal is emitted for this user-facing code path.\",\"suggestion\":\"Instrument this view: emit a RUM signal on render/fetch and, on failure, route the error into the js-errors counter (e.g. report via the RUM error path) so the view's load behavior is observable.\"},{\"path\":\"frontend/src/Dashboard.tsx\",\"line\":10,\"severity\":\"high\",\"message\":\"The fetch chain (.then(r => r.json()).then(setData)) has no .catch. A failed fetch or JSON parse rejects silently \u2014 the error is swallowed and never reaches the js-errors counter, so the failure is invisible. Relying on the global unhandledrejection listener is fragile and yields no signal tied to this view.\",\"suggestion\":\"Add a .catch that surfaces the failure into RUM/the js-errors counter (and renders an error state), mirroring the .catch(() => setError(true)) pattern used in Items.tsx, so the failure is observed rather than swallowed.\"}]",
+  "repeat": 2,
+  "seeded_file": "frontend/src/Dashboard.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

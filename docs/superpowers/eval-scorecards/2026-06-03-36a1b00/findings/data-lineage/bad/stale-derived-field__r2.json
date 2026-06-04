@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 53,
+      "message": "rename_item writes item.name directly but never recalculates the derived slug, so after a rename the persisted slug diverges from its source-of-truth name. The model explicitly documents slug as always derived from name and requiring both to be updated together, and the repository already provides update_item_name() which keeps them in sync. This route bypasses that helper and breaks the derived-field invariant: the unique/indexed slug now no longer matches name.strip().lower().replace(' ', '-'), producing inconsistent data and potentially duplicate-collision/stale-lookup behavior on the unique slug column.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Recalculate the slug whenever name changes, or delegate to the existing repository helper: replace the inline mutation with `item = update_item_name(session, item_id, payload.name)` (raising 404 when it returns None), so name and slug are always committed together."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":53,\"severity\":\"high\",\"message\":\"rename_item writes item.name directly but never recalculates the derived slug, so after a rename the persisted slug diverges from its source-of-truth name. The model explicitly documents slug as always derived from name and requiring both to be updated together, and the repository already provides update_item_name() which keeps them in sync. This route bypasses that helper and breaks the derived-field invariant: the unique/indexed slug now no longer matches name.strip().lower().replace(' ', '-'), producing inconsistent data and potentially duplicate-collision/stale-lookup behavior on the unique slug column.\",\"suggestion\":\"Recalculate the slug whenever name changes, or delegate to the existing repository helper: replace the inline mutation with `item = update_item_name(session, item_id, payload.name)` (raising 404 when it returns None), so name and slug are always committed together.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 46,
+      "message": "The create_item mutation now accepts a non-null `description` argument (line 43) but the resolver ignores it: `repository.create_item(session, name)` is called with only `name`. Clients are forced to supply `description`, yet it is silently dropped and never persisted, so the schema advertises an input that has no effect.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "info",
+      "suggestion": "Either persist the new input by threading it through the repository (e.g. `repository.create_item(session, name, description=description)` and add a `description` column/parameter), or make `description` an optional argument (`description: str | None = None`) until the persistence layer supports it, and surface it on the returned Item type so the API contract matches behavior."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":46,\"severity\":\"info\",\"message\":\"The create_item mutation now accepts a non-null `description` argument (line 43) but the resolver ignores it: `repository.create_item(session, name)` is called with only `name`. Clients are forced to supply `description`, yet it is silently dropped and never persisted, so the schema advertises an input that has no effect.\",\"suggestion\":\"Either persist the new input by threading it through the repository (e.g. `repository.create_item(session, name, description=description)` and add a `description` column/parameter), or make `description` an optional argument (`description: str | None = None`) until the persistence layer supports it, and surface it on the returned Item type so the API contract matches behavior.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "service-dev-only",
+  "findings": [
+    {
+      "line": 3,
+      "message": "The `widgetizer` runtime service is defined only in `dev.yml` (scoped to the `dev` profile). Per Taskfile.yml, only dev and dev:lite compose `dev.yml`; staging/prod compose `<env>.yml` + services.yml + observability.yml (per infra/deploy/strategy.sh), which do NOT include `dev.yml`. As a result this prebuilt application service (image ghcr.io/acme/widgetizer:1.4.0, wired to the app database) reaches dev but is silently absent from staging/prod. It is not local-developer-experience tooling (not TLS termination, a mail catcher, or a DB admin UI), so the dev-only home is a parity defect.",
+      "path": "infra/compose/dev.yml",
+      "severity": "high",
+      "suggestion": "Move the `widgetizer` service definition to `infra/compose/services.yml` (the battery service overlay staging/prod compose) or to the deployed `staging.yml`/`prod.yml` overlays so it reaches every deployed environment. If it is intentionally dev-only, record that opt-out in the decisions log rather than leaving it silently omitted from staging/prod."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/dev.yml\",\"line\":3,\"severity\":\"high\",\"message\":\"The `widgetizer` runtime service is defined only in `dev.yml` (scoped to the `dev` profile). Per Taskfile.yml, only dev and dev:lite compose `dev.yml`; staging/prod compose `<env>.yml` + services.yml + observability.yml (per infra/deploy/strategy.sh), which do NOT include `dev.yml`. As a result this prebuilt application service (image ghcr.io/acme/widgetizer:1.4.0, wired to the app database) reaches dev but is silently absent from staging/prod. It is not local-developer-experience tooling (not TLS termination, a mail catcher, or a DB admin UI), so the dev-only home is a parity defect.\",\"suggestion\":\"Move the `widgetizer` service definition to `infra/compose/services.yml` (the battery service overlay staging/prod compose) or to the deployed `staging.yml`/`prod.yml` overlays so it reaches every deployed environment. If it is intentionally dev-only, record that opt-out in the decisions log rather than leaving it silently omitted from staging/prod.\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/compose/dev.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

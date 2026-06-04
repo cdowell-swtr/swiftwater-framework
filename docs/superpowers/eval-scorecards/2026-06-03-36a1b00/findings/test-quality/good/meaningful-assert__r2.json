@@ -1,0 +1,22 @@
+{
+  "agent": "test-quality",
+  "case": "meaningful-assert",
+  "findings": [
+    {
+      "line": 59,
+      "message": "Weak negative assertion: `assert s.resolved_log_level != \"DEBUG\"` does not pin the expected value. If `resolved_log_level` returns an unexpected value (e.g. `\"WARNING\"`, `None`, or empty string) the test still passes, hiding a regression. Additionally, `environment=\"production\"` is not a canonical env in this codebase (the parametrized test uses `\"prod\"`), so this test exercises an untested alias that happens to return `\"INFO\"` only because it is not `\"dev\"`.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "medium",
+      "suggestion": "Assert the exact expected value: `assert s.resolved_log_level == \"INFO\"`. Also align the environment value with the canonical name used elsewhere: `Settings(environment=\"prod\")`."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":59,\"severity\":\"medium\",\"message\":\"Weak negative assertion: `assert s.resolved_log_level != \\\"DEBUG\\\"` does not pin the expected value. If `resolved_log_level` returns an unexpected value (e.g. `\\\"WARNING\\\"`, `None`, or empty string) the test still passes, hiding a regression. Additionally, `environment=\\\"production\\\"` is not a canonical env in this codebase (the parametrized test uses `\\\"prod\\\"`), so this test exercises an untested alias that happens to return `\\\"INFO\\\"` only because it is not `\\\"dev\\\"`.\",\"suggestion\":\"Assert the exact expected value: `assert s.resolved_log_level == \\\"INFO\\\"`. Also align the environment value with the canonical name used elsewhere: `Settings(environment=\\\"prod\\\")`.\"}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

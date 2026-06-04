@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "compose-var-not-declared",
+  "findings": [
+    {
+      "line": 11,
+      "message": "The compose overlay interpolates ${APP_WIDGET_API_URL} for the app service, but APP_WIDGET_API_URL is not declared anywhere in .env.example. An undeclared interpolation resolves to an empty string (or warns), so the widget API URL silently becomes blank wherever this overlay is composed. Add the variable to .env.example so the environment surface is documented and reproducible across dev/CI.",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "suggestion": "Declare APP_WIDGET_API_URL in .env.example (within the FRAMEWORK-managed or app section), e.g. `APP_WIDGET_API_URL=` with a comment describing the expected value."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"infra/compose/base.yml\",\"line\":11,\"severity\":\"high\",\"message\":\"The compose overlay interpolates ${APP_WIDGET_API_URL} for the app service, but APP_WIDGET_API_URL is not declared anywhere in .env.example. An undeclared interpolation resolves to an empty string (or warns), so the widget API URL silently becomes blank wherever this overlay is composed. Add the variable to .env.example so the environment surface is documented and reproducible across dev/CI.\",\"suggestion\":\"Declare APP_WIDGET_API_URL in .env.example (within the FRAMEWORK-managed or app section), e.g. `APP_WIDGET_API_URL=` with a comment describing the expected value.\"}]",
+  "repeat": 1,
+  "seeded_file": "infra/compose/base.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

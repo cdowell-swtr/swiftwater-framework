@@ -1,0 +1,29 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 41,
+      "message": "The 404 error path raises HTTPException with no structured log entry. When an item is not found, there is no log line carrying the correlation id (or any request context), making it impossible to correlate 404s to specific callers without distributed tracing enabled.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add a structured log call before raising: e.g. `get_logger().warning(\"archive_item.not_found\", item_id=item_id)` so the error path is observable via logs as well as traces."
+    },
+    {
+      "line": 38,
+      "message": "The new archive_item endpoint is a state-mutating route with no structured logging on any code path (neither the 404 branch nor the success branch). The ObservabilityMiddleware covers request counts/latency at the HTTP layer, but there is no application-level log entry recording the mutation (item archived, item_id, outcome), leaving an audit and debug gap.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Log the successful archive action with structured context, e.g. `get_logger().info(\"archive_item.archived\", item_id=item_id)` after `session.commit()`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"The 404 error path raises HTTPException with no structured log entry. When an item is not found, there is no log line carrying the correlation id (or any request context), making it impossible to correlate 404s to specific callers without distributed tracing enabled.\",\"suggestion\":\"Add a structured log call before raising: e.g. `get_logger().warning(\\\"archive_item.not_found\\\", item_id=item_id)` so the error path is observable via logs as well as traces.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":38,\"severity\":\"high\",\"message\":\"The new archive_item endpoint is a state-mutating route with no structured logging on any code path (neither the 404 branch nor the success branch). The ObservabilityMiddleware covers request counts/latency at the HTTP layer, but there is no application-level log entry recording the mutation (item archived, item_id, outcome), leaving an audit and debug gap.\",\"suggestion\":\"Log the successful archive action with structured context, e.g. `get_logger().info(\\\"archive_item.archived\\\", item_id=item_id)` after `session.commit()`.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

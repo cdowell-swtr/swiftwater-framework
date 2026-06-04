@@ -1,0 +1,22 @@
+{
+  "agent": "performance",
+  "case": "single-query",
+  "findings": [
+    {
+      "line": 43,
+      "message": "Unbounded query: `select(Item.name)` fetches every row with no LIMIT. The existing `get_items` endpoint clamps results to MAX_PAGE_SIZE (100) via `list_items()`, but this new endpoint bypasses that guard entirely. On a large `items` table this returns an arbitrarily large payload in one request, causing memory pressure, slow DB scans, and potential connection-pool starvation.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Apply the same bound used elsewhere: add a `limit` query param defaulting to MAX_PAGE_SIZE and pass `.limit(bounded)` to the SELECT statement, or delegate to a repository function that enforces the cap."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"high\",\"message\":\"Unbounded query: `select(Item.name)` fetches every row with no LIMIT. The existing `get_items` endpoint clamps results to MAX_PAGE_SIZE (100) via `list_items()`, but this new endpoint bypasses that guard entirely. On a large `items` table this returns an arbitrarily large payload in one request, causing memory pressure, slow DB scans, and potential connection-pool starvation.\",\"suggestion\":\"Apply the same bound used elsewhere: add a `limit` query param defaulting to MAX_PAGE_SIZE and pass `.limit(bounded)` to the SELECT statement, or delegate to a repository function that enforces the cap.\"}]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "accessibility",
+  "case": "img-no-alt-rendered",
+  "findings": [
+    {
+      "line": 31,
+      "message": "Missing alt attribute on <img>: screen readers cannot describe the image content, violating WCAG 2.1 SC 1.1.1.",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "suggestion": "Add a descriptive alt attribute, e.g. alt=\"Items catalogue banner\". If the image is purely decorative, use alt=\"\" to hide it from assistive technologies."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":31,\"severity\":\"high\",\"message\":\"Missing alt attribute on <img>: screen readers cannot describe the image content, violating WCAG 2.1 SC 1.1.1.\",\"suggestion\":\"Add a descriptive alt attribute, e.g. alt=\\\"Items catalogue banner\\\". If the image is purely decorative, use alt=\\\"\\\" to hide it from assistive technologies.\"}]",
+  "repeat": 0,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "documentation",
+  "case": "documented-public-function",
+  "findings": [
+    {
+      "line": 50,
+      "message": "The docstring says 'total number of items in the catalogue' but `list_items(session)` is called without a `limit` argument, so it uses `DEFAULT_PAGE_SIZE=50` \u2014 the count is capped at 50, not the true total. The docstring should document this limitation or the implementation should use a direct `COUNT(*)` query.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "suggestion": "Either document the cap in the docstring ('Returns the count of up to DEFAULT_PAGE_SIZE items, not the true catalogue total') or replace `len(list_items(session))` with a proper SQL COUNT query (e.g. `session.scalar(select(func.count()).select_from(Item))`) and update the docstring accordingly."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":50,\"severity\":\"low\",\"message\":\"The docstring says 'total number of items in the catalogue' but `list_items(session)` is called without a `limit` argument, so it uses `DEFAULT_PAGE_SIZE=50` \u2014 the count is capped at 50, not the true total. The docstring should document this limitation or the implementation should use a direct `COUNT(*)` query.\",\"suggestion\":\"Either document the cap in the docstring ('Returns the count of up to DEFAULT_PAGE_SIZE items, not the true catalogue total') or replace `len(list_items(session))` with a proper SQL COUNT query (e.g. `session.scalar(select(func.count()).select_from(Item))`) and update the docstring accordingly.\"}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

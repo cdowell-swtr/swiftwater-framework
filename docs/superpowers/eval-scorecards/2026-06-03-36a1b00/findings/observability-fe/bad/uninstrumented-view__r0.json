@@ -1,0 +1,22 @@
+{
+  "agent": "observability-fe",
+  "case": "uninstrumented-view",
+  "findings": [
+    {
+      "line": 8,
+      "message": "New Dashboard view ships a fetch to /internal/summary with no RUM/error instrumentation reachable from it. The promise chain (.then(r => r.json()).then(setData)) has no error handling: a failed request, non-2xx response, or JSON parse failure leaves `data` null forever with no user-visible error state and no explicit RUM error signal \u2014 the failure of this user-facing code path is effectively unobserved. The global unhandledrejection handler only emits a generic, undifferentiated error count that cannot identify this view or fetch.",
+      "path": "frontend/src/Dashboard.tsx",
+      "severity": "high",
+      "suggestion": "Add a .catch that records an explicit RUM signal for this fetch (e.g. push a kind:\"error\" event distinguishing the summary fetch, or route through the existing instrumented fetch wrapper) and surface a user-visible error/loading-failed state, so a broken /internal/summary load is observable rather than silently blank."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Dashboard.tsx\",\"line\":8,\"severity\":\"high\",\"message\":\"New Dashboard view ships a fetch to /internal/summary with no RUM/error instrumentation reachable from it. The promise chain (.then(r => r.json()).then(setData)) has no error handling: a failed request, non-2xx response, or JSON parse failure leaves `data` null forever with no user-visible error state and no explicit RUM error signal \u2014 the failure of this user-facing code path is effectively unobserved. The global unhandledrejection handler only emits a generic, undifferentiated error count that cannot identify this view or fetch.\",\"suggestion\":\"Add a .catch that records an explicit RUM signal for this fetch (e.g. push a kind:\\\"error\\\" event distinguishing the summary fetch, or route through the existing instrumented fetch wrapper) and surface a user-visible error/loading-failed state, so a broken /internal/summary load is observable rather than silently blank.\"}]",
+  "repeat": 0,
+  "seeded_file": "frontend/src/Dashboard.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

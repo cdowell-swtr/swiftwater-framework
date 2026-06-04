@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 53,
+      "message": "rename_item writes item.name directly and commits without recomputing the derived slug. slug is documented (models.py) as always derived from name via _make_slug and must stay in sync, but this write path persists a stale slug that diverges from the new name. The repository already provides update_item_name which keeps both in sync; the route bypasses it.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Call repository.update_item_name(session, item_id, payload.name) instead of mutating item.name inline, or set item.slug = _make_slug(payload.name) before committing so the derived field stays consistent with name."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":53,\"severity\":\"high\",\"message\":\"rename_item writes item.name directly and commits without recomputing the derived slug. slug is documented (models.py) as always derived from name via _make_slug and must stay in sync, but this write path persists a stale slug that diverges from the new name. The repository already provides update_item_name which keeps both in sync; the route bypasses it.\",\"suggestion\":\"Call repository.update_item_name(session, item_id, payload.name) instead of mutating item.name inline, or set item.slug = _make_slug(payload.name) before committing so the derived field stays consistent with name.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

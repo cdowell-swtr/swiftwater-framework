@@ -1,0 +1,29 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 16,
+      "message": "Added `requests` with no version constraint. All other runtime dependencies carry a `>=X.Y` floor; `requests` has no floor at all, so any version (including ancient, vulnerable releases) can be resolved. Pin a minimum version (e.g., `>=2.32`) to match the project's pinning convention and avoid resolving EOL releases.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Add a lower-bound: `\"requests>=2.32\"`."
+    },
+    {
+      "line": 16,
+      "message": "`httpx>=0.28` is already in the dev dependency group and is the idiomatic async HTTP client for FastAPI services. For runtime HTTP calls in an async context, `httpx` (async-capable) is preferred over `requests` (synchronous-only), which can block the event loop. If `requests` is only needed in tests or scripts, move it to the `dev` group; if needed at runtime, consider replacing with `httpx` promoted to the main dependencies.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Promote `httpx` to the `[project] dependencies` list and remove `requests`, or justify why the synchronous client is required at runtime."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":16,\"severity\":\"low\",\"message\":\"Added `requests` with no version constraint. All other runtime dependencies carry a `>=X.Y` floor; `requests` has no floor at all, so any version (including ancient, vulnerable releases) can be resolved. Pin a minimum version (e.g., `>=2.32`) to match the project's pinning convention and avoid resolving EOL releases.\",\"suggestion\":\"Add a lower-bound: `\\\"requests>=2.32\\\"`.\"},{\"path\":\"pyproject.toml\",\"line\":16,\"severity\":\"info\",\"message\":\"`httpx>=0.28` is already in the dev dependency group and is the idiomatic async HTTP client for FastAPI services. For runtime HTTP calls in an async context, `httpx` (async-capable) is preferred over `requests` (synchronous-only), which can block the event loop. If `requests` is only needed in tests or scripts, move it to the `dev` group; if needed at runtime, consider replacing with `httpx` promoted to the main dependencies.\",\"suggestion\":\"Promote `httpx` to the `[project] dependencies` list and remove `requests`, or justify why the synchronous client is required at runtime.\"}]",
+  "repeat": 1,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

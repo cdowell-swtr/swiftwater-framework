@@ -1,0 +1,29 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 38,
+      "message": "session.commit() is called inside the loop, making each insert its own transaction. If any iteration fails (e.g., DB error, constraint violation, network interruption), all previously committed rows remain durably written while the remaining rows are not inserted. The caller has no way to roll back the partial batch, leaving the database in a permanently inconsistent state.",
+      "path": "src/demo/db/repository.py",
+      "severity": "critical",
+      "suggestion": "Add all items before committing: call session.add() for every item in the loop, then call session.commit() once after the loop. Use a try/except with session.rollback() on failure, or rely on a context-manager-scoped transaction so a single failure rolls back the entire batch."
+    },
+    {
+      "line": 42,
+      "message": "The function has no return statement, so it implicitly returns None despite its declared return type of list[Item]. Callers expecting the list of created items will receive None, which can cause AttributeError or silent data loss (e.g., silently skipping post-insert ID assignment or audit logging steps that depend on the returned objects).",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add 'return created' as the final statement of the function body, after the loop."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":38,\"severity\":\"critical\",\"message\":\"session.commit() is called inside the loop, making each insert its own transaction. If any iteration fails (e.g., DB error, constraint violation, network interruption), all previously committed rows remain durably written while the remaining rows are not inserted. The caller has no way to roll back the partial batch, leaving the database in a permanently inconsistent state.\",\"suggestion\":\"Add all items before committing: call session.add() for every item in the loop, then call session.commit() once after the loop. Use a try/except with session.rollback() on failure, or rely on a context-manager-scoped transaction so a single failure rolls back the entire batch.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":42,\"severity\":\"high\",\"message\":\"The function has no return statement, so it implicitly returns None despite its declared return type of list[Item]. Callers expecting the list of created items will receive None, which can cause AttributeError or silent data loss (e.g., silently skipping post-insert ID assignment or audit logging steps that depend on the returned objects).\",\"suggestion\":\"Add 'return created' as the final statement of the function body, after the loop.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

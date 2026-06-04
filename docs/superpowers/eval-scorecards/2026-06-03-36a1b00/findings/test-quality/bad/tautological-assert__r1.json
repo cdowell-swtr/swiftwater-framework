@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 53,
+      "message": "Tautological assertion: `assert s is s` is always True regardless of what `Settings()` does. This test can never fail and provides zero coverage signal.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful assertion, e.g. check a specific attribute value: `assert Settings().environment == \"dev\"`, or remove the test entirely if the existing `test_defaults` already covers this."
+    },
+    {
+      "line": 61,
+      "message": "Over-mocked test: `resolved_log_level` is patched on the very class under test, then the test asserts the mock returns `\"MOCKED\"`. This only confirms that `unittest.mock.patch.object` works \u2014 it cannot detect regressions in the real `resolved_log_level` implementation.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Remove the mock entirely and assert on the real behaviour, e.g. `assert Settings(environment=\"dev\").resolved_log_level == \"DEBUG\"` (which is already tested in `test_resolved_log_level_is_debug_in_dev`). If the goal is to test a new code path, add a direct assertion without patching the method under test."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":53,\"severity\":\"high\",\"message\":\"Tautological assertion: `assert s is s` is always True regardless of what `Settings()` does. This test can never fail and provides zero coverage signal.\",\"suggestion\":\"Replace with a meaningful assertion, e.g. check a specific attribute value: `assert Settings().environment == \\\"dev\\\"`, or remove the test entirely if the existing `test_defaults` already covers this.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":61,\"severity\":\"high\",\"message\":\"Over-mocked test: `resolved_log_level` is patched on the very class under test, then the test asserts the mock returns `\\\"MOCKED\\\"`. This only confirms that `unittest.mock.patch.object` works \u2014 it cannot detect regressions in the real `resolved_log_level` implementation.\",\"suggestion\":\"Remove the mock entirely and assert on the real behaviour, e.g. `assert Settings(environment=\\\"dev\\\").resolved_log_level == \\\"DEBUG\\\"` (which is already tested in `test_resolved_log_level_is_debug_in_dev`). If the goal is to test a new code path, add a direct assertion without patching the method under test.\"}]",
+  "repeat": 1,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

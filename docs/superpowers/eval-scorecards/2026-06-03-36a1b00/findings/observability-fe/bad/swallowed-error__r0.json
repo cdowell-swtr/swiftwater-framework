@@ -1,0 +1,22 @@
+{
+  "agent": "observability-fe",
+  "case": "swallowed-error",
+  "findings": [
+    {
+      "line": 10,
+      "message": "loadItemsQuietly() catches the fetchItems() rejection and returns [] without rethrowing or emitting any telemetry. The RUM js-errors counter only increments from the window 'error'/'unhandledrejection' listeners wired in observability/rum.ts; swallowing the promise rejection here means no unhandledrejection fires, the counter never moves, and the failed /items load is invisible to RUM. It also removes the prior setError(true) path, so the user-facing error state is dead too \u2014 the failure is unobserved end to end.",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "suggestion": "Do not swallow the error. Either let it reject so the unhandledrejection listener records it (e.g. fetchItems().then(setItems).catch(() => setError(true)) and rethrow/report), or in the catch block explicitly emit a RUM error event before returning a fallback so the js-errors counter still increments."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":10,\"severity\":\"high\",\"message\":\"loadItemsQuietly() catches the fetchItems() rejection and returns [] without rethrowing or emitting any telemetry. The RUM js-errors counter only increments from the window 'error'/'unhandledrejection' listeners wired in observability/rum.ts; swallowing the promise rejection here means no unhandledrejection fires, the counter never moves, and the failed /items load is invisible to RUM. It also removes the prior setError(true) path, so the user-facing error state is dead too \u2014 the failure is unobserved end to end.\",\"suggestion\":\"Do not swallow the error. Either let it reject so the unhandledrejection listener records it (e.g. fetchItems().then(setItems).catch(() => setError(true)) and rethrow/report), or in the catch block explicitly emit a RUM error event before returning a fallback so the js-errors counter still increments.\"}]",
+  "repeat": 0,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

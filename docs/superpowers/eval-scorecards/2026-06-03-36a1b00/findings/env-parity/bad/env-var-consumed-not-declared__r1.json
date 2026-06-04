@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "env-var-consumed-not-declared",
+  "findings": [
+    {
+      "line": 23,
+      "message": "New pydantic field `widget_timeout_s` is consumed under the `APP_` prefix (env var `APP_WIDGET_TIMEOUT_S`) but is not declared in `.env.example`. A consumed-but-undeclared variable breaks DEV->CI->STAGE->PROD env-var parity: operators have no documented surface to configure the widget call timeout, so it silently falls back to the hardcoded 5.0 default in every deployed environment.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` (with a brief comment) to `.env.example` so the variable is declared on the environment surface alongside the other APP_* fields."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":23,\"severity\":\"high\",\"message\":\"New pydantic field `widget_timeout_s` is consumed under the `APP_` prefix (env var `APP_WIDGET_TIMEOUT_S`) but is not declared in `.env.example`. A consumed-but-undeclared variable breaks DEV->CI->STAGE->PROD env-var parity: operators have no documented surface to configure the widget call timeout, so it silently falls back to the hardcoded 5.0 default in every deployed environment.\",\"suggestion\":\"Add `APP_WIDGET_TIMEOUT_S=5.0` (with a brief comment) to `.env.example` so the variable is declared on the environment surface alongside the other APP_* fields.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

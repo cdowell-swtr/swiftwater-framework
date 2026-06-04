@@ -1,0 +1,29 @@
+{
+  "agent": "dependency",
+  "case": "pinned-reputable-dep",
+  "findings": [
+    {
+      "line": 19,
+      "message": "httpx is a reputable, actively maintained HTTP client (encode/httpx). The upper bound <1.0 is good practice to guard against breaking changes at the v1 boundary. No supply-chain concerns.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": null
+    },
+    {
+      "line": 19,
+      "message": "Version floor mismatch: runtime dep allows httpx>=0.27 but the dev dependency-group pins httpx>=0.28. Tests always run against 0.28+, so a production install of 0.27 could expose untested behaviour differences between those minor releases.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Align the runtime lower bound with the dev lower bound: \"httpx>=0.28,<1.0\" so that the tested version range matches what ships to production."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":19,\"severity\":\"info\",\"message\":\"httpx is a reputable, actively maintained HTTP client (encode/httpx). The upper bound <1.0 is good practice to guard against breaking changes at the v1 boundary. No supply-chain concerns.\",\"suggestion\":null},{\"path\":\"pyproject.toml\",\"line\":19,\"severity\":\"low\",\"message\":\"Version floor mismatch: runtime dep allows httpx>=0.27 but the dev dependency-group pins httpx>=0.28. Tests always run against 0.28+, so a production install of 0.27 could expose untested behaviour differences between those minor releases.\",\"suggestion\":\"Align the runtime lower bound with the dev lower bound: \\\"httpx>=0.28,<1.0\\\" so that the tested version range matches what ships to production.\"}]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

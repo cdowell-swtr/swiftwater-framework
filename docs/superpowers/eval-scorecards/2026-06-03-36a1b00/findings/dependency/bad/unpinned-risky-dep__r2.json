@@ -1,0 +1,29 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "line": 19,
+      "message": "\"requests\" is added without any version constraint (no `>=X.Y` floor), unlike every other dependency in this manifest. An unconstrained specifier allows pip/uv to resolve arbitrarily old versions, including those with known CVEs (e.g., requests<2.31 had urllib3 header-injection issues). All other runtime dependencies carry a lower-bound pin.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "suggestion": "Add a version floor: `\"requests>=2.32\"` (the current stable series). Alternatively, consider whether `httpx` (already a dev dependency) can serve the same need \u2014 it is async-native, integrates cleanly with FastAPI, and is already present in the toolchain."
+    },
+    {
+      "line": 19,
+      "message": "`requests` (synchronous HTTP client) is added as a production runtime dependency to a FastAPI service that already has `httpx>=0.28` in its dev group. The synchronous `requests` library blocks the event loop when called from async FastAPI handlers, and `httpx` provides an equivalent async-native API (`httpx.AsyncClient`). No justification is visible in the diff for preferring `requests` over the already-present `httpx`.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "If this is for production HTTP calls from async handlers, use `httpx.AsyncClient` instead (already a declared dev dependency \u2014 promote it to runtime if needed). If `requests` is genuinely required (e.g., for a sync worker or a library that depends on it), document the reason in a comment and add the version floor."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":19,\"severity\":\"low\",\"message\":\"\\\"requests\\\" is added without any version constraint (no `>=X.Y` floor), unlike every other dependency in this manifest. An unconstrained specifier allows pip/uv to resolve arbitrarily old versions, including those with known CVEs (e.g., requests<2.31 had urllib3 header-injection issues). All other runtime dependencies carry a lower-bound pin.\",\"suggestion\":\"Add a version floor: `\\\"requests>=2.32\\\"` (the current stable series). Alternatively, consider whether `httpx` (already a dev dependency) can serve the same need \u2014 it is async-native, integrates cleanly with FastAPI, and is already present in the toolchain.\"},{\"path\":\"pyproject.toml\",\"line\":19,\"severity\":\"info\",\"message\":\"`requests` (synchronous HTTP client) is added as a production runtime dependency to a FastAPI service that already has `httpx>=0.28` in its dev group. The synchronous `requests` library blocks the event loop when called from async FastAPI handlers, and `httpx` provides an equivalent async-native API (`httpx.AsyncClient`). No justification is visible in the diff for preferring `requests` over the already-present `httpx`.\",\"suggestion\":\"If this is for production HTTP calls from async handlers, use `httpx.AsyncClient` instead (already a declared dev dependency \u2014 promote it to runtime if needed). If `requests` is genuinely required (e.g., for a sync worker or a library that depends on it), document the reason in a comment and add the version floor.\"}]",
+  "repeat": 2,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

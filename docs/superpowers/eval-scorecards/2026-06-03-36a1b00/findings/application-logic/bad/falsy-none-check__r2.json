@@ -1,0 +1,22 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 44,
+      "message": "Falsy check `if not item:` is used instead of an explicit `if item is None:`. SQLAlchemy's `session.get()` returns `None` when the row is not found, but an ORM object's truthiness is not guaranteed to be equivalent to identity with None. In practice this would incorrectly raise 404 for a valid item whose primary key is 0 (e.g., if the sequence is reset or a fixture uses id=0), since `not <Item object>` can evaluate True in unexpected scenarios. The correct pattern for presence-checking an ORM result is an explicit None check.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace `if not item:` with `if item is None:` to correctly distinguish between a missing row (None) and a found ORM object regardless of its truthiness."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":44,\"severity\":\"high\",\"message\":\"Falsy check `if not item:` is used instead of an explicit `if item is None:`. SQLAlchemy's `session.get()` returns `None` when the row is not found, but an ORM object's truthiness is not guaranteed to be equivalent to identity with None. In practice this would incorrectly raise 404 for a valid item whose primary key is 0 (e.g., if the sequence is reset or a fixture uses id=0), since `not <Item object>` can evaluate True in unexpected scenarios. The correct pattern for presence-checking an ORM result is an explicit None check.\",\"suggestion\":\"Replace `if not item:` with `if item is None:` to correctly distinguish between a missing row (None) and a found ORM object regardless of its truthiness.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

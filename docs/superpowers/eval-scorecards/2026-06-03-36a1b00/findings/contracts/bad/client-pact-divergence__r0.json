@@ -1,0 +1,29 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "line": 12,
+      "message": "The client now sends a query parameter `include_location=true` on the GET /inventory/{item_id} request, but the committed consumer pact (tests/functional/test_consumer_inventory.py) declares the interaction as `with_request(\"GET\", \"/inventory/1\")` with no query parameters. The request the client actually makes now diverges from the committed consumer contract: the pact no longer represents the real request the consumer issues, so the published pact and provider verification will not exercise the `include_location` query the client depends on. Either add `query={\"include_location\": match.like(\"true\")}` to the pact's with_request so the contract covers the new parameter (and regenerate/republish the pact), or drop the query param from the client.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Update tests/functional/test_consumer_inventory.py to declare the new query parameter in the pact interaction (e.g. `.with_request(\"GET\", \"/inventory/1\", query={\"include_location\": \"true\"})`) and regenerate/publish pacts/demo-inventory.json so the consumer contract matches the request the client now makes."
+    },
+    {
+      "line": 12,
+      "message": "Provider-side change to the request shape (added include_location query param) means pacts/demo-inventory.json must be regenerated and republished; the existing committed pact and provider-verification job will not cover the new parameter until the consumer pact is updated.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "suggestion": "Run the consumer pact test to regenerate pacts/demo-inventory.json and publish it before provider verification relies on it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"high\",\"message\":\"The client now sends a query parameter `include_location=true` on the GET /inventory/{item_id} request, but the committed consumer pact (tests/functional/test_consumer_inventory.py) declares the interaction as `with_request(\\\"GET\\\", \\\"/inventory/1\\\")` with no query parameters. The request the client actually makes now diverges from the committed consumer contract: the pact no longer represents the real request the consumer issues, so the published pact and provider verification will not exercise the `include_location` query the client depends on. Either add `query={\\\"include_location\\\": match.like(\\\"true\\\")}` to the pact's with_request so the contract covers the new parameter (and regenerate/republish the pact), or drop the query param from the client.\",\"suggestion\":\"Update tests/functional/test_consumer_inventory.py to declare the new query parameter in the pact interaction (e.g. `.with_request(\\\"GET\\\", \\\"/inventory/1\\\", query={\\\"include_location\\\": \\\"true\\\"})`) and regenerate/publish pacts/demo-inventory.json so the consumer contract matches the request the client now makes.\"},{\"path\":\"src/demo/clients/inventory.py\",\"line\":12,\"severity\":\"info\",\"message\":\"Provider-side change to the request shape (added include_location query param) means pacts/demo-inventory.json must be regenerated and republished; the existing committed pact and provider-verification job will not cover the new parameter until the consumer pact is updated.\",\"suggestion\":\"Run the consumer pact test to regenerate pacts/demo-inventory.json and publish it before provider verification relies on it.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 37,
+      "message": "Non-atomic bulk insert: session.commit() is called inside the loop on each iteration. If any item fails (e.g. a constraint violation on item N), all prior items (1..N-1) are already durably committed and cannot be rolled back, leaving the database in a partial/inconsistent state.",
+      "path": "src/demo/db/repository.py",
+      "severity": "critical",
+      "suggestion": "Move session.add() calls into the loop but defer the single session.commit() until after all items have been staged: add all items first, then call session.commit() once, then session.refresh() each item. Wrap the whole operation in a try/except with session.rollback() on error to guarantee atomicity."
+    },
+    {
+      "line": 42,
+      "message": "Missing return statement: the function builds the `created` list but never returns it, implicitly returning None. Callers typed to receive list[Item] will get None at runtime, breaking any downstream code that relies on the returned items (cache updates, event emission, response serialization).",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add `return created` at the end of the function body."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":37,\"severity\":\"critical\",\"message\":\"Non-atomic bulk insert: session.commit() is called inside the loop on each iteration. If any item fails (e.g. a constraint violation on item N), all prior items (1..N-1) are already durably committed and cannot be rolled back, leaving the database in a partial/inconsistent state.\",\"suggestion\":\"Move session.add() calls into the loop but defer the single session.commit() until after all items have been staged: add all items first, then call session.commit() once, then session.refresh() each item. Wrap the whole operation in a try/except with session.rollback() on error to guarantee atomicity.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":42,\"severity\":\"high\",\"message\":\"Missing return statement: the function builds the `created` list but never returns it, implicitly returning None. Callers typed to receive list[Item] will get None at runtime, breaking any downstream code that relies on the returned items (cache updates, event emission, response serialization).\",\"suggestion\":\"Add `return created` at the end of the function body.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

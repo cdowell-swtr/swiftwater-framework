@@ -1,0 +1,22 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "line": 43,
+      "message": "Falsy check `if not item` used instead of an identity check `if item is None`. SQLAlchemy's `session.get()` returns `None` when the row is absent, but an ORM instance that evaluates as falsy (e.g. if `__bool__`/`__len__` is ever added to the model, or if a mapped column value causes truthiness issues) would wrongly raise a 404 for a valid item. The correct guard for absence is the explicit identity test `if item is None`.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Replace `if not item:` with `if item is None:` to distinguish a missing row (None) from a valid but potentially falsy-evaluating ORM instance."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"high\",\"message\":\"Falsy check `if not item` used instead of an identity check `if item is None`. SQLAlchemy's `session.get()` returns `None` when the row is absent, but an ORM instance that evaluates as falsy (e.g. if `__bool__`/`__len__` is ever added to the model, or if a mapped column value causes truthiness issues) would wrongly raise a 404 for a valid item. The correct guard for absence is the explicit identity test `if item is None`.\",\"suggestion\":\"Replace `if not item:` with `if item is None:` to distinguish a missing row (None) from a valid but potentially falsy-evaluating ORM instance.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

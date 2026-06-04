@@ -1,0 +1,29 @@
+{
+  "agent": "dependency",
+  "case": "pinned-reputable-dep",
+  "findings": [
+    {
+      "line": 19,
+      "message": "httpx added to production dependencies with a lower bound of >=0.27, but the dev group already pins >=0.28. The prod lower bound could allow an older version in production than in development, creating a subtle environment divergence.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": "Align the production lower bound with the dev group: \"httpx>=0.28,<1.0\" to ensure dev and prod resolve the same minimum version."
+    },
+    {
+      "line": 19,
+      "message": "httpx is a reputable, well-maintained library (Encode/encode) with no known supply-chain concerns. The <1.0 upper cap is a reasonable guard against a future breaking major release. No existing production dependency covers async HTTP client use, so the addition appears justified.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "suggestion": null
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"pyproject.toml\",\"line\":19,\"severity\":\"info\",\"message\":\"httpx added to production dependencies with a lower bound of >=0.27, but the dev group already pins >=0.28. The prod lower bound could allow an older version in production than in development, creating a subtle environment divergence.\",\"suggestion\":\"Align the production lower bound with the dev group: \\\"httpx>=0.28,<1.0\\\" to ensure dev and prod resolve the same minimum version.\"},{\"path\":\"pyproject.toml\",\"line\":19,\"severity\":\"info\",\"message\":\"httpx is a reputable, well-maintained library (Encode/encode) with no known supply-chain concerns. The <1.0 upper cap is a reasonable guard against a future breaking major release. No existing production dependency covers async HTTP client use, so the addition appears justified.\",\"suggestion\":null}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "unbounded-label",
+  "findings": [
+    {
+      "line": 105,
+      "message": "record_raw_path() stores one map entry per raw full path (including the query string) with no sanitize, no distinct-value cap, and no 'other' overflow bucket. Every other metric in this class routes through _san()/_bump_capped() (MAX_ROUTES, MAX_ATTRIBUTION, MAX_REFERRERS) or a fixed enum; this path is unbounded. A public RUM beacon endpoint can mint an unlimited number of distinct full_path values, producing unbounded label cardinality that will blow up the Prometheus series count.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Sanitize the path (strip the query string, normalize via _san) and route it through _bump_capped(self._raw_paths, path, self.MAX_ROUTES, overflow='other') so the label degrades into an 'other' bucket once the cap is hit, matching record_page_view()."
+    },
+    {
+      "line": 208,
+      "message": "app_frontend_raw_path_total emits one time series per raw full path with no sanitize and no cap, so the path=\"...\" label is unbounded / high-cardinality. Combined with record_raw_path() above, an attacker or normal query-string variation creates an unbounded number of series in /metrics.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "suggestion": "Apply the same distinct-value cap + 'other' overflow used for page_views/attribution/referrers before rendering, so path is effectively a bounded enum. Alternatively drop this metric entirely since app_frontend_page_views_total already covers route-level page views."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":105,\"severity\":\"high\",\"message\":\"record_raw_path() stores one map entry per raw full path (including the query string) with no sanitize, no distinct-value cap, and no 'other' overflow bucket. Every other metric in this class routes through _san()/_bump_capped() (MAX_ROUTES, MAX_ATTRIBUTION, MAX_REFERRERS) or a fixed enum; this path is unbounded. A public RUM beacon endpoint can mint an unlimited number of distinct full_path values, producing unbounded label cardinality that will blow up the Prometheus series count.\",\"suggestion\":\"Sanitize the path (strip the query string, normalize via _san) and route it through _bump_capped(self._raw_paths, path, self.MAX_ROUTES, overflow='other') so the label degrades into an 'other' bucket once the cap is hit, matching record_page_view().\"},{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":208,\"severity\":\"high\",\"message\":\"app_frontend_raw_path_total emits one time series per raw full path with no sanitize and no cap, so the path=\\\"...\\\" label is unbounded / high-cardinality. Combined with record_raw_path() above, an attacker or normal query-string variation creates an unbounded number of series in /metrics.\",\"suggestion\":\"Apply the same distinct-value cap + 'other' overflow used for page_views/attribution/referrers before rendering, so path is effectively a bounded enum. Alternatively drop this metric entirely since app_frontend_page_views_total already covers route-level page views.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/frontend_rum/metrics.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

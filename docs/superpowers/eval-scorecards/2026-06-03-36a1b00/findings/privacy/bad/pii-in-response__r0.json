@@ -1,0 +1,29 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "line": 24,
+      "message": "ItemRead is the external API response schema and now exposes owner_email, which the model explicitly flags as PII ('do not include in logs or external responses'). Both GET /items and POST /items serialize through ItemRead, so owner email PII is echoed in external API responses to any caller.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Remove owner_email from ItemRead. If contact info must be returned, gate it behind an authorized/owner-only response schema rather than the default public list contract."
+    },
+    {
+      "line": 43,
+      "message": "ItemCreate collects owner_email (PII) from the request, but post_item calls create_item(session, payload.name) and never persists or uses the email. This is collection of PII not needed for the stated purpose; the value is silently accepted and dropped, which is both unnecessary collection and misleading.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Drop owner_email from ItemCreate unless it is actually required and will be stored with a defined retention/purpose. If it is required, persist it intentionally and document the purpose."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":24,\"severity\":\"high\",\"message\":\"ItemRead is the external API response schema and now exposes owner_email, which the model explicitly flags as PII ('do not include in logs or external responses'). Both GET /items and POST /items serialize through ItemRead, so owner email PII is echoed in external API responses to any caller.\",\"suggestion\":\"Remove owner_email from ItemRead. If contact info must be returned, gate it behind an authorized/owner-only response schema rather than the default public list contract.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"high\",\"message\":\"ItemCreate collects owner_email (PII) from the request, but post_item calls create_item(session, payload.name) and never persists or uses the email. This is collection of PII not needed for the stated purpose; the value is silently accepted and dropped, which is both unnecessary collection and misleading.\",\"suggestion\":\"Drop owner_email from ItemCreate unless it is actually required and will be stored with a defined retention/purpose. If it is required, persist it intentionally and document the purpose.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

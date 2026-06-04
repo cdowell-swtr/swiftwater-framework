@@ -1,0 +1,22 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "line": 43,
+      "message": "Breaking schema change: `create_item` adds a required non-null argument `description: str`. Existing clients that call the mutation with only `name` will now fail GraphQL validation, since `description` has no default and is non-nullable. This is a backwards-incompatible change with no compatible path.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "suggestion": "Make the new argument optional/nullable with a default, e.g. `description: str | None = None` (or `Optional[str] = strawberry.UNSET`), so existing clients that omit it continue to work."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":43,\"severity\":\"high\",\"message\":\"Breaking schema change: `create_item` adds a required non-null argument `description: str`. Existing clients that call the mutation with only `name` will now fail GraphQL validation, since `description` has no default and is non-nullable. This is a backwards-incompatible change with no compatible path.\",\"suggestion\":\"Make the new argument optional/nullable with a default, e.g. `description: str | None = None` (or `Optional[str] = strawberry.UNSET`), so existing clients that omit it continue to work.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

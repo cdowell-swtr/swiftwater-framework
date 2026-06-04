@@ -1,0 +1,22 @@
+{
+  "agent": "env-parity",
+  "case": "env-var-consumed-not-declared",
+  "findings": [
+    {
+      "line": 23,
+      "message": "New pydantic field `widget_timeout_s` (env prefix APP_, so consumed as APP_WIDGET_TIMEOUT_S) is added to Settings but is not declared in .env.example. A variable consumed in config/settings.py with no corresponding .env.example entry breaks DEV\u2192CI\u2192STAGE\u2192PROD env-var parity: operators have no documented surface to set the widget timeout per environment, so it silently falls back to the hardcoded 5.0s default everywhere.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` to the framework-managed block of .env.example (alongside the other APP_ vars) so the new variable is part of the declared environment surface."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":23,\"severity\":\"high\",\"message\":\"New pydantic field `widget_timeout_s` (env prefix APP_, so consumed as APP_WIDGET_TIMEOUT_S) is added to Settings but is not declared in .env.example. A variable consumed in config/settings.py with no corresponding .env.example entry breaks DEV\u2192CI\u2192STAGE\u2192PROD env-var parity: operators have no documented surface to set the widget timeout per environment, so it silently falls back to the hardcoded 5.0s default everywhere.\",\"suggestion\":\"Add `APP_WIDGET_TIMEOUT_S=5.0` to the framework-managed block of .env.example (alongside the other APP_ vars) so the new variable is part of the declared environment surface.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,36 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "line": 37,
+      "message": "New POST /items/{item_id}/archive endpoint has no structured logging on any code path. Neither the success path (item archived) nor the 404 error path emits a log event with correlation context. Error paths must log with correlation ID so failures are traceable.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add a logger call on both paths, e.g. `log = get_logger(); log.info('item_archived', item_id=item_id)` on success and `log.warning('item_not_found', item_id=item_id)` on the 404 path, using the structlog logger from `demo.logging_config`."
+    },
+    {
+      "line": 37,
+      "message": "New archive endpoint introduces an unmetered code path. No business-level metric is recorded for archive operations. The ObservabilityMiddleware counts HTTP requests globally but this mutating write operation is invisible to monitoring beyond raw HTTP counters.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Increment a counter metric (e.g. via the app's MetricsRegistry or a dedicated counter) when an item is archived, and separately when a 404 is returned, so archive volume and failure rates are observable independently of the aggregate request metric."
+    },
+    {
+      "line": 41,
+      "message": "The 404 error path raises HTTPException with no log event and no correlation ID in the response or logs. If OTel is disabled, there is no signal at all when an archive is attempted for a non-existent item.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Before raising HTTPException, emit a structured log: `get_logger().warning('archive_item_not_found', item_id=item_id)` so the error is recorded with the request correlation context."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"high\",\"message\":\"New POST /items/{item_id}/archive endpoint has no structured logging on any code path. Neither the success path (item archived) nor the 404 error path emits a log event with correlation context. Error paths must log with correlation ID so failures are traceable.\",\"suggestion\":\"Add a logger call on both paths, e.g. `log = get_logger(); log.info('item_archived', item_id=item_id)` on success and `log.warning('item_not_found', item_id=item_id)` on the 404 path, using the structlog logger from `demo.logging_config`.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":37,\"severity\":\"high\",\"message\":\"New archive endpoint introduces an unmetered code path. No business-level metric is recorded for archive operations. The ObservabilityMiddleware counts HTTP requests globally but this mutating write operation is invisible to monitoring beyond raw HTTP counters.\",\"suggestion\":\"Increment a counter metric (e.g. via the app's MetricsRegistry or a dedicated counter) when an item is archived, and separately when a 404 is returned, so archive volume and failure rates are observable independently of the aggregate request metric.\"},{\"path\":\"src/demo/routes/items.py\",\"line\":41,\"severity\":\"high\",\"message\":\"The 404 error path raises HTTPException with no log event and no correlation ID in the response or logs. If OTel is disabled, there is no signal at all when an archive is attempted for a non-existent item.\",\"suggestion\":\"Before raising HTTPException, emit a structured log: `get_logger().warning('archive_item_not_found', item_id=item_id)` so the error is recorded with the request correlation context.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

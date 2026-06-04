@@ -1,0 +1,29 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [
+    {
+      "line": 33,
+      "message": "New data-layer write/delete path `delete_items_by_prefix` has no span or metric instrumentation. The delete is invisible to observability \u2014 no latency span, no row-count metric, and no error logging with the correlation id, so failures and slow bulk deletes cannot be traced or alerted on.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Wrap the delete in a tracing span (e.g. `with tracer.start_as_current_span(\"db.delete_items_by_prefix\")`) and emit a metric for the operation latency and the number of rows deleted (return value), matching the observability conventions used elsewhere in the data layer."
+    },
+    {
+      "line": 38,
+      "message": "Unbounded query: `select(Item).where(Item.name.startswith(prefix))` has no limit/pagination and no latency or row-count metric. Unlike `list_items`, which clamps to MAX_PAGE_SIZE, this selects (and then deletes) every matching row, so a broad prefix can load and delete an arbitrarily large result set with no observability on the volume or duration.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Bound or batch the delete and emit a row-count/latency metric (or use a bulk `delete()` statement with the affected-row count recorded as a metric) so the size and duration of the operation are observable."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":33,\"severity\":\"high\",\"message\":\"New data-layer write/delete path `delete_items_by_prefix` has no span or metric instrumentation. The delete is invisible to observability \u2014 no latency span, no row-count metric, and no error logging with the correlation id, so failures and slow bulk deletes cannot be traced or alerted on.\",\"suggestion\":\"Wrap the delete in a tracing span (e.g. `with tracer.start_as_current_span(\\\"db.delete_items_by_prefix\\\")`) and emit a metric for the operation latency and the number of rows deleted (return value), matching the observability conventions used elsewhere in the data layer.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":38,\"severity\":\"high\",\"message\":\"Unbounded query: `select(Item).where(Item.name.startswith(prefix))` has no limit/pagination and no latency or row-count metric. Unlike `list_items`, which clamps to MAX_PAGE_SIZE, this selects (and then deletes) every matching row, so a broad prefix can load and delete an arbitrarily large result set with no observability on the volume or duration.\",\"suggestion\":\"Bound or batch the delete and emit a row-count/latency metric (or use a bulk `delete()` statement with the affected-row count recorded as a metric) so the size and duration of the operation are observable.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

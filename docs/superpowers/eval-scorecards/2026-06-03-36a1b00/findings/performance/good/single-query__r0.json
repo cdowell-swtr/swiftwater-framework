@@ -1,0 +1,22 @@
+{
+  "agent": "performance",
+  "case": "single-query",
+  "findings": [
+    {
+      "line": 43,
+      "message": "Unbounded query: `select(Item.name)` has no LIMIT, so it scans and materializes every row in the `items` table. The existing `get_items` endpoint deliberately caps reads at MAX_PAGE_SIZE=100 via `list_items()`; this endpoint bypasses that guard entirely. As the table grows the response time and memory allocation grow without bound, violating the bounded-read SLO established by the repository layer.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Add a LIMIT (e.g. `.limit(MAX_PAGE_SIZE)`) or accept `limit`/`offset` query parameters mirroring `get_items`, and import `MAX_PAGE_SIZE` from the repository. Example: `select(Item.name).order_by(Item.id).limit(MAX_PAGE_SIZE)`"
+    }
+  ],
+  "kind": "good",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":43,\"severity\":\"high\",\"message\":\"Unbounded query: `select(Item.name)` has no LIMIT, so it scans and materializes every row in the `items` table. The existing `get_items` endpoint deliberately caps reads at MAX_PAGE_SIZE=100 via `list_items()`; this endpoint bypasses that guard entirely. As the table grows the response time and memory allocation grow without bound, violating the bounded-read SLO established by the repository layer.\",\"suggestion\":\"Add a LIMIT (e.g. `.limit(MAX_PAGE_SIZE)`) or accept `limit`/`offset` query parameters mirroring `get_items`, and import `MAX_PAGE_SIZE` from the repository. Example: `select(Item.name).order_by(Item.id).limit(MAX_PAGE_SIZE)`\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

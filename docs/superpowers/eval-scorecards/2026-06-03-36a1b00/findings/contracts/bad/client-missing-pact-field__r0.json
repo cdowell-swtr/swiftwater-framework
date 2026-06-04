@@ -1,0 +1,22 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "line": 14,
+      "message": "get_stock now reads `reserved_count` from the inventory response, but the consumer Pact interaction in tests/functional/test_consumer_inventory.py (line 19) only declares `item_id` and `in_stock`. The consumer now relies on a field that the contract does not pin, so provider verification cannot guarantee the provider returns `reserved_count`, and the consumer Pact mock (which omits the field) will make `int(data['reserved_count'])` raise KeyError. The pact interaction must be extended to declare `reserved_count` before the client depends on it.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "suggestion": "Add `reserved_count` to the consumer pact body in test_consumer_inventory.py (e.g. `.with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5), \"reserved_count\": match.int(0)})`) and regenerate/publish the pact so the provider is verified against the new contracted field."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/clients/inventory.py\",\"line\":14,\"severity\":\"high\",\"message\":\"get_stock now reads `reserved_count` from the inventory response, but the consumer Pact interaction in tests/functional/test_consumer_inventory.py (line 19) only declares `item_id` and `in_stock`. The consumer now relies on a field that the contract does not pin, so provider verification cannot guarantee the provider returns `reserved_count`, and the consumer Pact mock (which omits the field) will make `int(data['reserved_count'])` raise KeyError. The pact interaction must be extended to declare `reserved_count` before the client depends on it.\",\"suggestion\":\"Add `reserved_count` to the consumer pact body in test_consumer_inventory.py (e.g. `.with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5), \\\"reserved_count\\\": match.int(0)})`) and regenerate/publish the pact so the provider is verified against the new contracted field.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

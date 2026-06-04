@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "rum-allowlists-pii",
+  "findings": [
+    {
+      "line": 45,
+      "message": "Adding \"email\" to frontend_rum_allowed_query_params captures the user's email address from the URL query string into RUM telemetry. The allowlist's stated purpose is marketing attribution (UTM params); email is PII that is not needed for that purpose. It flows through routes/frontend_rum.py:64 into frontend_metrics.record_page_view(), persisting PII in telemetry/metrics. This is unnecessary PII collection into telemetry.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "suggestion": "Remove the \"email\" entry. Keep the allowlist limited to the non-PII UTM attribution params (utm_source/medium/campaign/term/content). If per-user analytics are genuinely required, use a non-identifying pseudonymous ID rather than collecting raw email into telemetry."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":45,\"severity\":\"high\",\"message\":\"Adding \\\"email\\\" to frontend_rum_allowed_query_params captures the user's email address from the URL query string into RUM telemetry. The allowlist's stated purpose is marketing attribution (UTM params); email is PII that is not needed for that purpose. It flows through routes/frontend_rum.py:64 into frontend_metrics.record_page_view(), persisting PII in telemetry/metrics. This is unnecessary PII collection into telemetry.\",\"suggestion\":\"Remove the \\\"email\\\" entry. Keep the allowlist limited to the non-PII UTM attribution params (utm_source/medium/campaign/term/content). If per-user analytics are genuinely required, use a non-identifying pseudonymous ID rather than collecting raw email into telemetry.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

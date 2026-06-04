@@ -1,0 +1,29 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "line": 39,
+      "message": "session.commit() is called inside the loop, destroying atomicity across the batch. If any subsequent insert fails, all previously committed items remain in the database \u2014 a partial write that leaves the store in an inconsistent state with no way to roll back the already-committed rows.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Move all session.add() calls before a single session.commit() after the loop: add all items, then commit once, then refresh all. Alternatively, use session.add_all(items) followed by a single commit to ensure the entire batch is atomic."
+    },
+    {
+      "line": 41,
+      "message": "The function has no return statement. It always returns None instead of the list[Item] declared in the signature, silently dropping all results for every caller.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "suggestion": "Add 'return created' after the loop body."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/db/repository.py\",\"line\":39,\"severity\":\"high\",\"message\":\"session.commit() is called inside the loop, destroying atomicity across the batch. If any subsequent insert fails, all previously committed items remain in the database \u2014 a partial write that leaves the store in an inconsistent state with no way to roll back the already-committed rows.\",\"suggestion\":\"Move all session.add() calls before a single session.commit() after the loop: add all items, then commit once, then refresh all. Alternatively, use session.add_all(items) followed by a single commit to ensure the entire batch is atomic.\"},{\"path\":\"src/demo/db/repository.py\",\"line\":41,\"severity\":\"high\",\"message\":\"The function has no return statement. It always returns None instead of the list[Item] declared in the signature, silently dropping all results for every caller.\",\"suggestion\":\"Add 'return created' after the loop body.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "line": 53,
+      "message": "rename_item updates item.name but never recalculates the derived slug, so slug goes stale and diverges from name. The model contract (models.py:16-18) requires slug to stay in sync with name, and repository.update_item_name already does this correctly (sets item.slug = _make_slug(name)). This route bypasses that helper, leaving an inconsistent cross-field write. Because slug is unique+indexed, stale slugs also block legitimate future renames/collisions.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "suggestion": "Recalculate the slug alongside the name, or delegate to the repository helper. e.g. replace the direct mutation with `from ..db.repository import update_item_name` and `item = update_item_name(session, item_id, payload.name)` (raising 404 when it returns None), or set `item.slug = _make_slug(payload.name)` before committing."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":53,\"severity\":\"medium\",\"message\":\"rename_item updates item.name but never recalculates the derived slug, so slug goes stale and diverges from name. The model contract (models.py:16-18) requires slug to stay in sync with name, and repository.update_item_name already does this correctly (sets item.slug = _make_slug(name)). This route bypasses that helper, leaving an inconsistent cross-field write. Because slug is unique+indexed, stale slugs also block legitimate future renames/collisions.\",\"suggestion\":\"Recalculate the slug alongside the name, or delegate to the repository helper. e.g. replace the direct mutation with `from ..db.repository import update_item_name` and `item = update_item_name(session, item_id, payload.name)` (raising 404 when it returns None), or set `item.slug = _make_slug(payload.name)` before committing.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

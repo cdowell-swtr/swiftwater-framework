@@ -1,0 +1,22 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [
+    {
+      "line": 50,
+      "message": "Cross-path write inconsistency: post_item() takes user-supplied input (payload.name) and writes it via the bare create_item(), bypassing the canonical create_item_normalized() entry-point. The repository explicitly documents a consistency contract ('Callers that accept user input MUST go through this function, not the bare create_item()') so all stored names share a single casing/whitespace convention. Two write paths now persist the same logical field (Item.name) under different normalization rules: the seed path and any normalized caller store stripped/lowercased values, while this route stores raw casing and surrounding whitespace. This breaks lookups, deduplication, and uniqueness assumptions that rely on the documented canonical form, with no reconciliation strategy.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Route user-supplied names through the canonical normalizer: `return create_item_normalized(session, payload.name)`. If a non-normalized path is genuinely needed, document the divergent store invariant and add a consistency/reconciliation strategy rather than silently writing un-normalized data through create_item()."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":50,\"severity\":\"high\",\"message\":\"Cross-path write inconsistency: post_item() takes user-supplied input (payload.name) and writes it via the bare create_item(), bypassing the canonical create_item_normalized() entry-point. The repository explicitly documents a consistency contract ('Callers that accept user input MUST go through this function, not the bare create_item()') so all stored names share a single casing/whitespace convention. Two write paths now persist the same logical field (Item.name) under different normalization rules: the seed path and any normalized caller store stripped/lowercased values, while this route stores raw casing and surrounding whitespace. This breaks lookups, deduplication, and uniqueness assumptions that rely on the documented canonical form, with no reconciliation strategy.\",\"suggestion\":\"Route user-supplied names through the canonical normalizer: `return create_item_normalized(session, payload.name)`. If a non-normalized path is genuinely needed, document the divergent store invariant and add a consistency/reconciliation strategy rather than silently writing un-normalized data through create_item().\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

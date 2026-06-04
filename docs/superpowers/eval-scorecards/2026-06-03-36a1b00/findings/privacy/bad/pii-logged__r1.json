@@ -1,0 +1,22 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "line": 52,
+      "message": "owner_email is written to application logs in the item_created audit event. owner_email is PII (the model in db/models.py explicitly comments 'PII: owner email address \u2014 do not include in logs or external responses'). Logging it exposes personal data in log sinks, violating the stated handling rule.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "suggestion": "Drop owner_email from the log call entirely, or log a non-identifying surrogate (e.g. a hash or just item_id): log.info(\"item_created\", item_id=item.id)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"src/demo/routes/items.py\",\"line\":52,\"severity\":\"high\",\"message\":\"owner_email is written to application logs in the item_created audit event. owner_email is PII (the model in db/models.py explicitly comments 'PII: owner email address \u2014 do not include in logs or external responses'). Logging it exposes personal data in log sinks, violating the stated handling rule.\",\"suggestion\":\"Drop owner_email from the log call entirely, or log a non-identifying surrogate (e.g. a hash or just item_id): log.info(\\\"item_created\\\", item_id=item.id).\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}

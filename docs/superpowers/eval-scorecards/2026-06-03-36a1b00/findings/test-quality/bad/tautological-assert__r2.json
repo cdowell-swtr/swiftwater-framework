@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "line": 53,
+      "message": "Tautological assertion: `assert s is s` is always True regardless of the implementation. This test can never fail and provides zero coverage of Settings behaviour.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Replace with a meaningful assertion, e.g. assert isinstance(s, Settings), or assert s.environment == 'dev' to verify a real default."
+    },
+    {
+      "line": 61,
+      "message": "Over-mocked test: `resolved_log_level` is patched to return a hardcoded string, then the test asserts that hardcoded string. The real implementation is never exercised. This test will always pass even if `resolved_log_level` is completely broken or deleted.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "suggestion": "Remove the mock and assert the actual resolution logic, e.g. `assert Settings(environment='dev').resolved_log_level == 'DEBUG'` (already covered by test_resolved_log_level_is_debug_in_dev; delete this test entirely if it adds no new scenario)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": null,
+  "raw_text": "[{\"path\":\"tests/unit/test_settings.py\",\"line\":53,\"severity\":\"high\",\"message\":\"Tautological assertion: `assert s is s` is always True regardless of the implementation. This test can never fail and provides zero coverage of Settings behaviour.\",\"suggestion\":\"Replace with a meaningful assertion, e.g. assert isinstance(s, Settings), or assert s.environment == 'dev' to verify a real default.\"},{\"path\":\"tests/unit/test_settings.py\",\"line\":61,\"severity\":\"high\",\"message\":\"Over-mocked test: `resolved_log_level` is patched to return a hardcoded string, then the test asserts that hardcoded string. The real implementation is never exercised. This test will always pass even if `resolved_log_level` is completely broken or deleted.\",\"suggestion\":\"Remove the mock and assert the actual resolution logic, e.g. `assert Settings(environment='dev').resolved_log_level == 'DEBUG'` (already covered by test_resolved_log_level_is_debug_in_dev; delete this test entirely if it adds no new scenario).\"}]",
+  "repeat": 2,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {}
+}
