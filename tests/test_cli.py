@@ -1900,6 +1900,61 @@ def test_resolve_audit_base_since_as_ref_resolves_via_rev_parse(tmp_path, monkey
     assert name is None  # ref form has no baseline-dir name
 
 
+def test_resolve_audit_base_baseline_dir_meta_unreadable_raises_valueerror(
+    tmp_path, monkeypatch
+):
+    """If is_baseline_dir passes but meta.json is gone/corrupt by the time the
+    baseline-dir branch re-reads it (a TOCTOU window), _resolve_audit_base raises a
+    clean ValueError — not a raw OSError/JSONDecodeError. The caller only wraps
+    ValueError into the `audit-prepare:` error line + exit 2.
+    """
+    from framework_cli.cli import _resolve_audit_base
+    from framework_cli.review import baselines
+
+    bd = tmp_path / "audit-2026-01-01-x"
+    bd.mkdir()
+    # Simulate the pre-check having seen a valid baseline, but meta.json is
+    # absent when the branch re-reads it for the `agents` list.
+    monkeypatch.setattr(baselines, "is_baseline_dir", lambda p: True)
+
+    with pytest.raises(ValueError, match="meta.json"):
+        _resolve_audit_base(
+            "security",
+            "framework",
+            snapshot_flag=False,
+            since_arg=str(bd),
+            scorecards_root=tmp_path,
+        )
+
+
+def test_resolve_audit_base_baseline_dir_sha_none_raises_valueerror(
+    tmp_path, monkeypatch
+):
+    """If the agent is in the baseline but its SHA can't be read (None — e.g. the
+    file changed under us), _resolve_audit_base raises a clear ValueError rather
+    than silently returning ('delta', None, ...), which would later fail in
+    `git diff None...HEAD` with a confusing message.
+    """
+    from framework_cli.cli import _resolve_audit_base
+    from framework_cli.review import baselines
+
+    bd = tmp_path / "audit-2026-01-01-x"
+    bd.mkdir()
+    (bd / "meta.json").write_text(
+        '{"target": "framework", "git_sha": "shaX", "agents": ["security"]}'
+    )
+    monkeypatch.setattr(baselines, "read_baseline_sha", lambda p: None)
+
+    with pytest.raises(ValueError, match="git_sha"):
+        _resolve_audit_base(
+            "security",
+            "framework",
+            snapshot_flag=False,
+            since_arg=str(bd),
+            scorecards_root=tmp_path,
+        )
+
+
 def test_resolve_audit_base_since_as_bad_ref_raises(tmp_path, monkeypatch):
     """since_arg is a ref but git rev-parse fails → ValueError (caller exits 2)."""
     import subprocess
@@ -2806,6 +2861,66 @@ def test_gate_finalize_acknowledged_active_decision_passes(tmp_path, monkeypatch
     assert record["findings"][0]["acknowledged"] == "DEC-0001"
 
 
+def test_gate_finalize_acknowledged_but_stale_decision_blocks(tmp_path, monkeypatch):
+    """A finding tagged acknowledged: <active-id> AND stale: <id> must still block.
+    `stale` signals the decision's premise no longer holds, so the acknowledgement
+    is void even though the cited id is active → verdict FAIL. (Without the stale
+    check, a contradictory acknowledged+stale pair would silently pass.)
+    """
+    monkeypatch.chdir(tmp_path)
+    _seed_gate_decision(tmp_path, "DEC-0001", "accepted")
+
+    out = tmp_path / "audit"
+    out.mkdir()
+    results = [
+        {
+            "agent": "security",
+            "findings": [
+                {
+                    "path": "a.py",
+                    "line": 1,
+                    "severity": "high",
+                    "message": "premise no longer holds — re-raised",
+                    "suggestion": None,
+                    "acknowledged": "DEC-0001",
+                    "stale": "DEC-0001",
+                },
+            ],
+            "usage": {},
+            "latency_ms": None,
+            "stop_reason": "end_turn",
+            "raw_text": "[]",
+            "turns": 1,
+            "tool_calls": [],
+        },
+    ]
+    payload = {
+        "results": results,
+        "meta": {
+            "mode": "gate",
+            "staged_hash": "sha256:abc",
+            "agents_set": ["security"],
+        },
+    }
+    results_file = tmp_path / "results.json"
+    results_file.write_text(_json.dumps(payload))
+    result = runner.invoke(
+        app,
+        [
+            "gate-finalize",
+            "--results",
+            str(results_file),
+            "--out-dir",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    marker = _json.loads((out.parent / "marker.json").read_text())
+    assert marker["verdict"] == "FAIL", (
+        f"Acknowledged-but-stale finding must still block; marker={marker}"
+    )
+
+
 def test_gate_finalize_acknowledged_inactive_decision_blocks(tmp_path, monkeypatch):
     """Integrity guard: acknowledged: <id> citing an INACTIVE decision (status=retired)
     is ignored — the finding blocks normally → verdict FAIL.
@@ -3074,6 +3189,7 @@ def test_prepare_split_dir_replaces_pre_populated_dir(tmp_path):
     assert not (split_dir / "stray.txt").exists()
     assert not (items_dir / "item-9999.json").exists()
     assert stat.S_IMODE(split_dir.stat().st_mode) == 0o700
+    assert stat.S_IMODE(items_dir.stat().st_mode) == 0o700
 
 
 def test_template_render_renders_all_batteries(tmp_path):

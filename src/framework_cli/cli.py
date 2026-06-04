@@ -1244,10 +1244,25 @@ def _resolve_audit_base(
     if since_arg:
         since_path = Path(since_arg)
         if is_baseline_dir(since_path):
-            meta = json.loads((since_path / "meta.json").read_text())
+            # is_baseline_dir already parsed meta.json, but re-read it for the
+            # `agents` list. Guard the re-read: if the file vanished or became
+            # unreadable in the window between the two reads (TOCTOU), surface a
+            # clean ValueError — the caller only wraps ValueError into the
+            # `audit-prepare:` error line, not a raw OSError/JSONDecodeError.
+            try:
+                meta = json.loads((since_path / "meta.json").read_text())
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError(
+                    f"could not read {since_path / 'meta.json'}: {exc}"
+                ) from exc
             agents_in_baseline = meta.get("agents") or []
             if agent in agents_in_baseline:
                 sha = read_baseline_sha(since_path)
+                if sha is None:
+                    raise ValueError(
+                        f"baseline dir {since_path} has no readable git_sha in "
+                        "meta.json; was it written by audit-finalize?"
+                    )
                 return ("delta", sha, since_path.name)
             return ("snapshot", None, None)
         # Treat as a ref/SHA. Resolve via git rev-parse.
@@ -1873,11 +1888,14 @@ def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) 
         if spec.block_threshold is None:
             continue
         # Exclude findings that are acknowledged against an active decision
-        # (integrity guard: only active ids exempt; unknown/inactive ids block normally).
+        # (integrity guard: only active ids exempt; unknown/inactive ids block
+        # normally). A finding also tagged `stale` is NOT exempt even when it
+        # cites an active id: `stale` signals the decision's premise no longer
+        # holds, so the acknowledgement is void and the finding must block.
         blocking = [
             f
             for f in findings_objs
-            if not (f.acknowledged and f.acknowledged in active_ids)
+            if not (f.acknowledged and f.acknowledged in active_ids and not f.stale)
         ]
         if flags(blocking, spec):
             failing = True
