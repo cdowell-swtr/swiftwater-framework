@@ -9,6 +9,8 @@ byte-identical across paid and free.
 
 from __future__ import annotations
 
+import json
+import subprocess  # noqa: S404 — invoking the local `claude` CLI by fixed argv
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -96,3 +98,126 @@ class ApiBackend:
 
     def __init__(self, sdk_client: Any) -> None:
         self.messages = _ApiMessages(sdk_client)
+
+
+# Tools disabled on every subagent turn so `claude -p` returns exactly ONE model turn
+# (no internal agentic loop). Python owns the loop. Explicit list so a new CC tool can't
+# silently re-enable looping.
+_DISABLED_TOOLS = (
+    "Bash",
+    "Read",
+    "Edit",
+    "Write",
+    "Grep",
+    "Glob",
+    "WebFetch",
+    "WebSearch",
+    "Task",
+    "NotebookEdit",
+)
+
+# Substrings marking a usage-limit / subscription-exhaustion error in `claude -p` output
+# (case-insensitive). Matched loosely because phrasing varies by CLI version; the engine
+# (20b) treats this as a hard stop, not a retry.
+_EXHAUSTION_MARKERS = ("usage limit", "rate limit reached", "quota", "limit reached")
+_EXHAUSTION_MESSAGE = "claude subscription usage limit reached"
+
+
+def _default_subprocess_runner(argv: list[str], *, input_text: str | None) -> str:
+    proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
+        argv,
+        input=input_text,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    if proc.returncode != 0:
+        combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+        if any(m in combined.lower() for m in _EXHAUSTION_MARKERS):
+            raise BackendExhausted(_EXHAUSTION_MESSAGE)
+        raise RuntimeError(f"claude -p failed ({proc.returncode}): {combined.strip()}")
+    return proc.stdout
+
+
+def _join_system(system: list[dict[str, Any]]) -> str:
+    return "\n\n".join(b.get("text", "") for b in system if b.get("text"))
+
+
+def _render_prompt(
+    messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
+) -> str:
+    # Bundle tier (tools is None): a single user turn — return its text. Agentic framing
+    # is added in Task 1.4.
+    last = messages[-1]["content"]
+    return last if isinstance(last, str) else json.dumps(last)
+
+
+def _parse_claude_json(raw: str, tools: list[dict[str, Any]] | None) -> Message:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"claude -p returned non-JSON output: {raw[:120]!r}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(
+            f"claude -p returned unexpected JSON type: {type(payload).__name__}"
+        )
+    if payload.get("is_error"):
+        low = (payload.get("result") or "").lower()
+        if any(m in low for m in _EXHAUSTION_MARKERS):
+            raise BackendExhausted(_EXHAUSTION_MESSAGE)
+        raise RuntimeError(f"claude -p error: {payload.get('result')}")
+    text = (payload.get("result", "") or "").strip()
+    u = payload.get("usage", {}) or {}
+    usage = Usage(
+        input_tokens=u.get("input_tokens", 0) or 0,
+        output_tokens=u.get("output_tokens", 0) or 0,
+        cache_read_input_tokens=u.get("cache_read_input_tokens", 0) or 0,
+        cache_creation_input_tokens=u.get("cache_creation_input_tokens", 0) or 0,
+    )
+    stop = payload.get("stop_reason")
+    # Agentic tool-protocol decoding is added in Task 1.4; bundle tier is one text block.
+    return Message(content=[TextBlock(text=text)], usage=usage, stop_reason=stop)
+
+
+class _SubagentMessages:
+    def __init__(self, runner: Any) -> None:
+        self._runner = runner
+
+    def create(
+        self,
+        *,
+        model: str,
+        max_tokens: int,
+        system: list[dict[str, Any]],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Message:
+        prompt = _render_prompt(messages, tools)
+        argv = [
+            "claude",
+            "-p",
+            prompt,
+            "--system-prompt",
+            _join_system(system),
+            "--exclude-dynamic-system-prompt-sections",
+            "--output-format",
+            "json",
+            "--model",
+            model,
+        ]
+        for t in _DISABLED_TOOLS:
+            argv += ["--disallowed-tools", t]
+        raw = self._runner(argv, input_text=None)
+        return _parse_claude_json(raw, tools)
+
+
+class SubagentBackend:
+    """The free backend: headless `claude -p` on the subscription, adapted to `Message`.
+
+    Tools are always disabled so each call is a single model turn; the agentic loop in
+    `run_agent_agentic` drives tool use via a text protocol (Task 1.4)."""
+
+    def __init__(self, runner: Any = _default_subprocess_runner) -> None:
+        self.messages = _SubagentMessages(runner)
