@@ -1,20 +1,38 @@
+diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
+index 862bafd..8766707 100644
 --- a/src/demo/db/repository.py
 +++ b/src/demo/db/repository.py
-@@ -14,3 +14,15 @@
+@@ -28,3 +28,33 @@ def create_item(session: Session, name: str) -> Item:
      session.commit()
      session.refresh(item)
      return item
 +
 +
 +def bulk_create_items(session: Session, names: list[str]) -> list[Item]:
-+    """Insert multiple items atomically in a single transaction."""
-+    created = []
++    """Insert multiple items atomically in a single transaction.
++
++    Each name is stripped and validated (non-empty, within the 255-char column);
++    the batch is de-duplicated (order preserved) and capped to avoid an unbounded
++    insert. All rows commit together or none do. Server-assigned ids are populated
++    by the flush inside ``session.commit()``, so the created rows are returned
++    directly (no per-row refresh).
++
++    Raises ``ValueError`` on an invalid name or an over-cap batch, and propagates
++    ``sqlalchemy.exc.IntegrityError`` (e.g. a unique-constraint violation) — the
++    caller is responsible for rolling back the session in that case.
++    """
++    seen: set[str] = set()
++    cleaned: list[str] = []
 +    for name in names:
-+        item = Item(name=name)
-+        session.add(item)
-+        created.append(item)
-+    # Single commit — all rows land together or none do.
++        stripped = name.strip()
++        if not stripped or len(stripped) > 255:
++            raise ValueError(f"invalid item name: {name!r}")
++        if stripped not in seen:
++            seen.add(stripped)
++            cleaned.append(stripped)
++    if len(cleaned) > 1000:  # bound the batch to avoid an unbounded insert
++        raise ValueError(f"bulk insert of {len(cleaned)} exceeds the 1000-row limit")
++    created = [Item(name=name) for name in cleaned]
++    session.add_all(created)
 +    session.commit()
-+    for item in created:
-+        session.refresh(item)
 +    return created
