@@ -12,7 +12,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-06-09-reviewer-path-parity-design.md`.
 
-**Working agreement:** Every commit stages an updated `CLAUDE.md` Current-State pointer (a `PreToolUse` hook enforces it). Pre-commit gate: `uv run pytest -q && uv run ruff check . && uv run ruff format --check . && uv run mypy src`. Full-suite runs use `TMPDIR=/var/tmp` (per `[[full-suite-exhausts-tmp-tmpfs-use-var-tmp]]`). All unit tests are hermetic (fake backend / fake `claude -p` runner); live calls appear only in the explicit smoke task. Per `[[gate-cadence-framework-slices]]`, one branch-end review, not per-commit.
+**Working agreement:** Every commit stages an updated `CLAUDE.md` Current-State pointer (a `PreToolUse` hook enforces it). Pre-commit gate: `uv run pytest -q && uv run ruff check . && uv run ruff format --check . && uv run mypy src`. Full-suite runs use `TMPDIR=/var/tmp` (per `[[full-suite-exhausts-tmp-tmpfs-use-var-tmp]]`). All unit tests are hermetic (fake backend / fake `claude -p` runner); live calls appear only in the explicit smoke task. Per `[[gate-cadence-framework-slices]]`, one branch-end review, not per-commit. **Review-model policy:** implementers → Sonnet (Haiku for trivial); spec-compliance review → Sonnet; **code-quality review → Opus**; final/branch-end review → Opus (see `[[subagent-review-model-pattern]]`).
 
 ---
 

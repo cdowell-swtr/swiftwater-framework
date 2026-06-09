@@ -105,7 +105,9 @@ def test_parse_nonnumeric_line_coerced_keeps_finding():
 
 
 def test_parse_extracts_leading_int_from_messy_line():
-    text = '[{"path": "a.py", "line": "42: see here", "severity": "low", "message": "m"}]'
+    text = (
+        '[{"path": "a.py", "line": "42: see here", "severity": "low", "message": "m"}]'
+    )
     assert parse_findings(text)[0].line == 42
 
 

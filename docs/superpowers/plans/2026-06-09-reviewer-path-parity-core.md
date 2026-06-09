@@ -12,7 +12,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-06-09-reviewer-path-parity-design.md` — read it first.
 
-**Working agreement:** Every commit must stage an updated `CLAUDE.md` Current-State pointer (a `PreToolUse` hook blocks the commit otherwise). Pre-commit quality gate: `uv run pytest -q && uv run ruff check . && uv run ruff format --check . && uv run mypy src`. Per `[[gate-cadence-framework-slices]]`, rely on the green test gate + one branch-end review, not per-commit agent review. All unit tests here are hermetic — they inject a fake SDK client or a fake `claude -p` runner; **no test requires a live key or a live `claude`.**
+**Working agreement:** Every commit must stage an updated `CLAUDE.md` Current-State pointer (a `PreToolUse` hook blocks the commit otherwise). Pre-commit quality gate: `uv run pytest -q && uv run ruff check . && uv run ruff format --check . && uv run mypy src`. Per `[[gate-cadence-framework-slices]]`, rely on the green test gate + one branch-end review, not per-commit agent review. All unit tests here are hermetic — they inject a fake SDK client or a fake `claude -p` runner; **no test requires a live key or a live `claude`.** **Review-model policy:** implementers → Sonnet (Haiku for trivial); spec-compliance review → Sonnet; **code-quality review → Opus**; final/branch-end review → Opus (see `[[subagent-review-model-pattern]]`).
 
 ---
 
