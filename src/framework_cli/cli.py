@@ -517,7 +517,12 @@ def eval_agents(
         help="Directory to write per-(agent,fixture,repeat) findings JSON for diagnosis.",
     ),
 ) -> None:
-    """Run golden fixtures through the review agents and score recall/precision (spec §20)."""
+    """Run golden fixtures through the review agents and score recall/precision (spec §20).
+
+    A malformed agent response (FindingsParseError) is scored as no findings for
+    that single repeat and reported via a WARNING (and a ``parse_error`` marker in
+    ``--findings-out``); only ``anthropic.APIError`` aborts the whole run.
+    """
     from framework_cli.review.evals import (
         DEFAULT_THRESHOLDS,
         flags,
@@ -540,6 +545,8 @@ def eval_agents(
     import tempfile
 
     import anthropic
+
+    from framework_cli.review.findings import FindingsParseError
 
     root = Path(fixtures)
     _base_dir = Path(tempfile.mkdtemp(prefix="evalbase-"))
@@ -591,6 +598,20 @@ def eval_agents(
                         err=True,
                     )
                     raise typer.Exit(3) from exc
+                except FindingsParseError as exc:
+                    # A malformed agent response is the agent's fault, not an
+                    # infra failure: score this single run as no findings (a miss
+                    # on a bad fixture) and continue — never crash the whole run.
+                    typer.echo(
+                        f"\neval: WARNING {spec.name} {fx.kind}/{fx.name} r{i} — "
+                        f"unparseable agent response ({exc}); scoring as no findings",
+                        err=True,
+                    )
+                    # Mark the persisted record so eval-analyze can tell a parse
+                    # failure apart from a genuine clean run (both have 0 findings).
+                    if report is not None:
+                        report["parse_error"] = str(exc)
+                    found = []
                 if findings_out:
                     _write_findings(Path(findings_out), fx, i, found, report or {})
                 blocked = (

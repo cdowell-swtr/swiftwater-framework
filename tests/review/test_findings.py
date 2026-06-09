@@ -41,6 +41,54 @@ def test_no_array_raises():
         parse_findings("I could not produce JSON.")
 
 
+def test_parse_array_with_trailing_prose_containing_brackets():
+    """The agent appends an explanation after the JSON array, and that prose
+    itself contains brackets (e.g. a line reference) — naive first-[..last-]
+    over-spans and json.loads chokes on 'Extra data'. Extract the FIRST complete
+    array and ignore the trailing content. Regression: a real contracts-agent
+    response crashed the paid eval exactly this way."""
+    text = _JSON + "\n\nNote: see the related check at line [42] for context."
+    findings = parse_findings(text)
+    assert len(findings) == 1
+    assert findings[0].path == "a.py"
+
+
+def test_parse_first_array_when_response_has_trailing_array():
+    """A second bracketed token after the findings array must not be swept in."""
+    text = _JSON + "\n\nAnd separately: [1, 2, 3]"
+    findings = parse_findings(text)
+    assert len(findings) == 1
+    assert findings[0].path == "a.py"
+
+
+def test_parse_array_when_prose_has_invalid_leading_bracket():
+    """A bracket in the prose BEFORE the array that is NOT valid JSON (e.g.
+    `[docs]`) is skipped — take the first bracket that decodes to a JSON list."""
+    text = "See [docs]. Findings:\n" + _JSON
+    findings = parse_findings(text)
+    assert len(findings) == 1
+    assert findings[0].path == "a.py"
+
+
+def test_parse_skips_leading_numeric_array_citation():
+    """A valid-JSON but non-findings array in leading prose (e.g. a `[42]` line
+    citation) must NOT be returned — it isn't a list of finding objects, so skip
+    it and take the real findings array."""
+    text = "See line [42] for context. Findings:\n" + _JSON
+    findings = parse_findings(text)
+    assert len(findings) == 1
+    assert findings[0].path == "a.py"
+
+
+def test_parse_skips_leading_empty_array_in_prose():
+    """An empty `[]` in leading prose (e.g. 'no [] params found') must NOT short-
+    circuit to zero findings — prefer the first NON-EMPTY array of objects."""
+    text = "Checked: no [] params found. Findings:\n" + _JSON
+    findings = parse_findings(text)
+    assert len(findings) == 1
+    assert findings[0].path == "a.py"
+
+
 def test_severity_rank_orders_critical_above_info():
     assert severity_rank("critical") > severity_rank("high") > severity_rank("info")
 

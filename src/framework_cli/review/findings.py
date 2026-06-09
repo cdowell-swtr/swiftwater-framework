@@ -28,10 +28,41 @@ def severity_rank(severity: str) -> int:
 
 
 def _extract_array(text: str) -> str:
-    start, end = text.find("["), text.rfind("]")
-    if start == -1 or end == -1 or end < start:
-        raise FindingsParseError("no JSON array found in agent response")
-    return text[start : end + 1]
+    """Return the substring of the best top-level JSON findings array in ``text``.
+
+    Agents are told to emit only a JSON array, but sometimes wrap it in prose
+    that contains its own brackets — a trailing explanation (``... line [42]``),
+    a second bracketed token, or a leading ``[]``/``[42]`` citation. A naive
+    first-``[``..last-``]`` span over-reaches and ``json.loads`` fails with
+    "Extra data" (which crashed the paid eval once); naively taking the first
+    JSON list instead wrongly returns a prose ``[]`` or ``[42]``.
+
+    Scan candidate ``[`` positions and prefer the first NON-EMPTY array of
+    objects (a real findings list). Skip arrays whose elements aren't objects
+    (e.g. ``[42]``) and invalid JSON. Fall back to an empty ``[]`` only if no
+    findings-shaped array exists (a genuine "no findings" response).
+
+    Returns a substring of ``text`` that ``json.loads`` accepts as a JSON list;
+    raises ``FindingsParseError`` if no JSON array is found.
+    """
+    decoder = json.JSONDecoder()
+    empty_fallback: str | None = None
+    idx = text.find("[")
+    while idx != -1:
+        try:
+            value, end = decoder.raw_decode(text, idx)
+        except json.JSONDecodeError:
+            idx = text.find("[", idx + 1)
+            continue
+        if isinstance(value, list):
+            if value and all(isinstance(item, dict) for item in value):
+                return text[idx:end]
+            if not value and empty_fallback is None:
+                empty_fallback = text[idx:end]
+        idx = text.find("[", idx + 1)
+    if empty_fallback is not None:
+        return empty_fallback
+    raise FindingsParseError("no JSON array found in agent response")
 
 
 def parse_findings(text: str) -> list[Finding]:

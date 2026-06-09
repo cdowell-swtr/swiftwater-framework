@@ -385,6 +385,64 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
     assert "FAIL" in result.output
 
 
+def test_eval_unparseable_response_is_non_fatal(tmp_path, monkeypatch):
+    """A FindingsParseError from one agent's response must NOT crash the whole
+    eval run (regression: a malformed contracts response with trailing data
+    crashed the paid eval). It is scored as no findings for that repeat — a miss
+    on a bad fixture — and the run completes with a normal verdict, not a
+    traceback. Only anthropic.APIError aborts (scores are then unreliable)."""
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.findings import FindingsParseError
+
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
+
+    def boom(diff, root, spec, **kw):
+        raise FindingsParseError("Extra data: line 1 column 17 (char 16)")
+
+    monkeypatch.setattr(cli_mod, "_eval_run", boom)
+    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
+    # Handled gracefully — the parse error must not bubble out (a clean
+    # typer.Exit(1) surfaces as SystemExit on the result, which is fine).
+    assert not isinstance(result.exception, FindingsParseError), (
+        f"crashed instead of handling: {result.exception!r}"
+    )
+    # Bad fixture scored as a miss (no findings) -> FAIL verdict, exit 1.
+    assert result.exit_code == 1, result.output
+    assert "FAIL" in result.output
+    # The operator-visible warning must be emitted (CliRunner mixes stderr in).
+    assert "unparseable" in result.output
+
+
+def test_eval_findings_out_marks_parse_error(tmp_path, monkeypatch):
+    """On a FindingsParseError the --findings-out record must carry a parse_error
+    marker, so eval-analyze can distinguish an unparseable response (scored as
+    no findings) from a genuine clean run — both otherwise show zero findings."""
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.findings import FindingsParseError
+
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
+
+    def boom(diff, root, spec, **kw):
+        raise FindingsParseError("Extra data: line 1 column 17 (char 16)")
+
+    monkeypatch.setattr(cli_mod, "_eval_run", boom)
+    out = tmp_path / "findings"
+    runner.invoke(
+        app,
+        ["eval", "security", "--fixtures", str(tmp_path), "--findings-out", str(out)],
+    )
+    rec = _json.loads((out / "security" / "good" / "g1__r0.json").read_text())
+    assert rec["findings"] == []
+    assert "Extra data" in rec.get("parse_error", "")
+
+
 def test_eval_findings_out_writes_per_call_json(tmp_path, monkeypatch):
     """--findings-out persists each (agent, fixture, repeat)'s findings as JSON
     so the fp-cluster and partial-recall agents can be diagnosed without re-running."""
