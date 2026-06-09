@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from time import perf_counter
 from typing import Any
 
@@ -85,8 +86,57 @@ def run_agent(
 EVAL_KEY_ENV = "ANTHROPIC_EVAL_API_KEY"
 RUNTIME_KEY_ENV = "ANTHROPIC_RUNTIME_API_KEY"
 
+# The Anthropic SDK default is 2 retries. Reviews (eval + the `framework review`
+# builder path) fire large-context agents back-to-back and burst over a tight
+# per-minute input-token (ITPM) tier, returning 429. Give the SDK a larger retry
+# budget so it absorbs those transient rate limits via its exponential backoff
+# (which respects the Retry-After header, self-pacing under the limit) instead of
+# hard-aborting. A genuinely sustained failure still propagates once exhausted.
+DEFAULT_MAX_RETRIES = 8  # ~minutes of backoff ceiling; absorbs a ~169% ITPM burst
+# Upper bound: a misconfigured huge value would back off for hours/days, masking a
+# sustained outage instead of absorbing a transient burst.
+MAX_RETRIES_CAP = 20
 
-def default_client(api_key_env: str) -> Any:  # pragma: no cover - thin SDK wrapper
+
+def _warn(msg: str) -> None:
+    print(f"warning: {msg}", file=sys.stderr, flush=True)
+
+
+def _max_retries() -> int:
+    """Anthropic client retry budget, from ``ANTHROPIC_MAX_RETRIES``.
+
+    Falls back to ``DEFAULT_MAX_RETRIES`` for an unset/invalid/non-positive value
+    and clamps anything above ``MAX_RETRIES_CAP`` — warning (to stderr) on the
+    misconfigured cases so an ignored override is visible rather than silent.
+    """
+    raw = os.environ.get("ANTHROPIC_MAX_RETRIES", "").strip()
+    if not raw:  # unset/empty — normal path, use the default silently
+        return DEFAULT_MAX_RETRIES
+    try:
+        n = int(raw)
+    except ValueError:
+        _warn(
+            f"ignoring non-integer ANTHROPIC_MAX_RETRIES={raw!r}; "
+            f"using default {DEFAULT_MAX_RETRIES}"
+        )
+        return DEFAULT_MAX_RETRIES
+    if n <= 0:  # 0/negative would disable retries — defeats the backoff purpose
+        _warn(
+            f"ANTHROPIC_MAX_RETRIES={n} would disable retry backoff; "
+            f"using default {DEFAULT_MAX_RETRIES}"
+        )
+        return DEFAULT_MAX_RETRIES
+    if n > MAX_RETRIES_CAP:
+        _warn(
+            f"ANTHROPIC_MAX_RETRIES={n} exceeds the cap; clamping to {MAX_RETRIES_CAP}"
+        )
+        return MAX_RETRIES_CAP
+    return n
+
+
+def default_client(api_key_env: str) -> Any:
     import anthropic
 
-    return anthropic.Anthropic(api_key=os.environ.get(api_key_env))
+    return anthropic.Anthropic(
+        api_key=os.environ.get(api_key_env), max_retries=_max_retries()
+    )

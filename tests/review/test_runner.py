@@ -2,7 +2,89 @@ from framework_cli.review.context import Bundle
 from framework_cli.review.decisions import Decision
 from framework_cli.review.findings import Finding
 from framework_cli.review.registry import get_agent
-from framework_cli.review.runner import run_agent
+from framework_cli.review.runner import default_client, run_agent
+
+
+def test_default_client_uses_elevated_max_retries(monkeypatch):
+    """The Anthropic SDK default is 2 retries; the client is built with more so a
+    transient per-minute rate-limit (429) is absorbed via the SDK's Retry-After
+    backoff instead of hard-aborting both eval and the `framework review`
+    builder path."""
+    import anthropic
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        anthropic, "Anthropic", lambda **kw: captured.update(kw) or object()
+    )
+    monkeypatch.delenv("ANTHROPIC_MAX_RETRIES", raising=False)
+
+    default_client("ANTHROPIC_EVAL_API_KEY")
+    assert captured["max_retries"] >= 6
+
+
+def test_default_client_max_retries_env_override(monkeypatch):
+    """ANTHROPIC_MAX_RETRIES tunes the retry budget per environment."""
+    import anthropic
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        anthropic, "Anthropic", lambda **kw: captured.update(kw) or object()
+    )
+    monkeypatch.setenv("ANTHROPIC_MAX_RETRIES", "3")
+
+    default_client("ANTHROPIC_EVAL_API_KEY")
+    assert captured["max_retries"] == 3
+
+
+def test_default_client_invalid_max_retries_falls_back_to_default(monkeypatch):
+    """A non-integer ANTHROPIC_MAX_RETRIES is ignored (use the default) rather
+    than crashing or being treated as 'unset' silently."""
+    import anthropic
+
+    from framework_cli.review.runner import DEFAULT_MAX_RETRIES
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        anthropic, "Anthropic", lambda **kw: captured.update(kw) or object()
+    )
+    monkeypatch.setenv("ANTHROPIC_MAX_RETRIES", "eight")
+
+    default_client("ANTHROPIC_EVAL_API_KEY")
+    assert captured["max_retries"] == DEFAULT_MAX_RETRIES
+
+
+def test_default_client_nonpositive_max_retries_falls_back_to_default(monkeypatch):
+    """0/negative would disable retries, defeating the backoff purpose — fall back
+    to the default rather than honouring it."""
+    import anthropic
+
+    from framework_cli.review.runner import DEFAULT_MAX_RETRIES
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        anthropic, "Anthropic", lambda **kw: captured.update(kw) or object()
+    )
+    monkeypatch.setenv("ANTHROPIC_MAX_RETRIES", "0")
+
+    default_client("ANTHROPIC_EVAL_API_KEY")
+    assert captured["max_retries"] == DEFAULT_MAX_RETRIES
+
+
+def test_default_client_excessive_max_retries_clamped_to_cap(monkeypatch):
+    """An absurd value is clamped to MAX_RETRIES_CAP rather than backing off for
+    hours and masking a sustained outage."""
+    import anthropic
+
+    from framework_cli.review.runner import MAX_RETRIES_CAP
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        anthropic, "Anthropic", lambda **kw: captured.update(kw) or object()
+    )
+    monkeypatch.setenv("ANTHROPIC_MAX_RETRIES", "10000")
+
+    default_client("ANTHROPIC_EVAL_API_KEY")
+    assert captured["max_retries"] == MAX_RETRIES_CAP
 
 
 class _Block:
