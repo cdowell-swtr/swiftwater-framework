@@ -185,8 +185,14 @@ def _render_prompt(
     messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
 ) -> str:
     if tools is None:
-        last = messages[-1]["content"]
-        return last if isinstance(last, str) else json.dumps(last)
+        # Bundle tier: a single user turn — return its text.
+        if len(messages) == 1:
+            last = messages[-1]["content"]
+            return last if isinstance(last, str) else json.dumps(last)
+        # Agentic turn-cap finalize (tools omitted this turn, but a full multi-turn
+        # transcript exists): render the whole conversation so the subagent finalizes
+        # with everything it explored — matching what the API path's messages array carries.
+        return _render_transcript(messages)
     names = ", ".join(t.get("name", "") for t in tools)
     return _render_transcript(messages) + _TOOL_PROTOCOL + names
 

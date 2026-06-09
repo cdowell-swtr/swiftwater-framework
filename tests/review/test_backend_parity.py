@@ -135,3 +135,58 @@ def test_multi_findings_identical_across_backends():
     f_sub = run_agent(bundle, spec, SubagentBackend(runner=_sub_runner(_MULTI)))
     assert f_api == f_sub
     assert len(f_api) == 2 and f_api[1].message == "two"
+
+
+def test_agentic_turn_cap_finalize_parity(tmp_path) -> None:  # noqa: ANN001
+    """Turn-cap finalize path: both backends must produce identical findings, and the
+    subagent's finalize prompt must contain the full gathered transcript (not just the
+    _FINALIZE_INSTRUCTION string)."""
+    (tmp_path / "a.py").write_text("SENTINEL_CONTENT_XYZ = 1\n")
+    spec = get_agent("architecture")  # agentic tier
+
+    # API backend: tool_use on each of the 2 tool-rounds, then findings on the finalize
+    # turn (which omits tools= — the 3rd create() call).
+    api = ApiBackend(
+        _ScriptedSDK(
+            [
+                _SDKResp([_SDKToolUse("t1", "read_file", {"path": "a.py"})]),
+                _SDKResp([_SDKToolUse("t2", "read_file", {"path": "a.py"})]),
+                _SDKResp([_SDKBlock(_FINDINGS)]),
+            ]
+        )
+    )
+
+    prompts: list[str] = []
+    calls: dict[str, int] = {"n": 0}
+
+    def sub_runner(argv: list, *, input_text: str | None) -> str:  # type: ignore[type-arg]
+        prompts.append(argv[argv.index("-p") + 1])
+        calls["n"] += 1
+        # First 2 calls: offer tools → return a tool_use request.
+        # 3rd call: finalize (no tools kwarg) → return findings.
+        if calls["n"] <= 2:
+            result = '{"tool_calls":[{"name":"read_file","input":{"path":"a.py"}}]}'
+        else:
+            result = _FINDINGS
+        return json.dumps(
+            {
+                "is_error": False,
+                "stop_reason": "end_turn",
+                "result": result,
+                "usage": {},
+            }
+        )
+
+    f_api = run_agent_agentic("DIFF", tmp_path, spec, api, max_turns=2)
+    f_sub = run_agent_agentic(
+        "DIFF", tmp_path, spec, SubagentBackend(runner=sub_runner), max_turns=2
+    )
+
+    # Both paths must produce identical findings.
+    assert f_api == f_sub
+
+    # The finalize prompt (last captured call) must contain the tool_result content that
+    # the agent gathered during exploration — proving the transcript was rendered, not
+    # dropped.  Without the _render_prompt fix, only the _FINALIZE_INSTRUCTION text would
+    # appear and "SENTINEL_CONTENT_XYZ" would be absent.
+    assert "SENTINEL_CONTENT_XYZ" in prompts[-1]
