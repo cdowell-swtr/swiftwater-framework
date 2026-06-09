@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 from framework_cli.review.context import Bundle
-from framework_cli.review.decisions import render_decisions_block
 from framework_cli.review.findings import Finding, parse_findings
 from framework_cli.review.registry import AgentSpec
+from framework_cli.review.request import build_review_request
 
 _MAX_TOKENS = 4096
 
@@ -33,40 +34,14 @@ def run_agent(
     same target, so its cache prefix is shared; (2) optional per-agent context files; (3)
     the agent prompt. A diff-only bundle omits block 2, byte-identical to the legacy call.
     """
-    system: list[dict[str, Any]] = [
-        {
-            "type": "text",
-            "text": f"Review this unified diff:\n\n{bundle.diff}",
-            "cache_control": {"type": "ephemeral"},
-        }
-    ]
-    if bundle.context_files:
-        joined = "\n\n".join(
-            f"=== {path} ===\n{content}" for path, content in bundle.context_files
-        )
-        note = "\n\n[context truncated to fit the budget]" if bundle.truncated else ""
-        system.append(
-            {
-                "type": "text",
-                "text": f"Relevant repository files for context:\n\n{joined}{note}",
-                "cache_control": {"type": "ephemeral"},
-            }
-        )
-    block = render_decisions_block(list(bundle.decisions))
-    if block is not None:
-        system.append(
-            {"type": "text", "text": block, "cache_control": {"type": "ephemeral"}}
-        )
-    system.append({"type": "text", "text": spec.prompt})
+    req = build_review_request(bundle, spec, root=Path.cwd())
 
     t0 = perf_counter()
     message = client.messages.create(
-        model=spec.model,
+        model=req.model,
         max_tokens=_MAX_TOKENS,
-        system=system,
-        messages=[
-            {"role": "user", "content": "Return your findings as a JSON array only."}
-        ],
+        system=req.system,
+        messages=[{"role": "user", "content": req.user_message}],
     )
     text = "".join(
         block.text
