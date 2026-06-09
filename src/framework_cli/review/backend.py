@@ -50,3 +50,49 @@ class BackendExhausted(Exception):
     def __init__(self, message: str, *, reset_hint: str | None = None) -> None:
         super().__init__(message)
         self.reset_hint = reset_hint
+
+
+def _normalize_content(raw: Any) -> list[TextBlock | ToolUseBlock]:
+    out: list[TextBlock | ToolUseBlock] = []
+    for b in raw or []:
+        btype = getattr(b, "type", None)
+        if btype == "text":
+            out.append(TextBlock(text=getattr(b, "text", "") or ""))
+        elif btype == "tool_use":
+            out.append(
+                ToolUseBlock(
+                    id=getattr(b, "id", ""),
+                    name=getattr(b, "name", ""),
+                    input=dict(getattr(b, "input", {}) or {}),
+                )
+            )
+    return out
+
+
+def _normalize_usage(raw: Any) -> Usage:
+    return Usage(
+        input_tokens=getattr(raw, "input_tokens", 0) or 0,
+        output_tokens=getattr(raw, "output_tokens", 0) or 0,
+        cache_read_input_tokens=getattr(raw, "cache_read_input_tokens", 0) or 0,
+        cache_creation_input_tokens=getattr(raw, "cache_creation_input_tokens", 0) or 0,
+    )
+
+
+class _ApiMessages:
+    def __init__(self, sdk: Any) -> None:
+        self._sdk = sdk
+
+    def create(self, **kwargs: Any) -> Message:
+        resp = self._sdk.messages.create(**kwargs)
+        return Message(
+            content=_normalize_content(getattr(resp, "content", [])),
+            usage=_normalize_usage(getattr(resp, "usage", None)),
+            stop_reason=getattr(resp, "stop_reason", None),
+        )
+
+
+class ApiBackend:
+    """The paid backend: the Anthropic SDK client, normalized to `Message`."""
+
+    def __init__(self, sdk_client: Any) -> None:
+        self.messages = _ApiMessages(sdk_client)
