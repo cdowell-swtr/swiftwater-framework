@@ -5,8 +5,9 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from framework_cli.review.decisions import Decision, render_decisions_block
+from framework_cli.review.decisions import Decision
 from framework_cli.review.findings import Finding, parse_findings
+from framework_cli.review.request import TOOL_SCHEMAS, build_agentic_request
 
 
 def _accum_usage(into: dict[str, int], resp: Any) -> None:
@@ -129,44 +130,6 @@ def _run_tool(name: str, args: dict, root: Path) -> str:
         return f"error: missing argument {exc}"
 
 
-TOOL_SCHEMAS: list[dict[str, Any]] = [
-    {
-        "name": "read_file",
-        "description": "Read a UTF-8 text file by its path relative to the project root.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"path": {"type": "string"}},
-            "required": ["path"],
-        },
-    },
-    {
-        "name": "grep",
-        "description": "Search file contents with a Python regex. Optional path_glob limits the search.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "pattern": {"type": "string"},
-                "path_glob": {"type": "string"},
-            },
-            "required": ["pattern"],
-        },
-    },
-    {
-        "name": "glob",
-        "description": "List files matching a glob pattern (e.g. 'src/**/*.py') relative to the project root.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"pattern": {"type": "string"}},
-            "required": ["pattern"],
-        },
-    },
-]
-
-_INITIAL_INSTRUCTION = (
-    "Review the change shown in the diff. Use the read_file, grep, and glob tools to "
-    "explore the surrounding repository as needed. When done, reply with ONLY a JSON "
-    "array of findings (no tools)."
-)
 _FINALIZE_INSTRUCTION = "Stop exploring. Return your findings now as a JSON array only. Do not request tools."
 
 
@@ -190,20 +153,11 @@ def run_agent_agentic(
     pull whatever cross-file context it needs. At `max_turns` tool rounds we force a final
     answer so the call always terminates with a (possibly partial) findings list.
     """
-    system: list[dict[str, Any]] = [
-        {
-            "type": "text",
-            "text": f"Review this unified diff:\n\n{diff}",
-            "cache_control": {"type": "ephemeral"},
-        },
-    ]
-    block = render_decisions_block(list(decisions))
-    if block is not None:
-        system.append(
-            {"type": "text", "text": block, "cache_control": {"type": "ephemeral"}}
-        )
-    system.append({"type": "text", "text": spec.prompt})
-    messages: list[dict[str, Any]] = [{"role": "user", "content": _INITIAL_INSTRUCTION}]
+    req = build_agentic_request(
+        diff, spec, root=root, decisions=decisions, max_turns=max_turns
+    )
+    system = req.system
+    messages: list[dict[str, Any]] = [{"role": "user", "content": req.user_message}]
     t0 = perf_counter()
     usage: dict[str, int] = {}
     tool_calls: list[dict[str, Any]] = []
