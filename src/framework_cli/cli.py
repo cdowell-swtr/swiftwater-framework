@@ -369,11 +369,24 @@ def _review_diff() -> str:
     return pr_diff()
 
 
-def _review_run(diff: str, spec: object, force_agentic: bool = False) -> list:
+def _make_backend(name: str, key_env: str) -> object:
+    # Returns ApiBackend | SubagentBackend; annotated `object` to avoid a
+    # TYPE_CHECKING import for a deferred cosmetic — Plan 20b adds a Backend type.
+    from framework_cli.review.backend import ApiBackend, SubagentBackend
+
+    if name == "subagent":
+        return SubagentBackend()
+    return ApiBackend(default_client(key_env))
+
+
+def _review_run(
+    diff: str, spec: object, force_agentic: bool = False, backend: object = None
+) -> list:
     from framework_cli.review.context import assemble
     from framework_cli.review.decisions import relevant_decisions
     from framework_cli.review.runner import run_agent
 
+    client = backend if backend is not None else default_client(RUNTIME_KEY_ENV)
     short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
     if force_agentic or spec.context.strategy == "agentic":  # type: ignore[attr-defined]
         from framework_cli.review.agentic import DEFAULT_MAX_TURNS, run_agent_agentic
@@ -383,20 +396,26 @@ def _review_run(diff: str, spec: object, force_agentic: bool = False) -> list:
             diff,
             Path.cwd(),
             spec,
-            default_client(RUNTIME_KEY_ENV),
+            client,
             max_turns=turns,
             decisions=tuple(relevant_decisions(short, Path.cwd())),
         )
     bundle = assemble(diff, Path.cwd(), spec.context, model=spec.model, agent=short)  # type: ignore[attr-defined]
-    return run_agent(bundle, spec, default_client(RUNTIME_KEY_ENV))  # type: ignore[arg-type]
+    return run_agent(bundle, spec, client)  # type: ignore[arg-type]
 
 
 def _eval_run(
-    diff: str, root: object, spec: object, *, report: dict | None = None
+    diff: str,
+    root: object,
+    spec: object,
+    *,
+    report: dict | None = None,
+    backend: object = None,
 ) -> list:
     from framework_cli.review.context import assemble
     from framework_cli.review.runner import run_agent
 
+    client = backend if backend is not None else default_client(EVAL_KEY_ENV)
     base = root if isinstance(root, Path) else Path.cwd()
     if spec.context.strategy == "agentic":  # type: ignore[attr-defined]
         from framework_cli.review.agentic import DEFAULT_MAX_TURNS, run_agent_agentic
@@ -406,7 +425,7 @@ def _eval_run(
             diff,
             base,
             spec,
-            default_client(EVAL_KEY_ENV),
+            client,
             max_turns=turns,
             report=report,
         )
@@ -414,7 +433,7 @@ def _eval_run(
     return run_agent(
         bundle,
         spec,  # type: ignore[arg-type]
-        default_client(EVAL_KEY_ENV),
+        client,
         report=report,
     )
 
@@ -516,6 +535,11 @@ def eval_agents(
         "--findings-out",
         help="Directory to write per-(agent,fixture,repeat) findings JSON for diagnosis.",
     ),
+    backend: str = typer.Option(
+        "api",
+        "--backend",
+        help="Model backend: 'api' (paid) or 'subagent' (free claude -p).",
+    ),
 ) -> None:
     """Run golden fixtures through the review agents and score recall/precision (spec §20).
 
@@ -531,7 +555,7 @@ def eval_agents(
         score_agent,
     )
 
-    if not os.environ.get(EVAL_KEY_ENV):
+    if backend == "api" and not os.environ.get(EVAL_KEY_ENV):
         if require_key:
             typer.echo("eval: ANTHROPIC_EVAL_API_KEY is required but unset", err=True)
             raise typer.Exit(1)
@@ -548,6 +572,7 @@ def eval_agents(
 
     from framework_cli.review.findings import FindingsParseError
 
+    _backend = _make_backend(backend, EVAL_KEY_ENV)
     root = Path(fixtures)
     _base_dir = Path(tempfile.mkdtemp(prefix="evalbase-"))
     _combo_cache: dict = {}
@@ -585,7 +610,9 @@ def eval_agents(
             for i in range(repeat):
                 report: dict | None = {} if findings_out else None
                 try:
-                    found = _eval_run(rdiff, rroot, spec, report=report)
+                    found = _eval_run(
+                        rdiff, rroot, spec, report=report, backend=_backend
+                    )
                 except anthropic.APIError as exc:
                     typer.echo(
                         f"\neval: ABORTED at {spec.name} — API error "
@@ -1968,6 +1995,11 @@ def review(
     target: str = typer.Option(
         "project", "--target", help="Review target: 'project' (default) or 'framework'."
     ),
+    backend: str = typer.Option(
+        "api",
+        "--backend",
+        help="Model backend: 'api' (paid) or 'subagent' (free claude -p).",
+    ),
 ) -> None:
     """Run a Layer-3 review agent over the PR diff and post a GitHub Check Run."""
     try:
@@ -1984,7 +2016,7 @@ def review(
         if findings_out:
             write_findings(Path(findings_out), spec.name, conclusion, found)
 
-    if not os.environ.get(RUNTIME_KEY_ENV):
+    if backend == "api" and not os.environ.get(RUNTIME_KEY_ENV):
         payload = neutral_payload(
             spec.name, "review skipped — set ANTHROPIC_RUNTIME_API_KEY to enable."
         )
@@ -1993,6 +2025,7 @@ def review(
         typer.echo(f"{spec.name}: skipped (no ANTHROPIC_RUNTIME_API_KEY)")
         raise typer.Exit(0)
 
+    _backend = _make_backend(backend, RUNTIME_KEY_ENV)
     try:
         diff = framework_diff() if target == "framework" else _review_diff()
         if spec.trigger_globs and not matches_globs(
@@ -2005,7 +2038,9 @@ def review(
             _emit(payload.conclusion, [])
             typer.echo(f"{spec.name}: skipped (not triggered)")
             raise typer.Exit(0)
-        findings = _review_run(diff, spec, force_agentic=(target == "framework"))
+        findings = _review_run(
+            diff, spec, force_agentic=(target == "framework"), backend=_backend
+        )
         payload = to_check_run(spec, findings)
     except typer.Exit:
         raise  # the not-triggered skip (and any Exit) must propagate, not become neutral

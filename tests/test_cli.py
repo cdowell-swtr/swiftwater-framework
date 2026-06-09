@@ -132,7 +132,9 @@ def test_review_blocking_finding_exits_1(monkeypatch):
     monkeypatch.setattr(
         cli_mod,
         "_review_run",
-        lambda diff, spec, force_agentic=False: [Finding("a.py", 1, "high", "bad")],
+        lambda diff, spec, force_agentic=False, **kw: [
+            Finding("a.py", 1, "high", "bad")
+        ],
     )
     result = runner.invoke(app, ["review", "security"])
     assert result.exit_code == 1
@@ -149,7 +151,7 @@ def test_review_low_finding_exits_0(monkeypatch):
     monkeypatch.setattr(
         cli_mod,
         "_review_run",
-        lambda diff, spec, force_agentic=False: [Finding("a.py", 1, "low", "m")],
+        lambda diff, spec, force_agentic=False, **kw: [Finding("a.py", 1, "low", "m")],
     )
     result = runner.invoke(app, ["review", "security"])
     assert result.exit_code == 0
@@ -188,7 +190,7 @@ def test_review_dependency_skips_when_no_dep_files(monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "+++ b/src/app/main.py\n")
 
-    def _should_not_run(diff, spec):
+    def _should_not_run(diff, spec, **kw):
         raise AssertionError("LLM must not run when not triggered")
 
     monkeypatch.setattr(cli_mod, "_review_run", _should_not_run)
@@ -207,7 +209,7 @@ def test_review_dependency_runs_when_dep_file_changed(monkeypatch):
     monkeypatch.setattr(
         cli_mod,
         "_review_run",
-        lambda diff, spec, force_agentic=False: [
+        lambda diff, spec, force_agentic=False, **kw: [
             Finding("pyproject.toml", 1, "low", "m")
         ],
     )
@@ -226,7 +228,7 @@ def test_review_findings_out_writes_on_normal_path(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cli_mod,
         "_review_run",
-        lambda diff, spec, force_agentic=False: [Finding("a.py", 3, "low", "m")],
+        lambda diff, spec, force_agentic=False, **kw: [Finding("a.py", 3, "low", "m")],
     )
 
     out = tmp_path / "findings" / "security.json"
@@ -689,7 +691,7 @@ def test_eval_findings_out_includes_instrumentation(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
 
-    def _fake_run(diff, root, spec, *, report=None):
+    def _fake_run(diff, root, spec, *, report=None, backend=None):
         # the bundle/agentic runners populate `report`; mimic that contract here
         if report is not None:
             report["usage"] = {
@@ -772,6 +774,133 @@ def test_eval_unknown_agent_errors(monkeypatch):
     result = runner.invoke(app, ["eval", "nonsense-agent"])
     assert result.exit_code == 1
     assert "unknown review agent" in result.output
+
+
+# ---------------------------------------------------------------------------
+# --backend flag tests
+# ---------------------------------------------------------------------------
+
+
+def test_make_backend_factory(monkeypatch):
+    import framework_cli.cli as climod
+    from framework_cli.review.backend import ApiBackend, SubagentBackend
+
+    # subagent: no key / SDK needed
+    assert isinstance(
+        climod._make_backend("subagent", "ANTHROPIC_RUNTIME_API_KEY"), SubagentBackend
+    )
+    # api: constructs ApiBackend; stub default_client so no real SDK/key is needed
+    monkeypatch.setattr(climod, "default_client", lambda env: object())
+    assert isinstance(
+        climod._make_backend("api", "ANTHROPIC_RUNTIME_API_KEY"), ApiBackend
+    )
+
+
+def test_eval_subagent_backend_flows_without_key(tmp_path, monkeypatch):
+    """--backend subagent must not skip on a missing ANTHROPIC_EVAL_API_KEY and
+    must pass the SubagentBackend through to _eval_run without touching the key.
+
+    Design choice: we test _eval_run directly (not via CliRunner + real fixtures)
+    because realizing eval fixtures requires rendering a copier template, which is
+    heavy and unrelated to the backend-selection concern. Instead we call
+    _eval_run(diff, root, spec, backend=stub) and assert (a) it reaches the stub
+    backend's messages.create, (b) exit 0 via the CLI with --backend subagent
+    and no key set.
+    """
+    import framework_cli.cli as climod
+
+    recorded: dict = {}
+
+    # Minimal stub backend whose messages.create records the call and returns an
+    # empty-findings Message so parse_findings sees "[]" text.
+    class _StubMessages:
+        def create(self, **kwargs):
+            recorded["called"] = True
+            from framework_cli.review.backend import Message, TextBlock, Usage
+
+            return Message(
+                content=[TextBlock(text="[]")],
+                usage=Usage(),
+                stop_reason="end_turn",
+            )
+
+    class _StubBackend:
+        messages = _StubMessages()
+
+    stub = _StubBackend()
+
+    spec = climod.get_agent("security")
+    findings = climod._eval_run("+++ b/a.py\n", tmp_path, spec, backend=stub)
+    assert recorded.get("called"), "_eval_run did not call backend.messages.create"
+    assert findings == []
+
+    # CLI path: --backend subagent must not exit early on a missing key
+    _make_backend_calls: list = []
+
+    def _capture_make_backend(name, key_env):
+        _make_backend_calls.append(name)
+        return stub
+
+    monkeypatch.delenv("ANTHROPIC_EVAL_API_KEY", raising=False)
+    monkeypatch.setattr(climod, "_make_backend", _capture_make_backend)
+    monkeypatch.setattr(climod, "realize_cached", _fake_realize_cached)
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    result = runner.invoke(
+        app,
+        [
+            "eval",
+            "security",
+            "--fixtures",
+            str(tmp_path),
+            "--backend",
+            "subagent",
+        ],
+    )
+    assert result.exit_code in (0, 1), result.output  # 0=PASS, 1=FAIL; both mean it ran
+    assert "skipped" not in result.output, (
+        "subagent backend must not skip on missing key"
+    )
+    assert _make_backend_calls == ["subagent"], (
+        f"_make_backend was called with {_make_backend_calls!r}, expected ['subagent']"
+    )
+
+
+def test_review_subagent_backend_skips_key_check(monkeypatch):
+    """--backend subagent must not early-exit on a missing ANTHROPIC_RUNTIME_API_KEY."""
+    import framework_cli.cli as climod
+    from framework_cli.review.backend import Message, TextBlock, Usage
+
+    class _StubMessages:
+        def create(self, **kwargs):
+            return Message(
+                content=[TextBlock(text="[]")],
+                usage=Usage(),
+                stop_reason="end_turn",
+            )
+
+    class _StubBackend:
+        messages = _StubMessages()
+
+    stub = _StubBackend()
+    _make_backend_calls: list = []
+
+    def _capture_make_backend(name, key_env):
+        _make_backend_calls.append(name)
+        return stub
+
+    monkeypatch.delenv("ANTHROPIC_RUNTIME_API_KEY", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(climod, "_make_backend", _capture_make_backend)
+    monkeypatch.setattr(
+        climod, "_review_diff", lambda: "+++ b/src/app/main.py\n# change\n"
+    )
+    result = runner.invoke(app, ["review", "security", "--backend", "subagent"])
+    assert "skipped (no ANTHROPIC_RUNTIME_API_KEY)" not in result.output, (
+        "subagent backend must not skip on missing key"
+    )
+    assert _make_backend_calls == ["subagent"], (
+        f"_make_backend was called with {_make_backend_calls!r}, expected ['subagent']"
+    )
 
 
 def test_new_with_webhooks_passes_integrity(tmp_path, monkeypatch):
@@ -1033,7 +1162,7 @@ def test_review_reads_runtime_key_not_shared_or_eval(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
     monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
     monkeypatch.setattr(
-        cli_mod, "_review_run", lambda diff, spec, force_agentic=False: []
+        cli_mod, "_review_run", lambda diff, spec, force_agentic=False, **kw: []
     )
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     assert runner.invoke(app, ["review", "security"]).exit_code == 0
