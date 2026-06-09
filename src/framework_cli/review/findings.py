@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -25,6 +26,23 @@ class Finding:
 
 def severity_rank(severity: str) -> int:
     return _RANK[severity]
+
+
+def _coerce_line(value: object) -> int:
+    """Best-effort line number. Agents sometimes put a code snippet, range, or
+    ``"?"`` in ``line``; that must neither crash (``int("x")`` raises) nor discard
+    an otherwise-valid finding (scoring keys on path + severity, not line). Use
+    the value if it's an int, the leading integer of a string if present, else 0.
+    """
+    if isinstance(value, bool):  # bool is an int subclass — treat as unknown
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        m = re.match(r"\s*(\d+)", value)
+        if m:
+            return int(m.group(1))
+    return 0
 
 
 def _extract_array(text: str) -> str:
@@ -76,17 +94,29 @@ def parse_findings(text: str) -> list[Finding]:
     for item in data:
         if not isinstance(item, dict) or item.get("severity") not in _RANK:
             raise FindingsParseError(f"invalid finding: {item!r}")
-        findings.append(
-            Finding(
-                path=str(item["path"]),
-                line=int(item["line"]),
-                severity=item["severity"],
-                message=str(item["message"]),
-                suggestion=str(item["suggestion"]) if item.get("suggestion") else None,
-                acknowledged=str(item["acknowledged"])
-                if item.get("acknowledged")
-                else None,
-                stale=str(item["stale"]) if item.get("stale") else None,
+        # Coerce each field defensively: a non-numeric `line` is tolerated
+        # (see _coerce_line), but a missing required field (path/message) or a
+        # type that won't stringify is wrapped as FindingsParseError rather than
+        # a raw KeyError/TypeError — so the eval loop and `framework review`
+        # degrade gracefully instead of crashing on a malformed agent response.
+        try:
+            findings.append(
+                Finding(
+                    path=str(item["path"]),
+                    line=_coerce_line(item.get("line", 0)),
+                    severity=item["severity"],
+                    message=str(item["message"]),
+                    suggestion=str(item["suggestion"])
+                    if item.get("suggestion")
+                    else None,
+                    acknowledged=str(item["acknowledged"])
+                    if item.get("acknowledged")
+                    else None,
+                    stale=str(item["stale"]) if item.get("stale") else None,
+                )
             )
-        )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise FindingsParseError(
+                f"invalid finding fields: {item!r} ({exc})"
+            ) from exc
     return findings

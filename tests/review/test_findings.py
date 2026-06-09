@@ -89,6 +89,35 @@ def test_parse_skips_leading_empty_array_in_prose():
     assert findings[0].path == "a.py"
 
 
+def test_parse_nonnumeric_line_coerced_keeps_finding():
+    """An agent sometimes puts a code snippet (not a number) in `line`. That must
+    not crash or discard the finding — coerce to 0 and keep it. Regression: a
+    real data-lineage response with line='item.name = payload.name' crashed the
+    paid eval via int()."""
+    text = (
+        '[{"path": "a.py", "line": "item.name = payload.name", '
+        '"severity": "high", "message": "m"}]'
+    )
+    findings = parse_findings(text)
+    assert len(findings) == 1
+    assert findings[0].path == "a.py"
+    assert findings[0].line == 0
+
+
+def test_parse_extracts_leading_int_from_messy_line():
+    text = '[{"path": "a.py", "line": "42: see here", "severity": "low", "message": "m"}]'
+    assert parse_findings(text)[0].line == 42
+
+
+def test_parse_missing_required_field_raises_parse_error():
+    """A structurally-broken item (missing `path`) raises FindingsParseError — not
+    a raw KeyError — so the eval loop and the `framework review` path degrade
+    gracefully instead of crashing."""
+    text = '[{"line": 1, "severity": "high", "message": "m"}]'  # no path
+    with pytest.raises(FindingsParseError):
+        parse_findings(text)
+
+
 def test_severity_rank_orders_critical_above_info():
     assert severity_rank("critical") > severity_rank("high") > severity_rank("info")
 
