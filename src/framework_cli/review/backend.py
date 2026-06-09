@@ -143,13 +143,83 @@ def _join_system(system: list[dict[str, Any]]) -> str:
     return "\n\n".join(b.get("text", "") for b in system if b.get("text"))
 
 
+_TOOL_PROTOCOL = (
+    "\n\nYou have read-only tools available. To call tools, respond with ONLY a JSON "
+    'object: {"tool_calls":[{"name":"<tool>","input":{...}}, ...]} and nothing else. '
+    "When done exploring and ready to report, respond with ONLY the findings JSON array "
+    "(no object, no prose). Available tools: "
+)
+
+
+def _render_transcript(messages: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for m in messages:
+        role = m["role"]
+        content = m["content"]
+        if isinstance(content, str):
+            parts.append(f"[{role}] {content}")
+            continue
+        for block in content:
+            btype = (
+                block.get("type")
+                if isinstance(block, dict)
+                else getattr(block, "type", None)
+            )
+            if btype == "tool_use":
+                name = block.get("name", "") if isinstance(block, dict) else block.name
+                inp = block.get("input", {}) if isinstance(block, dict) else block.input
+                parts.append(f"[assistant tool_call] {name} {json.dumps(inp)}")
+            elif btype == "tool_result":
+                body = (
+                    block.get("content") if isinstance(block, dict) else block.content
+                )
+                parts.append(f"[tool_result]\n{body}")
+            elif btype == "text":
+                parts.append(
+                    f"[{role}] {block.get('text') if isinstance(block, dict) else block.text}"
+                )
+    return "\n\n".join(parts)
+
+
 def _render_prompt(
     messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
 ) -> str:
-    # Bundle tier (tools is None): a single user turn — return its text. Agentic framing
-    # is added in Task 1.4.
-    last = messages[-1]["content"]
-    return last if isinstance(last, str) else json.dumps(last)
+    if tools is None:
+        last = messages[-1]["content"]
+        return last if isinstance(last, str) else json.dumps(last)
+    names = ", ".join(t.get("name", "") for t in tools)
+    return _render_transcript(messages) + _TOOL_PROTOCOL + names
+
+
+def _decode_tool_turn(text: str) -> list[TextBlock | ToolUseBlock] | None:
+    """A `{"tool_calls":[...]}` object → ToolUseBlocks. A findings array (or anything
+    else) → None → treated as the final answer. Tolerant of leading/trailing prose and
+    a ``` fence (mirrors findings._extract_array's raw_decode scan for the array case)."""
+    body = text
+    if body.startswith("```"):
+        body = body.strip("`")
+    decoder = json.JSONDecoder()
+    idx = body.find("{")
+    while idx != -1:
+        try:
+            obj, _ = decoder.raw_decode(body, idx)
+        except json.JSONDecodeError:
+            idx = body.find("{", idx + 1)
+            continue
+        if isinstance(obj, dict) and "tool_calls" in obj:
+            blocks: list[TextBlock | ToolUseBlock] = []
+            for i, call in enumerate(obj.get("tool_calls") or []):
+                if isinstance(call, dict) and "name" in call:
+                    blocks.append(
+                        ToolUseBlock(
+                            id=f"sub-{i}",
+                            name=str(call["name"]),
+                            input=dict(call.get("input") or {}),
+                        )
+                    )
+            return blocks or None
+        idx = body.find("{", idx + 1)
+    return None
 
 
 def _parse_claude_json(raw: str, tools: list[dict[str, Any]] | None) -> Message:
@@ -177,7 +247,10 @@ def _parse_claude_json(raw: str, tools: list[dict[str, Any]] | None) -> Message:
         cache_creation_input_tokens=u.get("cache_creation_input_tokens", 0) or 0,
     )
     stop = payload.get("stop_reason")
-    # Agentic tool-protocol decoding is added in Task 1.4; bundle tier is one text block.
+    if tools is not None:
+        decoded = _decode_tool_turn(text)
+        if decoded is not None:
+            return Message(content=decoded, usage=usage, stop_reason=stop)
     return Message(content=[TextBlock(text=text)], usage=usage, stop_reason=stop)
 
 

@@ -168,3 +168,124 @@ def test_subagent_non_json_output_raises_runtime():
             messages=[{"role": "user", "content": "go"}],
             tools=None,
         )
+
+
+def test_subagent_agentic_tool_turn_decodes_to_tool_use():
+    captured = {}
+
+    def runner(argv, *, input_text):
+        captured["argv"] = argv
+        return _json.dumps(
+            {
+                "is_error": False,
+                "stop_reason": "end_turn",
+                "result": '{"tool_calls":[{"name":"read_file","input":{"path":"a.py"}}]}',
+                "usage": {"input_tokens": 4, "output_tokens": 6},
+            }
+        )
+
+    backend = SubagentBackend(runner=runner)
+    msg = backend.messages.create(
+        model="claude-opus-4-8",
+        max_tokens=4096,
+        system=[{"type": "text", "text": "SYS"}],
+        messages=[{"role": "user", "content": "Review the diff."}],
+        tools=[{"name": "read_file"}],
+    )
+    assert len(msg.content) == 1 and msg.content[0].type == "tool_use"
+    assert msg.content[0].name == "read_file"
+    assert msg.content[0].input == {"path": "a.py"}
+    pidx = captured["argv"].index("-p") + 1
+    assert "tool_calls" in captured["argv"][pidx]
+
+
+def test_subagent_agentic_final_array_is_text():
+    def runner(argv, *, input_text):
+        return _json.dumps(
+            {
+                "is_error": False,
+                "stop_reason": "end_turn",
+                "result": '[{"path":"a.py","line":2,"severity":"low","message":"m"}]',
+                "usage": {},
+            }
+        )
+
+    backend = SubagentBackend(runner=runner)
+    msg = backend.messages.create(
+        model="claude-opus-4-8",
+        max_tokens=4096,
+        system=[{"type": "text", "text": "SYS"}],
+        messages=[{"role": "user", "content": "Review the diff."}],
+        tools=[{"name": "read_file"}],
+    )
+    assert len(msg.content) == 1 and msg.content[0].type == "text"
+    assert '"severity":"low"' in msg.content[0].text
+
+
+def test_subagent_agentic_tool_turn_with_prose_decodes():
+    def runner(argv, *, input_text):
+        return _json.dumps(
+            {
+                "is_error": False,
+                "stop_reason": "end_turn",
+                "result": 'Let me read that file:\n{"tool_calls":[{"name":"read_file","input":{"path":"a.py"}}]}',
+                "usage": {},
+            }
+        )
+
+    backend = SubagentBackend(runner=runner)
+    msg = backend.messages.create(
+        model="m",
+        max_tokens=10,
+        system=[{"type": "text", "text": "S"}],
+        messages=[{"role": "user", "content": "go"}],
+        tools=[{"name": "read_file"}],
+    )
+    assert len(msg.content) == 1 and msg.content[0].type == "tool_use"
+    assert msg.content[0].name == "read_file"
+
+
+def test_subagent_agentic_fenced_tool_turn_decodes():
+    def runner(argv, *, input_text):
+        return _json.dumps(
+            {
+                "is_error": False,
+                "stop_reason": "end_turn",
+                "result": '```json\n{"tool_calls":[{"name":"grep","input":{"pattern":"x"}}]}\n```',
+                "usage": {},
+            }
+        )
+
+    backend = SubagentBackend(runner=runner)
+    msg = backend.messages.create(
+        model="m",
+        max_tokens=10,
+        system=[{"type": "text", "text": "S"}],
+        messages=[{"role": "user", "content": "go"}],
+        tools=[{"name": "grep"}],
+    )
+    assert len(msg.content) == 1 and msg.content[0].type == "tool_use"
+    assert msg.content[0].name == "grep"
+
+
+def test_subagent_agentic_findings_array_with_prose_is_text():
+    # A findings array (even prose-wrapped) must NOT be misread as tools.
+    def runner(argv, *, input_text):
+        return _json.dumps(
+            {
+                "is_error": False,
+                "stop_reason": "end_turn",
+                "result": 'Here are my findings: [{"path":"a.py","line":1,"severity":"low","message":"m"}]',
+                "usage": {},
+            }
+        )
+
+    backend = SubagentBackend(runner=runner)
+    msg = backend.messages.create(
+        model="m",
+        max_tokens=10,
+        system=[{"type": "text", "text": "S"}],
+        messages=[{"role": "user", "content": "go"}],
+        tools=[{"name": "read_file"}],
+    )
+    assert len(msg.content) == 1 and msg.content[0].type == "text"
