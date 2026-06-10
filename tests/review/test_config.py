@@ -3,6 +3,7 @@ from framework_cli.review.config import (
     write_backend_choice,
     clear_backend_choice,
     resolve_backend,
+    probe_availability,
 )
 
 
@@ -112,3 +113,19 @@ def test_persisted_config_is_honored_as_sole_source(tmp_path):
         availability=_avail(claude=True),
     )
     assert r.backend == "subagent" and r.reason == "resolved"
+
+
+def test_probe_detects_key_and_claude(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "sk-x")
+    monkeypatch.setattr(
+        "shutil.which", lambda name: "/usr/bin/claude" if name == "claude" else None
+    )
+    a = probe_availability(key_env="ANTHROPIC_RUNTIME_API_KEY")
+    assert a == {"api_key_present": True, "claude_available": True}
+
+
+def test_probe_no_key_no_claude(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_RUNTIME_API_KEY", raising=False)
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    a = probe_availability(key_env="ANTHROPIC_RUNTIME_API_KEY")
+    assert a == {"api_key_present": False, "claude_available": False}

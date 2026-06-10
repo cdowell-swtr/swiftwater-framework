@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -63,3 +65,11 @@ def resolve_backend(
     if availability.get("claude_available"):
         return Resolution(backend="subagent", reason="resolved", intent="subagent")
     return Resolution(backend=None, reason="subagent-unavailable", intent="subagent")
+
+
+def probe_availability(*, key_env: str) -> dict[str, bool]:
+    """What backends *could* run here. Presence only — never consent (R1)."""
+    return {
+        "api_key_present": bool(os.environ.get(key_env)),
+        "claude_available": shutil.which("claude") is not None,
+    }
