@@ -384,6 +384,250 @@ def _make_backend(name: str, key_env: str) -> object:
     return ApiBackend(default_client(key_env))
 
 
+def _resolve_review_backend(*, flag: str | None, key_env: str) -> object:
+    """Resolve the review backend via R1–R4 precedence (flag → env → config → none).
+
+    Returns a resolution object with .backend (str | None), .reason (str), .intent (str).
+    flag=None means no --backend flag was passed; the resolver applies lower-priority sources.
+    """
+    from framework_cli.review.config import probe_availability, resolve_backend
+
+    return resolve_backend(
+        root=Path.cwd(),
+        flag=flag,
+        env=dict(os.environ),
+        availability=probe_availability(key_env=key_env),
+    )
+
+
+def _explain_no_backend(res: object, *, command: str) -> None:
+    """Print a human-readable explanation when no backend could be resolved."""
+    reason = getattr(res, "reason", "")
+    if reason == "api-unavailable":
+        msg = "review backend 'api' selected but no API key is set"
+    elif reason == "subagent-unavailable":
+        msg = "review backend 'subagent' selected but the `claude` CLI was not found"
+    else:
+        msg = (
+            "no review backend enabled "
+            "(set --backend, FRAMEWORK_REVIEW_BACKEND, or `framework review-config set-backend`)"
+        )
+    typer.echo(f"{command}: {msg}", err=True)
+
+
+def _build_audit_items(
+    target_arg: str,
+    selected_agents: list[str],
+    snapshot_flag: bool,
+    since_arg: str | None,
+) -> "list[object]":
+    """Build EngineItem list from selection + per-agent base resolution.
+
+    Mirrors the selection + per-agent loop from the retired _emit_audit_prep,
+    but returns EngineItem objects instead of JS-dispatch work-item dicts.
+    """
+    from framework_cli.review.context import FRAMEWORK_AGENTS
+    from framework_cli.review.diff import delta_diff, snapshot_seed
+    from framework_cli.review.engine import EngineItem
+    from framework_cli.source import read_batteries
+
+    target = _detect_audit_target(target_arg)
+    if target == "framework":
+        all_agents = sorted(FRAMEWORK_AGENTS)
+    else:
+        all_agents = active_agents("pull_request", read_batteries(Path(".")))
+
+    # Dedupe selected agents while preserving insertion order.
+    selected = list(dict.fromkeys(selected_agents))
+    if selected:
+        unknown = [a for a in selected if a not in all_agents]
+        if unknown:
+            typer.echo(
+                f"audit: unknown agent(s): {', '.join(unknown)}. "
+                f"Valid agents for target '{target}': {', '.join(sorted(all_agents))}",
+                err=True,
+            )
+            raise typer.Exit(2)
+        agents_set = selected
+    else:
+        agents_set = all_agents
+
+    scorecards_root = _default_scorecards_root()
+    root = Path.cwd()
+    items: list[object] = []
+    for a in agents_set:
+        try:
+            spec = get_agent(a)
+        except KeyError:
+            continue
+
+        try:
+            mode, base_sha, base_baseline = _resolve_audit_base(
+                a,
+                target,
+                snapshot_flag=snapshot_flag,
+                since_arg=since_arg,
+                scorecards_root=scorecards_root,
+            )
+        except ValueError as exc:
+            typer.echo(f"audit: {exc}", err=True)
+            raise typer.Exit(2) from exc
+
+        if mode == "delta":
+            try:
+                diff = delta_diff(base_sha)  # type: ignore[arg-type]
+            except ValueError as exc:
+                typer.echo(f"audit: {exc}", err=True)
+                raise typer.Exit(2) from exc
+        else:
+            diff = snapshot_seed(target, root)
+            typer.echo(f"audit: {a} running in snapshot mode", err=True)
+
+        items.append(
+            EngineItem(
+                agent=a,
+                diff=diff,
+                spec=spec,
+                review_mode=mode,
+                base_sha=base_sha,
+                base_baseline=base_baseline,
+            )
+        )
+    return items
+
+
+def _load_records_from_checkpoint(out: Path) -> list[dict]:
+    """Load all per-agent records written by append_record under out/findings/*.json.
+
+    Returns the list sorted by filename for determinism (matches the order
+    _finalize_audit processes them).
+    """
+    findings_dir = out / "findings"
+    if not findings_dir.is_dir():
+        return []
+    records = []
+    for p in sorted(findings_dir.glob("*.json")):
+        try:
+            records.append(json.loads(p.read_text()))
+        except (OSError, json.JSONDecodeError):
+            continue
+    return records
+
+
+def _audit_meta_in(target_arg: str) -> dict:
+    """Build the meta_in dict for _finalize_audit."""
+    return {"target": _detect_audit_target(target_arg)}
+
+
+@app.command()
+def audit(
+    target: str = typer.Option(
+        "", "--target", help="'framework' or 'project' (default: auto-detect)."
+    ),
+    agent: list[str] = typer.Option(
+        None, "--agent", help="Restrict to this agent. Repeat for multiple."
+    ),
+    out_dir: str = typer.Option(
+        ".framework/audit/latest", "--out-dir", help="Output directory."
+    ),
+    backend: str = typer.Option(
+        None, "--backend", help="Backend: 'api' or 'subagent' (default: from config)."
+    ),
+    snapshot: bool = typer.Option(
+        False, "--snapshot", help="Force every agent into snapshot mode."
+    ),
+    since: str = typer.Option(
+        "", "--since", help="Force delta mode against a git ref/SHA or baseline dir."
+    ),
+    resume: bool = typer.Option(
+        False, "--resume", help="Resume from a prior checkpoint."
+    ),
+    fresh: bool = typer.Option(
+        False, "--fresh", help="Discard a stale checkpoint and restart."
+    ),
+    preserve_as: str = typer.Option(
+        "",
+        "--preserve-as",
+        help="After finalize, copy the audit tree into this dated baseline dir.",
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Required to overwrite a non-empty --preserve-as target."
+    ),
+) -> None:
+    """Run all review agents in-process and write audit-report.md + meta.json."""
+    import shutil
+
+    from framework_cli.review.checkpoint import is_stale, tree_signature
+    from framework_cli.review.engine import run_engine
+
+    res = _resolve_review_backend(flag=backend or None, key_env=RUNTIME_KEY_ENV)
+    if res.backend is None:  # type: ignore[attr-defined]
+        _explain_no_backend(res, command="audit")
+        raise typer.Exit(2)
+
+    if snapshot and since:
+        typer.echo("audit: --snapshot and --since are mutually exclusive", err=True)
+        raise typer.Exit(2)
+
+    out = Path(out_dir)
+    sha, dirty = tree_signature(Path.cwd())
+
+    # stale guard: only when the user asked to resume and did NOT pass --fresh
+    if (
+        resume
+        and not fresh
+        and out.exists()
+        and (out / "run-state.json").exists()
+        and is_stale(out, git_sha=sha, dirty_hash=dirty)
+    ):
+        typer.echo(
+            "audit: checkpoint is stale (tree changed); re-run with --fresh to restart",
+            err=True,
+        )
+        raise typer.Exit(2)
+
+    effective_resume = resume and not fresh
+    if not effective_resume:
+        # Clear stale per-agent records so a fresh run over a re-used out-dir
+        # never inherits an old agent set (mirrors _finalize_gate's stale-clear).
+        shutil.rmtree(out / "findings", ignore_errors=True)
+        (out / "run-state.json").unlink(missing_ok=True)
+
+    items = _build_audit_items(target, list(agent or []), snapshot, since or None)
+    result = run_engine(
+        items,  # type: ignore[arg-type]
+        backend=_make_backend(res.backend, RUNTIME_KEY_ENV),  # type: ignore[attr-defined]
+        run_dir=out,
+        root=Path.cwd(),
+        git_sha=sha,
+        dirty_hash=dirty,
+        backend_name=res.backend,  # type: ignore[attr-defined]
+        resume=effective_resume,
+    )
+
+    if result.exhausted:
+        hint = f" (resets {result.reset_hint})" if result.reset_hint else ""
+        typer.echo(
+            f"Subscription limit reached after {len(result.completed)} agents. "
+            f"Progress checkpointed at {out}. Resume with `framework audit --resume`{hint}."
+        )
+
+    if result.failed:
+        typer.echo(
+            f"audit: {len(result.failed)} agent(s) failed and were recorded with no findings: "
+            f"{', '.join(result.failed)}",
+            err=True,
+        )
+
+    findings_dir = out / "findings"
+    findings_dir.mkdir(parents=True, exist_ok=True)
+    _finalize_audit(
+        _load_records_from_checkpoint(out), findings_dir, out, _audit_meta_in(target)
+    )
+    if preserve_as:
+        _preserve_audit_tree(out, Path(preserve_as), force=force)
+
+
 def _review_run(
     diff: str, spec: object, force_agentic: bool = False, backend: object = None
 ) -> list:
@@ -777,82 +1021,6 @@ def tune_prepare(
     _emit_tune_prep(agent, Path(fixtures), repeat, output_dir, split_to)
 
 
-@app.command(name="audit-prepare")
-def audit_prepare(
-    agent: list[str] = typer.Option(
-        None,
-        "--agent",
-        help=(
-            "Restrict to this agent. Repeat for multiple agents. "
-            "Omit for all active agents for the target."
-        ),
-    ),
-    target: str = typer.Option(
-        "",
-        "--target",
-        help="'framework' or 'project' (default: auto-detect).",
-    ),
-    output_dir: str = typer.Option(
-        "",
-        "--output-dir",
-        help="Output dir for finalize (echoed in the prep manifest).",
-    ),
-    split_to: str = typer.Option(
-        "",
-        "--split-to",
-        help=(
-            "If set, write a small index.json + per-item items/item-NNNN.json under "
-            "DIR (in addition to the stdout manifest). Lets the Workflow tool be "
-            "invoked with a tiny args payload instead of a multi-MB inline manifest. "
-            "Idempotent: an existing DIR is cleared first."
-        ),
-    ),
-    snapshot: bool = typer.Option(
-        False,
-        "--snapshot",
-        help=(
-            "Force every agent into snapshot mode (no diff seed; bundled context "
-            "does the work). Skips per-agent baseline auto-discovery."
-        ),
-    ),
-    since: str = typer.Option(
-        "",
-        "--since",
-        help=(
-            "Force delta mode against a chosen anchor — either a git ref/SHA "
-            "(all agents diff HEAD vs that ref) or a baseline directory under "
-            "docs/superpowers/eval-scorecards/ (per-agent: agents in that baseline "
-            "diff against its SHA; agents not in the baseline fall back to snapshot)."
-        ),
-    ),
-) -> None:
-    """Emit the audit-mode work-item manifest (current code, one item per agent).
-
-    Output is JSON on stdout; consumed by /reviewers:audit. When ``--split-to DIR``
-    is set, also writes a split-manifest layout (``index.json`` + ``items/item-NNNN.json``)
-    under DIR for the Workflow tool to consume via ``{indexPath, itemsDir}`` args.
-
-    By default, each agent's mode is auto-discovered: if a prior baseline under
-    ``docs/superpowers/eval-scorecards/audit-*/`` exists for this (target, agent),
-    the agent runs in delta mode (diff vs that baseline's git_sha). Otherwise the
-    agent falls back to snapshot mode (with a visible log line per agent).
-    """
-    if snapshot and since:
-        typer.echo(
-            "audit-prepare: --snapshot and --since are mutually exclusive",
-            err=True,
-        )
-        raise typer.Exit(2)
-    _emit_audit_prep(
-        list(agent or []),
-        target,
-        output_dir,
-        split_to,
-        snapshot_flag=snapshot,
-        since_arg=since or None,
-    )
-
-
 @app.command(name="gate-prepare")
 def gate_prepare(
     split_to: str = typer.Option(
@@ -1009,6 +1177,87 @@ def _prepare_split_dir(split_to: str) -> tuple[Path, Path]:
     return split_dir, split_dir / "items"
 
 
+def _build_gate_work_item(spec: object, diff: str, root: Path) -> dict:
+    """Build one JS-dispatch work-item dict for the gate path.
+
+    The gate and tune commands still use a JS-dispatch Workflow; the audit command
+    has been replaced by the in-process engine (see `audit` command). This helper
+    exists solely for _emit_gate_prep — it is NOT part of the public API and must
+    NOT be used in the new engine path.
+
+    Formerly named _build_audit_work_item; renamed at Plan-20b Phase 4.1 to make
+    clear it is only the JS-dispatch shape (gate), not the engine shape (audit).
+    """
+    from framework_cli.review.decisions import (
+        relevant_decisions,
+        render_decisions_block,
+    )
+
+    short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
+    dec_block = render_decisions_block(relevant_decisions(short, root))
+
+    is_agentic = spec.context.strategy == "agentic"  # type: ignore[attr-defined]
+    if is_agentic:
+        system_blocks = [{"text": f"Review this unified diff:\n\n{diff}"}]
+        if dec_block is not None:
+            system_blocks.append({"text": dec_block})
+        system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
+        user_message = (
+            f"You are reviewing the codebase rooted at: {root}\n\n"
+            "Use the Read, Grep, and Glob tools (these only — do NOT use Bash, "
+            "WebFetch, WebSearch, or any other tool) to explore the code as "
+            "needed. Use absolute paths starting with the root above.\n\n"
+            "When done, reply with ONLY a JSON array of findings:\n"
+            '  [{"path": "...", "line": N, "severity": "...", "message": "...", '
+            '"suggestion": "..."}]\n\n'
+            "IMPORTANT: in each finding, the `path` MUST be a path RELATIVE to "
+            f"the project root above (e.g. 'src/demo/foo.py'), NOT the absolute "
+            "path you used for the tool call. The scoring layer matches on "
+            "relative paths; absolute paths register as misses."
+        )
+        return {
+            "agent": short,
+            "kind": "current",
+            "case": short,
+            "repeat_idx": 0,
+            "seeded_file": None,
+            "subagent_type": "Explore",
+            "model": spec.model,  # type: ignore[attr-defined]
+            "system_blocks": system_blocks,
+            "user_message": user_message,
+            "tools_allowed": ["Read", "Grep", "Glob"],
+            "root_dir": str(root),
+            "diff": diff,
+        }
+    from framework_cli.review.context import assemble
+
+    bundle = assemble(diff, root, spec.context, model=spec.model)  # type: ignore[attr-defined]
+    system_blocks = [{"text": f"Review this unified diff:\n\n{bundle.diff}"}]
+    if bundle.context_files:
+        joined = "\n\n".join(f"=== {p} ===\n{c}" for p, c in bundle.context_files)
+        note = "\n\n[context truncated to fit the budget]" if bundle.truncated else ""
+        system_blocks.append(
+            {"text": f"Relevant repository files for context:\n\n{joined}{note}"}
+        )
+    if dec_block is not None:
+        system_blocks.append({"text": dec_block})
+    system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
+    return {
+        "agent": short,
+        "kind": "current",
+        "case": short,
+        "repeat_idx": 0,
+        "seeded_file": None,
+        "subagent_type": "general-purpose",
+        "model": spec.model,  # type: ignore[attr-defined]
+        "system_blocks": system_blocks,
+        "user_message": "Return your findings as a JSON array only.",
+        "tools_allowed": None,
+        "root_dir": str(root),
+        "diff": diff,
+    }
+
+
 def _emit_gate_prep(split_to: str = "") -> None:
     """Emit a gate-mode manifest from the current staged set."""
     staged = _staged_files()
@@ -1044,7 +1293,7 @@ def _emit_gate_prep(split_to: str = "") -> None:
                 spec = get_agent(a)
             except KeyError:
                 continue
-            work_items.append(_build_audit_work_item(spec, diff, root))
+            work_items.append(_build_gate_work_item(spec, diff, root))
         manifest = {
             "mode": "gate",
             "agents_set": agents,
@@ -1314,7 +1563,7 @@ def _resolve_audit_base(
                 if sha is None:
                     raise ValueError(
                         f"baseline dir {since_path} has no readable git_sha in "
-                        "meta.json; was it written by audit-finalize?"
+                        "meta.json; was it written by a prior audit?"
                     )
                 return ("delta", sha, since_path.name)
             return ("snapshot", None, None)
@@ -1339,227 +1588,6 @@ def _resolve_audit_base(
         return ("snapshot", None, None)
     sha = read_baseline_sha(found)
     return ("delta", sha, found.name)
-
-
-def _emit_audit_prep(
-    selected_agents: list[str],
-    target_arg: str,
-    output_dir: str,
-    split_to: str = "",
-    *,
-    snapshot_flag: bool = False,
-    since_arg: str | None = None,
-) -> None:
-    """Emit the audit-mode manifest to stdout (always) plus, when ``split_to`` is
-    non-empty, an on-disk split-manifest layout under ``split_to``:
-
-    * ``<split_to>/index.json`` — slim metadata (``mode``, ``target``,
-      ``agents_set``, ``output_dir``, ``items: [{i, agent, subagent_type,
-      review_mode, base_sha, base_baseline}]``). The three mode-related fields
-      ride on the index entry — not just the per-item file — so the workflow's
-      per-item dispatch can branch the DELTA vs SNAPSHOT prompt template
-      without re-reading each item file. Written with mode 0o600.
-    * ``<split_to>/items/item-NNNN.json`` — one full work-item per file
-      (``system_blocks``, ``user_message``, etc.). Each written with mode 0o600.
-    * ``<split_to>/`` and ``<split_to>/items/`` themselves get mode 0o700.
-
-    Each work-item also carries ``review_mode`` / ``base_sha`` / ``base_baseline``
-    fields, resolved per-agent via :func:`_resolve_audit_base`. The
-    ``system_blocks[0]`` diff text is :func:`delta_diff` output when
-    ``review_mode == "delta"``, or the (empty) :func:`snapshot_seed` output
-    when ``review_mode == "snapshot"``.
-
-    The split layout exists so the Workflow tool can be invoked with a tiny
-    ``{indexPath, itemsDir}`` args payload instead of a multi-MB inline manifest
-    (the documented ~1.76 MB Workflow-args ceiling). Mirrors ``_emit_tune_prep``
-    and ``_emit_gate_prep``.
-    """
-    from framework_cli.review.context import FRAMEWORK_AGENTS
-    from framework_cli.review.diff import delta_diff, snapshot_seed
-    from framework_cli.source import read_batteries
-
-    target = _detect_audit_target(target_arg)
-    if target == "framework":
-        all_agents = sorted(FRAMEWORK_AGENTS)
-    else:
-        all_agents = active_agents("pull_request", read_batteries(Path(".")))
-    # Dedupe selected agents while preserving insertion order.
-    selected = list(dict.fromkeys(selected_agents))
-    if selected:
-        unknown = [a for a in selected if a not in all_agents]
-        if unknown:
-            typer.echo(
-                f"audit-prepare: unknown agent(s): {', '.join(unknown)}. "
-                f"Valid agents for target '{target}': {', '.join(sorted(all_agents))}",
-                err=True,
-            )
-            raise typer.Exit(2)
-        agents_set = selected
-    else:
-        agents_set = all_agents
-
-    scorecards_root = _default_scorecards_root()
-    root = Path.cwd()
-    work_items: list[dict] = []
-    for a in agents_set:
-        try:
-            spec = get_agent(a)
-        except KeyError:
-            continue
-
-        try:
-            mode, base_sha, base_baseline = _resolve_audit_base(
-                a,
-                target,
-                snapshot_flag=snapshot_flag,
-                since_arg=since_arg,
-                scorecards_root=scorecards_root,
-            )
-        except ValueError as exc:
-            typer.echo(f"audit-prepare: {exc}", err=True)
-            raise typer.Exit(2) from exc
-
-        if mode == "delta":
-            try:
-                diff = delta_diff(base_sha)  # type: ignore[arg-type]
-            except ValueError as exc:
-                typer.echo(f"audit-prepare: {exc}", err=True)
-                raise typer.Exit(2) from exc
-        else:
-            diff = snapshot_seed(target, root)
-            # Visible log for the fallback / forced-snapshot path.
-            typer.echo(f"audit-prepare: {a} running in snapshot mode", err=True)
-
-        wi = _build_audit_work_item(spec, diff, root)
-        wi["review_mode"] = mode
-        wi["base_sha"] = base_sha
-        wi["base_baseline"] = base_baseline
-        work_items.append(wi)
-
-    resolved_output_dir = output_dir or ".framework/audit/latest"
-    manifest = {
-        "mode": "audit",
-        "target": target,
-        "agents_set": agents_set,
-        "work_items": work_items,
-        "output_dir": resolved_output_dir,
-    }
-
-    # Optional split-manifest write: in addition to the stdout manifest, write a small
-    # index.json + per-item items/item-NNNN.json so the Workflow tool can be invoked with
-    # a tiny args payload ({indexPath, itemsDir}) instead of a multi-MB inline manifest.
-    # Mirrors the gate-prepare / tune-prepare split layout. Audit items can be agentic
-    # (root_dir + tools_allowed), so per-item files carry the full audit work-item shape.
-    if split_to:
-        split_dir, items_dir = _prepare_split_dir(split_to)
-
-        index_items: list[dict] = []
-        for i, wi in enumerate(work_items):
-            item_path = items_dir / f"item-{i:04d}.json"
-            item_path.write_text(json.dumps(wi, indent=2))
-            item_path.chmod(0o600)
-            index_items.append(
-                {
-                    "i": i,
-                    "agent": wi["agent"],
-                    "subagent_type": wi["subagent_type"],
-                    # Carry the registry model so the subscription Workflow
-                    # dispatches each subagent at its intended tier (Sonnet
-                    # non-agentic / Opus agentic) instead of the harness default.
-                    "model": wi["model"],
-                    # Per-agent audit mode metadata — the workflow's per-item
-                    # dispatch reads these directly from the index entry to
-                    # select the DELTA vs SNAPSHOT prompt template (it does
-                    # not re-read the per-item file just for the framing).
-                    "review_mode": wi.get("review_mode", "snapshot"),
-                    "base_sha": wi.get("base_sha"),
-                    "base_baseline": wi.get("base_baseline"),
-                }
-            )
-        index = {
-            "mode": "audit",
-            "target": target,
-            "agents_set": agents_set,
-            "items": index_items,
-            "output_dir": resolved_output_dir,
-        }
-        index_path = split_dir / "index.json"
-        index_path.write_text(json.dumps(index, indent=2))
-        index_path.chmod(0o600)
-
-    typer.echo(json.dumps(manifest, indent=2))
-
-
-def _build_audit_work_item(spec: object, diff: str, root: Path) -> dict:
-    """Audit shape: one item per agent (no kind/case/repeat dimension)."""
-    from framework_cli.review.decisions import (
-        relevant_decisions,
-        render_decisions_block,
-    )
-
-    short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
-    dec_block = render_decisions_block(relevant_decisions(short, root))
-
-    is_agentic = spec.context.strategy == "agentic"  # type: ignore[attr-defined]
-    if is_agentic:
-        system_blocks = [{"text": f"Review this unified diff:\n\n{diff}"}]
-        if dec_block is not None:
-            system_blocks.append({"text": dec_block})
-        system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
-        user_message = (
-            f"You are reviewing the codebase rooted at: {root}\n\n"
-            "Use the Read, Grep, and Glob tools (these only — do NOT use Bash, "
-            "WebFetch, WebSearch, or any other tool) to explore the code as "
-            "needed. Use absolute paths starting with the root above.\n\n"
-            "When done, reply with ONLY a JSON array of findings:\n"
-            '  [{"path": "...", "line": N, "severity": "...", "message": "...", '
-            '"suggestion": "..."}]\n\n'
-            "IMPORTANT: in each finding, the `path` MUST be a path RELATIVE to "
-            f"the project root above (e.g. 'src/demo/foo.py'), NOT the absolute "
-            "path you used for the tool call. The scoring layer matches on "
-            "relative paths; absolute paths register as misses."
-        )
-        return {
-            "agent": short,
-            "kind": "current",
-            "case": short,
-            "repeat_idx": 0,
-            "seeded_file": None,
-            "subagent_type": "Explore",
-            "model": spec.model,  # type: ignore[attr-defined]
-            "system_blocks": system_blocks,
-            "user_message": user_message,
-            "tools_allowed": ["Read", "Grep", "Glob"],
-            "root_dir": str(root),
-            "diff": diff,
-        }
-    from framework_cli.review.context import assemble
-
-    bundle = assemble(diff, root, spec.context, model=spec.model)  # type: ignore[attr-defined]
-    system_blocks = [{"text": f"Review this unified diff:\n\n{bundle.diff}"}]
-    if bundle.context_files:
-        joined = "\n\n".join(f"=== {p} ===\n{c}" for p, c in bundle.context_files)
-        note = "\n\n[context truncated to fit the budget]" if bundle.truncated else ""
-        system_blocks.append(
-            {"text": f"Relevant repository files for context:\n\n{joined}{note}"}
-        )
-    if dec_block is not None:
-        system_blocks.append({"text": dec_block})
-    system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
-    return {
-        "agent": short,
-        "kind": "current",
-        "case": short,
-        "repeat_idx": 0,
-        "seeded_file": None,
-        "subagent_type": "general-purpose",
-        "model": spec.model,  # type: ignore[attr-defined]
-        "system_blocks": system_blocks,
-        "user_message": "Return your findings as a JSON array only.",
-        "tools_allowed": None,
-        "root_dir": str(root),
-        "diff": diff,
-    }
 
 
 def _load_finalize_payload(results: str, command_name: str) -> tuple[list, dict]:
@@ -1595,47 +1623,12 @@ def tune_finalize(
     _finalize_tune(records, findings_dir, out, meta_in)
 
 
-@app.command(name="audit-finalize")
-def audit_finalize(
-    results: str = typer.Option(
-        ..., "--results", help="Path to JSON file from the workflow."
-    ),
-    out_dir: str = typer.Option(
-        ..., "--out-dir", help="Output dir to write artifacts."
-    ),
-    preserve_as: str | None = typer.Option(
-        None,
-        "--preserve-as",
-        help="After writing out_dir, copy its tree into this dated baseline directory.",
-    ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        help="Required to overwrite a non-empty --preserve-as target.",
-    ),
-) -> None:
-    """Take the audit workflow's results, write findings/<agent>.json records,
-    audit-report.md (per-agent findings grouped by severity), and meta.json.
-
-    If --preserve-as is set, also copies the out_dir tree (findings/, audit-report.md,
-    meta.json) into the target directory. Refuses to overwrite a non-empty target
-    without --force.
-    """
-    records, meta_in = _load_finalize_payload(results, "audit-finalize")
-    out = Path(out_dir)
-    findings_dir = out / "findings"
-    findings_dir.mkdir(parents=True, exist_ok=True)
-    _finalize_audit(records, findings_dir, out, meta_in)
-    if preserve_as is not None:
-        _preserve_audit_tree(out, Path(preserve_as), force=force)
-
-
 def _preserve_audit_tree(src: Path, dst: Path, *, force: bool) -> None:
     """Copy the audit output tree (findings/, audit-report.md, meta.json) from
     src into dst. Refuses to overwrite a non-empty dst without force=True.
 
-    Used by `audit-finalize --preserve-as` to snapshot a hygiene-mode audit run
-    into a dated baseline directory parallel to the tune scorecards under
+    Used by `audit --preserve-as` to snapshot a hygiene-mode audit run into a
+    dated baseline directory parallel to the tune scorecards under
     `docs/superpowers/eval-scorecards/`.
     """
     import shutil
@@ -1643,7 +1636,7 @@ def _preserve_audit_tree(src: Path, dst: Path, *, force: bool) -> None:
     if dst.exists() and any(dst.iterdir()):
         if not force:
             typer.echo(
-                f"audit-finalize: --preserve-as target exists and is non-empty: {dst}. "
+                f"audit: --preserve-as target exists and is non-empty: {dst}. "
                 f"Pass --force to overwrite.",
                 err=True,
             )
@@ -1658,7 +1651,7 @@ def _preserve_audit_tree(src: Path, dst: Path, *, force: bool) -> None:
             shutil.copytree(s, dst / item)
         else:
             shutil.copy2(s, dst / item)
-    typer.echo(f"audit-finalize: preserved to {dst}")
+    typer.echo(f"audit: preserved to {dst}")
 
 
 @app.command(name="gate-finalize")
@@ -1864,7 +1857,7 @@ def _finalize_audit(
     meta_path.write_text(json.dumps(meta_out, indent=2, sort_keys=True))
     meta_path.chmod(0o600)
 
-    typer.echo(f"audit-finalize: wrote {out}")
+    typer.echo(f"audit: wrote {out}")
 
 
 def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) -> None:

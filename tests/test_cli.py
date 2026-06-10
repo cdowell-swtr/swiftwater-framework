@@ -1572,420 +1572,6 @@ def test_tune_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
     assert (split_dir / "items" / "item-0000.json").is_file()
 
 
-def test_audit_prepare_detects_framework_target(tmp_path, monkeypatch):
-    """audit-prepare auto-detects 'framework' target when run from the framework repo
-    (presence of src/framework_cli/ + pyproject.toml [project].name='framework-cli')."""
-    import framework_cli.cli as cli_mod
-
-    # --snapshot skips per-agent auto-discovery; this test is about target detection,
-    # not mode resolution. Use result.stdout (the snapshot fallback path logs to stderr
-    # per-agent, which would corrupt a stdout+stderr-combined JSON parse).
-    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
-    result = runner.invoke(app, ["audit-prepare", "--snapshot"])
-    assert result.exit_code == 0, result.output
-    data = _json.loads(result.stdout)
-    assert data["mode"] == "audit"
-    assert data["target"] == "framework"
-    assert set(data["agents_set"]) >= {"security", "architecture"}
-    assert len(data["work_items"]) == len(data["agents_set"])
-    item = data["work_items"][0]
-    assert item["kind"] == "current"
-    assert item["repeat_idx"] == 0
-
-
-def test_audit_prepare_explicit_target_override(tmp_path, monkeypatch):
-    """--target flag forces the target regardless of cwd signals.
-
-    Makes the override observable: forces auto-detection to return 'project'
-    (which would normally apply in a non-framework cwd), then passes
-    --target framework and asserts framework wins. Without the override
-    working, the assertion would fail because auto-detect would return
-    'project'.
-    """
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
-    # Force auto-detect to "project" so the --target framework override is observable.
-    monkeypatch.setattr(cli_mod, "_detect_audit_target", lambda arg: arg or "project")
-    result = runner.invoke(
-        app, ["audit-prepare", "--target", "framework", "--snapshot"]
-    )
-    assert result.exit_code == 0, result.output
-    data = _json.loads(result.stdout)
-    # The override wins over the (mocked) "project" default.
-    assert data["target"] == "framework"
-
-
-def test_audit_prepare_tolerates_pyproject_formatting_variations(tmp_path, monkeypatch):
-    """Whitespace and quote variations in pyproject.toml should still detect framework target."""
-    import framework_cli.cli as cli_mod
-
-    # Simulate a different-cwd pyproject with whitespace variation
-    fake_repo = tmp_path / "fake"
-    (fake_repo / "src" / "framework_cli").mkdir(parents=True)
-    (fake_repo / "pyproject.toml").write_text(
-        "[project]\n"
-        'name   =    "framework-cli"\n'  # extra whitespace, quote variation
-        'version = "0.1.0"\n'
-    )
-    monkeypatch.chdir(fake_repo)
-    # --snapshot: skip per-agent baseline auto-discovery (no diff seed needed for
-    # a test focused on target detection); also patch the scorecards root so any
-    # auto-discovery would find nothing.
-    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
-    result = runner.invoke(app, ["audit-prepare", "--snapshot"])
-    # Even with the whitespace, framework auto-detection should fire.
-    # If it doesn't (project-target also missing — no .copier-answers.yml),
-    # this would error with "Could not auto-detect target".
-    # We just need to confirm the framework path was matched, not the error path.
-    assert result.exit_code == 0, result.output
-    import json as _j
-
-    data = _j.loads(result.stdout)
-    assert data["target"] == "framework"
-
-
-def test_audit_prepare_multiple_agents_produces_union(tmp_path, monkeypatch):
-    """audit-prepare with two --agent flags produces work-items for both agents, deduplicated."""
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    # --snapshot: skip per-agent baseline auto-discovery so the test does not depend on a
-    # historical SHA being present (it isn't in a shallow CI checkout). This test is about
-    # agent union, not diff mode. Parse result.stdout (snapshot-mode stderr corrupts .output).
-    result = runner.invoke(
-        app,
-        [
-            "audit-prepare",
-            "--target",
-            "framework",
-            "--snapshot",
-            "--agent",
-            "security",
-            "--agent",
-            "dependency",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    manifest = _json.loads(result.stdout)
-    agent_names_in_manifest = {item["agent"] for item in manifest["work_items"]}
-    assert agent_names_in_manifest == {"security", "dependency"}
-    assert set(manifest["agents_set"]) == {"security", "dependency"}
-
-
-def test_audit_prepare_duplicate_agents_deduped(tmp_path, monkeypatch):
-    """Passing the same agent twice does not produce duplicate work-items."""
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    # --snapshot + result.stdout: avoid baseline auto-discovery (shallow-checkout-fragile SHA)
-    # and snapshot-mode stderr corrupting the parsed JSON. This test is about dedup, not diff mode.
-    result = runner.invoke(
-        app,
-        [
-            "audit-prepare",
-            "--target",
-            "framework",
-            "--snapshot",
-            "--agent",
-            "security",
-            "--agent",
-            "security",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    manifest = _json.loads(result.stdout)
-    security_items = [i for i in manifest["work_items"] if i["agent"] == "security"]
-    assert len(security_items) == 1
-
-
-def test_audit_prepare_unknown_agent_errors_clearly(monkeypatch):
-    """audit-prepare --agent <unknown> errors with a clear message listing valid names."""
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "diff")
-    result = runner.invoke(
-        app,
-        ["audit-prepare", "--target", "framework", "--agent", "bogus"],
-    )
-    assert result.exit_code != 0
-    assert "bogus" in result.output
-    assert (
-        "unknown agent" in result.output.lower()
-        or "valid agents" in result.output.lower()
-    )
-
-
-def test_audit_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
-    """audit-prepare --split-to DIR writes index.json + items/item-NNNN.json
-    in addition to printing the full manifest to stdout (unchanged behavior).
-
-    Mirrors the gate-prepare / tune-prepare split-manifest pattern: the
-    Workflow tool consumes a tiny {indexPath, itemsDir, meta} payload, while
-    each per-item file holds the full agent work-item (system_blocks,
-    user_message, optional root_dir/tools_allowed for agentic reviewers).
-    """
-    import framework_cli.cli as cli_mod
-
-    # --snapshot: keep the test focused on the split-manifest layout (not on
-    # diff content / baseline auto-discovery). Patch the scorecards root so no
-    # real baseline can be discovered either.
-    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
-
-    split_dir = tmp_path / "audit-split-out"
-    result = runner.invoke(
-        app,
-        [
-            "audit-prepare",
-            "--target",
-            "framework",
-            "--agent",
-            "security",
-            "--snapshot",
-            "--split-to",
-            str(split_dir),
-        ],
-    )
-    assert result.exit_code == 0, result.output
-
-    # Stdout still carries the full manifest (backward compat).
-    manifest = _json.loads(result.stdout)
-    assert manifest["mode"] == "audit"
-    assert manifest["target"] == "framework"
-    assert manifest["agents_set"] == ["security"]
-    assert len(manifest["work_items"]) == 1
-
-    # Index file: small per-item metadata, no system_blocks / no diff.
-    index_path = split_dir / "index.json"
-    assert index_path.is_file(), f"index.json not written under {split_dir}"
-    index = _json.loads(index_path.read_text())
-    assert index["mode"] == "audit"
-    assert index["target"] == "framework"
-    assert index["agents_set"] == manifest["agents_set"]
-    assert "output_dir" in index
-    assert len(index["items"]) == len(manifest["work_items"])
-    first = index["items"][0]
-    assert set(first.keys()) >= {
-        "i",
-        "agent",
-        "subagent_type",
-        "model",
-        "review_mode",
-        "base_sha",
-        "base_baseline",
-    }
-    # Per-agent audit-mode metadata must be carried on the index entry so the
-    # workflow's per-item dispatch can branch the DELTA vs SNAPSHOT prompt
-    # without re-reading the per-item file.
-    assert first["review_mode"] in ("snapshot", "delta")
-    # The registry model MUST ride the index entry so the subscription Workflow
-    # can dispatch each subagent at its intended tier (Sonnet non-agentic / Opus
-    # agentic) instead of inheriting the harness default (which was Haiku).
-    assert first["model"] == manifest["work_items"][0]["model"]
-    assert first["model"] == "claude-sonnet-4-6"  # security is bundle tier
-    # Index is intentionally lightweight — must NOT carry the bulky fields.
-    assert "system_blocks" not in first
-    assert "diff" not in first
-    assert "user_message" not in first
-
-    # Per-item files exist with the expected full payload.
-    items_dir = split_dir / "items"
-    assert items_dir.is_dir()
-    item_path = items_dir / "item-0000.json"
-    assert item_path.is_file(), f"missing {item_path}"
-    on_disk = _json.loads(item_path.read_text())
-    work_item = manifest["work_items"][0]
-    assert on_disk["agent"] == work_item["agent"]
-    assert on_disk["system_blocks"] == work_item["system_blocks"]
-    assert on_disk["user_message"] == work_item["user_message"]
-    assert on_disk["subagent_type"] == work_item["subagent_type"]
-
-    # Permissions are load-bearing — per-item files carry the full diff payload
-    # (potentially sensitive). Dirs: 0o700; files: 0o600.
-    import stat
-
-    assert stat.S_IMODE(split_dir.stat().st_mode) == 0o700
-    assert stat.S_IMODE(items_dir.stat().st_mode) == 0o700
-    assert stat.S_IMODE(index_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(item_path.stat().st_mode) == 0o600
-
-
-def test_audit_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
-    """A second invocation against a pre-populated split-dir clears the prior layout.
-
-    Mirrors the tune-prepare idempotency guarantee — `if split_dir.exists(): rmtree(...)`
-    must remove stale items from a prior run so the index + items reflect this run only.
-    """
-    import framework_cli.cli as cli_mod
-
-    # --snapshot: focus the test on the idempotency guarantee (the existing
-    # split-dir is cleared), not on diff content. Patch scorecards root too.
-    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
-
-    split_dir = tmp_path / "audit-split-idempotent"
-    split_dir.mkdir()
-    # Seed stale files that a fresh invocation should remove.
-    (split_dir / "items").mkdir()
-    (split_dir / "items" / "item-9999.json").write_text('{"stale": true}')
-    (split_dir / "index.json").write_text('{"stale": true}')
-    (split_dir / "stray.txt").write_text("leftover")
-
-    result = runner.invoke(
-        app,
-        [
-            "audit-prepare",
-            "--target",
-            "framework",
-            "--agent",
-            "security",
-            "--snapshot",
-            "--split-to",
-            str(split_dir),
-        ],
-    )
-    assert result.exit_code == 0, result.output
-
-    # Stale leftovers must be gone.
-    assert not (split_dir / "items" / "item-9999.json").exists()
-    assert not (split_dir / "stray.txt").exists()
-
-    # Fresh layout for THIS run is in place.
-    assert (split_dir / "items" / "item-0000.json").is_file()
-    fresh = _json.loads((split_dir / "index.json").read_text())
-    assert fresh.get("stale") is None
-    assert fresh["mode"] == "audit"
-    assert len(fresh["items"]) == 1
-
-
-def test_audit_prepare_snapshot_flag_produces_snapshot_items(tmp_path, monkeypatch):
-    """--snapshot → every work-item has review_mode='snapshot' and an empty/missing diff."""
-    import framework_cli.cli as cli_mod
-
-    # Force auto-discovery to find nothing (irrelevant for --snapshot but safe).
-    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
-
-    result = runner.invoke(
-        app,
-        [
-            "audit-prepare",
-            "--target",
-            "framework",
-            "--agent",
-            "security",
-            "--snapshot",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    manifest = _json.loads(result.stdout)
-    assert len(manifest["work_items"]) == 1
-    wi = manifest["work_items"][0]
-    assert wi["review_mode"] == "snapshot"
-    assert wi.get("base_sha") is None
-    assert wi.get("base_baseline") is None
-
-
-def test_audit_prepare_since_with_sha_produces_delta(tmp_path, monkeypatch):
-    """--since <SHA> (not a baseline dir) → every item delta against that SHA."""
-    import subprocess
-
-    import framework_cli.cli as cli_mod
-
-    def fake_run(args, **kwargs):
-        # Pretend "abc123" resolves to "deadbeef".
-        if args[:3] == ["git", "rev-parse", "--verify"]:
-            return subprocess.CompletedProcess(
-                args=args, returncode=0, stdout="deadbeef\n", stderr=""
-            )
-        # Other subprocess calls (like git diff inside delta_diff) — return empty.
-        return subprocess.CompletedProcess(
-            args=args, returncode=0, stdout="", stderr=""
-        )
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
-
-    result = runner.invoke(
-        app,
-        [
-            "audit-prepare",
-            "--target",
-            "framework",
-            "--agent",
-            "security",
-            "--since",
-            "abc123",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    manifest = _json.loads(result.stdout)
-    wi = manifest["work_items"][0]
-    assert wi["review_mode"] == "delta"
-    assert wi["base_sha"] == "deadbeef"
-    assert wi.get("base_baseline") is None  # ref form, no baseline name
-
-
-def test_audit_prepare_snapshot_and_since_mutually_exclusive(tmp_path, monkeypatch):
-    """Passing both --snapshot and --since → exit 2 with a clear message."""
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
-
-    result = runner.invoke(
-        app,
-        [
-            "audit-prepare",
-            "--target",
-            "framework",
-            "--agent",
-            "security",
-            "--snapshot",
-            "--since",
-            "abc123",
-        ],
-    )
-    assert result.exit_code == 2
-    assert "mutually exclusive" in result.output.lower()
-
-
-def test_audit_prepare_autodiscover_picks_latest_baseline(tmp_path, monkeypatch):
-    """No flags + a matching baseline exists → delta against its SHA."""
-    import subprocess
-
-    import framework_cli.cli as cli_mod
-
-    bd = tmp_path / "audit-2026-03-01-x"
-    bd.mkdir()
-    (bd / "meta.json").write_text(
-        '{"target": "framework", "git_sha": "shaNew", "agents": ["security"]}'
-    )
-
-    def fake_run(args, **kwargs):
-        # delta_diff calls git diff; return empty diff (irrelevant for test).
-        return subprocess.CompletedProcess(
-            args=args, returncode=0, stdout="", stderr=""
-        )
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(cli_mod, "_default_scorecards_root", lambda: tmp_path)
-
-    result = runner.invoke(
-        app,
-        [
-            "audit-prepare",
-            "--target",
-            "framework",
-            "--agent",
-            "security",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    manifest = _json.loads(result.stdout)
-    wi = manifest["work_items"][0]
-    assert wi["review_mode"] == "delta"
-    assert wi["base_sha"] == "shaNew"
-    assert wi["base_baseline"] == "audit-2026-03-01-x"
-
-
 def test_resolve_audit_base_snapshot_flag_forces_snapshot(tmp_path):
     """snapshot_flag=True → ("snapshot", None, None) regardless of available baselines."""
     from framework_cli.cli import _resolve_audit_base
@@ -2390,7 +1976,7 @@ def test_gate_prepare_diff_is_staged_set_not_head_minus_one(monkeypatch):
     assert len(data["work_items"]) >= 1
 
     # The diff text appears inside each work item's user_message (per
-    # _build_audit_work_item). The staged-set sentinel MUST be present;
+    # _build_gate_work_item). The staged-set sentinel MUST be present;
     # the pr_diff sentinel MUST NOT be.
     for wi in data["work_items"]:
         blob = _json.dumps(wi)
@@ -2505,217 +2091,6 @@ def test_tune_finalize_writes_records_runs_analyze_writes_meta(tmp_path):
     meta = _json.loads((out / "meta.json").read_text())
     assert meta["slug"] == "test"
     assert meta["mode"] == "tune"
-
-
-def test_audit_finalize_writes_audit_report(tmp_path):
-    """audit-finalize writes findings/<agent>.json and audit-report.md."""
-    out = tmp_path / "audit"
-    out.mkdir()
-    results = [
-        {
-            "agent": "security",
-            "findings": [],
-            "usage": {
-                "input_tokens": 100,
-                "output_tokens": 5,
-                "cache_read_input_tokens": 0,
-                "cache_creation_input_tokens": 0,
-            },
-            "latency_ms": 150,
-            "stop_reason": "end_turn",
-            "raw_text": "[]",
-            "turns": 1,
-            "tool_calls": [],
-        },
-    ]
-    results_file = tmp_path / "results.json"
-    results_file.write_text(
-        _json.dumps({"results": results, "meta": {"target": "framework"}})
-    )
-
-    result = runner.invoke(
-        app,
-        [
-            "audit-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    assert (out / "findings" / "security.json").is_file()
-    assert (out / "audit-report.md").is_file()
-
-
-def test_audit_finalize_preserve_as_copies_into_fresh_dir(tmp_path):
-    """audit-finalize --preserve-as copies findings/, audit-report.md, meta.json into target."""
-    out_dir = tmp_path / "latest"
-    out_dir.mkdir()
-    (out_dir / "findings").mkdir()
-    (out_dir / "findings" / "security.json").write_text(
-        '{"agent":"security","findings":[],"raw_text":"[]"}'
-    )
-    (out_dir / "audit-report.md").write_text("# Audit\n")
-    (out_dir / "meta.json").write_text("{}")
-
-    target = tmp_path / "preserved"
-    results = tmp_path / "results.json"
-    results.write_text('{"results": [], "meta": {"mode": "audit"}}')
-
-    result = runner.invoke(
-        app,
-        [
-            "audit-finalize",
-            "--results",
-            str(results),
-            "--out-dir",
-            str(out_dir),
-            "--preserve-as",
-            str(target),
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    # `findings/` should land at target/findings/
-    assert (target / "findings" / "security.json").exists()
-    assert (target / "audit-report.md").exists()
-    assert (target / "meta.json").exists()
-
-
-def test_audit_finalize_preserve_as_refuses_non_empty_target(tmp_path):
-    """--preserve-as refuses to overwrite a non-empty target dir without --force."""
-    out_dir = tmp_path / "latest"
-    out_dir.mkdir()
-    (out_dir / "audit-report.md").write_text("# Audit\n")
-
-    target = tmp_path / "preserved"
-    target.mkdir()
-    (target / "existing.txt").write_text("not empty")
-
-    results = tmp_path / "results.json"
-    results.write_text('{"results": [], "meta": {"mode": "audit"}}')
-
-    result = runner.invoke(
-        app,
-        [
-            "audit-finalize",
-            "--results",
-            str(results),
-            "--out-dir",
-            str(out_dir),
-            "--preserve-as",
-            str(target),
-        ],
-    )
-    assert result.exit_code != 0
-    assert str(target) in result.output
-    assert (
-        "non-empty" in result.output.lower()
-        or "exists" in result.output.lower()
-        or "use --force" in result.output.lower()
-    )
-
-
-def test_audit_finalize_preserve_as_force_overwrites_non_empty(tmp_path):
-    """--force allows --preserve-as to overwrite a non-empty target."""
-    out_dir = tmp_path / "latest"
-    out_dir.mkdir()
-    (out_dir / "audit-report.md").write_text("# Audit\n")
-
-    target = tmp_path / "preserved"
-    target.mkdir()
-    (target / "existing.txt").write_text("will be replaced")
-
-    results = tmp_path / "results.json"
-    results.write_text('{"results": [], "meta": {"mode": "audit"}}')
-
-    result = runner.invoke(
-        app,
-        [
-            "audit-finalize",
-            "--results",
-            str(results),
-            "--out-dir",
-            str(out_dir),
-            "--preserve-as",
-            str(target),
-            "--force",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    assert (target / "audit-report.md").exists()
-
-
-def test_audit_finalize_writes_per_agent_meta_json(tmp_path):
-    """audit-finalize writes a meta.json with run-level + per_agent fields."""
-    out_dir = tmp_path / "latest"
-    out_dir.mkdir()
-
-    results_path = tmp_path / "results.json"
-    results_path.write_text(
-        _json.dumps(
-            {
-                "results": [
-                    {
-                        "agent": "security",
-                        "findings": [],
-                        "review_mode": "delta",
-                        "base_sha": "shaX",
-                        "base_baseline": "audit-2026-01-01-aaa",
-                        "raw_text": "[]",
-                    },
-                    {
-                        "agent": "architecture",
-                        "findings": [],
-                        "review_mode": "snapshot",
-                        "base_sha": None,
-                        "base_baseline": None,
-                        "raw_text": "[]",
-                    },
-                ],
-                "meta": {
-                    "mode": "audit",
-                    "target": "framework",
-                    "agents_set": ["security", "architecture"],
-                },
-            }
-        )
-    )
-
-    result = runner.invoke(
-        app,
-        [
-            "audit-finalize",
-            "--results",
-            str(results_path),
-            "--out-dir",
-            str(out_dir),
-        ],
-    )
-    assert result.exit_code == 0, result.output
-
-    meta_path = out_dir / "meta.json"
-    assert meta_path.is_file()
-    meta = _json.loads(meta_path.read_text())
-
-    # Run-level fields
-    assert meta["target"] == "framework"
-    assert meta["agents"] == ["security", "architecture"]
-    assert "git_sha" in meta
-    assert "timestamp" in meta
-
-    # Per-agent traceability
-    assert meta["per_agent"]["security"]["review_mode"] == "delta"
-    assert meta["per_agent"]["security"]["base_sha"] == "shaX"
-    assert meta["per_agent"]["security"]["base_baseline"] == "audit-2026-01-01-aaa"
-    assert meta["per_agent"]["architecture"]["review_mode"] == "snapshot"
-    assert meta["per_agent"]["architecture"]["base_sha"] is None
-    assert meta["per_agent"]["architecture"]["base_baseline"] is None
-
-    # Per-agent findings records also include the fields
-    sec_record = _json.loads((out_dir / "findings" / "security.json").read_text())
-    assert sec_record["review_mode"] == "delta"
-    assert sec_record["base_sha"] == "shaX"
 
 
 def test_gate_finalize_writes_marker_pass(tmp_path):
@@ -3461,7 +2836,7 @@ def test_template_audit_command_is_framework_only():
 
 
 # ---------------------------------------------------------------------------
-# _build_audit_work_item — decisions injection
+# _build_gate_work_item — decisions injection
 # ---------------------------------------------------------------------------
 
 
@@ -3475,50 +2850,345 @@ def _make_decision_file(
     )
 
 
-def test_build_audit_work_item_injects_decisions_bundle(tmp_path):
-    """Bundle-strategy agent: a matching decision appears in the system_blocks."""
-    import framework_cli.cli as cli_mod
-    from framework_cli.review.registry import get_agent
-
-    dec_dir = tmp_path / "docs" / "superpowers" / "decisions"
-    _make_decision_file(dec_dir, "DEC-0001", ["security"])
-
-    wi = cli_mod._build_audit_work_item(get_agent("security"), "diff", tmp_path)
-    texts = [b["text"] for b in wi["system_blocks"]]
-    assert any("DEC-0001" in t for t in texts)
+# ---------------------------------------------------------------------------
+# Task 4.1 (Plan 20b): framework audit — in-process engine
+# ---------------------------------------------------------------------------
 
 
-def test_build_audit_work_item_byte_identical_without_decisions(tmp_path):
-    """When no decisions exist, the system_blocks must not contain any decision text."""
-    import framework_cli.cli as cli_mod
-    from framework_cli.review.registry import get_agent
+def _make_framework_git_repo(tmp_path: Path) -> None:
+    """Create a minimal fake framework repo with a git history under tmp_path.
 
-    wi = cli_mod._build_audit_work_item(get_agent("security"), "diff", tmp_path)
-    texts = "".join(b["text"] for b in wi["system_blocks"])
-    assert "DEC-" not in texts and "Accepted Decisions" not in texts
+    Matches the structure _detect_audit_target expects:
+    - src/framework_cli/ directory
+    - pyproject.toml with [project].name = "framework-cli"
+    - an initial git commit so tree_signature/snapshot_seed have a HEAD
+    """
+    import subprocess
+
+    (tmp_path / "src" / "framework_cli").mkdir(parents=True)
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "framework-cli"\nversion = "0.0.0"\n'
+    )
+    (tmp_path / "src" / "framework_cli" / "__init__.py").write_text("")
+    subprocess.run(
+        ["git", "init", "--initial-branch=main"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "--no-gpg-sign", "-m", "init"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
 
 
-def test_build_audit_work_item_injects_decisions_agentic(tmp_path):
-    """Agentic-strategy agent: a matching decision appears in the system_blocks."""
-    import framework_cli.cli as cli_mod
-    from framework_cli.review.registry import get_agent
+def test_audit_runs_in_process_and_writes_report(tmp_path, monkeypatch):
+    """framework audit runs selection→engine→finalize in-process and writes
+    audit-report.md + meta.json under --out-dir."""
+    import framework_cli.cli as climod
+    from framework_cli.cli import app
+    from framework_cli.review.backend import Message, TextBlock
 
-    dec_dir = tmp_path / "docs" / "superpowers" / "decisions"
-    _make_decision_file(dec_dir, "DEC-0002", ["architecture"])
+    class _Msgs:
+        def create(self, **kw):
+            return Message(content=[TextBlock(text="[]")], stop_reason="end_turn")
 
-    wi = cli_mod._build_audit_work_item(get_agent("architecture"), "diff", tmp_path)
-    texts = [b["text"] for b in wi["system_blocks"]]
-    assert any("DEC-0002" in t for t in texts)
+    # Stub: _make_backend returns a fake backend whose messages.create returns []
+    monkeypatch.setattr(
+        climod,
+        "_make_backend",
+        lambda name, key_env: type("B", (), {"messages": _Msgs()})(),
+    )
+    # Stub: _resolve_review_backend returns api-resolved so we skip the no-backend exit
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": "api", "reason": "resolved", "intent": "api"}
+        )(),
+    )
+
+    _make_framework_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    out_dir = tmp_path / "out"
+    r = runner.invoke(
+        app,
+        [
+            "audit",
+            "--target",
+            "framework",
+            "--backend",
+            "api",
+            "--agent",
+            "security",
+            "--out-dir",
+            str(out_dir),
+            "--snapshot",
+        ],
+    )
+    assert r.exit_code == 0, r.output
+    assert (out_dir / "audit-report.md").is_file()
+    assert (out_dir / "meta.json").is_file()
 
 
-def test_build_audit_work_item_agentic_no_decisions_no_block(tmp_path):
-    """Agentic-strategy agent with no decisions: no decision block injected."""
-    import framework_cli.cli as cli_mod
-    from framework_cli.review.registry import get_agent
+def _audit_stubs(monkeypatch, climod):
+    """Apply the standard backend stubs used by hermetic audit tests."""
+    from framework_cli.review.backend import Message, TextBlock
 
-    wi = cli_mod._build_audit_work_item(get_agent("architecture"), "diff", tmp_path)
-    texts = "".join(b["text"] for b in wi["system_blocks"])
-    assert "DEC-" not in texts and "Accepted Decisions" not in texts
+    class _Msgs:
+        def create(self, **kw):
+            return Message(content=[TextBlock(text="[]")], stop_reason="end_turn")
+
+    monkeypatch.setattr(
+        climod,
+        "_make_backend",
+        lambda name, key_env: type("B", (), {"messages": _Msgs()})(),
+    )
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": "api", "reason": "resolved", "intent": "api"}
+        )(),
+    )
+
+
+def test_audit_preserve_as_writes_baseline(tmp_path, monkeypatch):
+    """--preserve-as copies findings/, audit-report.md, meta.json into dst."""
+    import framework_cli.cli as climod
+    from framework_cli.cli import app
+
+    _audit_stubs(monkeypatch, climod)
+    _make_framework_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    out_dir = tmp_path / "out"
+    preserve_dir = tmp_path / "baseline"
+    r = runner.invoke(
+        app,
+        [
+            "audit",
+            "--target",
+            "framework",
+            "--backend",
+            "api",
+            "--agent",
+            "security",
+            "--out-dir",
+            str(out_dir),
+            "--snapshot",
+            "--preserve-as",
+            str(preserve_dir),
+        ],
+    )
+    assert r.exit_code == 0, r.output
+    assert (preserve_dir / "findings").is_dir()
+    assert (preserve_dir / "audit-report.md").is_file()
+    assert (preserve_dir / "meta.json").is_file()
+
+
+def test_audit_preserve_as_non_empty_without_force_exits_2(tmp_path, monkeypatch):
+    """--preserve-as over a non-empty target without --force exits 2."""
+    import framework_cli.cli as climod
+    from framework_cli.cli import app
+
+    _audit_stubs(monkeypatch, climod)
+    _make_framework_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    out_dir = tmp_path / "out"
+    preserve_dir = tmp_path / "baseline"
+    preserve_dir.mkdir()
+    (preserve_dir / "existing.txt").write_text("blocker")
+
+    r = runner.invoke(
+        app,
+        [
+            "audit",
+            "--target",
+            "framework",
+            "--backend",
+            "api",
+            "--agent",
+            "security",
+            "--out-dir",
+            str(out_dir),
+            "--snapshot",
+            "--preserve-as",
+            str(preserve_dir),
+        ],
+    )
+    assert r.exit_code == 2, r.output
+    assert "--force" in r.output
+
+
+def test_audit_preserve_as_non_empty_with_force_overwrites(tmp_path, monkeypatch):
+    """--preserve-as over a non-empty target WITH --force overwrites successfully."""
+    import framework_cli.cli as climod
+    from framework_cli.cli import app
+
+    _audit_stubs(monkeypatch, climod)
+    _make_framework_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    out_dir = tmp_path / "out"
+    preserve_dir = tmp_path / "baseline"
+    preserve_dir.mkdir()
+    (preserve_dir / "existing.txt").write_text("old content")
+
+    r = runner.invoke(
+        app,
+        [
+            "audit",
+            "--target",
+            "framework",
+            "--backend",
+            "api",
+            "--agent",
+            "security",
+            "--out-dir",
+            str(out_dir),
+            "--snapshot",
+            "--preserve-as",
+            str(preserve_dir),
+            "--force",
+        ],
+    )
+    assert r.exit_code == 0, r.output
+    assert (preserve_dir / "audit-report.md").is_file()
+    # Old file should have been wiped
+    assert not (preserve_dir / "existing.txt").exists()
+
+
+def test_audit_failed_agents_reported_on_stderr(tmp_path, monkeypatch):
+    """A non-exhaustion agent failure: run continues (exit 0), failed-agent message
+    appears in output, and the report is still written."""
+    import framework_cli.cli as climod
+    from framework_cli.cli import app
+    from framework_cli.review.backend import Message, TextBlock
+
+    call_count = [0]
+
+    class _Msgs:
+        def create(self, **kw):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # First agent succeeds
+                return Message(content=[TextBlock(text="[]")], stop_reason="end_turn")
+            # Second agent raises a non-exhaustion error
+            raise RuntimeError("simulated agent crash")
+
+    monkeypatch.setattr(
+        climod,
+        "_make_backend",
+        lambda name, key_env: type("B", (), {"messages": _Msgs()})(),
+    )
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": "api", "reason": "resolved", "intent": "api"}
+        )(),
+    )
+
+    _make_framework_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    out_dir = tmp_path / "out"
+    # Run two agents so the second one can fail
+    r = runner.invoke(
+        app,
+        [
+            "audit",
+            "--target",
+            "framework",
+            "--backend",
+            "api",
+            "--agent",
+            "security",
+            "--agent",
+            "documentation",
+            "--out-dir",
+            str(out_dir),
+            "--snapshot",
+        ],
+    )
+    assert r.exit_code == 0, r.output
+    assert (out_dir / "audit-report.md").is_file()
+    assert "agent(s) failed" in r.output
+
+
+def test_audit_fresh_run_clears_stale_ghost_records(tmp_path, monkeypatch):
+    """A fresh (non-resume) audit over a re-used out-dir removes old agent records
+    that are NOT in the current run's agent set."""
+    import framework_cli.cli as climod
+    from framework_cli.cli import app
+    import json as _json
+
+    _audit_stubs(monkeypatch, climod)
+    _make_framework_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    out_dir = tmp_path / "out"
+    findings_dir = out_dir / "findings"
+    findings_dir.mkdir(parents=True)
+    # Pre-seed a ghost record for an agent NOT in this run
+    ghost_record = {
+        "agent": "ghost",
+        "findings": [
+            {"path": "x.py", "line": 1, "severity": "high", "message": "ghost finding"}
+        ],
+        "review_mode": "snapshot",
+        "base_sha": None,
+        "base_baseline": None,
+        "usage": {},
+        "latency_ms": None,
+        "stop_reason": "end_turn",
+        "raw_text": "",
+        "turns": 1,
+        "tool_calls": [],
+    }
+    (findings_dir / "ghost.json").write_text(_json.dumps(ghost_record))
+
+    r = runner.invoke(
+        app,
+        [
+            "audit",
+            "--target",
+            "framework",
+            "--backend",
+            "api",
+            "--agent",
+            "security",
+            "--out-dir",
+            str(out_dir),
+            "--snapshot",
+        ],
+    )
+    assert r.exit_code == 0, r.output
+    assert not (findings_dir / "ghost.json").exists(), (
+        "ghost.json should have been cleared"
+    )
+    report = (out_dir / "audit-report.md").read_text()
+    assert "ghost" not in report
+    meta = _json.loads((out_dir / "meta.json").read_text())
+    assert "ghost" not in meta.get("agents", [])
 
 
 # ---------------------------------------------------------------------------
