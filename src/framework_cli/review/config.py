@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
 _VALID: tuple[str, ...] = ("api", "subagent")
@@ -36,3 +37,29 @@ def write_backend_choice(root: Path, backend: str) -> None:
 def clear_backend_choice(root: Path) -> None:
     """Remove the persisted choice → resolution returns to the no-intent default."""
     _config_path(root).unlink(missing_ok=True)
+
+
+@dataclass(frozen=True)
+class Resolution:
+    backend: str | None  # "api" | "subagent" | None (degrade)
+    reason: str  # resolved | no-intent | api-unavailable | subagent-unavailable
+    intent: str | None  # chosen backend before availability check (for messaging)
+
+
+def resolve_backend(
+    *,
+    root: Path,
+    flag: str | None,
+    env: dict[str, str],
+    availability: dict[str, bool],
+) -> Resolution:
+    intent = flag or env.get("FRAMEWORK_REVIEW_BACKEND") or read_backend_choice(root)
+    if intent not in _VALID:
+        return Resolution(backend=None, reason="no-intent", intent=None)
+    if intent == "api":
+        if availability.get("api_key_present"):
+            return Resolution(backend="api", reason="resolved", intent="api")
+        return Resolution(backend=None, reason="api-unavailable", intent="api")
+    if availability.get("claude_available"):
+        return Resolution(backend="subagent", reason="resolved", intent="subagent")
+    return Resolution(backend=None, reason="subagent-unavailable", intent="subagent")
