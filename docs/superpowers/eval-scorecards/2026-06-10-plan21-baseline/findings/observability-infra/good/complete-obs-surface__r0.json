@@ -1,0 +1,44 @@
+{
+  "agent": "observability-infra",
+  "case": "complete-obs-surface",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 68,
+      "message": "The new `redis:` block is added at 2-space indent under the `volumes:` mapping (sibling to `pgdata`), not under `services:`. As written it parses as a *volume* named `redis`, and `image`/`profiles`/`healthcheck` are meaningless keys on a volume \u2014 so the dev overlay has no redis *service*. The observability overlay's `redis-exporter` (observability.yml) has no `profiles:` so it also loads in the dev overlay, and it declares `depends_on: redis: condition: service_healthy`. With no `redis` service to resolve, dev observability bring-up fails and the `redis` scrape target (redis-exporter -> redis://redis:6379) has nothing behind it in dev. The prod copy in services.yml is correctly placed under `services:`; only the dev definition is malformed.",
+      "path": "infra/compose/dev.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Move the `redis:` block out of the `volumes:` mapping and under the top-level `services:` key in dev.yml (mirroring services.yml). Leave `volumes:` with `pgdata: {}` only. Verify `docker compose -f base.yml -f observability.yml -f dev.yml config` resolves the redis service and redis-exporter's depends_on."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 117117,
+  "raw_text": "[\n  {\n    \"path\": \"infra/compose/dev.yml\",\n    \"line\": 68,\n    \"severity\": \"medium\",\n    \"message\": \"The new `redis:` block is added at 2-space indent under the `volumes:` mapping (sibling to `pgdata`), not under `services:`. As written it parses as a *volume* named `redis`, and `image`/`profiles`/`healthcheck` are meaningless keys on a volume \u2014 so the dev overlay has no redis *service*. The observability overlay's `redis-exporter` (observability.yml) has no `profiles:` so it also loads in the dev overlay, and it declares `depends_on: redis: condition: service_healthy`. With no `redis` service to resolve, dev observability bring-up fails and the `redis` scrape target (redis-exporter -> redis://redis:6379) has nothing behind it in dev. The prod copy in services.yml is correctly placed under `services:`; only the dev definition is malformed.\",\n    \"suggestion\": \"Move the `redis:` block out of the `volumes:` mapping and under the top-level `services:` key in dev.yml (mirroring services.yml). Leave `volumes:` with `pgdata: {}` only. Verify `docker compose -f base.yml -f observability.yml -f dev.yml config` resolves the redis service and redis-exporter's depends_on.\"\n  }\n]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "infra/observability/**/*"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 36321,
+    "cache_read_input_tokens": 72225,
+    "input_tokens": 10190,
+    "output_tokens": 8618
+  }
+}

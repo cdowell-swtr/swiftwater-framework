@@ -1,0 +1,101 @@
+{
+  "agent": "observability-infra",
+  "case": "exporter-without-scrape",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 94,
+      "message": "New `redis-exporter` service is added to the prod observability stack, but `infra/observability/prometheus/prometheus.yml` has no `redis` scrape job (it scrapes only app, prometheus, otel-collector, postgres). The exporter exposes metrics on :9121 that nothing collects, so Redis remains effectively unobserved in prod despite the new service.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add a scrape_config to prometheus.yml, e.g.\n  - job_name: redis\n    static_configs:\n      - targets: [\"redis-exporter:9121\"]"
+    },
+    {
+      "acknowledged": null,
+      "line": 94,
+      "message": "The new `redis-exporter` (and the Redis surface it monitors) has no alert rule. infra/observability/prometheus/alerts/ contains alertmanager/otel_collector/postgres/prometheus/slo rules but nothing for redis (e.g. redis down, exporter scrape failure, memory/eviction). Redis is a prod runtime dependency (redis-exporter depends_on: redis) being instrumented with no alerting wired up.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add infra/observability/prometheus/alerts/redis_alerts.yml with at least a RedisDown / RedisExporterScrapeFailed rule routed through the existing Alertmanager receiver, mirroring postgres_alerts.yml."
+    },
+    {
+      "acknowledged": null,
+      "line": 94,
+      "message": "No Grafana dashboard accompanies the new redis-exporter. infra/observability/grafana/dashboards/ has otel-collector/postgres/prometheus/slo JSON but no redis dashboard, so the collected Redis metrics (once scraped) have no panel. This breaks the alert\u2194dashboard parity maintained for every other scrape target.",
+      "path": "infra/compose/observability.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add infra/observability/grafana/dashboards/redis.json with panels for the key redis_exporter series (up, memory, connected clients, evictions), consistent with postgres.json."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 103355,
+  "raw_text": "[\n  {\n    \"path\": \"infra/compose/observability.yml\",\n    \"line\": 94,\n    \"severity\": \"high\",\n    \"message\": \"New `redis-exporter` service is added to the prod observability stack, but `infra/observability/prometheus/prometheus.yml` has no `redis` scrape job (it scrapes only app, prometheus, otel-collector, postgres). The exporter exposes metrics on :9121 that nothing collects, so Redis remains effectively unobserved in prod despite the new service.\",\n    \"suggestion\": \"Add a scrape_config to prometheus.yml, e.g.\\n  - job_name: redis\\n    static_configs:\\n      - targets: [\\\"redis-exporter:9121\\\"]\"\n  },\n  {\n    \"path\": \"infra/compose/observability.yml\",\n    \"line\": 94,\n    \"severity\": \"high\",\n    \"message\": \"The new `redis-exporter` (and the Redis surface it monitors) has no alert rule. infra/observability/prometheus/alerts/ contains alertmanager/otel_collector/postgres/prometheus/slo rules but nothing for redis (e.g. redis down, exporter scrape failure, memory/eviction). Redis is a prod runtime dependency (redis-exporter depends_on: redis) being instrumented with no alerting wired up.\",\n    \"suggestion\": \"Add infra/observability/prometheus/alerts/redis_alerts.yml with at least a RedisDown / RedisExporterScrapeFailed rule routed through the existing Alertmanager receiver, mirroring postgres_alerts.yml.\"\n  },\n  {\n    \"path\": \"infra/compose/observability.yml\",\n    \"line\": 94,\n    \"severity\": \"medium\",\n    \"message\": \"No Grafana dashboard accompanies the new redis-exporter. infra/observability/grafana/dashboards/ has otel-collector/postgres/prometheus/slo JSON but no redis dashboard, so the collected Redis metrics (once scraped) have no panel. This breaks the alert\u2194dashboard parity maintained for every other scrape target.\",\n    \"suggestion\": \"Add infra/observability/grafana/dashboards/redis.json with panels for the key redis_exporter series (up, memory, connected clients, evictions), consistent with postgres.json.\"\n  }\n]",
+  "repeat": 2,
+  "seeded_file": "infra/compose/observability.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/**/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/**/prometheus*"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/observability/prometheus/prometheus.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "-i": true,
+        "path": "infra/",
+        "pattern": "redis"
+      },
+      "tool": "grep",
+      "turn": 2
+    },
+    {
+      "input": {
+        "pattern": "infra/observability/grafana/dashboards/*.json"
+      },
+      "tool": "glob",
+      "turn": 2
+    },
+    {
+      "input": {
+        "-i": true,
+        "path": "infra/compose/services.yml",
+        "pattern": "redis"
+      },
+      "tool": "grep",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 27160,
+    "cache_read_input_tokens": 47250,
+    "input_tokens": 10188,
+    "output_tokens": 8167
+  }
+}

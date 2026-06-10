@@ -1,0 +1,47 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 39,
+      "message": "Email address (PII) accepted as a URL query parameter. Query strings are written to server access logs, CDN logs, browser history, and appear in HTTP Referer headers \u2014 all uncontrolled sinks with no retention policy, no deletion path, and no pseudonymisation. GDPR Art. 5(1)(e) (storage limitation) and Art. 25 (privacy by design / data minimisation) are violated: PII must not flow into infrastructure logs by default.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Move the user identifier into a request header (e.g. X-User-ID) or a POST body field so it is excluded from URL-based logging. Use an opaque user-ID rather than a raw email address wherever an identifier is needed for personalisation; only resolve to email internally when strictly necessary."
+    },
+    {
+      "acknowledged": null,
+      "line": 50,
+      "message": "Raw email address is written to application logs at INFO level with no pseudonymisation, no retention bound, and no deletion path. Unstructured log lines containing a data-subject's email cannot be selectively erased, making GDPR Art. 17 (right to erasure) practically impossible to honour. Art. 5(1)(e) (storage limitation) is also breached because no maximum log-retention period is declared or enforced.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Replace the email with a pseudonymous ID (e.g. a stable hash or opaque user-ID) before logging. Attach a structured field (e.g. event='search_items', user_id=<hash>) rather than interpolating the raw address into a free-text string. Ensure log-retention policy (e.g. 30-/90-day rotation) is enforced at the log-sink level and documented in the record of processing under GDPR Art. 30."
+    },
+    {
+      "acknowledged": null,
+      "line": 50,
+      "message": "A personalised search tied to a user's email is a sensitive processing operation, but the audit record is a plain stdlib INFO log line \u2014 no tamper-evident store, no actor/purpose/legal-basis fields, no access controls, no query of who accessed it when. GDPR Art. 30 (records of processing activities) and Art. 32 (appropriate technical measures) require that processing of personal data for personalisation is logged in a structured, auditable, access-controlled channel separate from general operational logs.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Emit a dedicated, structured audit event (e.g. via a separate audit logger or SIEM sink) that records: timestamp, correlation-id, pseudonymous user identifier, operation name, legal basis, and outcome. Do not co-mingle audit events with operational INFO logs."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 45383,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 39,\n    \"severity\": \"high\",\n    \"message\": \"Email address (PII) accepted as a URL query parameter. Query strings are written to server access logs, CDN logs, browser history, and appear in HTTP Referer headers \u2014 all uncontrolled sinks with no retention policy, no deletion path, and no pseudonymisation. GDPR Art. 5(1)(e) (storage limitation) and Art. 25 (privacy by design / data minimisation) are violated: PII must not flow into infrastructure logs by default.\",\n    \"suggestion\": \"Move the user identifier into a request header (e.g. X-User-ID) or a POST body field so it is excluded from URL-based logging. Use an opaque user-ID rather than a raw email address wherever an identifier is needed for personalisation; only resolve to email internally when strictly necessary.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 50,\n    \"severity\": \"high\",\n    \"message\": \"Raw email address is written to application logs at INFO level with no pseudonymisation, no retention bound, and no deletion path. Unstructured log lines containing a data-subject's email cannot be selectively erased, making GDPR Art. 17 (right to erasure) practically impossible to honour. Art. 5(1)(e) (storage limitation) is also breached because no maximum log-retention period is declared or enforced.\",\n    \"suggestion\": \"Replace the email with a pseudonymous ID (e.g. a stable hash or opaque user-ID) before logging. Attach a structured field (e.g. event='search_items', user_id=<hash>) rather than interpolating the raw address into a free-text string. Ensure log-retention policy (e.g. 30-/90-day rotation) is enforced at the log-sink level and documented in the record of processing under GDPR Art. 30.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 50,\n    \"severity\": \"high\",\n    \"message\": \"A personalised search tied to a user's email is a sensitive processing operation, but the audit record is a plain stdlib INFO log line \u2014 no tamper-evident store, no actor/purpose/legal-basis fields, no access controls, no query of who accessed it when. GDPR Art. 30 (records of processing activities) and Art. 32 (appropriate technical measures) require that processing of personal data for personalisation is logged in a structured, auditable, access-controlled channel separate from general operational logs.\",\n    \"suggestion\": \"Emit a dedicated, structured audit event (e.g. via a separate audit logger or SIEM sink) that records: timestamp, correlation-id, pseudonymous user identifier, operation name, legal basis, and outcome. Do not co-mingle audit events with operational INFO logs.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 14635,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 2439
+  }
+}

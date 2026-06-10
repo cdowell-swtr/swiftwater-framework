@@ -1,0 +1,64 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-covered",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": 83703,
+  "raw_text": "[]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/pacts/**"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/test_provider*.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src",
+        "pattern": "warehouse_id"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "tests/contract/test_provider_pact.py"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "src",
+        "pattern": "in_stock|inventory|warehouse"
+      },
+      "tool": "grep",
+      "turn": 2
+    },
+    {
+      "input": {
+        "pattern": "**/pacts/*"
+      },
+      "tool": "glob",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 32904,
+    "cache_read_input_tokens": 72725,
+    "input_tokens": 10190,
+    "output_tokens": 5444
+  }
+}

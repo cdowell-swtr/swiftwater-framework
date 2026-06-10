@@ -1,0 +1,37 @@
+{
+  "agent": "privacy",
+  "case": "rum-allowlists-pii",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 45,
+      "message": "Adding \"email\" to frontend_rum_allowed_query_params collects the user's email address from the URL query string into RUM/telemetry. Email is PII, and capturing it into attribution telemetry is collection of PII not needed for the stated purpose (query-string attribution is for UTM campaign params, not personal identifiers). Once ingested it is retained in telemetry beyond any attribution purpose.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Remove the \"email\" entry from the allowlist. Keep only non-PII attribution keys (the utm_* set). If per-user correlation is genuinely required, use a pseudonymous, server-issued identifier rather than capturing raw email, and never source it from the untrusted browser query string."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 25396,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":45,\"severity\":\"high\",\"message\":\"Adding \\\"email\\\" to frontend_rum_allowed_query_params collects the user's email address from the URL query string into RUM/telemetry. Email is PII, and capturing it into attribution telemetry is collection of PII not needed for the stated purpose (query-string attribution is for UTM campaign params, not personal identifiers). Once ingested it is retained in telemetry beyond any attribution purpose.\",\"suggestion\":\"Remove the \\\"email\\\" entry from the allowlist. Keep only non-PII attribution keys (the utm_* set). If per-user correlation is genuinely required, use a pseudonymous, server-issued identifier rather than capturing raw email, and never source it from the untrusted browser query string.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/config/settings.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 10182,
+    "cache_read_input_tokens": 45047,
+    "input_tokens": 4,
+    "output_tokens": 929
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [],
+  "kind": "bad",
+  "latency_ms": 33288,
+  "raw_text": "Looking at the diff, the new `delete_items_by_prefix` function's docstring claims it's \"invisible to observability\" with no span/metric. But I need to verify against how this codebase actually instruments its data layer.\n\nThe grep confirms the key fact: `src/demo/observability/datastores.py:26` calls `SQLAlchemyInstrumentor().instrument(engine=engine)`. This auto-instruments **every** SQLAlchemy statement at the engine level \u2014 the `select`, the per-row `session.delete`, and the `session.commit` in this new function all emit spans automatically, without any manual instrumentation. The same is true of `create_item` and `list_items` directly above it, which also have no manual spans and are accepted as instrumented.\n\nThe query is also bounded by intent (prefix-scoped) and matches the existing idiom in the file. The docstring's assertion of being \"invisible to observability\" is contradicted by the actual auto-instrumentation in the engine setup. Flagging this would be flagging the entire repository's data layer, since nothing here uses manual spans.\n\nNo genuine observability gap exists.\n\n[]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/db/*.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "glob": "**/*.py",
+        "pattern": "SQLAlchemyInstrumentor|Instrumentor|tracer|start_as_current_span|metrics|meter"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/db/repository.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 23845,
+    "cache_read_input_tokens": 24358,
+    "input_tokens": 10186,
+    "output_tokens": 2029
+  }
+}

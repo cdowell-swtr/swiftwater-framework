@@ -1,0 +1,47 @@
+{
+  "agent": "data-integrity",
+  "case": "atomic-bulk-insert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 59,
+      "message": "session.commit() is called without any subsequent session.refresh() on the returned Item objects. The session factory in engine.py sets expire_on_commit=False, which prevents post-commit lazy-loading. The created_at column uses server_default=func.now() with no Python-side default, so its value is only set by the database. Whether SQLAlchemy populates it during flush via RETURNING depends on the dialect: PostgreSQL with implicit_returning works, but SQLite and MySQL/MariaDB do not reliably back-fill server_default columns. Returned objects will have created_at=None on those backends despite the column being NOT NULL in the schema, silently misrepresenting persisted state. The sibling function create_item() calls session.refresh(item) for exactly this reason; bulk_create_items removes that safeguard with an incorrect docstring claim ('no per-row refresh') at line 38-40.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "After session.add_all(created) and session.commit(), call session.refresh() on each item (e.g. for item in created: session.refresh(item)), or perform an explicit bulk SELECT by the assigned ids to reload all server-set columns in one round-trip."
+    },
+    {
+      "acknowledged": null,
+      "line": 55,
+      "message": "The 1000-row cap (line 55) is evaluated on the post-deduplication cleaned list, not on the raw names input. A caller may pass an arbitrarily large input (e.g. 10 M near-duplicate names) that deduplicates to fewer than 1000 entries; the entire raw list is iterated and hashed before the guard fires, exhausting memory and CPU. This is a denial-of-service vector against the persistence layer and can cause the hosting process to OOM before any error is raised.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add an early length guard on the raw input before the loop, e.g. if len(names) > 10_000: raise ValueError(...), sized to a safe upper bound that accounts for expected duplication rates while preventing runaway inputs."
+    },
+    {
+      "acknowledged": null,
+      "line": 43,
+      "message": "The docstring states the function 'propagates sqlalchemy.exc.IntegrityError (e.g. a unique-constraint violation)' and instructs callers to roll back in that case. However, the migration (migrations/versions/0001_initial.py) defines no UNIQUE constraint on items.name. Within-batch duplicates are silently removed by the dedup loop, but duplicate names across separate calls will insert without error, accumulating duplicate rows. The documented IntegrityError contract for uniqueness is unreachable given the actual schema, misleading callers into believing uniqueness is enforced at the database level.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a UNIQUE constraint on items.name in a new migration (op.create_unique_constraint) and reflect it in the model to match the stated contract, or remove the unique-constraint example from the docstring and explicitly document that cross-batch name duplicates are allowed."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 122354,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 59,\n    \"severity\": \"high\",\n    \"message\": \"session.commit() is called without any subsequent session.refresh() on the returned Item objects. The session factory in engine.py sets expire_on_commit=False, which prevents post-commit lazy-loading. The created_at column uses server_default=func.now() with no Python-side default, so its value is only set by the database. Whether SQLAlchemy populates it during flush via RETURNING depends on the dialect: PostgreSQL with implicit_returning works, but SQLite and MySQL/MariaDB do not reliably back-fill server_default columns. Returned objects will have created_at=None on those backends despite the column being NOT NULL in the schema, silently misrepresenting persisted state. The sibling function create_item() calls session.refresh(item) for exactly this reason; bulk_create_items removes that safeguard with an incorrect docstring claim ('no per-row refresh') at line 38-40.\",\n    \"suggestion\": \"After session.add_all(created) and session.commit(), call session.refresh() on each item (e.g. for item in created: session.refresh(item)), or perform an explicit bulk SELECT by the assigned ids to reload all server-set columns in one round-trip.\"\n  },\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 55,\n    \"severity\": \"medium\",\n    \"message\": \"The 1000-row cap (line 55) is evaluated on the post-deduplication cleaned list, not on the raw names input. A caller may pass an arbitrarily large input (e.g. 10 M near-duplicate names) that deduplicates to fewer than 1000 entries; the entire raw list is iterated and hashed before the guard fires, exhausting memory and CPU. This is a denial-of-service vector against the persistence layer and can cause the hosting process to OOM before any error is raised.\",\n    \"suggestion\": \"Add an early length guard on the raw input before the loop, e.g. if len(names) > 10_000: raise ValueError(...), sized to a safe upper bound that accounts for expected duplication rates while preventing runaway inputs.\"\n  },\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 43,\n    \"severity\": \"medium\",\n    \"message\": \"The docstring states the function 'propagates sqlalchemy.exc.IntegrityError (e.g. a unique-constraint violation)' and instructs callers to roll back in that case. However, the migration (migrations/versions/0001_initial.py) defines no UNIQUE constraint on items.name. Within-batch duplicates are silently removed by the dedup loop, but duplicate names across separate calls will insert without error, accumulating duplicate rows. The documented IntegrityError contract for uniqueness is unreachable given the actual schema, misleading callers into believing uniqueness is enforced at the database level.\",\n    \"suggestion\": \"Add a UNIQUE constraint on items.name in a new migration (op.create_unique_constraint) and reflect it in the model to match the stated contract, or remove the unique-constraint example from the docstring and explicitly document that cross-batch name duplicates are allowed.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 21621,
+    "input_tokens": 3,
+    "output_tokens": 6820
+  }
+}

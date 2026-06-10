@@ -1,0 +1,69 @@
+{
+  "agent": "env-parity",
+  "case": "parity-preserved",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": 63268,
+  "raw_text": "After reviewing the change against the overlay composition model, here's my analysis:\n\n**Env-var parity (the only relevant axis here \u2014 no service was added):**\n- `widget_api_url` field in `settings.py` with `env_prefix=\"APP_\"` \u2192 consumes `APP_WIDGET_API_URL` \u2713 declared in `.env.example`\n- The `${APP_WIDGET_API_URL}` interpolation in `base.yml` \u2713 has a matching `.env.example` declaration\n- Name mapping `widget_api_url` \u2194 `APP_WIDGET_API_URL` is consistent \u2713\n\n**On the base.yml-only passthrough:** Although `base.yml` is dev/test-only and the explicit `APP_WIDGET_API_URL` interpolation is not added to the deployed `<env>.yml`/`services.yml`, this is NOT an env-var gap: the deploy contract (`infra/deploy/README.md`) states *\"every var in `.env.example` \u2192 the target's environment \u2192 the app reads config from the target's env\"*, and `settings.py` reads `APP_*` directly from the process environment. So the variable reaches staging/prod via the deploy environment, plus it carries a code default.\n\n**Service parity:** No runtime service is defined in the diff. `http://widget:9000` is an external dependency URL (\"set per environment\") consumed by the app, not a compose service added to a dev-scoped overlay \u2014 so there is no dev-only-service omission to flag.\n\n[]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "Taskfile.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/compose/base.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": ".env.example"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/config/settings.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/deploy/strategy.sh"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/deploy/README.md"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 29029,
+    "cache_read_input_tokens": 37614,
+    "input_tokens": 5095,
+    "output_tokens": 4596
+  }
+}

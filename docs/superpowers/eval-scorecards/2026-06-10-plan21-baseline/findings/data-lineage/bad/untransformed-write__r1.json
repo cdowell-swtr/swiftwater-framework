@@ -1,0 +1,19 @@
+{
+  "agent": "data-lineage",
+  "case": "untransformed-write",
+  "findings": [],
+  "kind": "bad",
+  "latency_ms": 17420,
+  "raw_text": "[]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 5091,
+    "cache_read_input_tokens": 22901,
+    "input_tokens": 2,
+    "output_tokens": 1100
+  }
+}

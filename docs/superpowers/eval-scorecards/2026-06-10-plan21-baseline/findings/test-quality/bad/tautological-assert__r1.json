@@ -1,0 +1,38 @@
+{
+  "agent": "test-quality",
+  "case": "tautological-assert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 53,
+      "message": "Tautological assertion: `assert s is s` is always True in Python regardless of what `s` is or how Settings behaves. This test can never fail under any implementation.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Delete this test. If identity/singleton semantics need coverage, assert `get_settings() is get_settings()` (already covered by `test_get_settings_is_cached`). If the goal is a smoke-instantiation check, assert on a concrete default field value instead."
+    },
+    {
+      "acknowledged": null,
+      "line": 60,
+      "message": "Over-mocked: `mpatch.object` replaces the very property under test (`resolved_log_level`) with a lambda that returns 'MOCKED', then the assertion checks that the mock returns 'MOCKED'. This exercises only `unittest.mock` mechanics, never the real `resolved_log_level` implementation.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Delete this test. `resolved_log_level` is already covered by `test_resolved_log_level_is_debug_in_dev`, `test_resolved_log_level_is_info_outside_dev`, and `test_explicit_log_level_overrides_resolution`, which exercise the real method with real inputs. If a new branch needs coverage, add a concrete parametrize case to the existing parametrized test."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 42647,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"tests/unit/test_settings.py\",\n    \"line\": 53,\n    \"severity\": \"high\",\n    \"message\": \"Tautological assertion: `assert s is s` is always True in Python regardless of what `s` is or how Settings behaves. This test can never fail under any implementation.\",\n    \"suggestion\": \"Delete this test. If identity/singleton semantics need coverage, assert `get_settings() is get_settings()` (already covered by `test_get_settings_is_cached`). If the goal is a smoke-instantiation check, assert on a concrete default field value instead.\"\n  },\n  {\n    \"path\": \"tests/unit/test_settings.py\",\n    \"line\": 60,\n    \"severity\": \"high\",\n    \"message\": \"Over-mocked: `mpatch.object` replaces the very property under test (`resolved_log_level`) with a lambda that returns 'MOCKED', then the assertion checks that the mock returns 'MOCKED'. This exercises only `unittest.mock` mechanics, never the real `resolved_log_level` implementation.\",\n    \"suggestion\": \"Delete this test. `resolved_log_level` is already covered by `test_resolved_log_level_is_debug_in_dev`, `test_resolved_log_level_is_info_outside_dev`, and `test_explicit_log_level_overrides_resolution`, which exercise the real method with real inputs. If a new branch needs coverage, add a concrete parametrize case to the existing parametrized test.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": "tests/unit/test_settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 42002,
+    "input_tokens": 3,
+    "output_tokens": 2517
+  }
+}

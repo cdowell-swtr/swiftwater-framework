@@ -1,0 +1,29 @@
+{
+  "agent": "performance",
+  "case": "single-query",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 46,
+      "message": "list_items() issues SELECT id, name, created_at FROM items but only the name column is consumed. All ORM columns are hydrated into Item objects and then immediately discarded, transferring ~2\u00d7 more data than necessary per row.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add a dedicated repository helper (e.g. list_item_names) that executes select(Item.name).order_by(Item.id).limit(bounded) and returns list[str] directly, avoiding full-row hydration. With MAX_PAGE_SIZE capped at 100 rows the absolute cost is small today, but the pattern scales poorly if the model grows wide columns (e.g. description, blob fields)."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 48319,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 46,\n    \"severity\": \"low\",\n    \"message\": \"list_items() issues SELECT id, name, created_at FROM items but only the name column is consumed. All ORM columns are hydrated into Item objects and then immediately discarded, transferring ~2\u00d7 more data than necessary per row.\",\n    \"suggestion\": \"Add a dedicated repository helper (e.g. list_item_names) that executes select(Item.name).order_by(Item.id).limit(bounded) and returns list[str] directly, avoiding full-row hydration. With MAX_PAGE_SIZE capped at 100 rows the absolute cost is small today, but the pattern scales poorly if the model grows wide columns (e.g. description, blob fields).\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 13371,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 2503
+  }
+}

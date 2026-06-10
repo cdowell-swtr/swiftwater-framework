@@ -1,0 +1,29 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 46,
+      "message": "Falsy check `if not item:` is the wrong idiom for testing whether `session.get()` returned a row. SQLAlchemy ORM instances do not override `__bool__`, so the check happens to work today, but it would silently return HTTP 404 for a legitimately-found item if the model ever adds a `__bool__` or `__len__` method (e.g. via a mixin or future column). The comment in the diff itself acknowledges the bug: a `0`-valued primary key is a valid edge case that exposes the fragility of truthy/falsy object evaluation.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Replace `if not item:` with `if item is None:` \u2014 the identity check is the only semantically correct test for 'session.get() found no row'."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 96160,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 46,\n    \"severity\": \"medium\",\n    \"message\": \"Falsy check `if not item:` is the wrong idiom for testing whether `session.get()` returned a row. SQLAlchemy ORM instances do not override `__bool__`, so the check happens to work today, but it would silently return HTTP 404 for a legitimately-found item if the model ever adds a `__bool__` or `__len__` method (e.g. via a mixin or future column). The comment in the diff itself acknowledges the bug: a `0`-valued primary key is a valid edge case that exposes the fragility of truthy/falsy object evaluation.\",\n    \"suggestion\": \"Replace `if not item:` with `if item is None:` \u2014 the identity check is the only semantically correct test for 'session.get() found no row'.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 21873,
+    "input_tokens": 3,
+    "output_tokens": 5780
+  }
+}

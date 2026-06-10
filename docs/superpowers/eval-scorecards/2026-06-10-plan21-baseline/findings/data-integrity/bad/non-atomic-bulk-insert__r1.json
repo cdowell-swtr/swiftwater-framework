@@ -1,0 +1,29 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "session.commit() is called inside the loop, so each item is committed in its own transaction. If an error occurs after the first commit but before the last, the batch is partially persisted with no way to roll back the already-committed rows \u2014 violating atomicity for the entire operation.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Move session.add() calls into the loop but defer session.commit() to after the loop. Use session.flush() inside the loop if auto-generated IDs are needed before the final commit, then call session.refresh() on each item after the single commit:\n\n  created = []\n  for name in names:\n      item = Item(name=name)\n      session.add(item)\n      created.append(item)\n  session.commit()\n  for item in created:\n      session.refresh(item)\n  return created\n\nThis wraps the entire batch in one atomic transaction."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 27505,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 40,\n    \"severity\": \"high\",\n    \"message\": \"session.commit() is called inside the loop, so each item is committed in its own transaction. If an error occurs after the first commit but before the last, the batch is partially persisted with no way to roll back the already-committed rows \u2014 violating atomicity for the entire operation.\",\n    \"suggestion\": \"Move session.add() calls into the loop but defer session.commit() to after the loop. Use session.flush() inside the loop if auto-generated IDs are needed before the final commit, then call session.refresh() on each item after the single commit:\\n\\n  created = []\\n  for name in names:\\n      item = Item(name=name)\\n      session.add(item)\\n      created.append(item)\\n  session.commit()\\n  for item in created:\\n      session.refresh(item)\\n  return created\\n\\nThis wraps the entire batch in one atomic transaction.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 21106,
+    "input_tokens": 3,
+    "output_tokens": 1415
+  }
+}

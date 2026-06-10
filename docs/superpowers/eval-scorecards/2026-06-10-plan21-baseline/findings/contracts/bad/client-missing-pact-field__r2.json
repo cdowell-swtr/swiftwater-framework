@@ -1,0 +1,59 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 14,
+      "message": "get_stock now hard-depends on a `reserved_count` key in the inventory response, but the committed consumer pact does not declare it. The consumer test (tests/functional/test_consumer_inventory.py) sets `.with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5)})` with no `reserved_count`, so the Pact mock server returns no such key and `int(data[\"reserved_count\"])` raises KeyError when the contract is exercised. The change's own comment admits the field is \"not declared in the pact interaction.\" Because reserved_count is absent from the pact, the provider is under no contractual obligation to return it and provider-verification CI cannot catch its removal/absence \u2014 the consumer breaks in production with a green pipeline. A consumer that relies on a field MUST pin it in the pact.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `reserved_count` to the consumer pact response body (e.g. `.with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5), \"reserved_count\": match.int(0)})`) and regenerate/republish pacts/demo-inventory.json so the new dependency is part of the consumer-driven contract and gets provider-verified."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 67255,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/clients/inventory.py\",\n    \"line\": 14,\n    \"severity\": \"high\",\n    \"message\": \"get_stock now hard-depends on a `reserved_count` key in the inventory response, but the committed consumer pact does not declare it. The consumer test (tests/functional/test_consumer_inventory.py) sets `.with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5)})` with no `reserved_count`, so the Pact mock server returns no such key and `int(data[\\\"reserved_count\\\"])` raises KeyError when the contract is exercised. The change's own comment admits the field is \\\"not declared in the pact interaction.\\\" Because reserved_count is absent from the pact, the provider is under no contractual obligation to return it and provider-verification CI cannot catch its removal/absence \u2014 the consumer breaks in production with a green pipeline. A consumer that relies on a field MUST pin it in the pact.\",\n    \"suggestion\": \"Add `reserved_count` to the consumer pact response body (e.g. `.with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5), \\\"reserved_count\\\": match.int(0)})`) and regenerate/republish pacts/demo-inventory.json so the new dependency is part of the consumer-driven contract and gets provider-verified.\"\n  }\n]",
+  "repeat": 2,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/*pact*"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "output_mode": "files_with_matches",
+        "pattern": "in_stock|reserved_count|inventory"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "tests/functional/test_consumer_inventory.py"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "pacts/demo-inventory.json"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 32392,
+    "cache_read_input_tokens": 72057,
+    "input_tokens": 10050,
+    "output_tokens": 3104
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "agent": "test-quality",
+  "case": "meaningful-assert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 56,
+      "message": "test_resolved_log_level_prod_is_info is a verbatim duplicate of an existing parametrized case. test_resolved_log_level_is_info_outside_dev is already parametrized over [\"staging\", \"prod\", \"ci\"] and asserts the identical expression `Settings(environment=\"prod\").resolved_log_level == \"INFO\"`. The new test cannot fail in any scenario where the existing parametrized test passes; it adds zero coverage and will never catch a regression that the suite does not already catch.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Delete test_resolved_log_level_prod_is_info entirely. If the intent is to document the security rationale (no DEBUG in prod leaks data), add the comment to test_resolved_log_level_is_info_outside_dev instead."
+    },
+    {
+      "acknowledged": null,
+      "line": 50,
+      "message": "test_slo_request_latency_p99_env_override exercises the same Pydantic-settings env-override mechanism already proven by test_env_vars_override (which covers APP_SLO_ERROR_RATE_PCT). The new test does cover a distinct field name, so it is not a pure duplicate, but the marginal confidence gained is low: a bug that silently ignores APP_SLO_REQUEST_LATENCY_P99_MS would be the only new failure mode caught, and that scenario is already guarded by test_defaults asserting the default value. Consider whether this test pulls its weight.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Either fold APP_SLO_REQUEST_LATENCY_P99_MS into the existing test_env_vars_override (add a third setenv/assert pair) to consolidate the env-override story in one place, or keep it but remove the comment claiming it is 'meaningful' for a reason that applies equally to every other env-override test in the file."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 55304,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"tests/unit/test_settings.py\",\n    \"line\": 56,\n    \"severity\": \"high\",\n    \"message\": \"test_resolved_log_level_prod_is_info is a verbatim duplicate of an existing parametrized case. test_resolved_log_level_is_info_outside_dev is already parametrized over [\\\"staging\\\", \\\"prod\\\", \\\"ci\\\"] and asserts the identical expression `Settings(environment=\\\"prod\\\").resolved_log_level == \\\"INFO\\\"`. The new test cannot fail in any scenario where the existing parametrized test passes; it adds zero coverage and will never catch a regression that the suite does not already catch.\",\n    \"suggestion\": \"Delete test_resolved_log_level_prod_is_info entirely. If the intent is to document the security rationale (no DEBUG in prod leaks data), add the comment to test_resolved_log_level_is_info_outside_dev instead.\"\n  },\n  {\n    \"path\": \"tests/unit/test_settings.py\",\n    \"line\": 50,\n    \"severity\": \"low\",\n    \"message\": \"test_slo_request_latency_p99_env_override exercises the same Pydantic-settings env-override mechanism already proven by test_env_vars_override (which covers APP_SLO_ERROR_RATE_PCT). The new test does cover a distinct field name, so it is not a pure duplicate, but the marginal confidence gained is low: a bug that silently ignores APP_SLO_REQUEST_LATENCY_P99_MS would be the only new failure mode caught, and that scenario is already guarded by test_defaults asserting the default value. Consider whether this test pulls its weight.\",\n    \"suggestion\": \"Either fold APP_SLO_REQUEST_LATENCY_P99_MS into the existing test_env_vars_override (add a third setenv/assert pair) to consolidate the env-override story in one place, or keep it but remove the comment claiming it is 'meaningful' for a reason that applies equally to every other env-override test in the file.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 33573,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 3423
+  }
+}

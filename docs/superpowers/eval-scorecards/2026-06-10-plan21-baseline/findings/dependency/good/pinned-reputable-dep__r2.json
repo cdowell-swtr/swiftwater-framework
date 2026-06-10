@@ -1,0 +1,56 @@
+{
+  "agent": "dependency",
+  "case": "pinned-reputable-dep",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "httpx is already declared in [dependency-groups].dev as `httpx>=0.28`. Promoting it to production dependencies is appropriate only if application code (not just tests) now imports it at runtime. The diff touches only pyproject.toml \u2014 no source file introducing an httpx import is visible. If the sole consumer is the FastAPI test client or pytest fixtures, the library should remain dev-only.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Verify a runtime caller exists (e.g. `grep -r 'import httpx' src/`). If httpx is only needed in tests, remove this line and keep the existing dev-group entry."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "Version-floor inconsistency: the new production pin allows `>=0.27` while the dev-group pin requires `>=0.28`. A developer environment will always resolve to \u22650.28, but a minimal production install could resolve to 0.27.x, which is one minor behind. The public httpx API is stable across that range, but the asymmetry is surprising and easy to overlook.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Align the production floor with the dev floor: `httpx>=0.28,<1.0`."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "The `<1.0` upper bound is appropriate while httpx is pre-1.0 (current latest is 0.28.x), but it will silently block the 1.0 release when it ships. This is a known maintenance cost of capping a pre-release library.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Track the httpx 1.0 milestone (https://github.com/encode/httpx/milestone/1) and plan a version-cap update at that time. Consider adding a comment in pyproject.toml or a dependabot alert to catch it."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "Supply-chain and maintenance health are low-risk. httpx is maintained by the Encode team (also responsible for Starlette/Uvicorn), has a strong release cadence, passes standard audit tools, and has no known high/critical CVEs. No concerns here.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "No action needed; noted for completeness."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 34253,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": \"\\\"httpx>=0.27,<1.0\\\",\",\n    \"severity\": \"info\",\n    \"message\": \"httpx is already declared in [dependency-groups].dev as `httpx>=0.28`. Promoting it to production dependencies is appropriate only if application code (not just tests) now imports it at runtime. The diff touches only pyproject.toml \u2014 no source file introducing an httpx import is visible. If the sole consumer is the FastAPI test client or pytest fixtures, the library should remain dev-only.\",\n    \"suggestion\": \"Verify a runtime caller exists (e.g. `grep -r 'import httpx' src/`). If httpx is only needed in tests, remove this line and keep the existing dev-group entry.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": \"\\\"httpx>=0.27,<1.0\\\",\",\n    \"severity\": \"info\",\n    \"message\": \"Version-floor inconsistency: the new production pin allows `>=0.27` while the dev-group pin requires `>=0.28`. A developer environment will always resolve to \u22650.28, but a minimal production install could resolve to 0.27.x, which is one minor behind. The public httpx API is stable across that range, but the asymmetry is surprising and easy to overlook.\",\n    \"suggestion\": \"Align the production floor with the dev floor: `httpx>=0.28,<1.0`.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": \"\\\"httpx>=0.27,<1.0\\\",\",\n    \"severity\": \"info\",\n    \"message\": \"The `<1.0` upper bound is appropriate while httpx is pre-1.0 (current latest is 0.28.x), but it will silently block the 1.0 release when it ships. This is a known maintenance cost of capping a pre-release library.\",\n    \"suggestion\": \"Track the httpx 1.0 milestone (https://github.com/encode/httpx/milestone/1) and plan a version-cap update at that time. Consider adding a comment in pyproject.toml or a dependabot alert to catch it.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": \"\\\"httpx>=0.27,<1.0\\\",\",\n    \"severity\": \"info\",\n    \"message\": \"Supply-chain and maintenance health are low-risk. httpx is maintained by the Encode team (also responsible for Starlette/Uvicorn), has a strong release cadence, passes standard audit tools, and has no known high/critical CVEs. No concerns here.\",\n    \"suggestion\": \"No action needed; noted for completeness.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 20254,
+    "input_tokens": 3,
+    "output_tokens": 1597
+  }
+}

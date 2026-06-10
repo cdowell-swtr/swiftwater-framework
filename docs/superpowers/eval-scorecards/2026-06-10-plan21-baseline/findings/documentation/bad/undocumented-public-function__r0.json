@@ -1,0 +1,56 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "Public endpoint `count_items` has no docstring. Every other route in this file documents its behaviour, contract, and notable caveats.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add a docstring explaining what the endpoint returns, e.g. 'Return the total number of items in the database as {\"count\": <int>}.'"
+    },
+    {
+      "acknowledged": null,
+      "line": 41,
+      "message": "`list_items(session)` is called with no explicit `limit`, so it silently uses `DEFAULT_PAGE_SIZE = 50`. The returned count therefore reflects at most 50 rows, not the true table cardinality. This behaviour is undocumented and likely surprising to callers.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Either document the cap explicitly in a docstring/inline comment, or pass `limit=MAX_PAGE_SIZE` (or use a direct `SELECT COUNT(*)` query) so the semantics match what the endpoint name implies."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "The 'Endpoints' section lists `GET /items` but omits the newly added `GET /items/count`. The spec is now stale.",
+      "path": "README.md",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add `- \\`GET /items/count\\` \u2014 total item count` to the Endpoints list in README.md."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "README advises running `task openapi:export` and committing `openapi.json` after any route change ('CI fails on a stale or breaking spec'). Adding `GET /items/count` requires regenerating that file.",
+      "path": "README.md",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Run `task openapi:export` and stage the updated `openapi.json` alongside this change to keep the contract diff CI job green."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 48214,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 40,\n    \"severity\": \"low\",\n    \"message\": \"Public endpoint `count_items` has no docstring. Every other route in this file documents its behaviour, contract, and notable caveats.\",\n    \"suggestion\": \"Add a docstring explaining what the endpoint returns, e.g. 'Return the total number of items in the database as {\\\"count\\\": <int>}.'\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 41,\n    \"severity\": \"low\",\n    \"message\": \"`list_items(session)` is called with no explicit `limit`, so it silently uses `DEFAULT_PAGE_SIZE = 50`. The returned count therefore reflects at most 50 rows, not the true table cardinality. This behaviour is undocumented and likely surprising to callers.\",\n    \"suggestion\": \"Either document the cap explicitly in a docstring/inline comment, or pass `limit=MAX_PAGE_SIZE` (or use a direct `SELECT COUNT(*)` query) so the semantics match what the endpoint name implies.\"\n  },\n  {\n    \"path\": \"README.md\",\n    \"line\": null,\n    \"severity\": \"low\",\n    \"message\": \"The 'Endpoints' section lists `GET /items` but omits the newly added `GET /items/count`. The spec is now stale.\",\n    \"suggestion\": \"Add `- \\\\`GET /items/count\\\\` \u2014 total item count` to the Endpoints list in README.md.\"\n  },\n  {\n    \"path\": \"README.md\",\n    \"line\": null,\n    \"severity\": \"info\",\n    \"message\": \"README advises running `task openapi:export` and committing `openapi.json` after any route change ('CI fails on a stale or breaking spec'). Adding `GET /items/count` requires regenerating that file.\",\n    \"suggestion\": \"Run `task openapi:export` and stage the updated `openapi.json` alongside this change to keep the contract diff CI job green.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 23282,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 2791
+  }
+}

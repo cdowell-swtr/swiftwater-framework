@@ -1,0 +1,38 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 44,
+      "message": "Unbounded full-table scan: `select(Item.id)` carries no LIMIT and no offset, so every row's id is fetched on every request. The sibling endpoint `/items` is guarded by MAX_PAGE_SIZE=100; this one is not. On a table with millions of rows this materialises the entire id column into Python memory and saturates the connection for the duration.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `.limit(MAX_PAGE_SIZE)` to the id query as a minimum backstop \u2014 or, better, collapse the whole function into `return list(session.scalars(select(Item.name).limit(MAX_PAGE_SIZE)))`, which is a single bounded query."
+    },
+    {
+      "acknowledged": null,
+      "line": 48,
+      "message": "N+1 query: after fetching all ids in one query (line 44), `session.get(Item, iid)` inside the loop issues a separate `SELECT * FROM items WHERE id = ?` for every id. Total round-trips = T+1 where T is the number of rows returned by the id query. The session is held open across all T+1 round-trips, blocking a connection-pool slot for the entire duration.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Replace the entire body with a single projection query: `return list(session.scalars(select(Item.name).order_by(Item.id).limit(MAX_PAGE_SIZE)))`. This is one round-trip, fetches only the `name` column, and stays within the page-size cap."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 67936,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 44,\n    \"severity\": \"high\",\n    \"message\": \"Unbounded full-table scan: `select(Item.id)` carries no LIMIT and no offset, so every row's id is fetched on every request. The sibling endpoint `/items` is guarded by MAX_PAGE_SIZE=100; this one is not. On a table with millions of rows this materialises the entire id column into Python memory and saturates the connection for the duration.\",\n    \"suggestion\": \"Add `.limit(MAX_PAGE_SIZE)` to the id query as a minimum backstop \u2014 or, better, collapse the whole function into `return list(session.scalars(select(Item.name).limit(MAX_PAGE_SIZE)))`, which is a single bounded query.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 48,\n    \"severity\": \"high\",\n    \"message\": \"N+1 query: after fetching all ids in one query (line 44), `session.get(Item, iid)` inside the loop issues a separate `SELECT * FROM items WHERE id = ?` for every id. Total round-trips = T+1 where T is the number of rows returned by the id query. The session is held open across all T+1 round-trips, blocking a connection-pool slot for the entire duration.\",\n    \"suggestion\": \"Replace the entire body with a single projection query: `return list(session.scalars(select(Item.name).order_by(Item.id).limit(MAX_PAGE_SIZE)))`. This is one round-trip, fetches only the `name` column, and stays within the page-size cap.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 13463,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 4275
+  }
+}

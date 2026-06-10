@@ -1,0 +1,47 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "session.commit() is called inside the loop, so every item is persisted in its own independent transaction. If the process fails (exception, crash, connectivity loss) after the k-th commit, the first k items are durably written and cannot be rolled back \u2014 the caller has no mechanism to recover or undo the partial batch. The function's public contract gives no indication that it is non-atomic.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Remove commit() from the loop. Call session.add() for every item first, then session.commit() once after the loop, then do a single-pass refresh. If the caller manages the transaction externally, omit the commit entirely and let the caller decide when to finalise."
+    },
+    {
+      "acknowledged": null,
+      "line": 41,
+      "message": "session.refresh() is called immediately after each per-loop commit. If refresh raises mid-batch (e.g. transient DB error, connection drop), the session is left in an indeterminate state: some items are already durably committed in closed transactions, the current item's add() may be in-flight, and the caller cannot safely roll back or retry. The combination of commit-then-refresh inside the loop creates two independent failure points per iteration, each of which can strand a partial write.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Defer all refresh() calls to a second pass after the single post-loop commit. Also note that expire_on_commit=False is already set in build_session_factory, so the refresh() calls are unnecessary \u2014 objects retain their populated state across commit without a round-trip."
+    },
+    {
+      "acknowledged": null,
+      "line": 33,
+      "message": "The names parameter is entirely unbounded. Unlike list_items, which enforces MAX_PAGE_SIZE on reads, this write path has no cap. A caller can pass a list of arbitrary length, producing N individual commits (under the current implementation) or one very large transaction (after the fix), either of which can cause prolonged lock contention, excessive memory pressure, or a single enormous all-or-nothing failure with no partial-progress option.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a MAX_BATCH_SIZE constant (analogous to MAX_PAGE_SIZE) and either raise ValueError for oversized inputs or chunk the work into bounded sub-batches, each committed atomically."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 86710,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 40,\n    \"severity\": \"high\",\n    \"message\": \"session.commit() is called inside the loop, so every item is persisted in its own independent transaction. If the process fails (exception, crash, connectivity loss) after the k-th commit, the first k items are durably written and cannot be rolled back \u2014 the caller has no mechanism to recover or undo the partial batch. The function's public contract gives no indication that it is non-atomic.\",\n    \"suggestion\": \"Remove commit() from the loop. Call session.add() for every item first, then session.commit() once after the loop, then do a single-pass refresh. If the caller manages the transaction externally, omit the commit entirely and let the caller decide when to finalise.\"\n  },\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 41,\n    \"severity\": \"high\",\n    \"message\": \"session.refresh() is called immediately after each per-loop commit. If refresh raises mid-batch (e.g. transient DB error, connection drop), the session is left in an indeterminate state: some items are already durably committed in closed transactions, the current item's add() may be in-flight, and the caller cannot safely roll back or retry. The combination of commit-then-refresh inside the loop creates two independent failure points per iteration, each of which can strand a partial write.\",\n    \"suggestion\": \"Defer all refresh() calls to a second pass after the single post-loop commit. Also note that expire_on_commit=False is already set in build_session_factory, so the refresh() calls are unnecessary \u2014 objects retain their populated state across commit without a round-trip.\"\n  },\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 33,\n    \"severity\": \"medium\",\n    \"message\": \"The names parameter is entirely unbounded. Unlike list_items, which enforces MAX_PAGE_SIZE on reads, this write path has no cap. A caller can pass a list of arbitrary length, producing N individual commits (under the current implementation) or one very large transaction (after the fix), either of which can cause prolonged lock contention, excessive memory pressure, or a single enormous all-or-nothing failure with no partial-progress option.\",\n    \"suggestion\": \"Add a MAX_BATCH_SIZE constant (analogous to MAX_PAGE_SIZE) and either raise ValueError for oversized inputs or chunk the work into bounded sub-batches, each committed atomically.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 12626,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 4765
+  }
+}

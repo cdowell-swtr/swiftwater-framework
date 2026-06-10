@@ -1,0 +1,71 @@
+{
+  "agent": "observability-fe",
+  "case": "unbounded-label",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 105,
+      "message": "record_raw_path() captures the raw full_path (including the query string) straight into a metric with no fail-closed query-param allowlist and no sanitization. This is exactly the beacon field the route at routes/frontend_rum.py:46 re-applies the allowlist to strip \u2014 this new path bypasses it, trusting whatever a non-browser client POSTs.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Strip the query string to the bare pathname and route the value through the server-side frontend_rum_allowed_query_params allowlist (as the existing page-view/attribution recorders do) before it ever reaches a label."
+    },
+    {
+      "acknowledged": null,
+      "line": 208,
+      "message": "app_frontend_raw_path_total emits one series per raw full path (path=\"<full_path incl. query>\") with no distinct-value cap and no \"other\" overflow bucket. Every unique path/query combination becomes a new Prometheus series \u2014 unbounded label cardinality that will blow up Prometheus, unlike the existing route-keyed page_views series which strip the query string.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Label by a fixed/sanitized route enum (templated path, query removed) and enforce a distinct-value cap with an \"other\" overflow bucket, mirroring the bounded labels used for app_frontend_page_views_total."
+    },
+    {
+      "acknowledged": null,
+      "line": 204,
+      "message": "app_frontend_raw_path_total is a new RUM signal scraped via /metrics but ships with no corresponding alert rule or dashboard panel \u2014 the signal is unobservable to operators even once emitted.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Either add an alert/dashboard panel for the new counter or, preferably, drop this redundant raw-path series in favor of the existing bounded page-view metrics."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 43582,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/frontend_rum/metrics.py\",\n    \"line\": 105,\n    \"severity\": \"high\",\n    \"message\": \"record_raw_path() captures the raw full_path (including the query string) straight into a metric with no fail-closed query-param allowlist and no sanitization. This is exactly the beacon field the route at routes/frontend_rum.py:46 re-applies the allowlist to strip \u2014 this new path bypasses it, trusting whatever a non-browser client POSTs.\",\n    \"suggestion\": \"Strip the query string to the bare pathname and route the value through the server-side frontend_rum_allowed_query_params allowlist (as the existing page-view/attribution recorders do) before it ever reaches a label.\"\n  },\n  {\n    \"path\": \"src/demo/frontend_rum/metrics.py\",\n    \"line\": 208,\n    \"severity\": \"high\",\n    \"message\": \"app_frontend_raw_path_total emits one series per raw full path (path=\\\"<full_path incl. query>\\\") with no distinct-value cap and no \\\"other\\\" overflow bucket. Every unique path/query combination becomes a new Prometheus series \u2014 unbounded label cardinality that will blow up Prometheus, unlike the existing route-keyed page_views series which strip the query string.\",\n    \"suggestion\": \"Label by a fixed/sanitized route enum (templated path, query removed) and enforce a distinct-value cap with an \\\"other\\\" overflow bucket, mirroring the bounded labels used for app_frontend_page_views_total.\"\n  },\n  {\n    \"path\": \"src/demo/frontend_rum/metrics.py\",\n    \"line\": 204,\n    \"severity\": \"medium\",\n    \"message\": \"app_frontend_raw_path_total is a new RUM signal scraped via /metrics but ships with no corresponding alert rule or dashboard panel \u2014 the signal is unobservable to operators even once emitted.\",\n    \"suggestion\": \"Either add an alert/dashboard panel for the new counter or, preferably, drop this redundant raw-path series in favor of the existing bounded page-view metrics.\"\n  }\n]",
+  "repeat": 2,
+  "seeded_file": "src/demo/frontend_rum/metrics.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/frontend_rum",
+        "pattern": "record_raw_path|raw_path|full_path"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "src/demo/frontend_rum/**"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/frontend_rum",
+        "pattern": "allowlist|allow_list|ALLOWED_PARAMS|query"
+      },
+      "tool": "grep",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 16750,
+    "cache_read_input_tokens": 36252,
+    "input_tokens": 5095,
+    "output_tokens": 2817
+  }
+}

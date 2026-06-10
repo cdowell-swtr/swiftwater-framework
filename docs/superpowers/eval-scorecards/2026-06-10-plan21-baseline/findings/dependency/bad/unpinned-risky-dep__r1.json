@@ -1,0 +1,47 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "No version floor specified for `requests`. Every other dependency in this file carries an explicit `>=X.Y` constraint; `requests` is pinned to no minimum, meaning any version \u2014 including pre-2.32.0 releases that contain CVE-2024-35195 (credential-leaking redirect) \u2014 is acceptable to the resolver.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add a version floor: `\"requests>=2.32\"` to stay above the CVE-2024-35195 fix and be consistent with the rest of the manifest."
+    },
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "`requests` is a synchronous, blocking HTTP client. The project runs on an async-first stack (FastAPI + uvicorn). Calling `requests` directly from an async route handler will block the event loop and degrade server throughput under any concurrency.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "If the call site is inside an `async def` handler, either use `httpx.AsyncClient` (async-native) or wrap the call in `asyncio.to_thread(...)` to avoid blocking the event loop. If the call site is in a sync worker this is fine, but the use case should be documented."
+    },
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "`httpx` is already present in the `[dependency-groups] dev` group and covers the same HTTP-client use case with both sync and async APIs. Adding `requests` as a production dependency when an equivalent library already exists in the project increases the dependency surface unnecessarily.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Consider promoting `httpx>=0.28` from the dev group to the main `dependencies` list instead of adding `requests`. This removes the duplicate, keeps the async-compatible client on the production path, and avoids the event-loop-blocking concern above."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 41962,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"low\",\n    \"message\": \"No version floor specified for `requests`. Every other dependency in this file carries an explicit `>=X.Y` constraint; `requests` is pinned to no minimum, meaning any version \u2014 including pre-2.32.0 releases that contain CVE-2024-35195 (credential-leaking redirect) \u2014 is acceptable to the resolver.\",\n    \"suggestion\": \"Add a version floor: `\\\"requests>=2.32\\\"` to stay above the CVE-2024-35195 fix and be consistent with the rest of the manifest.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"low\",\n    \"message\": \"`requests` is a synchronous, blocking HTTP client. The project runs on an async-first stack (FastAPI + uvicorn). Calling `requests` directly from an async route handler will block the event loop and degrade server throughput under any concurrency.\",\n    \"suggestion\": \"If the call site is inside an `async def` handler, either use `httpx.AsyncClient` (async-native) or wrap the call in `asyncio.to_thread(...)` to avoid blocking the event loop. If the call site is in a sync worker this is fine, but the use case should be documented.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"info\",\n    \"message\": \"`httpx` is already present in the `[dependency-groups] dev` group and covers the same HTTP-client use case with both sync and async APIs. Adding `requests` as a production dependency when an equivalent library already exists in the project increases the dependency surface unnecessarily.\",\n    \"suggestion\": \"Consider promoting `httpx>=0.28` from the dev group to the main `dependencies` list instead of adding `requests`. This removes the duplicate, keeps the async-compatible client on the production path, and avoids the event-loop-blocking concern above.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 20234,
+    "input_tokens": 3,
+    "output_tokens": 2221
+  }
+}

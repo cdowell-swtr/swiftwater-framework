@@ -1,0 +1,54 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 23,
+      "message": "ItemRead adds `owner_email` and is the response_model for GET /items (and the new POST /items), so the owner's email \u2014 explicitly annotated PII in models.py ('do not include in logs or external responses') \u2014 is echoed to every client that lists or creates items. This directly contradicts the data-classification comment on the source column.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Remove `owner_email` from the externally-serialized ItemRead schema. If owner contact is genuinely needed for a privileged client, expose it via a separate, access-controlled response model rather than the public list/create endpoints."
+    },
+    {
+      "acknowledged": null,
+      "line": 47,
+      "message": "ItemCreate collects `owner_email` (PII) from request bodies, but post_item calls `create_item(session, payload.name)` and never passes it on, so the email is accepted from clients yet serves no stated purpose in this path. Collecting PII that is not used is unnecessary collection.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Either drop `owner_email` from ItemCreate if it is not needed, or, if it is intended to be stored, pass it explicitly and document the purpose and retention. Do not accept PII that the handler discards."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 50126,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 23,\n    \"severity\": \"high\",\n    \"message\": \"ItemRead adds `owner_email` and is the response_model for GET /items (and the new POST /items), so the owner's email \u2014 explicitly annotated PII in models.py ('do not include in logs or external responses') \u2014 is echoed to every client that lists or creates items. This directly contradicts the data-classification comment on the source column.\",\n    \"suggestion\": \"Remove `owner_email` from the externally-serialized ItemRead schema. If owner contact is genuinely needed for a privileged client, expose it via a separate, access-controlled response model rather than the public list/create endpoints.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 47,\n    \"severity\": \"medium\",\n    \"message\": \"ItemCreate collects `owner_email` (PII) from request bodies, but post_item calls `create_item(session, payload.name)` and never passes it on, so the email is accepted from clients yet serves no stated purpose in this path. Collecting PII that is not used is unnecessary collection.\",\n    \"suggestion\": \"Either drop `owner_email` from ItemCreate if it is not needed, or, if it is intended to be stored, pass it explicitly and document the purpose and retention. Do not accept PII that the handler discards.\"\n  }\n]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/db/repository.py",
+        "pattern": "def create_item"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/db/repository.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 16341,
+    "cache_read_input_tokens": 68899,
+    "input_tokens": 6,
+    "output_tokens": 3161
+  }
+}

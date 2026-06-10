@@ -1,0 +1,35 @@
+{
+  "agent": "data-lineage",
+  "case": "normalized-write",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": 25778,
+  "raw_text": "[]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/db/models.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo",
+        "pattern": "class Item"
+      },
+      "tool": "grep",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 21229,
+    "cache_read_input_tokens": 24929,
+    "input_tokens": 10186,
+    "output_tokens": 1372
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "agent": "env-parity",
+  "case": "service-dev-only",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 3,
+      "message": "New runtime service `widgetizer` is defined only in `infra/compose/dev.yml`, a dev-scoped overlay. `dev` composes base+observability+dev and `dev:lite` composes base+dev, so this service reaches local dev only. Staging/prod compose the self-contained `<env>.yml` + `services.yml` + `observability.yml` (per infra/deploy/README.md + strategy.sh) \u2014 none of which include `dev.yml` \u2014 so `widgetizer` will silently NOT be deployed to staging/prod. It is not local-developer-experience tooling (it runs a published application image `ghcr.io/acme/widgetizer:1.4.0` and depends on the app `postgres`), so this is a service-parity gap, not an acknowledgeable dev convenience.",
+      "path": "infra/compose/dev.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Define `widgetizer` in `infra/compose/services.yml` (which staging/prod compose alongside `<env>.yml` and `observability.yml`) so it reaches every deployed environment, or in the deployed `staging.yml`/`prod.yml` overlays directly \u2014 NOT `dev.yml` (and NOT `base.yml`, which is dev/test-only). If it is genuinely meant to be dev-only, record that decision in the decisions log rather than leaving it silently omitted from staging/prod."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 32164,
+  "raw_text": "[{\"path\": \"infra/compose/dev.yml\", \"line\": 3, \"severity\": \"high\", \"message\": \"New runtime service `widgetizer` is defined only in `infra/compose/dev.yml`, a dev-scoped overlay. `dev` composes base+observability+dev and `dev:lite` composes base+dev, so this service reaches local dev only. Staging/prod compose the self-contained `<env>.yml` + `services.yml` + `observability.yml` (per infra/deploy/README.md + strategy.sh) \u2014 none of which include `dev.yml` \u2014 so `widgetizer` will silently NOT be deployed to staging/prod. It is not local-developer-experience tooling (it runs a published application image `ghcr.io/acme/widgetizer:1.4.0` and depends on the app `postgres`), so this is a service-parity gap, not an acknowledgeable dev convenience.\", \"suggestion\": \"Define `widgetizer` in `infra/compose/services.yml` (which staging/prod compose alongside `<env>.yml` and `observability.yml`) so it reaches every deployed environment, or in the deployed `staging.yml`/`prod.yml` overlays directly \u2014 NOT `dev.yml` (and NOT `base.yml`, which is dev/test-only). If it is genuinely meant to be dev-only, record that decision in the decisions log rather than leaving it silently omitted from staging/prod.\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/compose/dev.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "Taskfile.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/deploy/README.md"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 23450,
+    "cache_read_input_tokens": 36770,
+    "input_tokens": 5095,
+    "output_tokens": 1776
+  }
+}

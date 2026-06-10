@@ -1,0 +1,37 @@
+{
+  "agent": "privacy",
+  "case": "rum-allowlists-pii",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 45,
+      "message": "Adds \"email\" to frontend_rum_allowed_query_params, causing the user's email address to be captured from the query string into RUM/telemetry for attribution. This collects PII into telemetry, and email is not needed for the stated purpose of this allowlist (UTM-style campaign attribution). The surrounding code and comment explicitly warn that adding a PII-bearing key like \"email\" is a privacy violation flagged by review-privacy.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Remove the \"email\" entry from frontend_rum_allowed_query_params. Keep the allowlist limited to non-PII attribution params (the utm_* set). If per-user attribution is genuinely required, use a pseudonymous, non-PII identifier and document the purpose, lawful basis, and retention rather than capturing raw email from the query string."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 22887,
+  "raw_text": "[{\"path\": \"src/demo/config/settings.py\", \"line\": 45, \"severity\": \"high\", \"message\": \"Adds \\\"email\\\" to frontend_rum_allowed_query_params, causing the user's email address to be captured from the query string into RUM/telemetry for attribution. This collects PII into telemetry, and email is not needed for the stated purpose of this allowlist (UTM-style campaign attribution). The surrounding code and comment explicitly warn that adding a PII-bearing key like \\\"email\\\" is a privacy violation flagged by review-privacy.\", \"suggestion\": \"Remove the \\\"email\\\" entry from frontend_rum_allowed_query_params. Keep the allowlist limited to non-PII attribution params (the utm_* set). If per-user attribution is genuinely required, use a pseudonymous, non-PII identifier and document the purpose, lawful basis, and retention rather than capturing raw email from the query string.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/config/settings.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 10182,
+    "cache_read_input_tokens": 45047,
+    "input_tokens": 4,
+    "output_tokens": 1125
+  }
+}

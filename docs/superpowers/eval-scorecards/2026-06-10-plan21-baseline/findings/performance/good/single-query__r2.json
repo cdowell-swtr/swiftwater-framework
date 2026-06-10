@@ -1,0 +1,29 @@
+{
+  "agent": "performance",
+  "case": "single-query",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 46,
+      "message": "list_items(session) fetches full Item ORM objects (id, name, created_at) but only the name column is consumed. The unused columns are hydrated into Python objects and immediately discarded. Bounded at MAX_PAGE_SIZE=100 so real-world impact is negligible, but it is unnecessary work on every call to this endpoint.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add a projection query to the repository (e.g. session.scalars(select(Item.name).order_by(Item.id).limit(bounded))) or accept a columns argument in list_items so the caller can request only Item.name, avoiding the allocation and deserialization of id and created_at."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 55183,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 46,\n    \"severity\": \"low\",\n    \"message\": \"list_items(session) fetches full Item ORM objects (id, name, created_at) but only the name column is consumed. The unused columns are hydrated into Python objects and immediately discarded. Bounded at MAX_PAGE_SIZE=100 so real-world impact is negligible, but it is unnecessary work on every call to this endpoint.\",\n    \"suggestion\": \"Add a projection query to the repository (e.g. session.scalars(select(Item.name).order_by(Item.id).limit(bounded))) or accept a columns argument in list_items so the caller can request only Item.name, avoiding the allocation and deserialization of id and created_at.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 21851,
+    "input_tokens": 3,
+    "output_tokens": 3015
+  }
+}

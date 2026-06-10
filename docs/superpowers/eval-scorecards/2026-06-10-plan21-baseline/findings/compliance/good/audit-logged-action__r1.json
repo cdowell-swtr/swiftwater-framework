@@ -1,0 +1,65 @@
+{
+  "agent": "compliance",
+  "case": "audit-logged-action",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 51,
+      "message": "`user_id` is a personal identifier under GDPR Art. 4(1). It is written to application logs with no documented retention period, no deletion path, and no right-to-erasure mechanism (GDPR Arts. 5(1)(e) and 17). The docstring's claim that 'no PII is logged or stored' is factually incorrect.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Either omit `user_id` from the log entirely, or ensure the logging pipeline has a documented retention policy, automatic purge after the retention window, and an erasure handler that scrubs log entries on Art. 17 requests. At minimum, add a retention annotation (e.g. a structured `_retention_days` field) so the log-shipper can enforce it."
+    },
+    {
+      "acknowledged": null,
+      "line": 51,
+      "message": "`name_filter` (user-supplied search term) is logged alongside `user_id`, producing a behavioural record \u2014 what this identified user searched for \u2014 with no retention limit or erasure path. Even if the filter value is not PII in isolation, tying it to a `user_id` makes the combined log record personal data under GDPR Art. 4(1).",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "If search-term logging is required for analytics or abuse detection, treat the resulting records as personal data: apply the same retention/erasure controls as `user_id`, or hash/truncate the filter before logging so it cannot be linked back to an individual."
+    },
+    {
+      "acknowledged": null,
+      "line": 42,
+      "message": "`name_filter` is accepted as a query parameter and persisted in logs (line 51), but is never forwarded to `list_items()` (line 52). Collecting and storing a data element that serves no functional purpose in the request violates the GDPR Art. 5(1)(c) data-minimisation principle.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Either pass `name_filter` to `list_items()` so it is actually used, or remove the parameter entirely. Do not log data that has no functional role in the operation."
+    },
+    {
+      "acknowledged": null,
+      "line": 41,
+      "message": "`user_id` is transmitted as a URL query parameter. Query strings are routinely captured in server access logs, reverse-proxy logs, CDN logs, browser history, and HTTP `Referer` headers \u2014 creating undocumented secondary personal-data stores with no retention or erasure policy, in violation of GDPR Arts. 5(1)(e) and 32.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Move `user_id` out of the query string: read it from a signed session cookie, a JWT in the `Authorization` header, or a request-body field on this POST endpoint. This confines the identifier to channels where retention policies are already enforced."
+    },
+    {
+      "acknowledged": null,
+      "line": 52,
+      "message": "`list_items(session)` is called without `limit` or `offset`, returning the entire item table. Unlike `GET /items`, this endpoint has no pagination, potentially exposing a disproportionately large data set per request and violating the GDPR Art. 5(1)(c) data-minimisation principle.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Apply the same `limit`/`offset` parameters (or at least a hard server-side cap equivalent to `MAX_PAGE_SIZE`) used by `get_items` to bound the response to what is strictly necessary."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 83059,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 51,\n    \"severity\": \"high\",\n    \"message\": \"`user_id` is a personal identifier under GDPR Art. 4(1). It is written to application logs with no documented retention period, no deletion path, and no right-to-erasure mechanism (GDPR Arts. 5(1)(e) and 17). The docstring's claim that 'no PII is logged or stored' is factually incorrect.\",\n    \"suggestion\": \"Either omit `user_id` from the log entirely, or ensure the logging pipeline has a documented retention policy, automatic purge after the retention window, and an erasure handler that scrubs log entries on Art. 17 requests. At minimum, add a retention annotation (e.g. a structured `_retention_days` field) so the log-shipper can enforce it.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 51,\n    \"severity\": \"medium\",\n    \"message\": \"`name_filter` (user-supplied search term) is logged alongside `user_id`, producing a behavioural record \u2014 what this identified user searched for \u2014 with no retention limit or erasure path. Even if the filter value is not PII in isolation, tying it to a `user_id` makes the combined log record personal data under GDPR Art. 4(1).\",\n    \"suggestion\": \"If search-term logging is required for analytics or abuse detection, treat the resulting records as personal data: apply the same retention/erasure controls as `user_id`, or hash/truncate the filter before logging so it cannot be linked back to an individual.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 42,\n    \"severity\": \"medium\",\n    \"message\": \"`name_filter` is accepted as a query parameter and persisted in logs (line 51), but is never forwarded to `list_items()` (line 52). Collecting and storing a data element that serves no functional purpose in the request violates the GDPR Art. 5(1)(c) data-minimisation principle.\",\n    \"suggestion\": \"Either pass `name_filter` to `list_items()` so it is actually used, or remove the parameter entirely. Do not log data that has no functional role in the operation.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 41,\n    \"severity\": \"medium\",\n    \"message\": \"`user_id` is transmitted as a URL query parameter. Query strings are routinely captured in server access logs, reverse-proxy logs, CDN logs, browser history, and HTTP `Referer` headers \u2014 creating undocumented secondary personal-data stores with no retention or erasure policy, in violation of GDPR Arts. 5(1)(e) and 32.\",\n    \"suggestion\": \"Move `user_id` out of the query string: read it from a signed session cookie, a JWT in the `Authorization` header, or a request-body field on this POST endpoint. This confines the identifier to channels where retention policies are already enforced.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 52,\n    \"severity\": \"medium\",\n    \"message\": \"`list_items(session)` is called without `limit` or `offset`, returning the entire item table. Unlike `GET /items`, this endpoint has no pagination, potentially exposing a disproportionately large data set per request and violating the GDPR Art. 5(1)(c) data-minimisation principle.\",\n    \"suggestion\": \"Apply the same `limit`/`offset` parameters (or at least a hard server-side cap equivalent to `MAX_PAGE_SIZE`) used by `get_items` to bound the response to what is strictly necessary.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 23097,
+    "input_tokens": 3,
+    "output_tokens": 4917
+  }
+}

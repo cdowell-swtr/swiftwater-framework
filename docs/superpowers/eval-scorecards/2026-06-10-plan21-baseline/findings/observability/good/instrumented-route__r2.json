@@ -1,0 +1,65 @@
+{
+  "agent": "observability",
+  "case": "instrumented-route",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 54,
+      "message": "session.commit() failure produces an unhandled 500 with no structured log at the call site. The item_id context is lost; only the global exception handler fires, without mutation-specific fields. This is a new unmetered/unlogged error path on a mutating endpoint.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Wrap the commit+refresh block in try/except, log the exception with item_id (and correlation_id) at ERROR level, then re-raise or convert to an HTTPException(500) so the call site log entry is emitted regardless of global handler behavior."
+    },
+    {
+      "acknowledged": null,
+      "line": 51,
+      "message": "_log.warning('archive_item_not_found') logs item_id but no correlation_id. If the structlog pipeline does not auto-bind a request correlation ID via contextvars middleware, this 404 error event cannot be correlated to its originating trace or request in log aggregation.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Confirm that logging_config.get_logger() configures a contextvars processor that injects the correlation_id (e.g. from the ASGI scope or OTel trace context) automatically. If not, pass it explicitly: _log.warning('archive_item_not_found', item_id=item_id, correlation_id=...)."
+    },
+    {
+      "acknowledged": null,
+      "line": 56,
+      "message": "_log.info('archive_item_completed') has the same missing correlation_id as the 404 path \u2014 successful mutation events are also unlinked from their originating request in log aggregation, defeating end-to-end trace correlation for the happy path.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Same fix as line 51: ensure the structlog context processor binds correlation_id for every request, or pass it explicitly here."
+    },
+    {
+      "acknowledged": null,
+      "line": 42,
+      "message": "No SLO threshold is defined in slo.py / default_slos() for the new POST /items/{item_id}/archive endpoint. The global request_latency_p99_ms and error_rate_pct SLOs apply fleet-wide but cannot surface archive-specific degradation (e.g. elevated 404 or commit-failure rates on this path).",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a dedicated Prometheus counter (e.g. items_archived_total / items_archive_errors_total) emitted at lines 52 and 54, and consider an endpoint-scoped SLO entry or Grafana panel so archive failures can be alerted on independently of the global error rate."
+    },
+    {
+      "acknowledged": null,
+      "line": 55,
+      "message": "session.refresh() executes after a successful commit. If refresh raises (e.g. row deleted by a concurrent transaction between commit and refresh), the archive mutation DID succeed but archive_item_completed is never logged \u2014 creating a silent observability gap where the operation is unrecorded despite having taken effect.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Emit _log.info('archive_item_committed', item_id=item_id) immediately after session.commit() to anchor durability in logs unconditionally, keeping the existing archive_item_completed log after refresh as a secondary response-ready event."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 129066,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 54,\n    \"severity\": \"high\",\n    \"message\": \"session.commit() failure produces an unhandled 500 with no structured log at the call site. The item_id context is lost; only the global exception handler fires, without mutation-specific fields. This is a new unmetered/unlogged error path on a mutating endpoint.\",\n    \"suggestion\": \"Wrap the commit+refresh block in try/except, log the exception with item_id (and correlation_id) at ERROR level, then re-raise or convert to an HTTPException(500) so the call site log entry is emitted regardless of global handler behavior.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 51,\n    \"severity\": \"medium\",\n    \"message\": \"_log.warning('archive_item_not_found') logs item_id but no correlation_id. If the structlog pipeline does not auto-bind a request correlation ID via contextvars middleware, this 404 error event cannot be correlated to its originating trace or request in log aggregation.\",\n    \"suggestion\": \"Confirm that logging_config.get_logger() configures a contextvars processor that injects the correlation_id (e.g. from the ASGI scope or OTel trace context) automatically. If not, pass it explicitly: _log.warning('archive_item_not_found', item_id=item_id, correlation_id=...).\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 56,\n    \"severity\": \"medium\",\n    \"message\": \"_log.info('archive_item_completed') has the same missing correlation_id as the 404 path \u2014 successful mutation events are also unlinked from their originating request in log aggregation, defeating end-to-end trace correlation for the happy path.\",\n    \"suggestion\": \"Same fix as line 51: ensure the structlog context processor binds correlation_id for every request, or pass it explicitly here.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 42,\n    \"severity\": \"medium\",\n    \"message\": \"No SLO threshold is defined in slo.py / default_slos() for the new POST /items/{item_id}/archive endpoint. The global request_latency_p99_ms and error_rate_pct SLOs apply fleet-wide but cannot surface archive-specific degradation (e.g. elevated 404 or commit-failure rates on this path).\",\n    \"suggestion\": \"Add a dedicated Prometheus counter (e.g. items_archived_total / items_archive_errors_total) emitted at lines 52 and 54, and consider an endpoint-scoped SLO entry or Grafana panel so archive failures can be alerted on independently of the global error rate.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 55,\n    \"severity\": \"low\",\n    \"message\": \"session.refresh() executes after a successful commit. If refresh raises (e.g. row deleted by a concurrent transaction between commit and refresh), the archive mutation DID succeed but archive_item_completed is never logged \u2014 creating a silent observability gap where the operation is unrecorded despite having taken effect.\",\n    \"suggestion\": \"Emit _log.info('archive_item_committed', item_id=item_id) immediately after session.commit() to anchor durability in logs unconditionally, keeping the existing archive_item_completed log after refresh as a secondary response-ready event.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 26265,
+    "input_tokens": 3,
+    "output_tokens": 8024
+  }
+}

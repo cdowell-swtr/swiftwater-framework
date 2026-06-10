@@ -1,0 +1,36 @@
+{
+  "agent": "architecture",
+  "case": "clean-layering",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": 20427,
+  "raw_text": "[]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/db/repository.py",
+        "pattern": "def create_item"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/routes/items.py",
+        "pattern": "SessionDep"
+      },
+      "tool": "grep",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 15202,
+    "cache_read_input_tokens": 35388,
+    "input_tokens": 5095,
+    "output_tokens": 740
+  }
+}

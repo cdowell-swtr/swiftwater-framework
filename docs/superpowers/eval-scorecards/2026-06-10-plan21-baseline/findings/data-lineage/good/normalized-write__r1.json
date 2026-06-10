@@ -1,0 +1,19 @@
+{
+  "agent": "data-lineage",
+  "case": "normalized-write",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": 13092,
+  "raw_text": "[]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 5091,
+    "cache_read_input_tokens": 22898,
+    "input_tokens": 2,
+    "output_tokens": 643
+  }
+}

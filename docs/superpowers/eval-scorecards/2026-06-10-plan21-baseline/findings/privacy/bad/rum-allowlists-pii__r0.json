@@ -1,0 +1,37 @@
+{
+  "agent": "privacy",
+  "case": "rum-allowlists-pii",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 45,
+      "message": "Adds \"email\" to frontend_rum_allowed_query_params, causing the user's email address (PII) to be collected from the query string and captured into RUM/telemetry. The surrounding allowlist exists for non-PII UTM attribution params only; email is not needed for attribution and the file's own comment plus the added inline comment confirm it is PII flowing into telemetry. Email in telemetry is logged/retained PII collected beyond the stated attribution purpose.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Remove the \"email\" entry from frontend_rum_allowed_query_params. Keep the allowlist limited to non-PII attribution keys (utm_*). If user identity is genuinely required for an attribution use case, capture a non-reversible pseudonymous id server-side under a documented lawful basis and retention limit, never the raw email from the query string."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 18276,
+  "raw_text": "[{\"path\":\"src/demo/config/settings.py\",\"line\":45,\"severity\":\"high\",\"message\":\"Adds \\\"email\\\" to frontend_rum_allowed_query_params, causing the user's email address (PII) to be collected from the query string and captured into RUM/telemetry. The surrounding allowlist exists for non-PII UTM attribution params only; email is not needed for attribution and the file's own comment plus the added inline comment confirm it is PII flowing into telemetry. Email in telemetry is logged/retained PII collected beyond the stated attribution purpose.\",\"suggestion\":\"Remove the \\\"email\\\" entry from frontend_rum_allowed_query_params. Keep the allowlist limited to non-PII attribution keys (utm_*). If user identity is genuinely required for an attribution use case, capture a non-reversible pseudonymous id server-side under a documented lawful basis and retention limit, never the raw email from the query string.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/config/settings.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 20926,
+    "cache_read_input_tokens": 24121,
+    "input_tokens": 10186,
+    "output_tokens": 848
+  }
+}

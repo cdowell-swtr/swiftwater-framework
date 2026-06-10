@@ -1,0 +1,67 @@
+{
+  "agent": "env-parity",
+  "case": "service-dev-only",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 3,
+      "message": "The `widgetizer` runtime service is defined only in `dev.yml` (profiles: [\"dev\"]), so it reaches dev but NOT staging/prod. Per the deploy composition (strategy.sh: `<env>.yml + services.yml + observability.yml`), `dev.yml` is a dev/test-only overlay and is never composed in staging/prod. This is not local-developer-experience tooling (it runs a versioned application image `ghcr.io/acme/widgetizer:1.4.0`, holds a Postgres connection, and gates on `postgres: service_healthy`) \u2014 it is an app-tier dependency that will silently be absent in production.",
+      "path": "infra/compose/dev.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Move the `widgetizer` service definition to `infra/compose/services.yml` (the battery service overlay that staging/prod compose alongside `<env>.yml` and `observability.yml`) so it reaches every deployed environment, or add it to each deployed `<env>.yml` (staging.yml/prod.yml) directly. Do NOT place it in `base.yml`, which only reaches dev/test. If dev-only is genuinely intended, record it in the decisions log rather than leaving it silently omitted from prod."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 47455,
+  "raw_text": "[{\"path\": \"infra/compose/dev.yml\", \"line\": 3, \"severity\": \"high\", \"message\": \"The `widgetizer` runtime service is defined only in `dev.yml` (profiles: [\\\"dev\\\"]), so it reaches dev but NOT staging/prod. Per the deploy composition (strategy.sh: `<env>.yml + services.yml + observability.yml`), `dev.yml` is a dev/test-only overlay and is never composed in staging/prod. This is not local-developer-experience tooling (it runs a versioned application image `ghcr.io/acme/widgetizer:1.4.0`, holds a Postgres connection, and gates on `postgres: service_healthy`) \u2014 it is an app-tier dependency that will silently be absent in production.\", \"suggestion\": \"Move the `widgetizer` service definition to `infra/compose/services.yml` (the battery service overlay that staging/prod compose alongside `<env>.yml` and `observability.yml`) so it reaches every deployed environment, or add it to each deployed `<env>.yml` (staging.yml/prod.yml) directly. Do NOT place it in `base.yml`, which only reaches dev/test. If dev-only is genuinely intended, record it in the decisions log rather than leaving it silently omitted from prod.\"}]",
+  "repeat": 1,
+  "seeded_file": "infra/compose/dev.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "-i": true,
+        "output_mode": "files_with_matches",
+        "pattern": "widgetizer"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/**/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/compose/services.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/staging.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 38814,
+    "cache_read_input_tokens": 97619,
+    "input_tokens": 10192,
+    "output_tokens": 2617
+  }
+}

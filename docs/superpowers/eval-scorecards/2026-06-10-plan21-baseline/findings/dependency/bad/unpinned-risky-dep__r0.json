@@ -1,0 +1,56 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "No version constraint on `requests`. Every other production dependency carries a lower-bound pin (e.g. `>=2.32`). An unpinned transitive pull can silently install an older or future-incompatible release and weakens reproducibility.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add a lower-bound pin: `\"requests>=2.32\"`."
+    },
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "`httpx>=0.28` is already declared in `[dependency-groups] dev`. The project uses FastAPI (async); `httpx` is the idiomatic async-native HTTP client for this stack and is already a known-good dep. Adding the synchronous `requests` to production deps introduces a second HTTP client library without an apparent justification in the diff.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "If an HTTP client is needed in production code, promote `httpx` from the dev group to the main `dependencies` list instead of adding `requests`. If `requests` is genuinely required (e.g. by a third-party SDK that imports it directly), document that reason in a comment and pin the version."
+    },
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "`requests` is a blocking/synchronous library. Called directly inside an `async def` FastAPI route or background task it will block the event loop, degrading throughput under load.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Use `httpx.AsyncClient` for async call sites, or run `requests` calls in a thread pool via `asyncio.to_thread()` / `run_in_executor()` if `requests` must be retained."
+    },
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "The diff adds only the dependency declaration; no new source file using `requests` is included. Without a corresponding usage site it is unclear what need this covers and whether it duplicates `httpx`.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Confirm the call site exists and cannot be served by the already-present `httpx` before merging."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 40895,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"low\",\n    \"message\": \"No version constraint on `requests`. Every other production dependency carries a lower-bound pin (e.g. `>=2.32`). An unpinned transitive pull can silently install an older or future-incompatible release and weakens reproducibility.\",\n    \"suggestion\": \"Add a lower-bound pin: `\\\"requests>=2.32\\\"`.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"low\",\n    \"message\": \"`httpx>=0.28` is already declared in `[dependency-groups] dev`. The project uses FastAPI (async); `httpx` is the idiomatic async-native HTTP client for this stack and is already a known-good dep. Adding the synchronous `requests` to production deps introduces a second HTTP client library without an apparent justification in the diff.\",\n    \"suggestion\": \"If an HTTP client is needed in production code, promote `httpx` from the dev group to the main `dependencies` list instead of adding `requests`. If `requests` is genuinely required (e.g. by a third-party SDK that imports it directly), document that reason in a comment and pin the version.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"low\",\n    \"message\": \"`requests` is a blocking/synchronous library. Called directly inside an `async def` FastAPI route or background task it will block the event loop, degrading throughput under load.\",\n    \"suggestion\": \"Use `httpx.AsyncClient` for async call sites, or run `requests` calls in a thread pool via `asyncio.to_thread()` / `run_in_executor()` if `requests` must be retained.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"info\",\n    \"message\": \"The diff adds only the dependency declaration; no new source file using `requests` is included. Without a corresponding usage site it is unclear what need this covers and whether it duplicates `httpx`.\",\n    \"suggestion\": \"Confirm the call site exists and cannot be served by the already-present `httpx` before merging.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 11754,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 2277
+  }
+}

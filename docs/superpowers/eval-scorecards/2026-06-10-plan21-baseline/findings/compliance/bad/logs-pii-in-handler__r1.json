@@ -1,0 +1,56 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 53,
+      "message": "Raw email address (PII) written to the application log at INFO level. Standard log pipelines (files, stdout collectors, cloud log sinks) have no erasure path, making it practically impossible to honour a GDPR Article 17 right-to-erasure request. There is also no declared retention ceiling, violating Article 5(1)(e) storage-limitation.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Replace the raw value with a pseudonymised token (e.g. a one-way SHA-256 hash of the email) so the log entry carries no directly identifying information and erasure of the source record satisfies the obligation. Emit at DEBUG rather than INFO so the entry is excluded from production log sinks by default."
+    },
+    {
+      "acknowledged": null,
+      "line": 41,
+      "message": "The email address is received as a URL query parameter (`Query(...)`). Query strings are captured verbatim in web-server access logs, reverse-proxy logs, CDN logs, browser history, and HTTP Referer headers on any subsequent navigation\u2014all without any erasure mechanism. This creates multiple uncontrolled PII stores, violating GDPR Article 25 (data protection by design and by default) and Article 5(1)(f) (integrity and confidentiality).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Move PII inputs to the POST request body (a Pydantic model), where they are not logged automatically by infrastructure. Since the endpoint is already a POST, define a request schema (e.g. `class SearchRequest(BaseModel): email: EmailStr; name_filter: str = ''`) and accept it as `Body(...)`."
+    },
+    {
+      "acknowledged": null,
+      "line": 52,
+      "message": "`logging.getLogger().info()` is an operational log, not a structured audit event. The docstring explicitly acknowledges 'no audit trail'. Access to personalised data driven by a user identity is a sensitive operation requiring a tamper-evident, attributable audit record under GDPR Article 5(2) (accountability) and, depending on jurisdiction, sector-specific retention rules (e.g. ePrivacy). An INFO line in an application log does not constitute an audit trail\u2014it can be rotated out, filtered, or suppressed without detection.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Emit a dedicated audit event to a separate, append-only audit sink (e.g. a structured JSON record to an immutable audit log table or a write-once object-store bucket) containing: pseudonymised subject identifier, operation name, timestamp, correlation-id, and outcome. Keep this separate from the operational log so retention and access policies can be enforced independently."
+    },
+    {
+      "acknowledged": null,
+      "line": 41,
+      "message": "The email is declared as being collected for 'personalisation', but the function body makes no use of it\u2014it calls `list_items(session)` with no email argument and returns an unpersonalised result set. Collecting personal data that is not actually used for the stated purpose violates GDPR Article 5(1)(b) (purpose limitation) and Article 5(1)(c) (data minimisation).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Either (a) remove the `email` parameter entirely if personalisation is not yet implemented, or (b) implement the personalisation logic so the data is actually used for the stated purpose. Do not collect PII speculatively."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 64958,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 53,\n    \"severity\": \"high\",\n    \"message\": \"Raw email address (PII) written to the application log at INFO level. Standard log pipelines (files, stdout collectors, cloud log sinks) have no erasure path, making it practically impossible to honour a GDPR Article 17 right-to-erasure request. There is also no declared retention ceiling, violating Article 5(1)(e) storage-limitation.\",\n    \"suggestion\": \"Replace the raw value with a pseudonymised token (e.g. a one-way SHA-256 hash of the email) so the log entry carries no directly identifying information and erasure of the source record satisfies the obligation. Emit at DEBUG rather than INFO so the entry is excluded from production log sinks by default.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 41,\n    \"severity\": \"high\",\n    \"message\": \"The email address is received as a URL query parameter (`Query(...)`). Query strings are captured verbatim in web-server access logs, reverse-proxy logs, CDN logs, browser history, and HTTP Referer headers on any subsequent navigation\u2014all without any erasure mechanism. This creates multiple uncontrolled PII stores, violating GDPR Article 25 (data protection by design and by default) and Article 5(1)(f) (integrity and confidentiality).\",\n    \"suggestion\": \"Move PII inputs to the POST request body (a Pydantic model), where they are not logged automatically by infrastructure. Since the endpoint is already a POST, define a request schema (e.g. `class SearchRequest(BaseModel): email: EmailStr; name_filter: str = ''`) and accept it as `Body(...)`.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 52,\n    \"severity\": \"high\",\n    \"message\": \"`logging.getLogger().info()` is an operational log, not a structured audit event. The docstring explicitly acknowledges 'no audit trail'. Access to personalised data driven by a user identity is a sensitive operation requiring a tamper-evident, attributable audit record under GDPR Article 5(2) (accountability) and, depending on jurisdiction, sector-specific retention rules (e.g. ePrivacy). An INFO line in an application log does not constitute an audit trail\u2014it can be rotated out, filtered, or suppressed without detection.\",\n    \"suggestion\": \"Emit a dedicated audit event to a separate, append-only audit sink (e.g. a structured JSON record to an immutable audit log table or a write-once object-store bucket) containing: pseudonymised subject identifier, operation name, timestamp, correlation-id, and outcome. Keep this separate from the operational log so retention and access policies can be enforced independently.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 41,\n    \"severity\": \"high\",\n    \"message\": \"The email is declared as being collected for 'personalisation', but the function body makes no use of it\u2014it calls `list_items(session)` with no email argument and returns an unpersonalised result set. Collecting personal data that is not actually used for the stated purpose violates GDPR Article 5(1)(b) (purpose limitation) and Article 5(1)(c) (data minimisation).\",\n    \"suggestion\": \"Either (a) remove the `email` parameter entirely if personalisation is not yet implemented, or (b) implement the personalisation logic so the data is actually used for the stated purpose. Do not collect PII speculatively.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 23115,
+    "input_tokens": 3,
+    "output_tokens": 3247
+  }
+}

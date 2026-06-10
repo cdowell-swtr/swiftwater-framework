@@ -1,0 +1,29 @@
+{
+  "agent": "accessibility",
+  "case": "img-no-alt-rendered",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 30,
+      "message": "The <img> element has no alt attribute. Screen readers will fall back to announcing the filename or URL, giving users no meaningful description of the banner image. This violates WCAG 2.1 SC 1.1.1 (Non-text Content).",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add a descriptive alt attribute, e.g. alt=\"Items catalogue banner\". If the image is purely decorative, use alt=\"\" to instruct assistive technology to skip it."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 14047,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"frontend/src/Items.tsx\",\n    \"line\": 30,\n    \"severity\": \"high\",\n    \"message\": \"The <img> element has no alt attribute. Screen readers will fall back to announcing the filename or URL, giving users no meaningful description of the banner image. This violates WCAG 2.1 SC 1.1.1 (Non-text Content).\",\n    \"suggestion\": \"Add a descriptive alt attribute, e.g. alt=\\\"Items catalogue banner\\\". If the image is purely decorative, use alt=\\\"\\\" to instruct assistive technology to skip it.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 22245,
+    "input_tokens": 3,
+    "output_tokens": 668
+  }
+}

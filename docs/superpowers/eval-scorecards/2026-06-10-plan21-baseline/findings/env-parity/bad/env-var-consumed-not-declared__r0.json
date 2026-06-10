@@ -1,0 +1,59 @@
+{
+  "agent": "env-parity",
+  "case": "env-var-consumed-not-declared",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 23,
+      "message": "New pydantic setting `widget_timeout_s` (consumed as `APP_WIDGET_TIMEOUT_S` under the APP_ prefix) is not declared in `.env.example`. Operators have no documented knob to tune the widget service call timeout per environment, so the field silently falls back to its 5.0s default in DEV\u2192CI\u2192STAGE\u2192PROD.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` to the framework-managed block of `.env.example` (alongside the other APP_* SLO/timeout settings) so the variable is documented and overridable per environment."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 38710,
+  "raw_text": "[{\"path\": \"src/demo/config/settings.py\", \"line\": 23, \"severity\": \"high\", \"message\": \"New pydantic setting `widget_timeout_s` (consumed as `APP_WIDGET_TIMEOUT_S` under the APP_ prefix) is not declared in `.env.example`. Operators have no documented knob to tune the widget service call timeout per environment, so the field silently falls back to its 5.0s default in DEV\u2192CI\u2192STAGE\u2192PROD.\", \"suggestion\": \"Add `APP_WIDGET_TIMEOUT_S=5.0` to the framework-managed block of `.env.example` (alongside the other APP_* SLO/timeout settings) so the variable is documented and overridable per environment.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/.env.example"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/settings.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "-i": true,
+        "pattern": "widget"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": ".env.example"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 43067,
+    "cache_read_input_tokens": 85385,
+    "input_tokens": 15283,
+    "output_tokens": 1823
+  }
+}

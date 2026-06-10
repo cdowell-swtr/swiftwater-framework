@@ -1,0 +1,65 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 38,
+      "message": "Public endpoint `count_items` has no docstring. The sibling `get_items` documents its pagination semantics, bounded reads, and serialization path; this function is entirely undocumented.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add a docstring, e.g.: \"\"\"Return the total number of items. Note: count is bounded by the repository's DEFAULT_PAGE_SIZE (50); this reflects a single page, not the full table size.\"\"\""
+    },
+    {
+      "acknowledged": null,
+      "line": 39,
+      "message": "`list_items(session)` is called with no `limit` argument, so it silently uses `DEFAULT_PAGE_SIZE = 50`. The returned `count` is therefore capped at 50 and does not reflect the true row count. This subtle bound is nowhere documented in the function, the route decorator, or any comment.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Document the cap in the docstring and/or rename the key to `page_count`; alternatively use a `SELECT count(*)` query so the semantics match what callers expect from a `/count` endpoint."
+    },
+    {
+      "acknowledged": null,
+      "line": 37,
+      "message": "The route decorator has no `response_model`, `summary`, or `tags`. The OpenAPI spec generated from this route will show a bare `dict` return type with no description, unlike `/items` which carries `response_model=list[ItemRead]`.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Add `response_model=dict` (or a typed `ItemCount` Pydantic model) and a `summary=` string to keep the generated OpenAPI schema self-describing."
+    },
+    {
+      "acknowledged": null,
+      "line": 115,
+      "message": "The Endpoints section lists `GET /items` but does not mention the new `GET /items/count` route. The spec will be stale for anyone reading the README.",
+      "path": "README.md",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add `- \\`GET /items/count\\` \u2014 returns the count of items (bounded by DEFAULT_PAGE_SIZE)` to the Endpoints section."
+    },
+    {
+      "acknowledged": null,
+      "line": 1,
+      "message": "README instructs contributors to run `task openapi:export` and commit the updated `openapi.json` after every route change, or CI's `contract` job will fail. The diff adds a new route but shows no corresponding update to `openapi.json`.",
+      "path": "openapi.json",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Run `task openapi:export` and commit the regenerated `openapi.json` alongside this change."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 86178,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 38,\n    \"severity\": \"low\",\n    \"message\": \"Public endpoint `count_items` has no docstring. The sibling `get_items` documents its pagination semantics, bounded reads, and serialization path; this function is entirely undocumented.\",\n    \"suggestion\": \"Add a docstring, e.g.: \\\"\\\"\\\"Return the total number of items. Note: count is bounded by the repository's DEFAULT_PAGE_SIZE (50); this reflects a single page, not the full table size.\\\"\\\"\\\"\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 39,\n    \"severity\": \"low\",\n    \"message\": \"`list_items(session)` is called with no `limit` argument, so it silently uses `DEFAULT_PAGE_SIZE = 50`. The returned `count` is therefore capped at 50 and does not reflect the true row count. This subtle bound is nowhere documented in the function, the route decorator, or any comment.\",\n    \"suggestion\": \"Document the cap in the docstring and/or rename the key to `page_count`; alternatively use a `SELECT count(*)` query so the semantics match what callers expect from a `/count` endpoint.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 37,\n    \"severity\": \"info\",\n    \"message\": \"The route decorator has no `response_model`, `summary`, or `tags`. The OpenAPI spec generated from this route will show a bare `dict` return type with no description, unlike `/items` which carries `response_model=list[ItemRead]`.\",\n    \"suggestion\": \"Add `response_model=dict` (or a typed `ItemCount` Pydantic model) and a `summary=` string to keep the generated OpenAPI schema self-describing.\"\n  },\n  {\n    \"path\": \"README.md\",\n    \"line\": 115,\n    \"severity\": \"low\",\n    \"message\": \"The Endpoints section lists `GET /items` but does not mention the new `GET /items/count` route. The spec will be stale for anyone reading the README.\",\n    \"suggestion\": \"Add `- \\\\`GET /items/count\\\\` \u2014 returns the count of items (bounded by DEFAULT_PAGE_SIZE)` to the Endpoints section.\"\n  },\n  {\n    \"path\": \"openapi.json\",\n    \"line\": 1,\n    \"severity\": \"low\",\n    \"message\": \"README instructs contributors to run `task openapi:export` and commit the updated `openapi.json` after every route change, or CI's `contract` job will fail. The diff adds a new route but shows no corresponding update to `openapi.json`.\",\n    \"suggestion\": \"Run `task openapi:export` and commit the regenerated `openapi.json` alongside this change.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 31762,
+    "input_tokens": 3,
+    "output_tokens": 4580
+  }
+}

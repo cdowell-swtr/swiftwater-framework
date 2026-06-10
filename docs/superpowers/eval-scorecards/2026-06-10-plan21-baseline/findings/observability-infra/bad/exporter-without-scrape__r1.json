@@ -1,0 +1,64 @@
+{
+  "agent": "observability-infra",
+  "case": "exporter-without-scrape",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 94,
+      "message": "New `redis-exporter` service exposes Redis metrics on :9121, but `infra/observability/prometheus/prometheus.yml` has no scrape_config targeting `redis-exporter:9121` (it only scrapes prometheus, otel-collector, and postgres-exporter). The exporter is added to the prod-bound `observability.yml` overlay, so Redis \u2014 a prod runtime data store defined in `base.yml:40` \u2014 produces zero collected metrics. An exporter with no scrape job is dead weight: the observability never actually reaches Prometheus.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add a scrape job to `prometheus.yml`:\n  - job_name: redis\n    static_configs:\n      - targets: [\"redis-exporter:9121\"]"
+    },
+    {
+      "acknowledged": null,
+      "line": 94,
+      "message": "The new `redis-exporter` wires up a Redis observability surface, but there is no corresponding alert rule file under `infra/observability/prometheus/alerts/` (existing files cover only alertmanager, otel-collector, postgres, prometheus, slo). Redis is a prod runtime dependency, so adding the exporter without any alerts (e.g. redis down, memory/maxmemory pressure, rejected connections, replication lag) leaves the surface unmonitored despite now being instrumented.",
+      "path": "infra/compose/observability.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add `infra/observability/prometheus/alerts/redis_alerts.yml` with at least a RedisDown alert (`redis_up == 0`) routed to an existing Alertmanager receiver, plus memory/eviction alerts."
+    },
+    {
+      "acknowledged": null,
+      "line": 94,
+      "message": "No Grafana dashboard accompanies the new `redis-exporter`. Existing dashboards in `infra/observability/grafana/dashboards/` cover otel-collector, postgres, prometheus, and slo \u2014 there is no redis.json. The pattern in this repo is exporter + scrape job + alert rule + dashboard per surface (cf. postgres-exporter, which has postgres_alerts.yml and postgres.json); the Redis surface is missing the dashboard half of that contract.",
+      "path": "infra/compose/observability.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add `infra/observability/grafana/dashboards/redis.json` with panels for the key `redis_exporter` metrics (uptime, memory, connected clients, ops/sec, evictions) so the new metrics are visualized, mirroring the postgres dashboard."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 67918,
+  "raw_text": "[\n  {\n    \"path\": \"infra/compose/observability.yml\",\n    \"line\": 94,\n    \"severity\": \"high\",\n    \"message\": \"New `redis-exporter` service exposes Redis metrics on :9121, but `infra/observability/prometheus/prometheus.yml` has no scrape_config targeting `redis-exporter:9121` (it only scrapes prometheus, otel-collector, and postgres-exporter). The exporter is added to the prod-bound `observability.yml` overlay, so Redis \u2014 a prod runtime data store defined in `base.yml:40` \u2014 produces zero collected metrics. An exporter with no scrape job is dead weight: the observability never actually reaches Prometheus.\",\n    \"suggestion\": \"Add a scrape job to `prometheus.yml`:\\n  - job_name: redis\\n    static_configs:\\n      - targets: [\\\"redis-exporter:9121\\\"]\"\n  },\n  {\n    \"path\": \"infra/compose/observability.yml\",\n    \"line\": 94,\n    \"severity\": \"medium\",\n    \"message\": \"The new `redis-exporter` wires up a Redis observability surface, but there is no corresponding alert rule file under `infra/observability/prometheus/alerts/` (existing files cover only alertmanager, otel-collector, postgres, prometheus, slo). Redis is a prod runtime dependency, so adding the exporter without any alerts (e.g. redis down, memory/maxmemory pressure, rejected connections, replication lag) leaves the surface unmonitored despite now being instrumented.\",\n    \"suggestion\": \"Add `infra/observability/prometheus/alerts/redis_alerts.yml` with at least a RedisDown alert (`redis_up == 0`) routed to an existing Alertmanager receiver, plus memory/eviction alerts.\"\n  },\n  {\n    \"path\": \"infra/compose/observability.yml\",\n    \"line\": 94,\n    \"severity\": \"medium\",\n    \"message\": \"No Grafana dashboard accompanies the new `redis-exporter`. Existing dashboards in `infra/observability/grafana/dashboards/` cover otel-collector, postgres, prometheus, and slo \u2014 there is no redis.json. The pattern in this repo is exporter + scrape job + alert rule + dashboard per surface (cf. postgres-exporter, which has postgres_alerts.yml and postgres.json); the Redis surface is missing the dashboard half of that contract.\",\n    \"suggestion\": \"Add `infra/observability/grafana/dashboards/redis.json` with panels for the key `redis_exporter` metrics (uptime, memory, connected clients, ops/sec, evictions) so the new metrics are visualized, mirroring the postgres dashboard.\"\n  }\n]",
+  "repeat": 1,
+  "seeded_file": "infra/compose/observability.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "infra/**/*"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "ignore_case": true,
+        "path": "infra",
+        "pattern": "redis"
+      },
+      "tool": "grep",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 28312,
+    "cache_read_input_tokens": 110275,
+    "input_tokens": 5370,
+    "output_tokens": 4659
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "agent": "data-integrity",
+  "case": "atomic-bulk-insert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 60,
+      "message": "Returned Item objects will have created_at=None. engine.py configures the sessionmaker with expire_on_commit=False, so SQLAlchemy never expires attributes and lazily re-fetches server-generated values after commit. The created_at column is defined with server_default=func.now() and is never assigned by Python; without eager_defaults=True on the mapper or an explicit session.refresh(), the attribute stays in its ORM-pending state (None) on every returned object. The docstring claim that 'server-assigned ids are populated by the flush inside session.commit()' holds only for the PK (fetched via RETURNING/lastrowid); it does not extend to other server_default columns. By contrast, create_item defensively calls session.refresh(item) for exactly this reason.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Either (a) call session.refresh(obj) for every item in `created` before returning, (b) add __mapper_args__ = {'eager_defaults': True} to the Item model so SQLAlchemy fetches all server-default columns via RETURNING in the same INSERT round-trip, or (c) document explicitly that created_at will be None on return and require callers to refresh."
+    },
+    {
+      "acknowledged": null,
+      "line": 58,
+      "message": "The items table has no UNIQUE constraint on the name column (migration 0001_initial.py declares only NOT NULL). Within-batch deduplication prevents duplicates inside a single call, but two concurrent bulk_create_items calls with overlapping names will both succeed and silently insert duplicate rows, violating any name-uniqueness invariant the business may rely on. The docstring references sqlalchemy.exc.IntegrityError from 'a unique-constraint violation' as a real runtime concern, but no such constraint exists \u2014 that error path is dead code and the documented safety net is absent.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a UniqueConstraint (or unique=True) on Item.name in the model and a corresponding migration, or explicitly document that name uniqueness is not enforced at the database level and remove the misleading IntegrityError reference."
+    },
+    {
+      "acknowledged": null,
+      "line": 55,
+      "message": "The 1000-row cap is evaluated against the de-duplicated count, not the raw input length. A caller supplying 1001 names where any one is a duplicate reduces to 1000 unique entries and silently bypasses the cap, inserting exactly the maximum number of rows the cap was meant to prevent. The intent of the cap ('avoid an unbounded insert') suggests it should apply to the raw request size, not just the unique count after transformation.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Check len(names) > 1000 before the dedup loop to bound the raw input, and keep the post-dedup check as a secondary guard; or explicitly document that only the unique-name count is bounded so callers understand the semantics."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 163160,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 60,\n    \"severity\": \"high\",\n    \"message\": \"Returned Item objects will have created_at=None. engine.py configures the sessionmaker with expire_on_commit=False, so SQLAlchemy never expires attributes and lazily re-fetches server-generated values after commit. The created_at column is defined with server_default=func.now() and is never assigned by Python; without eager_defaults=True on the mapper or an explicit session.refresh(), the attribute stays in its ORM-pending state (None) on every returned object. The docstring claim that 'server-assigned ids are populated by the flush inside session.commit()' holds only for the PK (fetched via RETURNING/lastrowid); it does not extend to other server_default columns. By contrast, create_item defensively calls session.refresh(item) for exactly this reason.\",\n    \"suggestion\": \"Either (a) call session.refresh(obj) for every item in `created` before returning, (b) add __mapper_args__ = {'eager_defaults': True} to the Item model so SQLAlchemy fetches all server-default columns via RETURNING in the same INSERT round-trip, or (c) document explicitly that created_at will be None on return and require callers to refresh.\"\n  },\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 58,\n    \"severity\": \"medium\",\n    \"message\": \"The items table has no UNIQUE constraint on the name column (migration 0001_initial.py declares only NOT NULL). Within-batch deduplication prevents duplicates inside a single call, but two concurrent bulk_create_items calls with overlapping names will both succeed and silently insert duplicate rows, violating any name-uniqueness invariant the business may rely on. The docstring references sqlalchemy.exc.IntegrityError from 'a unique-constraint violation' as a real runtime concern, but no such constraint exists \u2014 that error path is dead code and the documented safety net is absent.\",\n    \"suggestion\": \"Add a UniqueConstraint (or unique=True) on Item.name in the model and a corresponding migration, or explicitly document that name uniqueness is not enforced at the database level and remove the misleading IntegrityError reference.\"\n  },\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 55,\n    \"severity\": \"medium\",\n    \"message\": \"The 1000-row cap is evaluated against the de-duplicated count, not the raw input length. A caller supplying 1001 names where any one is a duplicate reduces to 1000 unique entries and silently bypasses the cap, inserting exactly the maximum number of rows the cap was meant to prevent. The intent of the cap ('avoid an unbounded insert') suggests it should apply to the raw request size, not just the unique count after transformation.\",\n    \"suggestion\": \"Check len(names) > 1000 before the dedup loop to bound the raw input, and keep the post-dedup check as a secondary guard; or explicitly document that only the unique-name count is bounded so callers understand the semantics.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 21621,
+    "input_tokens": 3,
+    "output_tokens": 9320
+  }
+}

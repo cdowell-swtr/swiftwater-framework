@@ -1,0 +1,56 @@
+{
+  "agent": "observability",
+  "case": "correlation-id-logging",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 59,
+      "message": "`_log.error('delete_item_failed', item_id=item_id)` is called without `exc_info=True`. The log event carries the structlog-injected correlation_id but contains no exception type, message, or traceback \u2014 the error path is effectively unobservable in production because there is no actionable diagnostic information to reconstruct root cause.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Pass `exc_info=True`: `_log.error('delete_item_failed', item_id=item_id, exc_info=True)` so the full exception chain is bound to the structured log event alongside the correlation_id."
+    },
+    {
+      "acknowledged": null,
+      "line": 42,
+      "message": "No application-level counter metric for delete operations. `MetricsRegistry` and `ObservabilityMiddleware` record only fleet-wide HTTP p99 latency and 5xx error rate. A surge in successful or failed deletes is invisible in `/metrics`, `/health`, or any Prometheus alert until it moves the fleet-wide `error_rate_pct` SLO \u2014 by which point many deletes may have silently failed.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add `items_deleted_total` and `item_deletion_errors_total` counters (or extend `MetricsRegistry` with labelled counters) and increment them on the success and failure paths. Expose them in `render_prometheus()` so Prometheus can track and alert on delete-specific error rates independently of the fleet-wide SLO."
+    },
+    {
+      "acknowledged": null,
+      "line": 42,
+      "message": "No SLO threshold is defined for the new DELETE endpoint. The existing SLOs in `observability/slo.py` (`request_latency_p99_ms`, `error_rate_pct`) are fleet-wide aggregates that cannot distinguish a degraded delete path from healthy GET traffic. A destructive operation like item deletion warrants its own alertable SLO rather than being diluted into the fleet signal.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a `delete_error_rate_pct` SLO entry to `default_slos()` in `observability/slo.py`, back it with the counter from the suggestion above, and register the matching PromQL expression in `SLO_PROMQL` in `observability/provisioning.py` so the alert-rule and Grafana dashboard generators pick it up automatically."
+    },
+    {
+      "acknowledged": null,
+      "line": 50,
+      "message": "`item_id` is not attached to the active OTel span as a span attribute. `FastAPIInstrumentor` auto-creates a span for the route so the path IS traced, but without a span attribute the trace in Tempo has no discriminating key for the affected item \u2014 correlating a failed trace to the specific item requires a separate log join on correlation_id.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Attach the item id to the current span: `from opentelemetry import trace; trace.get_current_span().set_attribute('item.id', item_id)` (inside an `if settings.otel_enabled` guard, consistent with the pattern in `observability/tracing.py`). This makes `item_id` directly queryable in Tempo without needing the log pivot."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 117828,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 59,\n    \"severity\": \"high\",\n    \"message\": \"`_log.error('delete_item_failed', item_id=item_id)` is called without `exc_info=True`. The log event carries the structlog-injected correlation_id but contains no exception type, message, or traceback \u2014 the error path is effectively unobservable in production because there is no actionable diagnostic information to reconstruct root cause.\",\n    \"suggestion\": \"Pass `exc_info=True`: `_log.error('delete_item_failed', item_id=item_id, exc_info=True)` so the full exception chain is bound to the structured log event alongside the correlation_id.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 42,\n    \"severity\": \"medium\",\n    \"message\": \"No application-level counter metric for delete operations. `MetricsRegistry` and `ObservabilityMiddleware` record only fleet-wide HTTP p99 latency and 5xx error rate. A surge in successful or failed deletes is invisible in `/metrics`, `/health`, or any Prometheus alert until it moves the fleet-wide `error_rate_pct` SLO \u2014 by which point many deletes may have silently failed.\",\n    \"suggestion\": \"Add `items_deleted_total` and `item_deletion_errors_total` counters (or extend `MetricsRegistry` with labelled counters) and increment them on the success and failure paths. Expose them in `render_prometheus()` so Prometheus can track and alert on delete-specific error rates independently of the fleet-wide SLO.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 42,\n    \"severity\": \"medium\",\n    \"message\": \"No SLO threshold is defined for the new DELETE endpoint. The existing SLOs in `observability/slo.py` (`request_latency_p99_ms`, `error_rate_pct`) are fleet-wide aggregates that cannot distinguish a degraded delete path from healthy GET traffic. A destructive operation like item deletion warrants its own alertable SLO rather than being diluted into the fleet signal.\",\n    \"suggestion\": \"Add a `delete_error_rate_pct` SLO entry to `default_slos()` in `observability/slo.py`, back it with the counter from the suggestion above, and register the matching PromQL expression in `SLO_PROMQL` in `observability/provisioning.py` so the alert-rule and Grafana dashboard generators pick it up automatically.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 50,\n    \"severity\": \"low\",\n    \"message\": \"`item_id` is not attached to the active OTel span as a span attribute. `FastAPIInstrumentor` auto-creates a span for the route so the path IS traced, but without a span attribute the trace in Tempo has no discriminating key for the affected item \u2014 correlating a failed trace to the specific item requires a separate log join on correlation_id.\",\n    \"suggestion\": \"Attach the item id to the current span: `from opentelemetry import trace; trace.get_current_span().set_attribute('item.id', item_id)` (inside an `if settings.otel_enabled` guard, consistent with the pattern in `observability/tracing.py`). This makes `item_id` directly queryable in Tempo without needing the log pivot.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 17824,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 7056
+  }
+}

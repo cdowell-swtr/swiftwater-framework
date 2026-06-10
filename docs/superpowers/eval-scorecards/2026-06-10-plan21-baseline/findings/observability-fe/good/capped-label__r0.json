@@ -1,0 +1,112 @@
+{
+  "agent": "observability-fe",
+  "case": "capped-label",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 128,
+      "message": "The new app_frontend_device_class_total signal reads device_class from params.get(\"device_class\", \"\"), but the route (src/demo/routes/frontend_rum.py) filters params through the fail-closed allowlist (`{k: v ... if k in allow}`) and settings.frontend_rum_allowed_query_params defaults to the UTM set only (utm_source/medium/campaign/term/content) \u2014 device_class is never in it. So device_class is stripped server-side before record_page_view ever sees it, and the series will only ever emit device_class=\"unknown\". The signal is structurally incapable of recording its intended dimension: device-class distribution is effectively unobserved despite the metric appearing populated.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add \"device_class\" to frontend_rum_allowed_query_params in src/demo/config/settings.py so the backend's authoritative allowlist passes it through (the safe-by-default capability), and add a unit test asserting a real device_class value (not just \"unknown\") reaches app_frontend_device_class_total end-to-end through the ingest route."
+    },
+    {
+      "acknowledged": null,
+      "line": 206,
+      "message": "New RUM signal app_frontend_device_class_total is exposed on /metrics but has no corresponding Grafana dashboard panel (infra/observability/grafana/dashboards/frontend.json defines only vitals, JS errors, page-views-by-route, and beacon ingest) and no alert rule (no prometheus alert files exist under infra/observability). The new signal ships unwatched \u2014 operators have no panel to read it and nothing fires on anomalies.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a \"Page views by device class\" panel to infra/observability/grafana/dashboards/frontend.json (e.g. sum(rate(app_frontend_device_class_total[5m])) by (device_class)), consistent with the existing by-route/by-status panels, and update the obs-completeness battery declaration so the scrape+dashboard guard covers the new series."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 149136,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/frontend_rum/metrics.py\",\n    \"line\": 128,\n    \"severity\": \"high\",\n    \"message\": \"The new app_frontend_device_class_total signal reads device_class from params.get(\\\"device_class\\\", \\\"\\\"), but the route (src/demo/routes/frontend_rum.py) filters params through the fail-closed allowlist (`{k: v ... if k in allow}`) and settings.frontend_rum_allowed_query_params defaults to the UTM set only (utm_source/medium/campaign/term/content) \u2014 device_class is never in it. So device_class is stripped server-side before record_page_view ever sees it, and the series will only ever emit device_class=\\\"unknown\\\". The signal is structurally incapable of recording its intended dimension: device-class distribution is effectively unobserved despite the metric appearing populated.\",\n    \"suggestion\": \"Add \\\"device_class\\\" to frontend_rum_allowed_query_params in src/demo/config/settings.py so the backend's authoritative allowlist passes it through (the safe-by-default capability), and add a unit test asserting a real device_class value (not just \\\"unknown\\\") reaches app_frontend_device_class_total end-to-end through the ingest route.\"\n  },\n  {\n    \"path\": \"src/demo/frontend_rum/metrics.py\",\n    \"line\": 206,\n    \"severity\": \"medium\",\n    \"message\": \"New RUM signal app_frontend_device_class_total is exposed on /metrics but has no corresponding Grafana dashboard panel (infra/observability/grafana/dashboards/frontend.json defines only vitals, JS errors, page-views-by-route, and beacon ingest) and no alert rule (no prometheus alert files exist under infra/observability). The new signal ships unwatched \u2014 operators have no panel to read it and nothing fires on anomalies.\",\n    \"suggestion\": \"Add a \\\"Page views by device class\\\" panel to infra/observability/grafana/dashboards/frontend.json (e.g. sum(rate(app_frontend_device_class_total[5m])) by (device_class)), consistent with the existing by-route/by-status panels, and update the obs-completeness battery declaration so the scrape+dashboard guard covers the new series.\"\n  }\n]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/frontend_rum/metrics.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/frontend_rum",
+        "pattern": "_ATTRIBUTION_KEYS|allowlist|device_class|_san\\b"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "glob": "**/*.{yml,yaml,json,jsonnet,libsonnet}",
+        "pattern": "app_frontend_device_class_total|device_class"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "glob": "**/*",
+        "pattern": "app_frontend_page_views_total|app_frontend_referrer|app_frontend_beacon|app_frontend_attribution"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/observability/prometheus/frontend_alerts.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "src/demo/routes/frontend_rum.py"
+      },
+      "tool": "read_file",
+      "turn": 3
+    },
+    {
+      "input": {
+        "path": "src/demo/config/settings.py"
+      },
+      "tool": "read_file",
+      "turn": 3
+    },
+    {
+      "input": {
+        "path": "frontend/src/observability/rum.ts"
+      },
+      "tool": "read_file",
+      "turn": 3
+    },
+    {
+      "input": {
+        "path": "infra/observability/grafana/dashboards/frontend.json"
+      },
+      "tool": "read_file",
+      "turn": 3
+    },
+    {
+      "input": {
+        "pattern": "infra/observability/**/*.{yml,yaml,json}"
+      },
+      "tool": "glob",
+      "turn": 3
+    }
+  ],
+  "turns": 4,
+  "usage": {
+    "cache_creation_input_tokens": 84290,
+    "cache_read_input_tokens": 234198,
+    "input_tokens": 20922,
+    "output_tokens": 10799
+  }
+}

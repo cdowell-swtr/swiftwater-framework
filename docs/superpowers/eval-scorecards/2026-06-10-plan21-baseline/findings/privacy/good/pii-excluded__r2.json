@@ -1,0 +1,41 @@
+{
+  "agent": "privacy",
+  "case": "pii-excluded",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": 29098,
+  "raw_text": "[]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/observability.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/middleware*.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/middleware/observability.py"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 31222,
+    "cache_read_input_tokens": 73594,
+    "input_tokens": 10190,
+    "output_tokens": 1292
+  }
+}

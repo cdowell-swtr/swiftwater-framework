@@ -1,0 +1,101 @@
+{
+  "agent": "observability-infra",
+  "case": "scrape-without-alert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 23,
+      "message": "New Prometheus scrape job 'redis' targets 'redis-exporter:9121', but no redis-exporter service exists anywhere under infra/ (grep for 'redis-exporter' and 'redis' matches only this file \u2014 not in compose/base.yml, services.yml, observability.yml, or any overlay). The scrape target has no corresponding exporter, so this job will perpetually fail to scrape and surfaces no metrics.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add a redis-exporter service (e.g. oliver006/redis_exporter) to infra/compose/observability.yml (and ensure it reaches prod via services.yml/observability.yml, not just dev.yml) wired to the redis instance, OR drop this scrape job until the exporter is deployed."
+    },
+    {
+      "acknowledged": null,
+      "line": 21,
+      "message": "New scrape job 'redis' has no matching alert rule. The alerts directory (infra/observability/prometheus/alerts/) contains only alertmanager_alerts.yml, otel_collector_alerts.yml, postgres_alerts.yml, prometheus_alerts.yml, and slo_alerts.yml \u2014 there is no redis_alerts.yml. Redis metrics will be collected but nothing will fire when redis is down or degraded.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add infra/observability/prometheus/alerts/redis_alerts.yml with rules (e.g. RedisDown, high memory/eviction, replication lag) routed to a valid Alertmanager receiver."
+    },
+    {
+      "acknowledged": null,
+      "line": 21,
+      "message": "New scrape job 'redis' has no corresponding Grafana dashboard. infra/observability/grafana/dashboards/ contains only otel-collector.json, postgres.json, prometheus.json, and slo.json \u2014 no redis.json. The new surface is scraped but has no panel for visibility.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a provisioned redis dashboard (infra/observability/grafana/dashboards/redis.json) so the redis scrape job has at least one panel, keeping scrape/alert/dashboard coverage in parity."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 54689,
+  "raw_text": "[{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":23,\"severity\":\"high\",\"message\":\"New Prometheus scrape job 'redis' targets 'redis-exporter:9121', but no redis-exporter service exists anywhere under infra/ (grep for 'redis-exporter' and 'redis' matches only this file \u2014 not in compose/base.yml, services.yml, observability.yml, or any overlay). The scrape target has no corresponding exporter, so this job will perpetually fail to scrape and surfaces no metrics.\",\"suggestion\":\"Add a redis-exporter service (e.g. oliver006/redis_exporter) to infra/compose/observability.yml (and ensure it reaches prod via services.yml/observability.yml, not just dev.yml) wired to the redis instance, OR drop this scrape job until the exporter is deployed.\"},{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"medium\",\"message\":\"New scrape job 'redis' has no matching alert rule. The alerts directory (infra/observability/prometheus/alerts/) contains only alertmanager_alerts.yml, otel_collector_alerts.yml, postgres_alerts.yml, prometheus_alerts.yml, and slo_alerts.yml \u2014 there is no redis_alerts.yml. Redis metrics will be collected but nothing will fire when redis is down or degraded.\",\"suggestion\":\"Add infra/observability/prometheus/alerts/redis_alerts.yml with rules (e.g. RedisDown, high memory/eviction, replication lag) routed to a valid Alertmanager receiver.\"},{\"path\":\"infra/observability/prometheus/prometheus.yml\",\"line\":21,\"severity\":\"medium\",\"message\":\"New scrape job 'redis' has no corresponding Grafana dashboard. infra/observability/grafana/dashboards/ contains only otel-collector.json, postgres.json, prometheus.json, and slo.json \u2014 no redis.json. The new surface is scraped but has no panel for visibility.\",\"suggestion\":\"Add a provisioned redis dashboard (infra/observability/grafana/dashboards/redis.json) so the redis scrape job has at least one panel, keeping scrape/alert/dashboard coverage in parity.\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/observability/prometheus/prometheus.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "ignore_case": true,
+        "path": "infra",
+        "pattern": "redis"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/observability/prometheus/alerts.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/docker-compose.observability.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/**/*.yml"
+      },
+      "tool": "glob",
+      "turn": 2
+    },
+    {
+      "input": {
+        "pattern": "infra/**/*.yaml"
+      },
+      "tool": "glob",
+      "turn": 2
+    },
+    {
+      "input": {
+        "pattern": "infra/**/*.json"
+      },
+      "tool": "glob",
+      "turn": 2
+    },
+    {
+      "input": {
+        "ignore_case": true,
+        "path": "infra",
+        "pattern": "redis-exporter"
+      },
+      "tool": "grep",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 26989,
+    "cache_read_input_tokens": 74687,
+    "input_tokens": 10190,
+    "output_tokens": 3798
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "agent": "env-parity",
+  "case": "compose-var-not-declared",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 11,
+      "message": "The new `APP_WIDGET_API_URL: \"${APP_WIDGET_API_URL}\"` interpolation in base.yml references a `${APP_WIDGET_API_URL}` variable that is not declared anywhere in `.env.example` (its FRAMEWORK-managed block declares only APP_ENVIRONMENT, APP_LOG_LEVEL, APP_SLO_*, APP_DATABASE_URL, GRAFANA_ADMIN_PASSWORD, APP_ALERT_WEBHOOK_URL). With no `.env.example` declaration and no shell value set, Compose interpolates it to an empty string, so the app silently starts with a blank widget API URL. Declare `APP_WIDGET_API_URL=` in the `.env.example` FRAMEWORK block so the variable is documented and overridable.",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add an `APP_WIDGET_API_URL=` entry (with a sensible default or placeholder) inside the FRAMEWORK:BEGIN/END block of `.env.example` to match the new `${APP_WIDGET_API_URL}` interpolation."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 52833,
+  "raw_text": "[{\"path\": \"infra/compose/base.yml\", \"line\": 11, \"severity\": \"high\", \"message\": \"The new `APP_WIDGET_API_URL: \\\"${APP_WIDGET_API_URL}\\\"` interpolation in base.yml references a `${APP_WIDGET_API_URL}` variable that is not declared anywhere in `.env.example` (its FRAMEWORK-managed block declares only APP_ENVIRONMENT, APP_LOG_LEVEL, APP_SLO_*, APP_DATABASE_URL, GRAFANA_ADMIN_PASSWORD, APP_ALERT_WEBHOOK_URL). With no `.env.example` declaration and no shell value set, Compose interpolates it to an empty string, so the app silently starts with a blank widget API URL. Declare `APP_WIDGET_API_URL=` in the `.env.example` FRAMEWORK block so the variable is documented and overridable.\", \"suggestion\": \"Add an `APP_WIDGET_API_URL=` entry (with a sensible default or placeholder) inside the FRAMEWORK:BEGIN/END block of `.env.example` to match the new `${APP_WIDGET_API_URL}` interpolation.\"}]",
+  "repeat": 0,
+  "seeded_file": "infra/compose/base.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": ".",
+        "pattern": "APP_WIDGET_API_URL"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "ignore_case": true,
+        "path": "src",
+        "pattern": "widget"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": ".env.example"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "pattern": "src/*/config/settings.py"
+      },
+      "tool": "glob",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/prod.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/staging.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 52200,
+    "cache_read_input_tokens": 50277,
+    "input_tokens": 15281,
+    "output_tokens": 3212
+  }
+}

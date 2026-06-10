@@ -1,0 +1,35 @@
+{
+  "agent": "observability-db",
+  "case": "observed-query",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": 23333,
+  "raw_text": "[]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "output_mode": "files_with_matches",
+        "pattern": "SQLAlchemyInstrumentor"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "filepattern": "**/db/*.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 20518,
+    "cache_read_input_tokens": 24332,
+    "input_tokens": 10186,
+    "output_tokens": 1164
+  }
+}

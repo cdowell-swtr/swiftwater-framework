@@ -1,0 +1,83 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "archive_item emits no structured log on the success path. A data-mutation endpoint with no log line produces no audit trail and is invisible to the log aggregator.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Obtain the module logger (e.g. `log = get_logger()`) and call `log.info('item_archived', item_id=item_id)` after session.commit() so the mutation is traceable via the correlation ID injected by middleware."
+    },
+    {
+      "acknowledged": null,
+      "line": 45,
+      "message": "The 404 error path raises HTTPException without any log call. The correlation ID is never captured, making this error invisible to log-based alerting and distributed trace search.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `log.warning('item_not_found', item_id=item_id)` before raising so the correlation ID (propagated by ObservabilityMiddleware) appears in the structured log."
+    },
+    {
+      "acknowledged": null,
+      "line": 47,
+      "message": "session.commit() can raise SQLAlchemy exceptions (IntegrityError, OperationalError, etc.) that propagate as unhandled 500s with no log entry, no item_id, and no correlation ID \u2014 the error path is completely dark.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Wrap session.commit() in a try/except, log the exception with item_id at error level, and re-raise (or convert to a 500 HTTPException) so the failure is observable and traceable."
+    },
+    {
+      "acknowledged": null,
+      "line": 46,
+      "message": "Re-archiving an already-archived item silently double-prefixes the name (`[archived] [archived] \u2026`) with no metric, log, or trace signal to detect the idempotency violation.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Check whether the name already starts with '[archived]' before mutating, and log a warning (with item_id) if called on an already-archived item so the condition is observable."
+    },
+    {
+      "acknowledged": null,
+      "line": 39,
+      "message": "No SLO threshold or PromQL expression is defined for POST /items/{item_id}/archive. The existing SLOs in slo.py cover fleet-wide p99 latency and error_rate_pct but do not break out this new write endpoint, leaving its per-route error budget undefined.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a route-level SLO entry (or document that the global SLOs subsume it) and add a matching PromQL expression in provisioning.py's SLO_PROMQL dict so archive-specific latency and 4xx/5xx rates can be alerted on separately."
+    },
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "No domain-level metric is emitted for archive operations. ObservabilityMiddleware only records generic HTTP counters; archive success/failure rates are not independently visible in the Prometheus/Grafana dashboards.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Emit a dedicated counter (e.g. `items_archived_total` with a `success`/`error` label) via MetricsRegistry so archive throughput can be graphed and alerted on independently of the global error_rate_pct SLO."
+    },
+    {
+      "acknowledged": null,
+      "line": 44,
+      "message": "HTTPException is imported inline inside the if-block rather than at module top. This defers the ImportError to the error path at runtime and hides the dependency from static analysis and import-order linters.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Move `from fastapi import HTTPException` to the module-level imports alongside the existing `from fastapi import APIRouter, Depends, Query` line."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 108947,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 40,\n    \"severity\": \"high\",\n    \"message\": \"archive_item emits no structured log on the success path. A data-mutation endpoint with no log line produces no audit trail and is invisible to the log aggregator.\",\n    \"suggestion\": \"Obtain the module logger (e.g. `log = get_logger()`) and call `log.info('item_archived', item_id=item_id)` after session.commit() so the mutation is traceable via the correlation ID injected by middleware.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 45,\n    \"severity\": \"high\",\n    \"message\": \"The 404 error path raises HTTPException without any log call. The correlation ID is never captured, making this error invisible to log-based alerting and distributed trace search.\",\n    \"suggestion\": \"Add `log.warning('item_not_found', item_id=item_id)` before raising so the correlation ID (propagated by ObservabilityMiddleware) appears in the structured log.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 47,\n    \"severity\": \"high\",\n    \"message\": \"session.commit() can raise SQLAlchemy exceptions (IntegrityError, OperationalError, etc.) that propagate as unhandled 500s with no log entry, no item_id, and no correlation ID \u2014 the error path is completely dark.\",\n    \"suggestion\": \"Wrap session.commit() in a try/except, log the exception with item_id at error level, and re-raise (or convert to a 500 HTTPException) so the failure is observable and traceable.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 46,\n    \"severity\": \"high\",\n    \"message\": \"Re-archiving an already-archived item silently double-prefixes the name (`[archived] [archived] \u2026`) with no metric, log, or trace signal to detect the idempotency violation.\",\n    \"suggestion\": \"Check whether the name already starts with '[archived]' before mutating, and log a warning (with item_id) if called on an already-archived item so the condition is observable.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 39,\n    \"severity\": \"medium\",\n    \"message\": \"No SLO threshold or PromQL expression is defined for POST /items/{item_id}/archive. The existing SLOs in slo.py cover fleet-wide p99 latency and error_rate_pct but do not break out this new write endpoint, leaving its per-route error budget undefined.\",\n    \"suggestion\": \"Add a route-level SLO entry (or document that the global SLOs subsume it) and add a matching PromQL expression in provisioning.py's SLO_PROMQL dict so archive-specific latency and 4xx/5xx rates can be alerted on separately.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 40,\n    \"severity\": \"medium\",\n    \"message\": \"No domain-level metric is emitted for archive operations. ObservabilityMiddleware only records generic HTTP counters; archive success/failure rates are not independently visible in the Prometheus/Grafana dashboards.\",\n    \"suggestion\": \"Emit a dedicated counter (e.g. `items_archived_total` with a `success`/`error` label) via MetricsRegistry so archive throughput can be graphed and alerted on independently of the global error_rate_pct SLO.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 44,\n    \"severity\": \"low\",\n    \"message\": \"HTTPException is imported inline inside the if-block rather than at module top. This defers the ImportError to the error path at runtime and hides the dependency from static analysis and import-order linters.\",\n    \"suggestion\": \"Move `from fastapi import HTTPException` to the module-level imports alongside the existing `from fastapi import APIRouter, Depends, Query` line.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 25917,
+    "input_tokens": 3,
+    "output_tokens": 6524
+  }
+}

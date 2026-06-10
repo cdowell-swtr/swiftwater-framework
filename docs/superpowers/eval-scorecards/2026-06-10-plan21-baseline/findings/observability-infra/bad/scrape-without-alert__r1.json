@@ -1,0 +1,62 @@
+{
+  "agent": "observability-infra",
+  "case": "scrape-without-alert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "New `redis` scrape job targets `redis-exporter:9121`, but no `redis-exporter` service exists in any Compose file. `redis` itself is defined in `services.yml` (prod) and exposes no Prometheus metrics endpoint on 9121 \u2014 only the bare `redis:7-alpine` server plus a dev port map. The exporter that would translate Redis stats into the `redis_*` metric series is absent (cf. the existing `postgres-exporter` in `observability.yml:142`), so this target is unroutable and the job will sit permanently `DOWN`. Redis is a prod runtime surface; adding the scrape job without the exporter leaves it effectively unobserved.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add a `redis-exporter` service (e.g. `oliver006/redis_exporter`) to `infra/compose/observability.yml` on the `backend` network, pointed at the `redis` service, before (or with) this scrape job \u2014 mirror how `postgres-exporter` backs the `postgres` scrape job."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "The new `redis` scrape job has no matching Prometheus alert rule. `infra/observability/prometheus/alerts/` contains alertmanager/otel_collector/postgres/prometheus/slo rule files but nothing for Redis (no `redis_up`, memory, or eviction alerts). A scraped prod surface with no alert rule means failures (Redis down, OOM, evictions) page no one.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add `infra/observability/prometheus/alerts/redis_alerts.yml` with at least a `RedisDown` (on `redis_up == 0` / target down) alert and memory/eviction alerts, routed through an Alertmanager receiver, paralleling `postgres_alerts.yml`."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "The new `redis` scrape job has no matching Grafana dashboard. `infra/observability/grafana/dashboards/` ships api-slo/otel-collector/postgres/prometheus dashboards but no redis dashboard, so the `redis_*` series this job collects will not be visualized anywhere.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add `infra/observability/grafana/dashboards/redis.json` covering the key `redis_*` metrics (connected clients, memory, hit rate, evictions, replication), mirroring the existing `postgres.json` dashboard."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 52257,
+  "raw_text": "[\n  {\n    \"path\": \"infra/observability/prometheus/prometheus.yml\",\n    \"line\": \"      - targets: [\\\"redis-exporter:9121\\\"]\",\n    \"severity\": \"high\",\n    \"message\": \"New `redis` scrape job targets `redis-exporter:9121`, but no `redis-exporter` service exists in any Compose file. `redis` itself is defined in `services.yml` (prod) and exposes no Prometheus metrics endpoint on 9121 \u2014 only the bare `redis:7-alpine` server plus a dev port map. The exporter that would translate Redis stats into the `redis_*` metric series is absent (cf. the existing `postgres-exporter` in `observability.yml:142`), so this target is unroutable and the job will sit permanently `DOWN`. Redis is a prod runtime surface; adding the scrape job without the exporter leaves it effectively unobserved.\",\n    \"suggestion\": \"Add a `redis-exporter` service (e.g. `oliver006/redis_exporter`) to `infra/compose/observability.yml` on the `backend` network, pointed at the `redis` service, before (or with) this scrape job \u2014 mirror how `postgres-exporter` backs the `postgres` scrape job.\"\n  },\n  {\n    \"path\": \"infra/observability/prometheus/prometheus.yml\",\n    \"line\": \"  - job_name: redis\",\n    \"severity\": \"medium\",\n    \"message\": \"The new `redis` scrape job has no matching Prometheus alert rule. `infra/observability/prometheus/alerts/` contains alertmanager/otel_collector/postgres/prometheus/slo rule files but nothing for Redis (no `redis_up`, memory, or eviction alerts). A scraped prod surface with no alert rule means failures (Redis down, OOM, evictions) page no one.\",\n    \"suggestion\": \"Add `infra/observability/prometheus/alerts/redis_alerts.yml` with at least a `RedisDown` (on `redis_up == 0` / target down) alert and memory/eviction alerts, routed through an Alertmanager receiver, paralleling `postgres_alerts.yml`.\"\n  },\n  {\n    \"path\": \"infra/observability/prometheus/prometheus.yml\",\n    \"line\": \"  - job_name: redis\",\n    \"severity\": \"medium\",\n    \"message\": \"The new `redis` scrape job has no matching Grafana dashboard. `infra/observability/grafana/dashboards/` ships api-slo/otel-collector/postgres/prometheus dashboards but no redis dashboard, so the `redis_*` series this job collects will not be visualized anywhere.\",\n    \"suggestion\": \"Add `infra/observability/grafana/dashboards/redis.json` covering the key `redis_*` metrics (connected clients, memory, hit rate, evictions, replication), mirroring the existing `postgres.json` dashboard.\"\n  }\n]",
+  "repeat": 1,
+  "seeded_file": "infra/observability/prometheus/prometheus.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "infra/observability/**"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/**/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 16580,
+    "cache_read_input_tokens": 57843,
+    "input_tokens": 10188,
+    "output_tokens": 3446
+  }
+}

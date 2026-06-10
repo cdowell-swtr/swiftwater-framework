@@ -1,0 +1,84 @@
+{
+  "agent": "env-parity",
+  "case": "compose-var-not-declared",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 11,
+      "message": "The compose overlay interpolates ${APP_WIDGET_API_URL} (added to the app service's environment) but no APP_WIDGET_API_URL is declared in .env.example. With no declaration and no shell-exported value, Compose substitutes an empty string, so the app silently receives a blank widget API URL across dev/test (and any environment that composed base.yml). Every ${APP_*} interpolation must have a corresponding .env.example entry.",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add APP_WIDGET_API_URL to the FRAMEWORK-managed block of .env.example (with a sensible default/placeholder and a comment), matching the name exactly. If the app is meant to consume it, also add the corresponding APP_-prefixed pydantic field in src/demo/config/settings.py."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 45214,
+  "raw_text": "[{\"path\": \"infra/compose/base.yml\", \"line\": 11, \"severity\": \"high\", \"message\": \"The compose overlay interpolates ${APP_WIDGET_API_URL} (added to the app service's environment) but no APP_WIDGET_API_URL is declared in .env.example. With no declaration and no shell-exported value, Compose substitutes an empty string, so the app silently receives a blank widget API URL across dev/test (and any environment that composed base.yml). Every ${APP_*} interpolation must have a corresponding .env.example entry.\", \"suggestion\": \"Add APP_WIDGET_API_URL to the FRAMEWORK-managed block of .env.example (with a sensible default/placeholder and a comment), matching the name exactly. If the app is meant to consume it, also add the corresponding APP_-prefixed pydantic field in src/demo/config/settings.py.\"}]",
+  "repeat": 1,
+  "seeded_file": "infra/compose/base.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/.env.example"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "output_mode": "files_with_matches",
+        "pattern": "APP_WIDGET_API_URL"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "-i": true,
+        "output_mode": "content",
+        "pattern": "widget"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": ".env.example"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "-i": true,
+        "output_mode": "files_with_matches",
+        "pattern": "widget|WIDGET"
+      },
+      "tool": "grep",
+      "turn": 2
+    },
+    {
+      "input": {
+        "pattern": "src/*/config/settings.py"
+      },
+      "tool": "glob",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 26402,
+    "cache_read_input_tokens": 50004,
+    "input_tokens": 10188,
+    "output_tokens": 2897
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 14,
+      "message": "get_stock now hard-depends on a `reserved_count` field from the inventory response (it does int(data[\"reserved_count\"]) and will KeyError if absent), but the consumer pact in tests/functional/test_consumer_inventory.py only declares with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5)}) \u2014 `reserved_count` is not in the interaction. The code comment admits this. Because the published pact does not pin `reserved_count`, provider verification CI will pass even if the provider never sends (or later removes/renames) that field, leaving the consumer's real dependency uncontracted. This is exactly the gap a schema diff / provider-verification job misses.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `reserved_count` to the consumer pact's response body (e.g. with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5), \"reserved_count\": match.int(0)})) so the dependency is committed to the contract, and update the test's assertion to reflect the new dict return shape, then regenerate and publish pacts/demo-inventory.json."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 44688,
+  "raw_text": "[{\"path\": \"src/demo/clients/inventory.py\", \"line\": 14, \"severity\": \"high\", \"message\": \"get_stock now hard-depends on a `reserved_count` field from the inventory response (it does int(data[\\\"reserved_count\\\"]) and will KeyError if absent), but the consumer pact in tests/functional/test_consumer_inventory.py only declares with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5)}) \u2014 `reserved_count` is not in the interaction. The code comment admits this. Because the published pact does not pin `reserved_count`, provider verification CI will pass even if the provider never sends (or later removes/renames) that field, leaving the consumer's real dependency uncontracted. This is exactly the gap a schema diff / provider-verification job misses.\", \"suggestion\": \"Add `reserved_count` to the consumer pact's response body (e.g. with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5), \\\"reserved_count\\\": match.int(0)})) so the dependency is committed to the contract, and update the test's assertion to reflect the new dict return shape, then regenerate and publish pacts/demo-inventory.json.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": ".",
+        "pattern": "in_stock|reserved_count|inventory"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "tests/functional/test_consumer_inventory.py"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 37920,
+    "cache_read_input_tokens": 94713,
+    "input_tokens": 10192,
+    "output_tokens": 2403
+  }
+}

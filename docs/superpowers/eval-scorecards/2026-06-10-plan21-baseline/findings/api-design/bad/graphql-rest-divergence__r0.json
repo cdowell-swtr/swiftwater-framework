@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 18,
+      "message": "Breaking schema change: the `Item.name` field is renamed to `title` with no compatible path. Removing/renaming a queryable field breaks every existing client that selects `name`, and there is no deprecated alias retained.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Keep `name` for backwards compatibility and add `title` alongside it, or expose `title` while retaining `name` as a `@strawberry.field(deprecation_reason=...)` resolver that returns the same value. Only remove `name` after clients have migrated."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 11224,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/graphql/schema.py\",\n    \"line\": 18,\n    \"severity\": \"high\",\n    \"message\": \"Breaking schema change: the `Item.name` field is renamed to `title` with no compatible path. Removing/renaming a queryable field breaks every existing client that selects `name`, and there is no deprecated alias retained.\",\n    \"suggestion\": \"Keep `name` for backwards compatibility and add `title` alongside it, or expose `title` while retaining `name` as a `@strawberry.field(deprecation_reason=...)` resolver that returns the same value. Only remove `name` after clients have migrated.\"\n  }\n]",
+  "repeat": 0,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 10626,
+    "cache_read_input_tokens": 11907,
+    "input_tokens": 5093,
+    "output_tokens": 538
+  }
+}

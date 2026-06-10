@@ -1,0 +1,29 @@
+{
+  "agent": "accessibility",
+  "case": "img-no-alt-rendered",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 31,
+      "message": "Missing `alt` attribute on <img>. Screen readers cannot describe the image content, violating WCAG 2.1 SC 1.1.1 (Non-text Content).",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add a descriptive `alt` attribute, e.g. `alt=\"Items catalogue banner\"`. If the image is purely decorative, use `alt=\"\"` to suppress it from the accessibility tree."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 18851,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"frontend/src/Items.tsx\",\n    \"line\": 31,\n    \"severity\": \"high\",\n    \"message\": \"Missing `alt` attribute on <img>. Screen readers cannot describe the image content, violating WCAG 2.1 SC 1.1.1 (Non-text Content).\",\n    \"suggestion\": \"Add a descriptive `alt` attribute, e.g. `alt=\\\"Items catalogue banner\\\"`. If the image is purely decorative, use `alt=\\\"\\\"` to suppress it from the accessibility tree.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 13765,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 890
+  }
+}

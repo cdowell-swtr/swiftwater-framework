@@ -1,0 +1,74 @@
+{
+  "agent": "env-parity",
+  "case": "service-dev-only",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 3,
+      "message": "New runtime service `widgetizer` (ghcr.io/acme/widgetizer:1.4.0) is defined only in the dev-scoped overlay dev.yml (profiles: [\"dev\"]). Staging/prod compose `<env>.yml` + services.yml + observability.yml and never include dev.yml, so this service silently never reaches staging or prod. It is not local-developer-experience tooling (it's a versioned registry image with a real DB dependency on the shared postgres), so this is a parity gap, not dev-only convenience.",
+      "path": "infra/compose/dev.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Define `widgetizer` in infra/compose/services.yml (which staging/prod compose) so it reaches all deployed environments, or add it to staging.yml/prod.yml directly. If it is genuinely meant to be dev-only, record that decision in the decisions log rather than leaving it silently absent from staging/prod. Do not add it to base.yml, which only reaches dev/test."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 39479,
+  "raw_text": "[{\"path\": \"infra/compose/dev.yml\", \"line\": 3, \"severity\": \"high\", \"message\": \"New runtime service `widgetizer` (ghcr.io/acme/widgetizer:1.4.0) is defined only in the dev-scoped overlay dev.yml (profiles: [\\\"dev\\\"]). Staging/prod compose `<env>.yml` + services.yml + observability.yml and never include dev.yml, so this service silently never reaches staging or prod. It is not local-developer-experience tooling (it's a versioned registry image with a real DB dependency on the shared postgres), so this is a parity gap, not dev-only convenience.\", \"suggestion\": \"Define `widgetizer` in infra/compose/services.yml (which staging/prod compose) so it reaches all deployed environments, or add it to staging.yml/prod.yml directly. If it is genuinely meant to be dev-only, record that decision in the decisions log rather than leaving it silently absent from staging/prod. Do not add it to base.yml, which only reaches dev/test.\"}]",
+  "repeat": 0,
+  "seeded_file": "infra/compose/dev.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/Taskfile.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "output_mode": "files_with_matches",
+        "path": "infra",
+        "pattern": "widgetizer"
+      },
+      "tool": "grep",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/services.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/staging.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/prod.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 33291,
+    "cache_read_input_tokens": 38801,
+    "input_tokens": 15279,
+    "output_tokens": 2154
+  }
+}

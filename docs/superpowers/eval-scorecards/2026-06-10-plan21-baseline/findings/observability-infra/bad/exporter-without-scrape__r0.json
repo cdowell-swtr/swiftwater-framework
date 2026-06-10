@@ -1,0 +1,147 @@
+{
+  "agent": "observability-infra",
+  "case": "exporter-without-scrape",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 94,
+      "message": "New `redis-exporter` service (oliver006/redis_exporter on :9121) is added to the prod/staging observability overlay, but there is no matching Prometheus scrape job. prometheus.yml scrape_configs only defines app, prometheus, otel-collector, and postgres (postgres-exporter:9187) \u2014 nothing targets `redis-exporter:9121`. The exporter runs but its metrics are never collected, so Redis (a prod runtime data store per services.yml) remains effectively unobserved despite this change purporting to add observability for it.",
+      "path": "infra/compose/observability.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add a scrape job to infra/observability/prometheus/prometheus.yml, e.g.:\n  - job_name: redis\n    static_configs:\n      - targets: [\"redis-exporter:9121\"]"
+    },
+    {
+      "acknowledged": null,
+      "line": 94,
+      "message": "The new `redis-exporter` surface has no corresponding alert rule. infra/observability/prometheus/alerts/ defines rules for prometheus (and alertmanager) only \u2014 there is no `up{job=\"redis\"} == 0` / redis-down or saturation alert. A new exporter with no alert means Redis exporter/instance failures will go unnoticed.",
+      "path": "infra/compose/observability.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a redis alert group (e.g. RedisExporterDown on `up{job=\"redis\"} == 0`, plus memory/eviction alerts) under infra/observability/prometheus/alerts/."
+    },
+    {
+      "acknowledged": null,
+      "line": 94,
+      "message": "The new `redis-exporter` surface has no Grafana dashboard. infra/observability/grafana/dashboards/ contains otel-collector.json, postgres.json, prometheus.json, and slo.json, but no redis.json. Every other exporter (e.g. postgres) ships a paired dashboard; redis metrics would have no panel to view them.",
+      "path": "infra/compose/observability.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add infra/observability/grafana/dashboards/redis.json with panels for the redis_exporter metrics (connected clients, memory, hit rate, evictions), mirroring postgres.json."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 84258,
+  "raw_text": "[\n  {\n    \"path\": \"infra/compose/observability.yml\",\n    \"line\": 94,\n    \"severity\": \"high\",\n    \"message\": \"New `redis-exporter` service (oliver006/redis_exporter on :9121) is added to the prod/staging observability overlay, but there is no matching Prometheus scrape job. prometheus.yml scrape_configs only defines app, prometheus, otel-collector, and postgres (postgres-exporter:9187) \u2014 nothing targets `redis-exporter:9121`. The exporter runs but its metrics are never collected, so Redis (a prod runtime data store per services.yml) remains effectively unobserved despite this change purporting to add observability for it.\",\n    \"suggestion\": \"Add a scrape job to infra/observability/prometheus/prometheus.yml, e.g.:\\n  - job_name: redis\\n    static_configs:\\n      - targets: [\\\"redis-exporter:9121\\\"]\"\n  },\n  {\n    \"path\": \"infra/compose/observability.yml\",\n    \"line\": 94,\n    \"severity\": \"medium\",\n    \"message\": \"The new `redis-exporter` surface has no corresponding alert rule. infra/observability/prometheus/alerts/ defines rules for prometheus (and alertmanager) only \u2014 there is no `up{job=\\\"redis\\\"} == 0` / redis-down or saturation alert. A new exporter with no alert means Redis exporter/instance failures will go unnoticed.\",\n    \"suggestion\": \"Add a redis alert group (e.g. RedisExporterDown on `up{job=\\\"redis\\\"} == 0`, plus memory/eviction alerts) under infra/observability/prometheus/alerts/.\"\n  },\n  {\n    \"path\": \"infra/compose/observability.yml\",\n    \"line\": 94,\n    \"severity\": \"medium\",\n    \"message\": \"The new `redis-exporter` surface has no Grafana dashboard. infra/observability/grafana/dashboards/ contains otel-collector.json, postgres.json, prometheus.json, and slo.json, but no redis.json. Every other exporter (e.g. postgres) ships a paired dashboard; redis metrics would have no panel to view them.\",\n    \"suggestion\": \"Add infra/observability/grafana/dashboards/redis.json with panels for the redis_exporter metrics (connected clients, memory, hit rate, evictions), mirroring postgres.json.\"\n  }\n]",
+  "repeat": 0,
+  "seeded_file": "infra/compose/observability.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/observability.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/prometheus*.y*ml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/*.rules*.y*ml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/observability/prometheus/prometheus.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/observability/prometheus/alerts/prometheus_alerts.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "output_mode": "files_with_matches",
+        "path": "infra",
+        "pattern": "redis"
+      },
+      "tool": "grep",
+      "turn": 2
+    },
+    {
+      "input": {
+        "pattern": "**/grafana/**/*.json"
+      },
+      "tool": "glob",
+      "turn": 2
+    },
+    {
+      "input": {
+        "pattern": "**/alertmanager*.y*ml"
+      },
+      "tool": "glob",
+      "turn": 2
+    },
+    {
+      "input": {
+        "-i": true,
+        "output_mode": "content",
+        "path": "infra/compose",
+        "pattern": "redis"
+      },
+      "tool": "grep",
+      "turn": 3
+    },
+    {
+      "input": {
+        "-i": true,
+        "output_mode": "files_with_matches",
+        "path": ".",
+        "pattern": "redis|REDIS"
+      },
+      "tool": "grep",
+      "turn": 3
+    },
+    {
+      "input": {
+        "path": "infra/compose/base.yml"
+      },
+      "tool": "read_file",
+      "turn": 3
+    },
+    {
+      "input": {
+        "path": "infra/compose/services.yml"
+      },
+      "tool": "read_file",
+      "turn": 3
+    }
+  ],
+  "turns": 4,
+  "usage": {
+    "cache_creation_input_tokens": 51264,
+    "cache_read_input_tokens": 103385,
+    "input_tokens": 20645,
+    "output_tokens": 5277
+  }
+}

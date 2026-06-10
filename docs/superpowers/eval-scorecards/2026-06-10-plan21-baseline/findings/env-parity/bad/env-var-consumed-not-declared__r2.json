@@ -1,0 +1,51 @@
+{
+  "agent": "env-parity",
+  "case": "env-var-consumed-not-declared",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 23,
+      "message": "New pydantic setting `widget_timeout_s` (env var `APP_WIDGET_TIMEOUT_S` under the `APP_` prefix) is consumed by config/settings.py but is not declared in `.env.example`. Every other `APP_` field (environment, log_level, SLO thresholds, database_url) is mirrored in the framework-managed block of `.env.example`; this one is missing, so it won't surface for operators configuring DEV\u2192CI\u2192STAGE\u2192PROD and the env surface diverges from the settings contract.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` (with a brief comment) inside the FRAMEWORK:BEGIN/END block of `.env.example`, alongside the other `APP_*` declarations, so the new variable is documented across all environments."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 38935,
+  "raw_text": "[{\"path\": \"src/demo/config/settings.py\", \"line\": 23, \"severity\": \"high\", \"message\": \"New pydantic setting `widget_timeout_s` (env var `APP_WIDGET_TIMEOUT_S` under the `APP_` prefix) is consumed by config/settings.py but is not declared in `.env.example`. Every other `APP_` field (environment, log_level, SLO thresholds, database_url) is mirrored in the framework-managed block of `.env.example`; this one is missing, so it won't surface for operators configuring DEV\u2192CI\u2192STAGE\u2192PROD and the env surface diverges from the settings contract.\", \"suggestion\": \"Add `APP_WIDGET_TIMEOUT_S=5.0` (with a brief comment) inside the FRAMEWORK:BEGIN/END block of `.env.example`, alongside the other `APP_*` declarations, so the new variable is documented across all environments.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/config/settings.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/.env.example"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": ".env.example"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 27498,
+    "cache_read_input_tokens": 79162,
+    "input_tokens": 10190,
+    "output_tokens": 2094
+  }
+}

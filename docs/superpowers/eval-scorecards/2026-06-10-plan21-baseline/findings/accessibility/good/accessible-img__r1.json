@@ -1,0 +1,19 @@
+{
+  "agent": "accessibility",
+  "case": "accessible-img",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": 11213,
+  "raw_text": "```json\n[]\n```",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 22238,
+    "input_tokens": 3,
+    "output_tokens": 315
+  }
+}

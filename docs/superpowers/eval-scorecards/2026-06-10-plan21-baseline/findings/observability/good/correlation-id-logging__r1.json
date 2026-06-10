@@ -1,0 +1,56 @@
+{
+  "agent": "observability",
+  "case": "correlation-id-logging",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 57,
+      "message": "`_log.error(\"delete_item_failed\", item_id=item_id)` drops exception details entirely \u2014 no type, message, or traceback is captured in the structured log record. The error path emits only `item_id`, making post-incident diagnosis impossible from logs alone without cross-referencing the OTel span.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Replace with `_log.exception(\"delete_item_failed\", item_id=item_id)` (structlog's `.exception()` auto-attaches `exc_info`) or add `exc_info=True` to the `.error()` call so the full traceback appears in the structured log."
+    },
+    {
+      "acknowledged": null,
+      "line": 58,
+      "message": "No `session.rollback()` before the bare `raise`. After a failed `session.delete()` or `session.commit()`, the SQLAlchemy session is left in an invalid/dirty state. If the connection-pool reuses the session before the dependency-injection teardown fully closes it, subsequent DB operations will emit confusing errors that are not correlated to the original delete failure, polluting the correlation-ID log stream.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add `session.rollback()` immediately before `raise` to reset the session atomically, then allow FastAPI's DI teardown to close it cleanly."
+    },
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "No SLO threshold is defined for the new `DELETE /items/{item_id}` endpoint. `slo.py::default_slos()` defines only aggregate fleet-wide metrics (`request_latency_p99_ms`, `error_rate_pct`). A destructive endpoint that begins returning 5xx errors at high volume could stay below the aggregate alert threshold until it degrades a significant fraction of total traffic \u2014 the signal is silently absorbed.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a delete-specific error-rate SLO (e.g. key `delete_item_error_rate_pct`) to `default_slos()` and a matching PromQL expression in `SLO_PROMQL`, or add a docstring comment explicitly acknowledging that delete operations are intentionally covered only by aggregate SLOs."
+    },
+    {
+      "acknowledged": null,
+      "line": 56,
+      "message": "`_log.error(...)` fires inside the `except` block before the bare `raise` propagates to `register_exception_handlers`. If the global exception handler also logs unhandled exceptions (a common pattern for 500-level events), the same failure produces two log entries \u2014 one with the structlog-bound correlation ID and one potentially without it \u2014 creating split or duplicate correlation chains in log aggregation.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Either remove the local `_log.error` and rely entirely on the global handler (ensuring it uses structlog and includes `item_id`), or confirm that `register_exception_handlers` does not re-log unhandled exceptions so exactly one structured event per failure reaches the aggregator."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 137117,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 57,\n    \"severity\": \"high\",\n    \"message\": \"`_log.error(\\\"delete_item_failed\\\", item_id=item_id)` drops exception details entirely \u2014 no type, message, or traceback is captured in the structured log record. The error path emits only `item_id`, making post-incident diagnosis impossible from logs alone without cross-referencing the OTel span.\",\n    \"suggestion\": \"Replace with `_log.exception(\\\"delete_item_failed\\\", item_id=item_id)` (structlog's `.exception()` auto-attaches `exc_info`) or add `exc_info=True` to the `.error()` call so the full traceback appears in the structured log.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 58,\n    \"severity\": \"medium\",\n    \"message\": \"No `session.rollback()` before the bare `raise`. After a failed `session.delete()` or `session.commit()`, the SQLAlchemy session is left in an invalid/dirty state. If the connection-pool reuses the session before the dependency-injection teardown fully closes it, subsequent DB operations will emit confusing errors that are not correlated to the original delete failure, polluting the correlation-ID log stream.\",\n    \"suggestion\": \"Add `session.rollback()` immediately before `raise` to reset the session atomically, then allow FastAPI's DI teardown to close it cleanly.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 40,\n    \"severity\": \"medium\",\n    \"message\": \"No SLO threshold is defined for the new `DELETE /items/{item_id}` endpoint. `slo.py::default_slos()` defines only aggregate fleet-wide metrics (`request_latency_p99_ms`, `error_rate_pct`). A destructive endpoint that begins returning 5xx errors at high volume could stay below the aggregate alert threshold until it degrades a significant fraction of total traffic \u2014 the signal is silently absorbed.\",\n    \"suggestion\": \"Add a delete-specific error-rate SLO (e.g. key `delete_item_error_rate_pct`) to `default_slos()` and a matching PromQL expression in `SLO_PROMQL`, or add a docstring comment explicitly acknowledging that delete operations are intentionally covered only by aggregate SLOs.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 56,\n    \"severity\": \"low\",\n    \"message\": \"`_log.error(...)` fires inside the `except` block before the bare `raise` propagates to `register_exception_handlers`. If the global exception handler also logs unhandled exceptions (a common pattern for 500-level events), the same failure produces two log entries \u2014 one with the structlog-bound correlation ID and one potentially without it \u2014 creating split or duplicate correlation chains in log aggregation.\",\n    \"suggestion\": \"Either remove the local `_log.error` and rely entirely on the global handler (ensuring it uses structlog and includes `item_id`), or confirm that `register_exception_handlers` does not re-log unhandled exceptions so exactly one structured event per failure reaches the aggregator.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 26304,
+    "input_tokens": 3,
+    "output_tokens": 8264
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "The rename_item route writes item.name directly and commits without recalculating slug, so the slug column diverges from name on every rename. The model documents slug as always-derived-from-name and the repository provides update_item_name() specifically to keep both in sync, but this handler bypasses that helper and even acknowledges the divergence in its own docstring. This produces a persistent consistency violation in the data store: the derived slug (also unique/indexed) becomes stale and can no longer be trusted to match name, and lookups by the canonical slug will resolve to the wrong/old value.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Route the rename through the repository helper that already maintains the invariant \u2014 call update_item_name(session, item_id, payload.name) (returning 404 when it yields None) instead of mutating item.name inline \u2014 so slug = _make_slug(name) is recomputed atomically in the same commit."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 18373,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": \"item.name = payload.name\",\n    \"severity\": \"medium\",\n    \"message\": \"The rename_item route writes item.name directly and commits without recalculating slug, so the slug column diverges from name on every rename. The model documents slug as always-derived-from-name and the repository provides update_item_name() specifically to keep both in sync, but this handler bypasses that helper and even acknowledges the divergence in its own docstring. This produces a persistent consistency violation in the data store: the derived slug (also unique/indexed) becomes stale and can no longer be trusted to match name, and lookups by the canonical slug will resolve to the wrong/old value.\",\n    \"suggestion\": \"Route the rename through the repository helper that already maintains the invariant \u2014 call update_item_name(session, item_id, payload.name) (returning 404 when it yields None) instead of mutating item.name inline \u2014 so slug = _make_slug(name) is recomputed atomically in the same commit.\"\n  }\n]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 5091,
+    "cache_read_input_tokens": 23288,
+    "input_tokens": 2,
+    "output_tokens": 1188
+  }
+}
