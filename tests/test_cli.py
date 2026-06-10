@@ -1792,219 +1792,6 @@ def test_resolve_audit_base_autodiscover_falls_back_to_snapshot_when_no_baseline
     assert name is None
 
 
-def test_gate_prepare_affected_single_prompt(tmp_path, monkeypatch):
-    """A staged change to one agent's prompt → only that agent in the work items."""
-    import framework_cli.cli as cli_mod
-
-    # Simulate: only src/framework_cli/review/agents/security.md is staged.
-    monkeypatch.setattr(
-        cli_mod,
-        "_staged_files",
-        lambda: ["src/framework_cli/review/agents/security.md"],
-    )
-    monkeypatch.setattr(cli_mod, "staged_diff", lambda: "diff content")
-    result = runner.invoke(app, ["gate-prepare"])
-    assert result.exit_code == 0, result.output
-    data = _json.loads(result.output)
-    assert data["mode"] == "gate"
-    assert data["agents_set"] == ["security"]
-    assert len(data["work_items"]) == 1
-    assert "staged_hash" in data
-    assert data["staged_hash"].startswith("sha256:")
-
-
-def test_gate_prepare_runner_change_affects_all_bundle(monkeypatch):
-    """A staged change to runner.py → all 11 bundle agents."""
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(
-        cli_mod,
-        "_staged_files",
-        lambda: ["src/framework_cli/review/runner.py"],
-    )
-    monkeypatch.setattr(cli_mod, "staged_diff", lambda: "diff")
-    result = runner.invoke(app, ["gate-prepare"])
-    assert result.exit_code == 0, result.output
-    data = _json.loads(result.output)
-    # 11 bundle agents (everything not agentic) should be the agent set.
-    from framework_cli.review.registry import agent_names, get_agent
-
-    expected = sorted(
-        a for a in agent_names() if get_agent(a).context.strategy != "agentic"
-    )
-    assert sorted(data["agents_set"]) == expected
-    assert len(data["work_items"]) == len(expected)
-
-
-def test_gate_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
-    """gate-prepare --split-to DIR writes index.json + items/item-NNNN.json
-    in addition to printing the full manifest to stdout (unchanged behavior).
-
-    The split layout exists so the Workflow tool can be invoked with a tiny args payload
-    ({indexPath, itemsDir}) rather than a multi-MB inline manifest. Mirrors the
-    tune-prepare split-manifest pattern, but with gate's simpler item shape
-    (one item per affected agent; no kind/case/repeat dimension).
-    """
-    import framework_cli.cli as cli_mod
-
-    # Staged change to runner.py → all bundle agents affected.
-    monkeypatch.setattr(
-        cli_mod,
-        "_staged_files",
-        lambda: ["src/framework_cli/review/runner.py"],
-    )
-    monkeypatch.setattr(cli_mod, "staged_diff", lambda: "diff content")
-
-    split_dir = tmp_path / "split-out"
-    result = runner.invoke(app, ["gate-prepare", "--split-to", str(split_dir)])
-    assert result.exit_code == 0, result.output
-
-    # Stdout still carries the full manifest (backward compat).
-    manifest = _json.loads(result.output)
-    assert manifest["mode"] == "gate"
-    assert len(manifest["work_items"]) >= 1
-    assert "staged_hash" in manifest
-
-    # Index file: small per-item metadata, no system_blocks / no diff.
-    index_path = split_dir / "index.json"
-    assert index_path.is_file(), f"index.json not written under {split_dir}"
-    index = _json.loads(index_path.read_text())
-    assert index["mode"] == "gate"
-    assert "staged_hash" in index
-    assert index["staged_hash"] == manifest["staged_hash"]
-    assert "agents_set" in index
-    assert index["agents_set"] == manifest["agents_set"]
-    assert len(index["items"]) == len(manifest["work_items"])
-    first = index["items"][0]
-    assert set(first.keys()) >= {"i", "agent", "subagent_type", "model"}
-    # The registry model MUST ride the index entry so the subscription Workflow
-    # dispatches each subagent at its intended tier rather than the harness
-    # default (which was Haiku for the non-agentic reviewers).
-    assert first["model"] == manifest["work_items"][0]["model"]
-    # Index is intentionally lightweight — must NOT carry the bulky fields.
-    assert "system_blocks" not in first
-    assert "diff" not in first
-    assert "user_message" not in first
-
-    # Per-item files exist with the expected full payload.
-    items_dir = split_dir / "items"
-    assert items_dir.is_dir()
-    for i, work_item in enumerate(manifest["work_items"]):
-        item_path = items_dir / f"item-{i:04d}.json"
-        assert item_path.is_file(), f"missing {item_path}"
-        on_disk = _json.loads(item_path.read_text())
-        assert on_disk["agent"] == work_item["agent"]
-        assert on_disk["system_blocks"] == work_item["system_blocks"]
-        assert on_disk["user_message"] == work_item["user_message"]
-        assert on_disk["subagent_type"] == work_item["subagent_type"]
-
-
-def test_gate_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
-    """--split-to is idempotent: a pre-existing target dir is cleared before write
-    so stale items from a prior staged set can't leak into the new run."""
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(
-        cli_mod,
-        "_staged_files",
-        lambda: ["src/framework_cli/review/agents/security.md"],
-    )
-    monkeypatch.setattr(cli_mod, "staged_diff", lambda: "diff content")
-
-    split_dir = tmp_path / "split-out"
-    split_dir.mkdir()
-    (split_dir / "stale.txt").write_text("leftover")
-    (split_dir / "items").mkdir()
-    (split_dir / "items" / "item-9999.json").write_text("{}")
-
-    result = runner.invoke(app, ["gate-prepare", "--split-to", str(split_dir)])
-    assert result.exit_code == 0, result.output
-
-    assert not (split_dir / "stale.txt").exists()
-    assert not (split_dir / "items" / "item-9999.json").exists()
-    assert (split_dir / "index.json").is_file()
-    assert (split_dir / "items" / "item-0000.json").is_file()
-
-
-def test_gate_prepare_split_to_noop_writes_empty_index(tmp_path, monkeypatch):
-    """When mode is noop or regrade, --split-to still writes an index.json
-    (with empty items) so the slash command can uniformly invoke the workflow
-    when desired. The stdout manifest's mode remains the source of truth for
-    branching."""
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(
-        cli_mod, "_staged_files", lambda: ["tests/eval/fixtures/thresholds.yaml"]
-    )
-
-    split_dir = tmp_path / "split-out"
-    result = runner.invoke(app, ["gate-prepare", "--split-to", str(split_dir)])
-    assert result.exit_code == 0, result.output
-    manifest = _json.loads(result.output)
-    assert manifest["mode"] == "regrade"
-
-    index = _json.loads((split_dir / "index.json").read_text())
-    assert index["mode"] == "regrade"
-    assert index["items"] == []
-
-
-def test_gate_prepare_diff_is_staged_set_not_head_minus_one(monkeypatch):
-    """gate-prepare's work-item diff must reflect the staged set, not HEAD~1...HEAD.
-
-    Regression guard for the design quirk where pr_diff() (HEAD~1...HEAD) was used,
-    causing the gate to review the prior commit instead of the about-to-be-committed
-    content. Mock both diff functions to return distinct sentinels and assert
-    the work_items carry the staged_diff sentinel.
-    """
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(
-        cli_mod,
-        "_staged_files",
-        lambda: ["src/framework_cli/review/agents/security.md"],
-    )
-    monkeypatch.setattr(cli_mod, "staged_diff", lambda: "STAGED_DIFF_SENTINEL")
-    monkeypatch.setattr(cli_mod, "pr_diff", lambda: "PR_DIFF_SENTINEL")
-    # _review_diff() delegates to pr_diff(); patch the helper too so it would
-    # surface the PR sentinel if gate-prepare were (incorrectly) routed through it.
-    monkeypatch.setattr(cli_mod, "_review_diff", lambda: "PR_DIFF_SENTINEL")
-
-    result = runner.invoke(app, ["gate-prepare"])
-    assert result.exit_code == 0, result.output
-    data = _json.loads(result.output)
-    assert data["mode"] == "gate"
-    assert len(data["work_items"]) >= 1
-
-    # The diff text appears inside each work item's user_message (per
-    # _build_gate_work_item). The staged-set sentinel MUST be present;
-    # the pr_diff sentinel MUST NOT be.
-    for wi in data["work_items"]:
-        blob = _json.dumps(wi)
-        assert "STAGED_DIFF_SENTINEL" in blob, (
-            "gate-prepare work item does not carry the staged diff — "
-            "it is reviewing the wrong content."
-        )
-        assert "PR_DIFF_SENTINEL" not in blob, (
-            "gate-prepare work item carries the PR/HEAD~1 diff instead of "
-            "the staged set — regression of the diff-source bug."
-        )
-
-
-def test_gate_prepare_thresholds_only_signals_regrade(monkeypatch):
-    """If the only staged file is tests/eval/fixtures/thresholds.yaml, the manifest
-    signals mode='regrade' (no subagent dispatch needed)."""
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(
-        cli_mod, "_staged_files", lambda: ["tests/eval/fixtures/thresholds.yaml"]
-    )
-    result = runner.invoke(app, ["gate-prepare"])
-    assert result.exit_code == 0, result.output
-    data = _json.loads(result.output)
-    assert data["mode"] == "regrade"
-    assert data["work_items"] == []
-
-
 def test_tune_finalize_writes_records_runs_analyze_writes_meta(tmp_path):
     """tune-finalize: given workflow results, writes per-call JSON records and a scorecard."""
     out = tmp_path / "scorecard"
@@ -2095,9 +1882,13 @@ def test_tune_finalize_writes_records_runs_analyze_writes_meta(tmp_path):
 
 def test_gate_finalize_writes_marker_pass(tmp_path):
     """gate-mode finalize writes marker.json with verdict=PASS when no high+ findings."""
+    from framework_cli.cli import _finalize_gate
+
     out = tmp_path / "audit"
     out.mkdir()
-    results = [
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
+    records = [
         {
             "agent": "security",
             "findings": [],
@@ -2109,27 +1900,9 @@ def test_gate_finalize_writes_marker_pass(tmp_path):
             "tool_calls": [],
         },
     ]
-    payload = {
-        "results": results,
-        "meta": {
-            "mode": "gate",
-            "staged_hash": "sha256:abc",
-            "agents_set": ["security"],
-        },
-    }
-    results_file = tmp_path / "results.json"
-    results_file.write_text(_json.dumps(payload))
-    result = runner.invoke(
-        app,
-        [
-            "gate-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
-    )
-    assert result.exit_code == 0, result.output
+    meta = {"mode": "gate", "staged_hash": "sha256:abc", "agents_set": ["security"]}
+    verdict = _finalize_gate(records, findings_dir, out, meta)
+    assert verdict == "PASS"
     marker_path = out.parent / "marker.json"
     assert marker_path.is_file()
     marker = _json.loads(marker_path.read_text())
@@ -2141,9 +1914,13 @@ def test_gate_finalize_writes_marker_pass(tmp_path):
 
 def test_gate_finalize_writes_marker_fail_on_high_finding(tmp_path):
     """A high-severity finding on security (block_threshold='high') → verdict=FAIL."""
+    from framework_cli.cli import _finalize_gate
+
     out = tmp_path / "audit"
     out.mkdir()
-    results = [
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
+    records = [
         {
             "agent": "security",
             "findings": [
@@ -2163,27 +1940,9 @@ def test_gate_finalize_writes_marker_fail_on_high_finding(tmp_path):
             "tool_calls": [],
         },
     ]
-    payload = {
-        "results": results,
-        "meta": {
-            "mode": "gate",
-            "staged_hash": "sha256:abc",
-            "agents_set": ["security"],
-        },
-    }
-    results_file = tmp_path / "results.json"
-    results_file.write_text(_json.dumps(payload))
-    result = runner.invoke(
-        app,
-        [
-            "gate-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
-    )
-    assert result.exit_code == 0, result.output  # finalize itself succeeds
+    meta = {"mode": "gate", "staged_hash": "sha256:abc", "agents_set": ["security"]}
+    verdict = _finalize_gate(records, findings_dir, out, meta)
+    assert verdict == "FAIL"
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
     assert marker["verdict"] == "FAIL"
@@ -2199,10 +1958,14 @@ def test_gate_finalize_advisory_agent_findings_dont_block_gate(tmp_path):
     finding into a gate FAIL. Documented as the root cause of the
     documentation-INFO gate-iteration noise on the audit-semantics branch.
     """
+    from framework_cli.cli import _finalize_gate
+
     out = tmp_path / "audit"
     out.mkdir()
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
     # documentation has block_threshold=None (advisory) per the registry.
-    results = [
+    records = [
         {
             "agent": "documentation",
             "findings": [
@@ -2229,30 +1992,16 @@ def test_gate_finalize_advisory_agent_findings_dont_block_gate(tmp_path):
             "tool_calls": [],
         },
     ]
-    payload = {
-        "results": results,
-        "meta": {
-            "mode": "gate",
-            "staged_hash": "sha256:abc",
-            "agents_set": ["documentation"],
-        },
+    meta = {
+        "mode": "gate",
+        "staged_hash": "sha256:abc",
+        "agents_set": ["documentation"],
     }
-    results_file = tmp_path / "results.json"
-    results_file.write_text(_json.dumps(payload))
-    result = runner.invoke(
-        app,
-        [
-            "gate-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
-    )
-    assert result.exit_code == 0, result.output
+    verdict = _finalize_gate(records, findings_dir, out, meta)
+    # Advisory findings surface in the report but do NOT block.
+    assert verdict == "PASS", f"Advisory agent findings caused FAIL; verdict={verdict}"
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
-    # Advisory findings surface in the report but do NOT block.
     assert marker["verdict"] == "PASS", (
         f"Advisory agent findings caused FAIL; marker={marker}"
     )
@@ -2260,9 +2009,13 @@ def test_gate_finalize_advisory_agent_findings_dont_block_gate(tmp_path):
 
 def test_gate_finalize_marks_drift_detected(tmp_path):
     """A tool_calls entry using a disallowed tool → drift_detected: true in marker."""
+    from framework_cli.cli import _finalize_gate
+
     out = tmp_path / "audit"
     out.mkdir()
-    results = [
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
+    records = [
         {
             "agent": "architecture",
             "findings": [],
@@ -2274,27 +2027,9 @@ def test_gate_finalize_marks_drift_detected(tmp_path):
             "tool_calls": [{"turn": 1, "tool": "Bash", "input": {"command": "ls"}}],
         },
     ]
-    payload = {
-        "results": results,
-        "meta": {
-            "mode": "gate",
-            "staged_hash": "sha256:abc",
-            "agents_set": ["architecture"],
-        },
-    }
-    results_file = tmp_path / "results.json"
-    results_file.write_text(_json.dumps(payload))
-    result = runner.invoke(
-        app,
-        [
-            "gate-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
-    )
-    assert result.exit_code == 0, result.output
+    meta = {"mode": "gate", "staged_hash": "sha256:abc", "agents_set": ["architecture"]}
+    verdict = _finalize_gate(records, findings_dir, out, meta)
+    assert verdict == "FAIL"
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
     assert marker["drift_detected"] is True
@@ -2304,10 +2039,13 @@ def test_gate_finalize_marks_drift_detected(tmp_path):
 def test_gate_finalize_regrade_skips_dispatch(tmp_path):
     """A regrade-mode payload re-flags existing findings against current thresholds
     without invoking subagents."""
+    from framework_cli.cli import _finalize_gate
+
     out = tmp_path / "audit"
     out.mkdir()
-    (out / "findings").mkdir()
-    (out / "findings" / "security.json").write_text(
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
+    findings_dir.joinpath("security.json").write_text(
         _json.dumps(
             {
                 "agent": "security",
@@ -2321,23 +2059,9 @@ def test_gate_finalize_regrade_skips_dispatch(tmp_path):
             }
         )
     )
-    payload = {
-        "results": [],
-        "meta": {"mode": "regrade", "staged_hash": "sha256:abc"},
-    }
-    results_file = tmp_path / "results.json"
-    results_file.write_text(_json.dumps(payload))
-    result = runner.invoke(
-        app,
-        [
-            "gate-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
-    )
-    assert result.exit_code == 0, result.output
+    meta = {"mode": "regrade", "staged_hash": "sha256:abc"}
+    verdict = _finalize_gate([], findings_dir, out, meta)
+    assert verdict == "PASS"  # empty findings → PASS
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
     assert marker["verdict"] == "PASS"  # empty findings → PASS
@@ -2363,12 +2087,16 @@ def test_gate_finalize_acknowledged_active_decision_passes(tmp_path, monkeypatch
     (status=accepted) → the finding is excluded from the blocking set → verdict PASS.
     The integrity guard requires the cited id to be active; here it is, so it passes.
     """
+    from framework_cli.cli import _finalize_gate
+
     monkeypatch.chdir(tmp_path)
     _seed_gate_decision(tmp_path, "DEC-0001", "accepted")
 
     out = tmp_path / "audit"
     out.mkdir()
-    results = [
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
+    records = [
         {
             "agent": "security",
             "findings": [
@@ -2389,27 +2117,11 @@ def test_gate_finalize_acknowledged_active_decision_passes(tmp_path, monkeypatch
             "tool_calls": [],
         },
     ]
-    payload = {
-        "results": results,
-        "meta": {
-            "mode": "gate",
-            "staged_hash": "sha256:abc",
-            "agents_set": ["security"],
-        },
-    }
-    results_file = tmp_path / "results.json"
-    results_file.write_text(_json.dumps(payload))
-    result = runner.invoke(
-        app,
-        [
-            "gate-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
+    meta = {"mode": "gate", "staged_hash": "sha256:abc", "agents_set": ["security"]}
+    verdict = _finalize_gate(records, findings_dir, out, meta)
+    assert verdict == "PASS", (
+        f"Acknowledged-active finding should not block; verdict={verdict}"
     )
-    assert result.exit_code == 0, result.output
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
     assert marker["verdict"] == "PASS", (
@@ -2429,12 +2141,16 @@ def test_gate_finalize_acknowledged_but_stale_decision_blocks(tmp_path, monkeypa
     is void even though the cited id is active → verdict FAIL. (Without the stale
     check, a contradictory acknowledged+stale pair would silently pass.)
     """
+    from framework_cli.cli import _finalize_gate
+
     monkeypatch.chdir(tmp_path)
     _seed_gate_decision(tmp_path, "DEC-0001", "accepted")
 
     out = tmp_path / "audit"
     out.mkdir()
-    results = [
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
+    records = [
         {
             "agent": "security",
             "findings": [
@@ -2456,27 +2172,11 @@ def test_gate_finalize_acknowledged_but_stale_decision_blocks(tmp_path, monkeypa
             "tool_calls": [],
         },
     ]
-    payload = {
-        "results": results,
-        "meta": {
-            "mode": "gate",
-            "staged_hash": "sha256:abc",
-            "agents_set": ["security"],
-        },
-    }
-    results_file = tmp_path / "results.json"
-    results_file.write_text(_json.dumps(payload))
-    result = runner.invoke(
-        app,
-        [
-            "gate-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
+    meta = {"mode": "gate", "staged_hash": "sha256:abc", "agents_set": ["security"]}
+    verdict = _finalize_gate(records, findings_dir, out, meta)
+    assert verdict == "FAIL", (
+        f"Acknowledged-but-stale finding must still block; verdict={verdict}"
     )
-    assert result.exit_code == 0, result.output
     marker = _json.loads((out.parent / "marker.json").read_text())
     assert marker["verdict"] == "FAIL", (
         f"Acknowledged-but-stale finding must still block; marker={marker}"
@@ -2487,12 +2187,16 @@ def test_gate_finalize_acknowledged_inactive_decision_blocks(tmp_path, monkeypat
     """Integrity guard: acknowledged: <id> citing an INACTIVE decision (status=retired)
     is ignored — the finding blocks normally → verdict FAIL.
     """
+    from framework_cli.cli import _finalize_gate
+
     monkeypatch.chdir(tmp_path)
     _seed_gate_decision(tmp_path, "DEC-0002", "retired")
 
     out = tmp_path / "audit"
     out.mkdir()
-    results = [
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
+    records = [
         {
             "agent": "security",
             "findings": [
@@ -2513,27 +2217,11 @@ def test_gate_finalize_acknowledged_inactive_decision_blocks(tmp_path, monkeypat
             "tool_calls": [],
         },
     ]
-    payload = {
-        "results": results,
-        "meta": {
-            "mode": "gate",
-            "staged_hash": "sha256:abc",
-            "agents_set": ["security"],
-        },
-    }
-    results_file = tmp_path / "results.json"
-    results_file.write_text(_json.dumps(payload))
-    result = runner.invoke(
-        app,
-        [
-            "gate-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
+    meta = {"mode": "gate", "staged_hash": "sha256:abc", "agents_set": ["security"]}
+    verdict = _finalize_gate(records, findings_dir, out, meta)
+    assert verdict == "FAIL", (
+        f"Acknowledged-inactive finding must still block (integrity guard); verdict={verdict}"
     )
-    assert result.exit_code == 0, result.output
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
     assert marker["verdict"] == "FAIL", (
@@ -2545,12 +2233,16 @@ def test_gate_finalize_acknowledged_unknown_id_blocks(tmp_path, monkeypatch):
     """Integrity guard: acknowledged: <id> citing an UNKNOWN decision id is ignored —
     the finding blocks normally → verdict FAIL.
     """
+    from framework_cli.cli import _finalize_gate
+
     monkeypatch.chdir(tmp_path)
     # No decision files at all — DEC-9999 is unknown.
 
     out = tmp_path / "audit"
     out.mkdir()
-    results = [
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
+    records = [
         {
             "agent": "security",
             "findings": [
@@ -2571,27 +2263,11 @@ def test_gate_finalize_acknowledged_unknown_id_blocks(tmp_path, monkeypatch):
             "tool_calls": [],
         },
     ]
-    payload = {
-        "results": results,
-        "meta": {
-            "mode": "gate",
-            "staged_hash": "sha256:abc",
-            "agents_set": ["security"],
-        },
-    }
-    results_file = tmp_path / "results.json"
-    results_file.write_text(_json.dumps(payload))
-    result = runner.invoke(
-        app,
-        [
-            "gate-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
+    meta = {"mode": "gate", "staged_hash": "sha256:abc", "agents_set": ["security"]}
+    verdict = _finalize_gate(records, findings_dir, out, meta)
+    assert verdict == "FAIL", (
+        f"Acknowledged-unknown finding must still block (integrity guard); verdict={verdict}"
     )
-    assert result.exit_code == 0, result.output
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
     assert marker["verdict"] == "FAIL", (
@@ -2601,12 +2277,16 @@ def test_gate_finalize_acknowledged_unknown_id_blocks(tmp_path, monkeypatch):
 
 def test_gate_finalize_stale_finding_blocks(tmp_path, monkeypatch):
     """A finding tagged stale: <id> (premise no longer holds) blocks normally → FAIL."""
+    from framework_cli.cli import _finalize_gate
+
     monkeypatch.chdir(tmp_path)
     _seed_gate_decision(tmp_path, "DEC-0003", "accepted")
 
     out = tmp_path / "audit"
     out.mkdir()
-    results = [
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
+    records = [
         {
             "agent": "security",
             "findings": [
@@ -2627,27 +2307,9 @@ def test_gate_finalize_stale_finding_blocks(tmp_path, monkeypatch):
             "tool_calls": [],
         },
     ]
-    payload = {
-        "results": results,
-        "meta": {
-            "mode": "gate",
-            "staged_hash": "sha256:abc",
-            "agents_set": ["security"],
-        },
-    }
-    results_file = tmp_path / "results.json"
-    results_file.write_text(_json.dumps(payload))
-    result = runner.invoke(
-        app,
-        [
-            "gate-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
-    )
-    assert result.exit_code == 0, result.output
+    meta = {"mode": "gate", "staged_hash": "sha256:abc", "agents_set": ["security"]}
+    verdict = _finalize_gate(records, findings_dir, out, meta)
+    assert verdict == "FAIL", f"Stale finding must block; verdict={verdict}"
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
     assert marker["verdict"] == "FAIL", f"Stale finding must block; marker={marker}"
@@ -2833,11 +2495,6 @@ def test_template_audit_command_is_framework_only():
     payload_dir = template_path() / ".claude/commands/reviewers"
     assert not (payload_dir / "template-audit.md.jinja").exists()
     assert not (payload_dir / "template-audit.md").exists()
-
-
-# ---------------------------------------------------------------------------
-# _build_gate_work_item — decisions injection
-# ---------------------------------------------------------------------------
 
 
 def _make_decision_file(
@@ -3292,3 +2949,328 @@ def test_review_config_set_backend_consent_accept_persists(tmp_path, monkeypatch
     assert (
         tmp_path / ".framework" / "review.toml"
     ).read_text().strip() == 'backend = "api"'
+
+
+# ---------------------------------------------------------------------------
+# Task 4.2 (Plan 20b): framework gate — in-process gate command
+# ---------------------------------------------------------------------------
+
+
+def test_gate_skip_neutral_without_backend(tmp_path, monkeypatch):
+    """framework gate with no backend resolved → skip-neutral PASS, exit 0,
+    marker.json written with verdict=PASS and 'skip' visible in stdout."""
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ANTHROPIC_RUNTIME_API_KEY", raising=False)
+    monkeypatch.setattr("shutil.which", lambda n: None)
+    r = CliRunner().invoke(app, ["gate"])
+    assert r.exit_code == 0 and "skip" in r.stdout.lower()
+    assert (tmp_path / ".framework" / "audit" / "marker.json").exists()
+
+
+def test_audit_errors_without_backend(tmp_path, monkeypatch):
+    """framework audit (NOT gate) with no backend → exit 2 with 'backend' in output.
+    Regression guard: audit must NOT be skip-neutral."""
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ANTHROPIC_RUNTIME_API_KEY", raising=False)
+    monkeypatch.setattr("shutil.which", lambda n: None)
+    r = CliRunner().invoke(app, ["audit", "--target", "framework"])
+    # _explain_no_backend writes to stderr; typer's default CliRunner mixes it into output
+    assert r.exit_code == 2 and "backend" in r.output.lower()
+
+
+def test_gate_runs_in_process_and_writes_marker(tmp_path, monkeypatch):
+    """framework gate with a review-relevant staged file runs the in-process engine
+    and writes marker.json with verdict=PASS (no findings from stub)."""
+    import subprocess
+
+    import framework_cli.cli as climod
+    from framework_cli.cli import app
+    from framework_cli.review.backend import Message, TextBlock
+
+    class _Msgs:
+        def create(self, **kw):
+            return Message(content=[TextBlock(text="[]")], stop_reason="end_turn")
+
+    monkeypatch.setattr(
+        climod,
+        "_make_backend",
+        lambda name, key_env: type("B", (), {"messages": _Msgs()})(),
+    )
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": "api", "reason": "resolved", "intent": "api"}
+        )(),
+    )
+
+    # Set up a minimal git repo with a staged review-relevant file
+    (tmp_path / "src" / "framework_cli" / "review").mkdir(parents=True)
+    target_file = tmp_path / "src" / "framework_cli" / "review" / "runner.py"
+    target_file.write_text("# original\n")
+    subprocess.run(
+        ["git", "init", "--initial-branch=main"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "--no-gpg-sign", "-m", "init"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    # Now edit + stage the review-relevant file
+    target_file.write_text("# modified\n")
+    subprocess.run(
+        ["git", "add", str(target_file)], cwd=tmp_path, check=True, capture_output=True
+    )
+
+    monkeypatch.chdir(tmp_path)
+    out_dir = tmp_path / ".framework" / "audit" / "latest"
+    r = CliRunner().invoke(app, ["gate", "--out-dir", str(out_dir)])
+    assert r.exit_code == 0, r.output
+    marker_path = tmp_path / ".framework" / "audit" / "marker.json"
+    assert marker_path.is_file(), f"marker.json not found; output={r.output}"
+    marker = _json.loads(marker_path.read_text())
+    assert marker["verdict"] == "PASS"
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 — gate is fail-open on infra errors (never wedges commits)
+# ---------------------------------------------------------------------------
+
+
+def _setup_minimal_git_repo_with_staged_review_file(tmp_path: Path) -> None:
+    """Create a minimal git repo with a staged review-relevant file (runner.py)."""
+    import subprocess
+
+    (tmp_path / "src" / "framework_cli" / "review").mkdir(parents=True)
+    target_file = tmp_path / "src" / "framework_cli" / "review" / "runner.py"
+    target_file.write_text("# original\n")
+    subprocess.run(
+        ["git", "init", "--initial-branch=main"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "--no-gpg-sign", "-m", "init"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    target_file.write_text("# modified\n")
+    subprocess.run(
+        ["git", "add", str(target_file)], cwd=tmp_path, check=True, capture_output=True
+    )
+
+
+def test_gate_infra_error_is_fail_open_exit_0(tmp_path, monkeypatch):
+    """An unexpected exception inside the gate's engine block (e.g. _make_backend
+    raising) must degrade to exit 0 (skip, not block) so a commit is never wedged
+    on an infra error.  Stderr must mention 'errored' and 'skipping'."""
+    import framework_cli.cli as climod
+    from framework_cli.cli import app
+
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": "api", "reason": "resolved", "intent": "api"}
+        )(),
+    )
+    monkeypatch.setattr(
+        climod,
+        "_make_backend",
+        lambda name, key_env: (_ for _ in ()).throw(
+            RuntimeError("simulated infra error")
+        ),
+    )
+
+    _setup_minimal_git_repo_with_staged_review_file(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    out_dir = tmp_path / ".framework" / "audit" / "latest"
+    r = CliRunner().invoke(app, ["gate", "--out-dir", str(out_dir)])
+    assert r.exit_code == 0, (
+        f"expected exit 0 on infra error; got {r.exit_code}; output={r.output}"
+    )
+    # CliRunner mixes stdout+stderr into output; check the message is present
+    assert "errored" in r.output.lower() or "skipping" in r.output.lower(), (
+        f"expected 'errored'/'skipping' in output; got: {r.output!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 2 — noop gate must be skip-neutral on stale blocking findings
+# ---------------------------------------------------------------------------
+
+
+def test_gate_noop_is_skip_neutral_with_stale_blocking_findings(tmp_path, monkeypatch):
+    """Noop gate (no review-relevant staged files) must write verdict=PASS even when
+    findings/ contains a prior high-severity finding that would FAIL on reload.
+
+    Regression guard for [[noop-gate-inherits-stale-fail]]: before the fix the
+    noop branch called _finalize_gate(mode='noop') which reloaded prior findings/
+    records and re-derived a stale FAIL, blocking every subsequent commit on an
+    unrelated file.
+    """
+    import subprocess
+
+    import framework_cli.cli as climod
+    from framework_cli.cli import app
+
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": "api", "reason": "resolved", "intent": "api"}
+        )(),
+    )
+
+    # Minimal git repo — stage a NON-review-relevant file so mode → noop.
+    (tmp_path / "docs").mkdir(parents=True)
+    readme = tmp_path / "docs" / "README.md"
+    readme.write_text("hello\n")
+    subprocess.run(
+        ["git", "init", "--initial-branch=main"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "--no-gpg-sign", "-m", "init"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    readme.write_text("hello updated\n")
+    subprocess.run(
+        ["git", "add", str(readme)], cwd=tmp_path, check=True, capture_output=True
+    )
+
+    # Pre-seed findings/security.json with a high-severity finding (would FAIL on reload)
+    out_dir = tmp_path / ".framework" / "audit" / "latest"
+    findings_dir = out_dir / "findings"
+    findings_dir.mkdir(parents=True, exist_ok=True)
+    stale_record = {
+        "agent": "security",
+        "findings": [
+            {
+                "path": "src/app.py",
+                "line": 1,
+                "severity": "high",
+                "message": "hardcoded secret",
+                "suggestion": None,
+            }
+        ],
+        "usage": {},
+        "latency_ms": None,
+        "stop_reason": "end_turn",
+        "raw_text": "[]",
+        "turns": 1,
+        "tool_calls": [],
+    }
+    (findings_dir / "security.json").write_text(_json.dumps(stale_record))
+
+    monkeypatch.chdir(tmp_path)
+    r = CliRunner().invoke(app, ["gate", "--out-dir", str(out_dir)])
+    assert r.exit_code == 0, (
+        f"noop gate must exit 0 even with stale FAIL findings; got {r.exit_code}; output={r.output}"
+    )
+    marker_path = tmp_path / ".framework" / "audit" / "marker.json"
+    assert marker_path.is_file(), "marker.json not written"
+    marker = _json.loads(marker_path.read_text())
+    assert marker["verdict"] == "PASS", (
+        f"noop gate re-derived FAIL from stale findings; marker={marker}"
+    )
+    # The stale findings/ file must still be present (noop must NOT clear findings)
+    assert (findings_dir / "security.json").exists(), (
+        "noop must not clear stale findings"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 3 — errored agent is surfaced in marker summary (fail-open + auditable)
+# ---------------------------------------------------------------------------
+
+
+def test_gate_finalize_errored_agent_in_marker_summary(tmp_path):
+    """When gate-mode meta_in['failed'] is non-empty, _finalize_gate must append
+    '<n> agent(s) errored: <names>' to the marker summary. Verdict must still be
+    PASS when there are no blocking findings — the fail-open is intentional."""
+    from framework_cli.cli import _finalize_gate
+
+    out = tmp_path / "audit"
+    out.mkdir()
+    findings_dir = out / "findings"
+    findings_dir.mkdir()
+
+    meta = {
+        "mode": "gate",
+        "staged_hash": "sha256:abc",
+        "agents_set": ["security"],
+        "failed": ["security"],
+    }
+    # Pass an empty records list — the security agent "errored" with no findings.
+    verdict = _finalize_gate([], findings_dir, out, meta)
+    assert verdict == "PASS", (
+        f"fail-open: errored agent must not cause FAIL; got {verdict}"
+    )
+    marker_path = out.parent / "marker.json"
+    marker = _json.loads(marker_path.read_text())
+    assert marker["verdict"] == "PASS"
+    assert "errored" in marker["summary"].lower(), (
+        f"expected 'errored' in marker summary; got: {marker['summary']!r}"
+    )
+    assert "security" in marker["summary"], (
+        f"expected agent name in marker summary; got: {marker['summary']!r}"
+    )

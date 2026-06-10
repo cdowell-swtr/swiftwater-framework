@@ -628,6 +628,139 @@ def audit(
         _preserve_audit_tree(out, Path(preserve_as), force=force)
 
 
+@app.command()
+def gate(
+    backend: str = typer.Option(
+        None, "--backend", help="Backend: 'api' or 'subagent'."
+    ),
+    out_dir: str = typer.Option(
+        ".framework/audit/latest",
+        "--out-dir",
+        help="Output directory for findings.",
+    ),
+) -> None:
+    """Run the in-process review gate on the staged set and write marker.json.
+
+    Skip-neutral: if no AI review backend is enabled the gate writes a PASS
+    marker and exits 0 — a backend-less commit is never blocked.
+    """
+    from framework_cli.review.checkpoint import tree_signature
+    from framework_cli.review.engine import EngineItem, run_engine
+
+    res = _resolve_review_backend(flag=backend or None, key_env=RUNTIME_KEY_ENV)
+
+    staged = _staged_files()
+    mode, agents = _affected_agents(staged)
+    staged_hash = _staged_hash(staged)
+    out = Path(out_dir)
+
+    # Skip-neutral: no backend → write a PASS skip marker, exit 0
+    if res.backend is None:  # type: ignore[attr-defined]
+        _write_gate_pass_marker(
+            out, staged_hash, "no AI review backend enabled (skip-neutral)"
+        )
+        typer.echo("gate: skip-neutral — no review backend enabled; skipping review")
+        raise typer.Exit(0)
+
+    findings_dir = out / "findings"
+    findings_dir.mkdir(parents=True, exist_ok=True)
+
+    if mode == "noop":
+        # Noop: no review-relevant files staged. Write a fresh PASS marker directly
+        # WITHOUT reloading prior findings/ records — reloading would re-derive a
+        # stale FAIL from a previous gate run and block unrelated commits forever
+        # (see [[noop-gate-inherits-stale-fail]]). Leave findings/ untouched for
+        # audit/regrade use.
+        _write_gate_pass_marker(out, staged_hash, "no review-relevant changes (noop)")
+        typer.echo("gate: noop — no review-relevant changes; skipping review")
+        raise typer.Exit(0)
+
+    if mode == "regrade":
+        # Regrade: thresholds-only change; legitimately re-grade prior findings.
+        try:
+            verdict = _finalize_gate(
+                [],
+                findings_dir,
+                out,
+                {"mode": "regrade", "staged_hash": staged_hash, "agents_set": []},
+            )
+        except typer.Exit:
+            raise
+        except Exception as exc:  # gate must never wedge a commit on an infra error
+            typer.echo(
+                f"gate: review errored ({type(exc).__name__}: {exc}); skipping (not blocking)",
+                err=True,
+            )
+            raise typer.Exit(0)
+        raise typer.Exit(1 if verdict == "FAIL" else 0)
+
+    # gate mode: build EngineItems for all affected agents, run engine
+    diff = staged_diff()
+    root = Path.cwd()
+    sha, dirty = tree_signature(root)
+
+    items: list[EngineItem] = []
+    for a in agents:
+        try:
+            spec = get_agent(a)
+        except KeyError:
+            continue
+        items.append(EngineItem(agent=a, diff=diff, spec=spec, review_mode="snapshot"))
+
+    try:
+        result = run_engine(
+            items,
+            backend=_make_backend(res.backend, RUNTIME_KEY_ENV),  # type: ignore[attr-defined]
+            run_dir=out,
+            root=root,
+            git_sha=sha,
+            dirty_hash=dirty,
+            backend_name=res.backend,  # type: ignore[attr-defined]
+        )
+
+        if result.exhausted:
+            hint = f" (resets {result.reset_hint})" if result.reset_hint else ""
+            typer.echo(
+                f"Subscription limit reached after {len(result.completed)} agents. "
+                f"Progress checkpointed at {out}. Resume with `framework gate`{hint}."
+            )
+            # Intentional fail-open: finalize the partial completed set rather than
+            # blocking the commit on subscription exhaustion; the resume hint above
+            # tells the user how to re-run the remaining agents.
+
+        if result.failed:
+            # Intentional fail-open: a crashed agent records empty findings so the
+            # gate does NOT block — a flaky agent must never wedge a commit. The
+            # failure IS surfaced in the marker summary (via meta_in["failed"]) so
+            # the state is auditable even when the verdict stays PASS.
+            typer.echo(
+                f"gate: {len(result.failed)} agent(s) failed and were recorded with no findings: "
+                f"{', '.join(result.failed)}",
+                err=True,
+            )
+
+        verdict = _finalize_gate(
+            result.records,
+            findings_dir,
+            out,
+            {
+                "mode": "gate",
+                "staged_hash": staged_hash,
+                "agents_set": agents,
+                "failed": result.failed,
+            },
+        )
+    except typer.Exit:
+        raise
+    except Exception as exc:  # gate must never wedge a commit on an infra error
+        typer.echo(
+            f"gate: review errored ({type(exc).__name__}: {exc}); skipping (not blocking)",
+            err=True,
+        )
+        raise typer.Exit(0)
+    raise typer.Exit(1 if verdict == "FAIL" else 0)
+
+
 def _review_run(
     diff: str, spec: object, force_agentic: bool = False, backend: object = None
 ) -> list:
@@ -1021,27 +1154,6 @@ def tune_prepare(
     _emit_tune_prep(agent, Path(fixtures), repeat, output_dir, split_to)
 
 
-@app.command(name="gate-prepare")
-def gate_prepare(
-    split_to: str = typer.Option(
-        "",
-        "--split-to",
-        help=(
-            "If set, write a small index.json + per-item items/item-NNNN.json under "
-            "DIR (in addition to the stdout manifest). Lets the Workflow tool be "
-            "invoked with a tiny args payload instead of a multi-MB inline manifest. "
-            "Idempotent: an existing DIR is cleared first."
-        ),
-    ),
-) -> None:
-    """Emit the gate-mode work-item manifest (affected agents for the staged set).
-
-    Output is JSON on stdout; consumed by /reviewers:gate (and the PreToolUse
-    hook, which uses it to recompute the current staged_hash).
-    """
-    _emit_gate_prep(split_to)
-
-
 def _staged_files() -> list[str]:
     """Return the list of files in the staged set (git diff --cached --name-only)."""
     result = subprocess.run(
@@ -1175,169 +1287,6 @@ def _prepare_split_dir(split_to: str) -> tuple[Path, Path]:
     items_dir.chmod(0o700)
     os.replace(staging, split_dir)
     return split_dir, split_dir / "items"
-
-
-def _build_gate_work_item(spec: object, diff: str, root: Path) -> dict:
-    """Build one JS-dispatch work-item dict for the gate path.
-
-    The gate and tune commands still use a JS-dispatch Workflow; the audit command
-    has been replaced by the in-process engine (see `audit` command). This helper
-    exists solely for _emit_gate_prep — it is NOT part of the public API and must
-    NOT be used in the new engine path.
-
-    Formerly named _build_audit_work_item; renamed at Plan-20b Phase 4.1 to make
-    clear it is only the JS-dispatch shape (gate), not the engine shape (audit).
-    """
-    from framework_cli.review.decisions import (
-        relevant_decisions,
-        render_decisions_block,
-    )
-
-    short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
-    dec_block = render_decisions_block(relevant_decisions(short, root))
-
-    is_agentic = spec.context.strategy == "agentic"  # type: ignore[attr-defined]
-    if is_agentic:
-        system_blocks = [{"text": f"Review this unified diff:\n\n{diff}"}]
-        if dec_block is not None:
-            system_blocks.append({"text": dec_block})
-        system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
-        user_message = (
-            f"You are reviewing the codebase rooted at: {root}\n\n"
-            "Use the Read, Grep, and Glob tools (these only — do NOT use Bash, "
-            "WebFetch, WebSearch, or any other tool) to explore the code as "
-            "needed. Use absolute paths starting with the root above.\n\n"
-            "When done, reply with ONLY a JSON array of findings:\n"
-            '  [{"path": "...", "line": N, "severity": "...", "message": "...", '
-            '"suggestion": "..."}]\n\n'
-            "IMPORTANT: in each finding, the `path` MUST be a path RELATIVE to "
-            f"the project root above (e.g. 'src/demo/foo.py'), NOT the absolute "
-            "path you used for the tool call. The scoring layer matches on "
-            "relative paths; absolute paths register as misses."
-        )
-        return {
-            "agent": short,
-            "kind": "current",
-            "case": short,
-            "repeat_idx": 0,
-            "seeded_file": None,
-            "subagent_type": "Explore",
-            "model": spec.model,  # type: ignore[attr-defined]
-            "system_blocks": system_blocks,
-            "user_message": user_message,
-            "tools_allowed": ["Read", "Grep", "Glob"],
-            "root_dir": str(root),
-            "diff": diff,
-        }
-    from framework_cli.review.context import assemble
-
-    bundle = assemble(diff, root, spec.context, model=spec.model)  # type: ignore[attr-defined]
-    system_blocks = [{"text": f"Review this unified diff:\n\n{bundle.diff}"}]
-    if bundle.context_files:
-        joined = "\n\n".join(f"=== {p} ===\n{c}" for p, c in bundle.context_files)
-        note = "\n\n[context truncated to fit the budget]" if bundle.truncated else ""
-        system_blocks.append(
-            {"text": f"Relevant repository files for context:\n\n{joined}{note}"}
-        )
-    if dec_block is not None:
-        system_blocks.append({"text": dec_block})
-    system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
-    return {
-        "agent": short,
-        "kind": "current",
-        "case": short,
-        "repeat_idx": 0,
-        "seeded_file": None,
-        "subagent_type": "general-purpose",
-        "model": spec.model,  # type: ignore[attr-defined]
-        "system_blocks": system_blocks,
-        "user_message": "Return your findings as a JSON array only.",
-        "tools_allowed": None,
-        "root_dir": str(root),
-        "diff": diff,
-    }
-
-
-def _emit_gate_prep(split_to: str = "") -> None:
-    """Emit a gate-mode manifest from the current staged set."""
-    staged = _staged_files()
-    detected_mode, agents = _affected_agents(staged)
-    staged_hash = _staged_hash(staged)
-
-    if detected_mode == "noop":
-        manifest: dict = {
-            "mode": "noop",
-            "agents_set": [],
-            "work_items": [],
-            "staged_hash": staged_hash,
-            "output_dir": ".framework/audit/latest",
-        }
-    elif detected_mode == "regrade":
-        manifest = {
-            "mode": "regrade",
-            "agents_set": [],
-            "work_items": [],
-            "staged_hash": staged_hash,
-            "output_dir": ".framework/audit/latest",
-        }
-    else:
-        # Build work items for each affected agent (same shape as audit-mode items).
-        # Use staged_diff() — NOT _review_diff() / pr_diff() — so the gate reviews the
-        # about-to-be-committed staged set, not the prior commit (HEAD~1...HEAD), which
-        # was the original (buggy) behavior that reviewed the wrong content.
-        diff = staged_diff()
-        root = Path.cwd()
-        work_items: list[dict] = []
-        for a in agents:
-            try:
-                spec = get_agent(a)
-            except KeyError:
-                continue
-            work_items.append(_build_gate_work_item(spec, diff, root))
-        manifest = {
-            "mode": "gate",
-            "agents_set": agents,
-            "work_items": work_items,
-            "staged_hash": staged_hash,
-            "output_dir": ".framework/audit/latest",
-        }
-
-    # Optional split-manifest write: in addition to the stdout manifest, write a small
-    # index.json + per-item items/item-NNNN.json so the Workflow tool can be invoked with
-    # a tiny args payload ({indexPath, itemsDir}) instead of a multi-MB inline manifest.
-    # Mirrors the tune-prepare split layout but with gate's simpler item shape
-    # (one item per affected agent; no kind/case/repeat dimension).
-    if split_to:
-        split_dir, items_dir = _prepare_split_dir(split_to)
-
-        index_items: list[dict] = []
-        for i, wi in enumerate(manifest["work_items"]):
-            item_path = items_dir / f"item-{i:04d}.json"
-            item_path.write_text(json.dumps(wi, indent=2))
-            item_path.chmod(0o600)
-            index_items.append(
-                {
-                    "i": i,
-                    "agent": wi["agent"],
-                    "subagent_type": wi["subagent_type"],
-                    # Carry the registry model so the subscription Workflow
-                    # dispatches each subagent at its intended tier instead of
-                    # the harness default.
-                    "model": wi["model"],
-                }
-            )
-        index = {
-            "mode": manifest["mode"],
-            "agents_set": manifest["agents_set"],
-            "staged_hash": staged_hash,
-            "items": index_items,
-            "output_dir": manifest["output_dir"],
-        }
-        index_path = split_dir / "index.json"
-        index_path.write_text(json.dumps(index, indent=2))
-        index_path.chmod(0o600)
-
-    typer.echo(json.dumps(manifest, indent=2))
 
 
 def _emit_tune_prep(
@@ -1654,30 +1603,6 @@ def _preserve_audit_tree(src: Path, dst: Path, *, force: bool) -> None:
     typer.echo(f"audit: preserved to {dst}")
 
 
-@app.command(name="gate-finalize")
-def gate_finalize(
-    results: str = typer.Option(
-        ..., "--results", help="Path to JSON file from the workflow."
-    ),
-    out_dir: str = typer.Option(
-        ..., "--out-dir", help="Output dir to write artifacts."
-    ),
-) -> None:
-    """Take the gate workflow's results, write per-agent records (gate mode), compute
-    verdict, write marker.json.
-
-    In gate mode, stale per-agent records under <out-dir>/findings/ are cleared
-    before this run's records are written, so the verdict reflects only this run.
-    Noop/regrade modes leave findings_dir alone so the regrade-against-prior-findings
-    workflow continues to work.
-    """
-    records, meta_in = _load_finalize_payload(results, "gate-finalize")
-    out = Path(out_dir)
-    findings_dir = out / "findings"
-    findings_dir.mkdir(parents=True, exist_ok=True)
-    _finalize_gate(records, findings_dir, out, meta_in)
-
-
 def _finalize_tune(records: list, findings_dir: Path, out: Path, meta_in: dict) -> None:
     from framework_cli.review import analyze
     from framework_cli.review.evals import load_thresholds
@@ -1860,8 +1785,30 @@ def _finalize_audit(
     typer.echo(f"audit: wrote {out}")
 
 
-def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) -> None:
-    """Write records (if any), compute verdict, write marker.json."""
+def _write_gate_pass_marker(out: Path, staged_hash: str, summary: str) -> None:
+    """Write a fresh PASS marker.json without reloading any prior findings.
+
+    Used by skip-neutral (no backend) and noop (no review-relevant staged files)
+    to ensure a clean PASS is always recorded — never re-deriving a stale FAIL
+    from a previous gate run's findings/ directory.
+    """
+    from datetime import datetime, timezone
+
+    marker_path = out.parent / "marker.json"
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    marker = {
+        "staged_hash": staged_hash,
+        "agents_run": [],
+        "verdict": "PASS",
+        "drift_detected": False,
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "summary": summary,
+    }
+    marker_path.write_text(json.dumps(marker, indent=2, sort_keys=True))
+
+
+def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) -> str:
+    """Write records (if any), compute verdict, write marker.json. Returns verdict."""
     from datetime import datetime, timezone
 
     from framework_cli.review import analyze
@@ -1952,6 +1899,15 @@ def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) 
     if drift_detected and not failing:
         summary_parts.append("drift")
 
+    # Surface errored agents into the marker so partial-run state is auditable.
+    # An agent crash records empty findings → the gate PASSes (intentional fail-open:
+    # a flaky agent must not wedge a commit), but the failure IS noted in the summary.
+    failed_agents: list[str] = meta_in.get("failed", []) or []
+    if failed_agents:
+        summary_parts.append(
+            f"{len(failed_agents)} agent(s) errored: {', '.join(failed_agents)}"
+        )
+
     # marker.json lives at .framework/audit/marker.json (sibling to latest/)
     marker_path = out.parent / "marker.json"
     marker = {
@@ -1965,7 +1921,8 @@ def _finalize_gate(records: list, findings_dir: Path, out: Path, meta_in: dict) 
     }
     marker_path.parent.mkdir(parents=True, exist_ok=True)
     marker_path.write_text(json.dumps(marker, indent=2, sort_keys=True))
-    typer.echo(f"gate-finalize: verdict={verdict}, marker={marker_path}")
+    typer.echo(f"gate: verdict={verdict}, marker={marker_path}")
+    return verdict
 
 
 def _apply_md_content() -> str:
