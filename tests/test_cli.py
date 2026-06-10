@@ -2654,6 +2654,93 @@ def test_audit_failed_agents_reported_on_stderr(tmp_path, monkeypatch):
     assert "agent(s) failed" in r.output
 
 
+def test_finalize_audit_error_field_persisted_and_surfaced_in_report(
+    tmp_path, monkeypatch
+):
+    """_finalize_audit must (a) persist the 'error' field from a failure record into
+    findings/<agent>.json, and (b) render the error reason in audit-report.md instead
+    of the generic '_(no findings)_' placeholder."""
+    import json as _json
+
+    import framework_cli.cli as climod
+
+    findings_dir = tmp_path / "findings"
+    findings_dir.mkdir(parents=True)
+
+    error_text = (
+        "RuntimeError: claude -p failed (1): Usage credits required for 1M context"
+    )
+
+    records = [
+        # A normal passing agent with findings
+        {
+            "agent": "documentation",
+            "findings": [
+                {
+                    "path": "src/foo.py",
+                    "line": 10,
+                    "severity": "low",
+                    "message": "missing docstring",
+                }
+            ],
+            "review_mode": "snapshot",
+            "base_sha": None,
+            "base_baseline": None,
+            "usage": {},
+            "latency_ms": None,
+            "stop_reason": "end_turn",
+            "raw_text": "",
+            "turns": 1,
+            "tool_calls": [],
+        },
+        # A failed agent — error field present
+        {
+            "agent": "security",
+            "findings": [],
+            "stop_reason": "error",
+            "error": error_text,
+            "review_mode": "snapshot",
+            "base_sha": None,
+            "base_baseline": None,
+            "usage": {},
+            "latency_ms": None,
+            "raw_text": "",
+            "turns": 0,
+            "tool_calls": [],
+        },
+    ]
+
+    # _finalize_audit calls git rev-parse and active_decision_ids — stub them
+    monkeypatch.setattr(
+        climod.subprocess,
+        "run",
+        lambda *a, **kw: type(
+            "CP", (), {"returncode": 0, "stdout": "deadbeef" * 5 + "\n"}
+        )(),
+    )
+    import framework_cli.review.decisions as _dec
+
+    monkeypatch.setattr(_dec, "active_decision_ids", lambda cwd: set())
+
+    climod._finalize_audit(records, findings_dir, tmp_path, {"target": "framework"})
+
+    # (a) Persisted findings/security.json must contain the error text
+    security_record = _json.loads((findings_dir / "security.json").read_text())
+    assert security_record.get("error") == error_text, (
+        f"'error' field missing or wrong in persisted security.json: {security_record}"
+    )
+
+    # (b) audit-report.md must show the error reason — NOT just '_(no findings)_'
+    report = (tmp_path / "audit-report.md").read_text()
+    assert "Usage credits required for 1M context" in report, (
+        f"error text not found in audit-report.md:\n{report}"
+    )
+    # The clean agent's findings must still render normally
+    assert "missing docstring" in report, (
+        "normal agent findings must still appear in the report"
+    )
+
+
 def test_audit_fresh_run_clears_stale_ghost_records(tmp_path, monkeypatch):
     """A fresh (non-resume) audit over a re-used out-dir removes old agent records
     that are NOT in the current run's agent set."""

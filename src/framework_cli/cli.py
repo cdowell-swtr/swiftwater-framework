@@ -1421,6 +1421,7 @@ def _finalize_audit(
             "usage": r.get("usage", {}),
             "latency_ms": r.get("latency_ms"),
             "stop_reason": r.get("stop_reason"),
+            "error": r.get("error"),
             "raw_text": r.get("raw_text", ""),
             "turns": r.get("turns", 1),
             "tool_calls": r.get("tool_calls", []),
@@ -1428,6 +1429,12 @@ def _finalize_audit(
         record_path = findings_dir / f"{r['agent']}.json"
         record_path.write_text(json.dumps(record, indent=2, sort_keys=True))
         record_path.chmod(0o600)
+    # Build an error-text lookup from the raw records before load_records — the
+    # Record dataclass (analyze.py) does not carry the error field, so we index
+    # it here and use it when rendering the report below.
+    error_by_agent: dict[str, str | None] = {
+        r["agent"]: r.get("error") for r in records
+    }
     loaded = analyze.load_records(findings_dir)
     model_map: dict[str, str] = {}
     for r in loaded:
@@ -1449,7 +1456,11 @@ def _finalize_audit(
     md_lines.append("## Findings")
     for r in loaded:
         md_lines.append(f"### review-{r.agent}")
-        if not r.findings:
+        agent_error = error_by_agent.get(r.agent)
+        if r.stop_reason == "error" or agent_error:
+            reason = agent_error or "_(agent errored — see logs)_"
+            md_lines.append(f"_(agent errored: {reason})_")
+        elif not r.findings:
             md_lines.append("_(no findings)_")
         else:
             for f in r.findings:

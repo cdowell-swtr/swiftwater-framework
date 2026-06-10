@@ -10,7 +10,9 @@ byte-identical across paid and free.
 from __future__ import annotations
 
 import json
+import os
 import subprocess  # noqa: S404 — invoking the local `claude` CLI by fixed argv
+import tempfile
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -274,21 +276,35 @@ class _SubagentMessages:
         tools: list[dict[str, Any]] | None = None,
     ) -> Message:
         prompt = _render_prompt(messages, tools)
-        argv = [
-            "claude",
-            "-p",
-            prompt,
-            "--system-prompt",
-            _join_system(system),
-            "--exclude-dynamic-system-prompt-sections",
-            "--output-format",
-            "json",
-            "--model",
-            model,
-        ]
-        for t in _DISABLED_TOOLS:
-            argv += ["--disallowed-tools", t]
-        raw = self._runner(argv, input_text=None)
+        sys_content = _join_system(system)
+        # Write system content to a temp file (mode 0o600) so it never appears as an
+        # argv element — Linux's MAX_ARG_STRLEN (~128 KB) rejects large per-argument
+        # strings, and bundle-agent system blocks regularly exceed that on real targets.
+        # The user prompt is passed via stdin for the same reason.
+        fd, sys_path = tempfile.mkstemp(suffix=".txt")
+        try:
+            with os.fdopen(fd, "w") as fh:
+                fh.write(sys_content)
+            os.chmod(sys_path, 0o600)  # noqa: S103 — temp file; owner-read-only is correct
+            argv = [
+                "claude",
+                "-p",
+                "--system-prompt-file",
+                sys_path,
+                "--exclude-dynamic-system-prompt-sections",
+                "--output-format",
+                "json",
+                "--model",
+                model,
+            ]
+            for t in _DISABLED_TOOLS:
+                argv += ["--disallowed-tools", t]
+            raw = self._runner(argv, input_text=prompt)
+        finally:
+            try:
+                os.unlink(sys_path)
+            except OSError:
+                pass
         return _parse_claude_json(raw, tools)
 
 

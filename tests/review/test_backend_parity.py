@@ -156,11 +156,13 @@ def test_agentic_turn_cap_finalize_parity(tmp_path) -> None:  # noqa: ANN001
         )
     )
 
-    prompts: list[str] = []
+    # Capture the stdin prompt (input_text) for each call — the rendered transcript now
+    # arrives via stdin, not as an argv positional after -p.
+    stdin_prompts: list[str] = []
     calls: dict[str, int] = {"n": 0}
 
     def sub_runner(argv: list, *, input_text: str | None) -> str:  # type: ignore[type-arg]
-        prompts.append(argv[argv.index("-p") + 1])
+        stdin_prompts.append(input_text or "")
         calls["n"] += 1
         # First 2 calls: offer tools → return a tool_use request.
         # 3rd call: finalize (no tools kwarg) → return findings.
@@ -185,8 +187,8 @@ def test_agentic_turn_cap_finalize_parity(tmp_path) -> None:  # noqa: ANN001
     # Both paths must produce identical findings.
     assert f_api == f_sub
 
-    # The finalize prompt (last captured call) must contain the tool_result content that
-    # the agent gathered during exploration — proving the transcript was rendered, not
-    # dropped.  Without the _render_prompt fix, only the _FINALIZE_INSTRUCTION text would
-    # appear and "SENTINEL_CONTENT_XYZ" would be absent.
-    assert "SENTINEL_CONTENT_XYZ" in prompts[-1]
+    # The finalize prompt (last captured call, passed via stdin) must contain the
+    # tool_result content that the agent gathered during exploration — proving the
+    # transcript was rendered, not dropped.  Without the _render_prompt fix, only the
+    # _FINALIZE_INSTRUCTION text would appear and "SENTINEL_CONTENT_XYZ" would be absent.
+    assert "SENTINEL_CONTENT_XYZ" in stdin_prompts[-1]
