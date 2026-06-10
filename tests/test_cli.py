@@ -3555,3 +3555,70 @@ def test_new_succeeds_when_lock_generation_fails(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output  # scaffold still succeeds
     assert (tmp_path / "demo-app").exists()
     assert not (tmp_path / "demo-app" / "uv.lock").exists()
+
+
+# ---------------------------------------------------------------------------
+# review-config sub-app (Task 1.4 — Plan 20b)
+# ---------------------------------------------------------------------------
+
+
+def test_review_config_set_show_clear(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+    from framework_cli.cli import app
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+
+    r = runner.invoke(app, ["review-config", "show"])
+    assert r.exit_code == 0 and "none" in r.stdout.lower()
+
+    r = runner.invoke(app, ["review-config", "set-backend", "subagent", "--yes"])
+    assert r.exit_code == 0
+    assert (
+        tmp_path / ".framework" / "review.toml"
+    ).read_text().strip() == 'backend = "subagent"'
+
+    r = runner.invoke(app, ["review-config", "show"])
+    assert r.exit_code == 0 and "subagent" in r.stdout
+
+    r = runner.invoke(app, ["review-config", "clear"])
+    assert r.exit_code == 0 and not (tmp_path / ".framework" / "review.toml").exists()
+
+
+def test_review_config_set_rejects_invalid_backend(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+    from framework_cli.cli import app
+
+    monkeypatch.chdir(tmp_path)
+    r = CliRunner().invoke(app, ["review-config", "set-backend", "gpt", "--yes"])
+    assert r.exit_code == 2
+
+
+def test_review_config_set_backend_consent_decline_does_not_persist(
+    tmp_path, monkeypatch
+):
+    # The R3 informed-opt-in gate: without --yes, declining the confirm must show the
+    # cost caveat AND write nothing (no spend enabled without explicit consent).
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+
+    monkeypatch.chdir(tmp_path)
+    r = CliRunner().invoke(app, ["review-config", "set-backend", "api"], input="n\n")
+    assert r.exit_code == 1  # typer.confirm(abort=True) aborts non-zero on decline
+    assert "paid per use" in r.stdout  # the cost caveat was shown before the prompt
+    assert not (tmp_path / ".framework" / "review.toml").exists()
+
+
+def test_review_config_set_backend_consent_accept_persists(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+
+    monkeypatch.chdir(tmp_path)
+    r = CliRunner().invoke(app, ["review-config", "set-backend", "api"], input="y\n")
+    assert r.exit_code == 0
+    assert "paid per use" in r.stdout  # caveat shown even on the accept path
+    assert (
+        tmp_path / ".framework" / "review.toml"
+    ).read_text().strip() == 'backend = "api"'

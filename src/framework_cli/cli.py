@@ -40,6 +40,11 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+review_config_app = typer.Typer(
+    help="Configure the AI review backend (mutable any time)."
+)
+app.add_typer(review_config_app, name="review-config")
+
 
 @app.callback()
 def _main() -> None:
@@ -2057,3 +2062,54 @@ def review(
         f"{spec.name}: {payload.conclusion} ({len(payload.annotations)} finding(s))"
     )
     raise typer.Exit(1 if payload.conclusion == "failure" else 0)
+
+
+# ---------------------------------------------------------------------------
+# review-config sub-app — mutable backend configuration (R3/R4, Plan 20b)
+# ---------------------------------------------------------------------------
+
+
+@review_config_app.command("show")
+def review_config_show() -> None:
+    """Show the currently persisted AI review backend choice."""
+    from framework_cli.review.config import read_backend_choice
+
+    choice = read_backend_choice(Path.cwd())
+    typer.echo(
+        f"review backend: {choice or 'none (skip-neutral; AI review not enabled)'}"
+    )
+
+
+@review_config_app.command("set-backend")
+def review_config_set(
+    backend: str = typer.Argument(..., help="Backend to enable: 'api' or 'subagent'."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+) -> None:
+    """Persist an AI review backend choice for this project.
+
+    Without --yes, prints the cost caveat and prompts for confirmation.
+    """
+    from framework_cli.review.config import write_backend_choice
+
+    if backend not in ("api", "subagent"):
+        typer.echo("backend must be 'api' or 'subagent'", err=True)
+        raise typer.Exit(2)
+    if not yes:
+        cost = (
+            "paid per use (your API key)"
+            if backend == "api"
+            else "free within your Claude subscription; may consume overage past your limit"
+        )
+        typer.echo(f"Enabling AI review on the '{backend}' backend — {cost}.")
+        typer.confirm("Proceed?", abort=True)
+    write_backend_choice(Path.cwd(), backend)
+    typer.echo(f"review backend set to '{backend}'")
+
+
+@review_config_app.command("clear")
+def review_config_clear() -> None:
+    """Remove the persisted backend choice; AI review reverts to skip-neutral."""
+    from framework_cli.review.config import clear_backend_choice
+
+    clear_backend_choice(Path.cwd())
+    typer.echo("review backend cleared → AI review is skip-neutral until re-enabled")
