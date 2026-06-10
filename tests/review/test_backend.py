@@ -153,6 +153,31 @@ def test_subagent_is_error_with_exhaustion_marker_raises_exhausted():
         )
 
 
+def test_subagent_session_limit_429_raises_exhausted_with_reset_hint():
+    # The real `claude -p` 429 payload that crashed the Plan 21 baseline sweep:
+    # "session limit" was NOT in _EXHAUSTION_MARKERS, so it raised RuntimeError
+    # instead of BackendExhausted. Regression guard + reset-hint extraction.
+    def runner(argv, *, input_text):
+        return _json.dumps(
+            {
+                "is_error": True,
+                "api_error_status": 429,
+                "result": "You've hit your session limit · resets 11:30am (America/Los_Angeles)",
+            }
+        )
+
+    backend = SubagentBackend(runner=runner)
+    with pytest.raises(BackendExhausted) as ei:
+        backend.messages.create(
+            model="m",
+            max_tokens=10,
+            system=[{"type": "text", "text": "S"}],
+            messages=[{"role": "user", "content": "go"}],
+            tools=None,
+        )
+    assert ei.value.reset_hint and "11:30" in ei.value.reset_hint
+
+
 def test_subagent_is_error_without_marker_raises_runtime():
     def runner(argv, *, input_text):
         return _json.dumps({"is_error": True, "result": "some other failure"})

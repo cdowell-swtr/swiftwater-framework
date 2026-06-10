@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess  # noqa: S404 — invoking the local `claude` CLI by fixed argv
 import tempfile
 from dataclasses import dataclass, field
@@ -120,9 +121,27 @@ _DISABLED_TOOLS = (
 
 # Substrings marking a usage-limit / subscription-exhaustion error in `claude -p` output
 # (case-insensitive). Matched loosely because phrasing varies by CLI version; the engine
-# (20b) treats this as a hard stop, not a retry.
-_EXHAUSTION_MARKERS = ("usage limit", "rate limit reached", "quota", "limit reached")
+# (20b) treats this as a hard stop, not a retry. "session limit" is the real 5-hour
+# subscription-window 429 phrasing that crashed the Plan 21 baseline sweep.
+_EXHAUSTION_MARKERS = (
+    "usage limit",
+    "rate limit reached",
+    "quota",
+    "limit reached",
+    "session limit",
+)
 _EXHAUSTION_MESSAGE = "claude subscription usage limit reached"
+
+
+def _exhaustion_error(text: str) -> "BackendExhausted | None":
+    """If `text` (claude -p stdout/stderr or a result string) signals subscription
+    exhaustion, return a BackendExhausted carrying any "resets …" hint; else None."""
+    if not any(m in text.lower() for m in _EXHAUSTION_MARKERS):
+        return None
+    m = re.search(r"resets[^\"}\n]*", text, re.IGNORECASE)
+    hint = m.group(0).strip().rstrip(".") if m else None
+    msg = _EXHAUSTION_MESSAGE + (f" — {hint}" if hint else "")
+    return BackendExhausted(msg, reset_hint=hint)
 
 
 def _default_subprocess_runner(argv: list[str], *, input_text: str | None) -> str:
@@ -135,8 +154,9 @@ def _default_subprocess_runner(argv: list[str], *, input_text: str | None) -> st
     )
     if proc.returncode != 0:
         combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
-        if any(m in combined.lower() for m in _EXHAUSTION_MARKERS):
-            raise BackendExhausted(_EXHAUSTION_MESSAGE)
+        exhausted = _exhaustion_error(combined)
+        if exhausted is not None:
+            raise exhausted
         raise RuntimeError(f"claude -p failed ({proc.returncode}): {combined.strip()}")
     return proc.stdout
 
@@ -242,9 +262,10 @@ def _parse_claude_json(raw: str, tools: list[dict[str, Any]] | None) -> Message:
             f"claude -p returned unexpected JSON type: {type(payload).__name__}"
         )
     if payload.get("is_error"):
-        low = (payload.get("result") or "").lower()
-        if any(m in low for m in _EXHAUSTION_MARKERS):
-            raise BackendExhausted(_EXHAUSTION_MESSAGE)
+        result = payload.get("result") or ""
+        exhausted = _exhaustion_error(result)
+        if exhausted is not None:
+            raise exhausted
         raise RuntimeError(f"claude -p error: {payload.get('result')}")
     text = (payload.get("result", "") or "").strip()
     u = payload.get("usage", {}) or {}

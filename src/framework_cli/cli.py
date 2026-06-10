@@ -964,6 +964,7 @@ def eval_agents(
 
     import anthropic
 
+    from framework_cli.review.backend import BackendExhausted
     from framework_cli.review.findings import FindingsParseError
 
     _backend = _make_backend(res.backend, EVAL_KEY_ENV)  # type: ignore[attr-defined]
@@ -1007,6 +1008,20 @@ def eval_agents(
                     found = _eval_run(
                         rdiff, rroot, spec, report=report, backend=_backend
                     )
+                except BackendExhausted as exc:
+                    # Subscription/session limit (free subagent backend). Stop cleanly —
+                    # findings written so far are preserved; re-run after the reset to
+                    # continue (a per-agent driver can skip already-scored agents).
+                    typer.echo(
+                        f"\neval: STOPPED at {spec.name} — backend exhausted: {exc}",
+                        err=True,
+                    )
+                    typer.echo(
+                        "Findings written so far are preserved; re-run after the limit "
+                        "resets to continue.",
+                        err=True,
+                    )
+                    raise typer.Exit(4) from exc
                 except anthropic.APIError as exc:
                     typer.echo(
                         f"\neval: ABORTED at {spec.name} — API error "
