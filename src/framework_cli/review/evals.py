@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -171,6 +172,61 @@ def realize_cached(
         ["git", "diff"], cwd=work, capture_output=True, text=True, check=True
     ).stdout
     return work, diff
+
+
+_HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def validate_patch_hunks(patch: str) -> list[str]:
+    """Return a list of error strings for any unified-diff hunk whose declared
+    line counts disagree with its body. An empty list means well-formed.
+
+    Catches the truncation class: a `@@ -a,b +c,d @@` header where `b` != (context
+    + removed) or `d` != (context + added) makes `git apply` silently truncate.
+    """
+    errors: list[str] = []
+    lines = patch.splitlines()
+    i = 0
+    while i < len(lines):
+        m = _HUNK_RE.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        header = lines[i]
+        old_decl = int(m.group(2)) if m.group(2) is not None else 1
+        new_decl = int(m.group(4)) if m.group(4) is not None else 1
+        i += 1
+        ctx = rem = add = 0
+        while i < len(lines):
+            ln = lines[i]
+            if ln == "":  # blank context line (whitespace-stripped " ")
+                ctx += 1
+                i += 1
+                continue
+            if ln.startswith("\\"):  # "\ No newline at end of file"
+                i += 1
+                continue
+            if ln.startswith("--- ") or ln.startswith("+++ "):
+                break  # file header — end of this hunk's body
+            if ln.startswith("+"):
+                add += 1
+            elif ln.startswith("-"):
+                rem += 1
+            elif ln.startswith(" "):
+                ctx += 1
+            else:
+                # Any other leading char (@@, "diff --git", "index", "new file
+                # mode", "Binary files", …) ends the hunk body. Without this,
+                # the inter-file separators of a multi-file diff are miscounted
+                # as context lines of the preceding hunk (a +2-per-extra-file bug).
+                break
+            i += 1
+        if ctx + rem != old_decl or ctx + add != new_decl:
+            errors.append(
+                f"{header}: declared (-{old_decl},+{new_decl}) but body has "
+                f"old={ctx + rem}, new={ctx + add}"
+            )
+    return errors
 
 
 def load_fixtures(root: Path) -> list[Fixture]:

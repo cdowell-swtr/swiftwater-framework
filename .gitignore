@@ -17,3 +17,5 @@ build/
 
 # Local reviewers (audit + gate) ephemeral outputs
 .framework/audit/
+# Plan 21 audit-workflow scratch (mirrored to docs/.../plan21-audit/ for durability)
+.framework/plan21/
