@@ -1,15 +1,17 @@
+diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
+index 862bafd..3210454 100644
 --- a/src/demo/db/repository.py
 +++ b/src/demo/db/repository.py
-@@ -14,3 +14,12 @@ def create_item(session: Session, name: str) -> Item:
+@@ -28,3 +28,12 @@ def create_item(session: Session, name: str) -> Item:
      session.commit()
      session.refresh(item)
      return item
 +
 +
-+def get_item_by_name(session: Session, name: str) -> "Item | None":
-+    """Look up a single item by name — properly instrumented with a span."""
-+    from opentelemetry import trace
-+    tracer = trace.get_tracer(__name__)
-+    with tracer.start_as_current_span("db.repository.get_item_by_name") as span:
-+        span.set_attribute("item.name", name)
-+        return session.scalars(select(Item).where(Item.name == name)).first()
++def get_item_by_name(session: Session, name: str) -> Item | None:
++    """Return the item with the given name, or None if there is no match.
++
++    No hand-rolled span: SQLAlchemyInstrumentor auto-traces the query, so this
++    repository function stays a plain data-access call.
++    """
++    return session.scalars(select(Item).where(Item.name == name)).first()
