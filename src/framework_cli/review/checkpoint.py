@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -58,3 +60,22 @@ def pending_items(run_dir: Path) -> list[str]:
 def is_stale(run_dir: Path, *, git_sha: str, dirty_hash: str) -> bool:
     state = load_state(run_dir)
     return state["git_sha"] != git_sha or state["dirty_hash"] != dirty_hash
+
+
+def tree_signature(root: Path) -> tuple[str, str]:
+    """(HEAD sha, dirty-hash). The dirty-hash digests `git status --porcelain` + `git diff`,
+    so any uncommitted change moves it. Fail-open: a non-git dir returns ("", <digest>)."""
+
+    def _git(*args: str) -> str:
+        try:
+            return subprocess.run(
+                ["git", *args], cwd=root, capture_output=True, text=True, check=True
+            ).stdout
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return ""
+
+    sha = _git("rev-parse", "HEAD").strip()
+    digest = hashlib.sha256(
+        (_git("status", "--porcelain") + _git("diff")).encode("utf-8", "replace")
+    ).hexdigest()[:16]
+    return sha, digest
