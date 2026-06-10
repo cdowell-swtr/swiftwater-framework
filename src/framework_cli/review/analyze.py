@@ -64,7 +64,7 @@ class Record:
     tool_calls: list[dict[str, Any]]
     # Audit-mode metadata. None for tune-mode records (which don't have a
     # baseline concept) and for legacy audit records written before
-    # audit-finalize started persisting these fields. review_mode is
+    # the audit write-path started persisting these fields. review_mode is
     # "snapshot" or "delta" when set; base_sha is the commit the agent
     # delta-diffed against (None for snapshot); base_baseline is the dated
     # baseline-dir name (None for ref-form --since or no-prior fallback).

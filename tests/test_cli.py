@@ -1586,7 +1586,7 @@ def test_eval_analyze_scorecard_dir_writes_artifacts(tmp_path):
     """eval-analyze --scorecard-dir writes the tune artifact set: scorecard.md,
     thresholds.proposal.yaml, apply.md, meta.json into the given directory.
 
-    This replaces tune-finalize as the way to produce scored artifacts from per-call
+    This is the surviving way to produce scored tune artifacts from per-call
     records written by `framework eval --findings-out`.
     """
     findings = tmp_path / "findings"
