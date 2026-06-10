@@ -1071,6 +1071,14 @@ def eval_analyze(
         "--strict",
         help="Exit code 2 if any drift is detected (used by the gate context).",
     ),
+    scorecard_dir: str = typer.Option(
+        "",
+        "--scorecard-dir",
+        help=(
+            "Write the tune artifact set (scorecard.md, thresholds.proposal.yaml, "
+            "apply.md, meta.json) into this directory."
+        ),
+    ),
 ) -> None:
     """Produce scorecard + cost + recall/fp diagnosis + threshold proposal from
     per-call eval records (the artifacts written by `framework eval --findings-out`)."""
@@ -1102,6 +1110,31 @@ def eval_analyze(
         typer.echo(f"eval-analyze: wrote {out}")
     else:
         typer.echo(md)
+    if scorecard_dir:
+        sd = Path(scorecard_dir)
+        sd.mkdir(parents=True, exist_ok=True)
+        (sd / "scorecard.md").write_text(md)
+        # Extract the ```yaml block from md for thresholds.proposal.yaml
+        in_block = False
+        yaml_lines: list[str] = []
+        for line in md.splitlines():
+            if line.startswith("```yaml") and not in_block:
+                in_block = True
+                continue
+            if in_block and line.startswith("```"):
+                break
+            if in_block:
+                yaml_lines.append(line)
+        (sd / "thresholds.proposal.yaml").write_text("\n".join(yaml_lines) + "\n")
+        (sd / "apply.md").write_text(_apply_md_content())
+        drift_detected = len(analyze.drift_check(records)) > 0
+        meta_out = {
+            "agent_count": len({r.agent for r in records}),
+            "subagent_call_count": len(records),
+            "drift_detected": drift_detected,
+        }
+        (sd / "meta.json").write_text(json.dumps(meta_out, indent=2, sort_keys=True))
+        typer.echo(f"eval-analyze: wrote scorecard artifacts to {scorecard_dir}")
     if strict:
         drifts = analyze.drift_check(records)
         if drifts:
@@ -1116,42 +1149,6 @@ def eval_analyze(
     # Non-strict: exit 1 if any agent failed its thresholds (so callers can detect).
     if any(not s.passed for s in scores):
         raise typer.Exit(1)
-
-
-@app.command(name="tune-prepare")
-def tune_prepare(
-    agent: str = typer.Option(
-        "",
-        "--agent",
-        help="Single agent to prepare (default: all from registry).",
-    ),
-    fixtures: str = typer.Option(
-        "tests/eval/fixtures",
-        "--fixtures",
-        help="Fixtures root.",
-    ),
-    repeat: int = typer.Option(1, "--repeat", help="Repeats per fixture."),
-    output_dir: str = typer.Option(
-        "",
-        "--output-dir",
-        help="Output dir for finalize (echoed in the prep manifest).",
-    ),
-    split_to: str = typer.Option(
-        "",
-        "--split-to",
-        help=(
-            "If set, write a small index.json + per-item items/item-NNNN.json under "
-            "DIR (in addition to the stdout manifest). Lets the Workflow tool be "
-            "invoked with a tiny args payload instead of a multi-MB inline manifest. "
-            "Idempotent: an existing DIR is cleared first."
-        ),
-    ),
-) -> None:
-    """Emit the tune-mode work-item manifest (fixtures × agents × repeats).
-
-    Output is JSON on stdout; consumed by /reviewers:tune.
-    """
-    _emit_tune_prep(agent, Path(fixtures), repeat, output_dir, split_to)
 
 
 def _staged_files() -> list[str]:
@@ -1253,181 +1250,6 @@ def _staged_hash(staged: list[str]) -> str:
         h.update(content.encode())
         h.update(b"\x00")
     return "sha256:" + h.hexdigest()
-
-
-def _prepare_split_dir(split_to: str) -> tuple[Path, Path]:
-    """Create a clean, private (0o700) split-manifest directory at ``split_to``.
-
-    Returns ``(split_dir, items_dir)``. Hardening for the deferred findings in the
-    2026-05-30 audit (#3/#6/#7): refuse a symlink or non-directory at the target —
-    so we never rmtree/replace through a symlink or raise opaquely on a file
-    collision — and build the tree under a private ``tempfile.mkdtemp`` staging dir
-    that is atomically ``os.replace``d into place, so the published directory is
-    0o700 with no umask window and the publish is atomic. A narrow rmtree->replace
-    race remains (proportionate for this surface); a hostile racer recreating the
-    target as a non-empty dir makes ``os.replace`` raise rather than clobber.
-    """
-    import shutil
-    import tempfile
-
-    split_dir = Path(split_to)
-    if split_dir.is_symlink():
-        raise RuntimeError(f"--split-to target is a symlink, refusing: {split_dir}")
-    if split_dir.exists():
-        if not split_dir.is_dir():
-            raise RuntimeError(
-                f"--split-to target exists and is not a directory: {split_dir}"
-            )
-        shutil.rmtree(split_dir)
-    parent = split_dir.parent
-    parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".split-staging-", dir=parent))
-    items_dir = staging / "items"
-    items_dir.mkdir()
-    items_dir.chmod(0o700)
-    os.replace(staging, split_dir)
-    return split_dir, split_dir / "items"
-
-
-def _emit_tune_prep(
-    single_agent: str,
-    fixtures_root: Path,
-    repeat: int,
-    output_dir: str,
-    split_to: str = "",
-) -> None:
-    import tempfile
-
-    from framework_cli.review.evals import load_fixtures
-
-    targets = [single_agent] if single_agent else agent_names()
-    base_dir = Path(tempfile.mkdtemp(prefix="evalprep-"))
-    cache: dict = {}
-
-    by_agent: dict[str, list] = {}
-    for fx in load_fixtures(fixtures_root):
-        by_agent.setdefault(fx.agent, []).append(fx)
-
-    work_items: list[dict] = []
-    for a in targets:
-        try:
-            spec = get_agent(a)
-        except KeyError:
-            typer.echo(f"tune-prepare: unknown agent '{a}'", err=True)
-            raise typer.Exit(1) from None
-        for fx in by_agent.get(a, []):
-            root, diff = realize_cached(fx, cache, base_dir)
-            for i in range(repeat):
-                work_items.append(_build_work_item(spec, fx, i, diff, root))
-
-    manifest = {
-        "mode": "tune",
-        "agents_set": targets,
-        "work_items": work_items,
-        "output_dir": output_dir or "",
-    }
-
-    # Optional split-manifest write: in addition to the stdout manifest, write a small
-    # index.json + per-item items/item-NNNN.json so the Workflow tool can be invoked with
-    # a tiny args payload ({indexPath, itemsDir}) instead of a multi-MB inline manifest.
-    if split_to:
-        split_dir, items_dir = _prepare_split_dir(split_to)
-
-        index_items: list[dict] = []
-        for i, wi in enumerate(work_items):
-            item_path = items_dir / f"item-{i:04d}.json"
-            item_path.write_text(json.dumps(wi, indent=2))
-            item_path.chmod(0o600)
-            index_items.append(
-                {
-                    "i": i,
-                    "agent": wi["agent"],
-                    "kind": wi["kind"],
-                    "case": wi["case"],
-                    "repeat_idx": wi["repeat_idx"],
-                    "subagent_type": wi["subagent_type"],
-                    "model": wi["model"],
-                    "seeded_file": wi.get("seeded_file"),
-                }
-            )
-        index = {
-            "mode": "tune",
-            "agents_set": targets,
-            "items": index_items,
-            "output_dir": output_dir or "",
-        }
-        index_path = split_dir / "index.json"
-        index_path.write_text(json.dumps(index, indent=2))
-        index_path.chmod(0o600)
-
-    typer.echo(json.dumps(manifest, indent=2))
-
-
-def _build_work_item(
-    spec: object, fx: object, repeat_idx: int, diff: str, root: Path
-) -> dict:
-    """Build one work item: subagent_type + model + assembled prompt + diff + root."""
-    from framework_cli.review.context import assemble
-
-    is_agentic = spec.context.strategy == "agentic"  # type: ignore[attr-defined]
-    if is_agentic:
-        # Agentic: pass diff + agent prompt + tool-use instruction.
-        system_blocks = [
-            {"text": f"Review this unified diff:\n\n{diff}"},
-            {"text": spec.prompt},  # type: ignore[attr-defined]
-        ]
-        user_message = (
-            f"You are reviewing the codebase rooted at: {root}\n\n"
-            "Use the Read, Grep, and Glob tools (these only — do NOT use Bash, "
-            "WebFetch, WebSearch, or any other tool) to explore the surrounding "
-            "code as needed. Use absolute paths starting with the root above for "
-            "all tool calls.\n\n"
-            "When done, reply with ONLY a JSON array of findings:\n"
-            '  [{"path": "...", "line": N, "severity": "...", "message": "...", '
-            '"suggestion": "..."}]\n\n'
-            "IMPORTANT: in each finding, the `path` MUST be a path RELATIVE to "
-            f"the project root above (e.g. 'src/demo/foo.py'), NOT the absolute "
-            "path you used for the tool call. The scoring layer matches on "
-            "relative paths; absolute paths register as misses."
-        )
-        return {
-            "agent": fx.agent,  # type: ignore[attr-defined]
-            "kind": fx.kind,  # type: ignore[attr-defined]
-            "case": fx.name,  # type: ignore[attr-defined]
-            "repeat_idx": repeat_idx,
-            "seeded_file": fx.seeded_file,  # type: ignore[attr-defined]
-            "subagent_type": "Explore",
-            "model": spec.model,  # type: ignore[attr-defined]
-            "system_blocks": system_blocks,
-            "user_message": user_message,
-            "tools_allowed": ["Read", "Grep", "Glob"],
-            "root_dir": str(root),
-            "diff": diff,
-        }
-    # Bundle tier: assemble with context_files, single text completion.
-    bundle = assemble(diff, root, spec.context, model=spec.model)  # type: ignore[attr-defined]
-    system_blocks = [{"text": f"Review this unified diff:\n\n{bundle.diff}"}]
-    if bundle.context_files:
-        joined = "\n\n".join(f"=== {p} ===\n{c}" for p, c in bundle.context_files)
-        note = "\n\n[context truncated to fit the budget]" if bundle.truncated else ""
-        system_blocks.append(
-            {"text": f"Relevant repository files for context:\n\n{joined}{note}"}
-        )
-    system_blocks.append({"text": spec.prompt})  # type: ignore[attr-defined]
-    return {
-        "agent": fx.agent,  # type: ignore[attr-defined]
-        "kind": fx.kind,  # type: ignore[attr-defined]
-        "case": fx.name,  # type: ignore[attr-defined]
-        "repeat_idx": repeat_idx,
-        "seeded_file": fx.seeded_file,  # type: ignore[attr-defined]
-        "subagent_type": "general-purpose",
-        "model": spec.model,  # type: ignore[attr-defined]
-        "system_blocks": system_blocks,
-        "user_message": "Return your findings as a JSON array only.",
-        "tools_allowed": None,
-        "root_dir": str(root),
-        "diff": diff,
-    }
 
 
 def _detect_audit_target(explicit: str) -> str:
@@ -1539,39 +1361,6 @@ def _resolve_audit_base(
     return ("delta", sha, found.name)
 
 
-def _load_finalize_payload(results: str, command_name: str) -> tuple[list, dict]:
-    """Load and validate a finalize results JSON; return (records, meta_in)."""
-    try:
-        payload = json.loads(Path(results).read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        typer.echo(
-            f"{command_name}: failed to load results from {results}: {exc}", err=True
-        )
-        raise typer.Exit(1) from exc
-    if "results" not in payload:
-        typer.echo(f"{command_name}: results JSON missing 'results' key", err=True)
-        raise typer.Exit(1)
-    return payload["results"], payload.get("meta", {})
-
-
-@app.command(name="tune-finalize")
-def tune_finalize(
-    results: str = typer.Option(
-        ..., "--results", help="Path to JSON file from the workflow."
-    ),
-    out_dir: str = typer.Option(
-        ..., "--out-dir", help="Output dir to write artifacts."
-    ),
-) -> None:
-    """Take the tune workflow's results, write per-call JSON records + scorecard.md
-    + thresholds.proposal.yaml + apply.md + meta.json."""
-    records, meta_in = _load_finalize_payload(results, "tune-finalize")
-    out = Path(out_dir)
-    findings_dir = out / "findings"
-    findings_dir.mkdir(parents=True, exist_ok=True)
-    _finalize_tune(records, findings_dir, out, meta_in)
-
-
 def _preserve_audit_tree(src: Path, dst: Path, *, force: bool) -> None:
     """Copy the audit output tree (findings/, audit-report.md, meta.json) from
     src into dst. Refuses to overwrite a non-empty dst without force=True.
@@ -1601,86 +1390,6 @@ def _preserve_audit_tree(src: Path, dst: Path, *, force: bool) -> None:
         else:
             shutil.copy2(s, dst / item)
     typer.echo(f"audit: preserved to {dst}")
-
-
-def _finalize_tune(records: list, findings_dir: Path, out: Path, meta_in: dict) -> None:
-    from framework_cli.review import analyze
-    from framework_cli.review.evals import load_thresholds
-
-    for r in records:
-        agent_dir = findings_dir / r["agent"] / r["kind"]
-        agent_dir.mkdir(parents=True, exist_ok=True)
-        case = r["case"]
-        i = r["repeat_idx"]
-        record = {
-            "agent": r["agent"],
-            "kind": r["kind"],
-            "case": case,
-            "repeat": i,
-            "seeded_file": r.get("seeded_file"),
-            "findings": r.get("findings", []),
-            "usage": r.get("usage", {}),
-            "latency_ms": r.get("latency_ms"),
-            "stop_reason": r.get("stop_reason"),
-            "raw_text": r.get("raw_text", ""),
-            "turns": r.get("turns", 1),
-            "tool_calls": r.get("tool_calls", []),
-        }
-        (agent_dir / f"{case}__r{i}.json").write_text(
-            json.dumps(record, indent=2, sort_keys=True)
-        )
-
-    # Generate scorecard.md via analyze
-    loaded = analyze.load_records(findings_dir)
-    thr = load_thresholds(Path("tests/eval/fixtures/thresholds.yaml"))
-    scores = analyze.scorecard(loaded, thr)
-    model_map: dict[str, str] = {}
-    for r in loaded:
-        try:
-            model_map[r.agent] = get_agent(r.agent).model
-        except KeyError:
-            pass
-    costs = analyze.cost_report(loaded, model_map)
-    recall_diag = analyze.recall_diagnosis(loaded)
-    fp_diag = analyze.fp_diagnosis(loaded)
-    agentic = analyze.agentic_behavior(loaded)
-    proposed = analyze.propose_thresholds(scores)
-    md = analyze.render_markdown(
-        loaded, scores, costs, recall_diag, fp_diag, agentic, proposed
-    )
-    (out / "scorecard.md").write_text(md)
-
-    # Extract thresholds proposal yaml block
-    in_block = False
-    yaml_lines: list[str] = []
-    for line in md.splitlines():
-        if line.startswith("```yaml") and not in_block:
-            in_block = True
-            continue
-        if in_block and line.startswith("```"):
-            break
-        if in_block:
-            yaml_lines.append(line)
-    (out / "thresholds.proposal.yaml").write_text("\n".join(yaml_lines) + "\n")
-
-    # apply.md
-    (out / "apply.md").write_text(_apply_md_content())
-
-    # meta.json
-    drift_detected = len(analyze.drift_check(loaded)) > 0
-    meta = {
-        "mode": "tune",
-        "slug": meta_in.get("slug", ""),
-        "repeat": meta_in.get("repeat", 1),
-        "agent_count": len({r["agent"] for r in records}),
-        "subagent_call_count": len(records),
-        "drift_detected": drift_detected,
-        "git_ref": meta_in.get("git_ref", ""),
-        "model_used": meta_in.get("model_used", ""),
-        "run_duration_seconds": meta_in.get("run_duration_seconds", 0),
-    }
-    (out / "meta.json").write_text(json.dumps(meta, indent=2, sort_keys=True))
-    typer.echo(f"tune-finalize: wrote {out}")
 
 
 def _finalize_audit(

@@ -1,5 +1,4 @@
 import json as _json
-import stat
 from pathlib import Path
 
 import pytest
@@ -1391,185 +1390,58 @@ def test_eval_analyze_handles_audit_records_gracefully(tmp_path):
     assert "## Drift check" in result.output
 
 
-def test_tune_prepare_outputs_work_items_for_single_agent(tmp_path, monkeypatch):
-    """tune-prepare --agent security outputs a JSON list of work items
-    with diff + system_blocks + user_message + subagent_type + model per (agent,fixture,repeat)."""
-    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
-    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+def test_eval_analyze_scorecard_dir_writes_artifacts(tmp_path):
+    """eval-analyze --scorecard-dir writes the tune artifact set: scorecard.md,
+    thresholds.proposal.yaml, apply.md, meta.json into the given directory.
 
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
-
-    result = runner.invoke(
-        app,
-        [
-            "tune-prepare",
-            "--agent",
-            "security",
-            "--fixtures",
-            str(tmp_path),
-            "--repeat",
-            "2",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    data = _json.loads(result.output)
-    assert data["mode"] == "tune"
-    assert data["agents_set"] == ["security"]
-    # 2 fixtures × 2 repeats = 4 items
-    assert len(data["work_items"]) == 4
-    item = data["work_items"][0]
-    assert item["agent"] == "security"
-    assert item["kind"] in ("bad", "good")
-    assert item["case"] in ("b1", "g1")
-    assert item["repeat_idx"] in (0, 1)
-    assert item["subagent_type"] == "general-purpose"  # security is bundle tier
-    assert item["model"] == "claude-sonnet-4-6"
-    assert "system_blocks" in item and len(item["system_blocks"]) >= 2
-    assert "user_message" in item
-    assert "diff" in item
-    assert item["tools_allowed"] is None  # bundle: no tools
-
-
-def test_tune_prepare_uses_explore_for_agentic_agents(tmp_path, monkeypatch):
-    """Agentic-tier agents (e.g., architecture) get subagent_type='Explore' + tools_allowed."""
-    _make_fixture(tmp_path, "architecture", "bad", "b1", "+++ b/a.py\n", "a.py")
-
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
-
-    result = runner.invoke(
-        app,
-        [
-            "tune-prepare",
-            "--agent",
-            "architecture",
-            "--fixtures",
-            str(tmp_path),
-            "--repeat",
-            "1",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    data = _json.loads(result.output)
-    item = data["work_items"][0]
-    assert item["subagent_type"] == "Explore"
-    assert item["model"] == "claude-opus-4-8"
-    assert item["tools_allowed"] == ["Read", "Grep", "Glob"]
-    assert "root_dir" in item  # agentic items carry the rendered root for tool access
-
-
-def test_tune_prepare_split_to_writes_index_and_items(tmp_path, monkeypatch):
-    """tune-prepare --split-to DIR writes index.json + items/item-NNNN.json
-    in addition to printing the full manifest to stdout (unchanged behavior).
-
-    The split layout exists so the Workflow tool can be invoked with a tiny args payload
-    ({indexPath, itemsDir}) rather than a multi-MB inline manifest.
+    This replaces tune-finalize as the way to produce scored artifacts from per-call
+    records written by `framework eval --findings-out`.
     """
-    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
-    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+    findings = tmp_path / "findings"
+    out = tmp_path / "scorecard_out"
 
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
-
-    split_dir = tmp_path / "split-out"
-    result = runner.invoke(
-        app,
-        [
-            "tune-prepare",
-            "--agent",
-            "security",
-            "--fixtures",
-            str(tmp_path),
-            "--repeat",
-            "2",
-            "--split-to",
-            str(split_dir),
+    # Write two per-call records directly into <findings>/security/bad/ and good/.
+    _write_record(
+        findings,
+        "security",
+        "bad",
+        "b1",
+        0,
+        findings=[
+            {
+                "path": "a.py",
+                "line": 1,
+                "severity": "high",
+                "message": "danger",
+                "suggestion": None,
+            }
         ],
     )
-    assert result.exit_code == 0, result.output
-
-    # Stdout still carries the full manifest (backward compat).
-    manifest = _json.loads(result.output)
-    assert manifest["mode"] == "tune"
-    assert len(manifest["work_items"]) == 4  # 2 fixtures × 2 repeats
-
-    # Index file: small per-item metadata, no system_blocks / no diff.
-    index_path = split_dir / "index.json"
-    assert index_path.is_file(), f"index.json not written under {split_dir}"
-    index = _json.loads(index_path.read_text())
-    assert index["mode"] == "tune"
-    assert index["agents_set"] == ["security"]
-    assert len(index["items"]) == 4
-    first = index["items"][0]
-    assert set(first.keys()) >= {
-        "i",
-        "agent",
-        "kind",
-        "case",
-        "repeat_idx",
-        "subagent_type",
-        "model",
-        "seeded_file",
-    }
-    # Index is intentionally lightweight — must NOT carry the bulky fields.
-    assert "system_blocks" not in first
-    assert "diff" not in first
-    assert "user_message" not in first
-
-    # Per-item files exist with the expected full payload.
-    items_dir = split_dir / "items"
-    assert items_dir.is_dir()
-    for i, work_item in enumerate(manifest["work_items"]):
-        item_path = items_dir / f"item-{i:04d}.json"
-        assert item_path.is_file(), f"missing {item_path}"
-        on_disk = _json.loads(item_path.read_text())
-        assert on_disk["agent"] == work_item["agent"]
-        assert on_disk["system_blocks"] == work_item["system_blocks"]
-        assert on_disk["user_message"] == work_item["user_message"]
-        assert on_disk["tools_allowed"] == work_item["tools_allowed"]
-        assert on_disk["diff"] == work_item["diff"]
-
-
-def test_tune_prepare_split_to_clears_existing_dir(tmp_path, monkeypatch):
-    """--split-to is idempotent: a pre-existing target dir is cleared before write
-    so stale items from a prior run can't leak into a new sweep's index."""
-    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
-
-    import framework_cli.cli as cli_mod
-
-    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
-
-    split_dir = tmp_path / "split-out"
-    split_dir.mkdir()
-    # Pre-existing stale content that must not survive the rewrite.
-    (split_dir / "stale.txt").write_text("leftover")
-    (split_dir / "items").mkdir()
-    (split_dir / "items" / "item-9999.json").write_text("{}")
+    _write_record(findings, "security", "good", "g1", 0, findings=[])
 
     result = runner.invoke(
         app,
-        [
-            "tune-prepare",
-            "--agent",
-            "security",
-            "--fixtures",
-            str(tmp_path),
-            "--repeat",
-            "1",
-            "--split-to",
-            str(split_dir),
-        ],
+        ["eval-analyze", str(findings), "--scorecard-dir", str(out)],
     )
-    assert result.exit_code == 0, result.output
+    assert result.exit_code in (0, 1), result.output  # 1 if score FAIL
 
-    assert not (split_dir / "stale.txt").exists()
-    assert not (split_dir / "items" / "item-9999.json").exists()
-    assert (split_dir / "index.json").is_file()
-    assert (split_dir / "items" / "item-0000.json").is_file()
+    assert (out / "scorecard.md").is_file(), "scorecard.md missing"
+    assert (out / "thresholds.proposal.yaml").is_file(), (
+        "thresholds.proposal.yaml missing"
+    )
+    assert (out / "apply.md").is_file(), "apply.md missing"
+    assert (out / "meta.json").is_file(), "meta.json missing"
+
+    meta = _json.loads((out / "meta.json").read_text())
+    assert meta["subagent_call_count"] == 2
+    assert meta["agent_count"] == 1
+    assert "drift_detected" in meta
+
+    # Pin the non-trivial logic: the scorecard renders the agent, and the yaml
+    # block is actually extracted into thresholds.proposal.yaml (not an empty file).
+    assert "review-security" in (out / "scorecard.md").read_text()
+    prop = (out / "thresholds.proposal.yaml").read_text()
+    assert "security:" in prop and "recall_min:" in prop
 
 
 def test_resolve_audit_base_snapshot_flag_forces_snapshot(tmp_path):
@@ -1790,94 +1662,6 @@ def test_resolve_audit_base_autodiscover_falls_back_to_snapshot_when_no_baseline
     assert mode == "snapshot"
     assert sha is None
     assert name is None
-
-
-def test_tune_finalize_writes_records_runs_analyze_writes_meta(tmp_path):
-    """tune-finalize: given workflow results, writes per-call JSON records and a scorecard."""
-    out = tmp_path / "scorecard"
-    out.mkdir()
-
-    # Simulated workflow result: list of per-call records.
-    results = [
-        {
-            "agent": "security",
-            "kind": "bad",
-            "case": "b1",
-            "repeat_idx": 0,
-            "seeded_file": "a.py",
-            "findings": [
-                {
-                    "path": "a.py",
-                    "line": 1,
-                    "severity": "high",
-                    "message": "x",
-                    "suggestion": None,
-                }
-            ],
-            "usage": {
-                "input_tokens": 100,
-                "output_tokens": 10,
-                "cache_read_input_tokens": 0,
-                "cache_creation_input_tokens": 0,
-            },
-            "latency_ms": 200,
-            "stop_reason": "end_turn",
-            "raw_text": "[]",
-            "turns": 1,
-            "tool_calls": [],
-        },
-        {
-            "agent": "security",
-            "kind": "good",
-            "case": "g1",
-            "repeat_idx": 0,
-            "seeded_file": None,
-            "findings": [],
-            "usage": {
-                "input_tokens": 100,
-                "output_tokens": 5,
-                "cache_read_input_tokens": 0,
-                "cache_creation_input_tokens": 0,
-            },
-            "latency_ms": 150,
-            "stop_reason": "end_turn",
-            "raw_text": "[]",
-            "turns": 1,
-            "tool_calls": [],
-        },
-    ]
-    results_file = tmp_path / "results.json"
-    results_file.write_text(
-        _json.dumps({"results": results, "meta": {"slug": "test", "repeat": 1}})
-    )
-
-    result = runner.invoke(
-        app,
-        [
-            "tune-finalize",
-            "--results",
-            str(results_file),
-            "--out-dir",
-            str(out),
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    # Per-call records written under findings/
-    assert (out / "findings" / "security" / "bad" / "b1__r0.json").is_file()
-    assert (out / "findings" / "security" / "good" / "g1__r0.json").is_file()
-    # Scorecard generated
-    assert (out / "scorecard.md").is_file()
-    sc = (out / "scorecard.md").read_text()
-    assert "review-security" in sc
-    # Thresholds proposal extracted
-    assert (out / "thresholds.proposal.yaml").is_file()
-    # Apply.md generated
-    assert (out / "apply.md").is_file()
-    # Meta.json with run metadata
-    assert (out / "meta.json").is_file()
-    meta = _json.loads((out / "meta.json").read_text())
-    assert meta["slug"] == "test"
-    assert meta["mode"] == "tune"
 
 
 def test_gate_finalize_writes_marker_pass(tmp_path):
@@ -2313,107 +2097,6 @@ def test_gate_finalize_stale_finding_blocks(tmp_path, monkeypatch):
     marker_path = out.parent / "marker.json"
     marker = _json.loads(marker_path.read_text())
     assert marker["verdict"] == "FAIL", f"Stale finding must block; marker={marker}"
-
-
-def test_tune_finalize_fails_loudly_on_missing_results_file(tmp_path):
-    """A missing --results file produces a friendly error, not a Python traceback."""
-    out = tmp_path / "scorecard"
-    out.mkdir()
-    missing = tmp_path / "does-not-exist.json"
-    result = runner.invoke(
-        app,
-        [
-            "tune-finalize",
-            "--results",
-            str(missing),
-            "--out-dir",
-            str(out),
-        ],
-    )
-    assert result.exit_code == 1
-    assert "failed to load results" in result.output
-
-
-def test_tune_finalize_fails_loudly_on_malformed_results(tmp_path):
-    """A malformed --results file produces a friendly error."""
-    out = tmp_path / "scorecard"
-    out.mkdir()
-    bad = tmp_path / "bad.json"
-    bad.write_text("not valid json {{{ ")
-    result = runner.invoke(
-        app,
-        [
-            "tune-finalize",
-            "--results",
-            str(bad),
-            "--out-dir",
-            str(out),
-        ],
-    )
-    assert result.exit_code == 1
-    assert "failed to load results" in result.output
-
-
-# ---------------------------------------------------------------------------
-# _prepare_split_dir hardening (audit #3/#6/#7)
-# ---------------------------------------------------------------------------
-
-
-def test_prepare_split_dir_creates_private_dirs(tmp_path):
-    """_prepare_split_dir returns (split_dir, items_dir), both 0o700."""
-    from framework_cli.cli import _prepare_split_dir
-
-    target = tmp_path / "sd"
-    split_dir, items_dir = _prepare_split_dir(str(target))
-
-    assert split_dir == target
-    assert items_dir == target / "items"
-    assert split_dir.is_dir()
-    assert items_dir.is_dir()
-    assert stat.S_IMODE(split_dir.stat().st_mode) == 0o700
-    assert stat.S_IMODE(items_dir.stat().st_mode) == 0o700
-
-
-def test_prepare_split_dir_rejects_symlink_target(tmp_path):
-    """A symlink at the target is refused (don't rmtree/replace through it)."""
-    from framework_cli.cli import _prepare_split_dir
-
-    real = tmp_path / "real"
-    real.mkdir()
-    link = tmp_path / "link"
-    link.symlink_to(real)
-
-    with pytest.raises(RuntimeError, match="symlink"):
-        _prepare_split_dir(str(link))
-
-
-def test_prepare_split_dir_rejects_nondir_target(tmp_path):
-    """A plain file at the target is refused, not rmtree'd opaquely."""
-    from framework_cli.cli import _prepare_split_dir
-
-    target = tmp_path / "afile"
-    target.write_text("stale")
-
-    with pytest.raises(RuntimeError, match="not a directory"):
-        _prepare_split_dir(str(target))
-
-
-def test_prepare_split_dir_replaces_pre_populated_dir(tmp_path):
-    """A pre-existing dir (with stale contents) is cleanly replaced."""
-    from framework_cli.cli import _prepare_split_dir
-
-    target = tmp_path / "sd"
-    (target / "items").mkdir(parents=True)
-    (target / "items" / "item-9999.json").write_text("stale")
-    (target / "stray.txt").write_text("stale")
-
-    split_dir, items_dir = _prepare_split_dir(str(target))
-
-    assert items_dir.is_dir()
-    assert not (split_dir / "stray.txt").exists()
-    assert not (items_dir / "item-9999.json").exists()
-    assert stat.S_IMODE(split_dir.stat().st_mode) == 0o700
-    assert stat.S_IMODE(items_dir.stat().st_mode) == 0o700
 
 
 def test_template_render_renders_all_batteries(tmp_path):
