@@ -174,7 +174,8 @@ def template_render(
 
     Uses the canonical fixture answers (package_name=demo) plus the chosen
     batteries (default: all), then git-inits + commits so review tooling sees a
-    clean repo. Produces the audit subject for /reviewers:template-audit.
+    clean repo. Produces the audit subject for a template audit (render →
+    `framework audit --target project` → `framework template-map`).
     """
     from framework_cli.batteries import battery_names, resolve
 
@@ -1331,8 +1332,8 @@ def _resolve_audit_base(
             # is_baseline_dir already parsed meta.json, but re-read it for the
             # `agents` list. Guard the re-read: if the file vanished or became
             # unreadable in the window between the two reads (TOCTOU), surface a
-            # clean ValueError — the caller only wraps ValueError into the
-            # `audit-prepare:` error line, not a raw OSError/JSONDecodeError.
+            # clean ValueError — the caller only wraps ValueError into an
+            # `audit:` error line, not a raw OSError/JSONDecodeError.
             try:
                 meta = json.loads((since_path / "meta.json").read_text())
             except (OSError, json.JSONDecodeError) as exc:

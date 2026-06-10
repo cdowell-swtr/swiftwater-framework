@@ -1,6 +1,7 @@
 """Best-guess mapping from rendered finding paths back to template-source paths.
 
-Used by /reviewers:template-audit as a triage aid. Non-authoritative: it does a
+Used by `framework template-map` as a triage aid for template audits.
+Non-authoritative: it does a
 basename-anchored search of the template payload (a template file `foo.py.jinja`
 renders to `foo.py`), ranked by path-tail overlap after substituting the rendered
 package_name back to `{{package_name}}`. Line numbers are NOT mapped — Jinja

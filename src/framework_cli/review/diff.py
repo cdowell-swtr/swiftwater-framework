@@ -52,7 +52,7 @@ def pr_diff() -> str:
 def staged_diff() -> str:
     """The unified diff of the currently-staged set (`git diff --cached`).
 
-    Used by /reviewers:gate so the agents review the about-to-be-committed
+    Used by `framework gate` so the agents review the about-to-be-committed
     content, not the prior commit (which is what pr_diff() returns).
     Returns an empty string when nothing is staged.
     """

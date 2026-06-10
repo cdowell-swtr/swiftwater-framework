@@ -1,9 +1,10 @@
-"""Discovery helpers for prior `/reviewers:audit` baseline directories.
+"""Discovery helpers for prior audit baseline directories.
 
 Audit baselines live under `docs/superpowers/eval-scorecards/audit-*/`. Each
 contains a `meta.json` with at least `target`, `git_sha`, and `agents`. These
 helpers locate the newest baseline for a given (target, agent) and read its
-SHA. Used by `audit-prepare` to compute per-agent delta diffs.
+SHA. Used by `framework audit` (via `_resolve_audit_base`) to compute
+per-agent delta diffs.
 """
 
 from __future__ import annotations
