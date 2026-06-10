@@ -36,7 +36,8 @@ jobs:
       - name: run agent evals
         env:
           ANTHROPIC_EVAL_API_KEY: ${{ secrets.ANTHROPIC_FRAMEWORK_CI_EVAL }}
-        # --require-key dropped post-Slice-E: calibration moved to local subagents
-        # (/reviewers:tune). This CI job is now opt-in — set ANTHROPIC_FRAMEWORK_CI_EVAL
+        # --require-key dropped post-Slice-E: calibration moved to the free subagent
+        # backend (`framework eval --backend subagent` + `eval-analyze`). This CI job is
+        # now opt-in — set ANTHROPIC_FRAMEWORK_CI_EVAL
         # to enable a paid production-floor anchor run (Slice E3); unset = skip neutral.
         run: uv run framework eval --fixtures tests/eval/fixtures --backend api
