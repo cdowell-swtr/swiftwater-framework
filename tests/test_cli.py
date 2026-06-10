@@ -135,7 +135,7 @@ def test_review_blocking_finding_exits_1(monkeypatch):
             Finding("a.py", 1, "high", "bad")
         ],
     )
-    result = runner.invoke(app, ["review", "security"])
+    result = runner.invoke(app, ["review", "security", "--backend", "api"])
     assert result.exit_code == 1
     assert "failure" in result.output
 
@@ -152,7 +152,7 @@ def test_review_low_finding_exits_0(monkeypatch):
         "_review_run",
         lambda diff, spec, force_agentic=False, **kw: [Finding("a.py", 1, "low", "m")],
     )
-    result = runner.invoke(app, ["review", "security"])
+    result = runner.invoke(app, ["review", "security", "--backend", "api"])
     assert result.exit_code == 0
     assert "neutral" in result.output
 
@@ -167,7 +167,7 @@ def test_review_infra_error_is_neutral_exit_0(monkeypatch):
         raise RuntimeError("API down")
 
     monkeypatch.setattr(cli_mod, "_review_diff", _boom)
-    result = runner.invoke(app, ["review", "security"])
+    result = runner.invoke(app, ["review", "security", "--backend", "api"])
     assert result.exit_code == 0
     assert "neutral" in result.output or "could not run" in result.output
 
@@ -193,7 +193,7 @@ def test_review_dependency_skips_when_no_dep_files(monkeypatch):
         raise AssertionError("LLM must not run when not triggered")
 
     monkeypatch.setattr(cli_mod, "_review_run", _should_not_run)
-    result = runner.invoke(app, ["review", "dependency"])
+    result = runner.invoke(app, ["review", "dependency", "--backend", "api"])
     assert result.exit_code == 0
     assert "not triggered" in result.output
 
@@ -212,7 +212,7 @@ def test_review_dependency_runs_when_dep_file_changed(monkeypatch):
             Finding("pyproject.toml", 1, "low", "m")
         ],
     )
-    result = runner.invoke(app, ["review", "dependency"])
+    result = runner.invoke(app, ["review", "dependency", "--backend", "api"])
     assert result.exit_code == 0  # advisory → neutral, never blocks
     assert "neutral" in result.output
 
@@ -231,7 +231,9 @@ def test_review_findings_out_writes_on_normal_path(tmp_path, monkeypatch):
     )
 
     out = tmp_path / "findings" / "security.json"
-    result = runner.invoke(app, ["review", "security", "--findings-out", str(out)])
+    result = runner.invoke(
+        app, ["review", "security", "--findings-out", str(out), "--backend", "api"]
+    )
     assert result.exit_code == 0, result.output
     data = _json.loads(out.read_text())
     assert data["agent"] == "review-security"
@@ -262,7 +264,9 @@ def test_review_findings_out_on_infra_error(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli_mod, "_review_diff", _boom)
     out = tmp_path / "findings" / "security.json"
-    result = runner.invoke(app, ["review", "security", "--findings-out", str(out)])
+    result = runner.invoke(
+        app, ["review", "security", "--findings-out", str(out), "--backend", "api"]
+    )
     assert result.exit_code == 0, result.output
     data = _json.loads(out.read_text())
     assert data["agent"] == "review-security"
@@ -339,6 +343,123 @@ def test_eval_require_key_fails_without_key(monkeypatch):
     assert "required" in result.output
 
 
+# ---------------------------------------------------------------------------
+# R1 cost-safety tests: presence ≠ consent; no backend = skip/error
+# ---------------------------------------------------------------------------
+
+
+def test_eval_skip_neutral_no_intent(monkeypatch):
+    """R1: key present but no intent (no --backend, no env, no config) → skip exit 0.
+
+    Bare `framework eval` must NEVER spend when only a key is present — explicit
+    intent is required (--backend, FRAMEWORK_REVIEW_BACKEND, or review.toml).
+    """
+    import framework_cli.cli as climod
+
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "sk-x")
+    monkeypatch.delenv("FRAMEWORK_REVIEW_BACKEND", raising=False)
+    # Ensure no review.toml config provides intent
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": None, "reason": "no-intent", "intent": None}
+        )(),
+    )
+    result = runner.invoke(app, ["eval", "security"])
+    assert result.exit_code == 0, result.output
+    assert "skipped" in result.output
+    assert "backend" in result.output
+
+
+def test_eval_require_key_errors_no_backend(monkeypatch):
+    """R1: --require-key with no backend resolved → exit 1, not skip."""
+    import framework_cli.cli as climod
+
+    monkeypatch.delenv("ANTHROPIC_EVAL_API_KEY", raising=False)
+    monkeypatch.delenv("FRAMEWORK_REVIEW_BACKEND", raising=False)
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": None, "reason": "no-intent", "intent": None}
+        )(),
+    )
+    result = runner.invoke(app, ["eval", "security", "--require-key"])
+    assert result.exit_code == 1, result.output
+    assert "required" in result.output
+
+
+def test_eval_honors_env_var(tmp_path, monkeypatch):
+    """FRAMEWORK_REVIEW_BACKEND=subagent is explicit intent → resolves + runs (not skip)."""
+    import framework_cli.cli as climod
+
+    monkeypatch.delenv("ANTHROPIC_EVAL_API_KEY", raising=False)
+    monkeypatch.setenv("FRAMEWORK_REVIEW_BACKEND", "subagent")
+
+    class _StubMessages:
+        def create(self, **kwargs):
+            from framework_cli.review.backend import Message, TextBlock, Usage
+
+            return Message(
+                content=[TextBlock(text="[]")], usage=Usage(), stop_reason="end_turn"
+            )
+
+    class _StubBackend:
+        messages = _StubMessages()
+
+    stub = _StubBackend()
+    made: list = []
+
+    def _capture_make_backend(name, key_env):
+        made.append(name)
+        return stub
+
+    monkeypatch.setattr(climod, "_make_backend", _capture_make_backend)
+    monkeypatch.setattr(climod, "realize_cached", _fake_realize_cached)
+    # Resolve subagent via env var — stub so `claude` availability is not a concern
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": "subagent", "reason": "resolved", "intent": "subagent"}
+        )(),
+    )
+    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
+    result = runner.invoke(
+        app,
+        ["eval", "security", "--fixtures", str(tmp_path)],
+    )
+    assert "skipped" not in result.output, (
+        "env-var intent must not be treated as no-intent"
+    )
+    assert result.exit_code in (0, 1), result.output  # ran (0=PASS, 1=FAIL)
+    assert made == ["subagent"]
+
+
+def test_review_skip_neutral_no_intent(monkeypatch):
+    """R1: review with no backend intent → skip-neutral (exit 0, neutral check posted).
+
+    review is the CI/auto command; it must NEVER block CI when no backend is enabled.
+    """
+    import framework_cli.cli as climod
+
+    monkeypatch.delenv("ANTHROPIC_RUNTIME_API_KEY", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": None, "reason": "no-intent", "intent": None}
+        )(),
+    )
+    result = runner.invoke(app, ["review", "security"])
+    assert result.exit_code == 0, result.output
+    # skip-neutral: output mentions skipped and the reason
+    assert "skipped" in result.output
+    assert "no-intent" in result.output
+
+
 def _fake_realize_cached(fx, cache, base_dir):
     """Hermetic stand-in for realize_cached: skips rendering, returns patch as diff."""
     from pathlib import Path
@@ -364,7 +485,9 @@ def test_eval_passes_when_agent_catches_bad_and_clean_on_good(tmp_path, monkeypa
             [] if "clean" in diff else [Finding("a.py", 1, "high", "danger")]
         ),
     )
-    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
+    result = runner.invoke(
+        app, ["eval", "security", "--fixtures", str(tmp_path), "--backend", "api"]
+    )
     assert result.exit_code == 0, result.output
     assert "PASS" in result.output
 
@@ -381,7 +504,9 @@ def test_eval_fails_when_agent_misses(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cli_mod, "_eval_run", lambda diff, root, spec, **kw: []
     )  # never catches anything
-    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
+    result = runner.invoke(
+        app, ["eval", "security", "--fixtures", str(tmp_path), "--backend", "api"]
+    )
     assert result.exit_code == 1
     assert "FAIL" in result.output
 
@@ -405,7 +530,9 @@ def test_eval_unparseable_response_is_non_fatal(tmp_path, monkeypatch):
         raise FindingsParseError("Extra data: line 1 column 17 (char 16)")
 
     monkeypatch.setattr(cli_mod, "_eval_run", boom)
-    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
+    result = runner.invoke(
+        app, ["eval", "security", "--fixtures", str(tmp_path), "--backend", "api"]
+    )
     # Handled gracefully — the parse error must not bubble out (a clean
     # typer.Exit(1) surfaces as SystemExit on the result, which is fine).
     assert not isinstance(result.exception, FindingsParseError), (
@@ -437,7 +564,16 @@ def test_eval_findings_out_marks_parse_error(tmp_path, monkeypatch):
     out = tmp_path / "findings"
     runner.invoke(
         app,
-        ["eval", "security", "--fixtures", str(tmp_path), "--findings-out", str(out)],
+        [
+            "eval",
+            "security",
+            "--fixtures",
+            str(tmp_path),
+            "--findings-out",
+            str(out),
+            "--backend",
+            "api",
+        ],
     )
     rec = _json.loads((out / "security" / "good" / "g1__r0.json").read_text())
     assert rec["findings"] == []
@@ -476,6 +612,8 @@ def test_eval_findings_out_writes_per_call_json(tmp_path, monkeypatch):
             str(out),
             "--repeat",
             "2",
+            "--backend",
+            "api",
         ],
     )
     assert result.exit_code == 0, result.output
@@ -710,7 +848,16 @@ def test_eval_findings_out_includes_instrumentation(tmp_path, monkeypatch):
     out = tmp_path / "findings"
     result = runner.invoke(
         app,
-        ["eval", "security", "--fixtures", str(tmp_path), "--findings-out", str(out)],
+        [
+            "eval",
+            "security",
+            "--fixtures",
+            str(tmp_path),
+            "--findings-out",
+            str(out),
+            "--backend",
+            "api",
+        ],
     )
     assert result.exit_code == 0, result.output
     bad_obj = _json.loads((out / "security" / "bad" / "b1__r0.json").read_text())
@@ -742,7 +889,9 @@ def test_eval_aborts_loudly_on_api_error(tmp_path, monkeypatch):
         raise anthropic.APIError("credit balance is too low", req, body=None)
 
     monkeypatch.setattr(cli_mod, "_eval_run", _credit_wall)
-    result = runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)])
+    result = runner.invoke(
+        app, ["eval", "security", "--fixtures", str(tmp_path), "--backend", "api"]
+    )
     assert result.exit_code == 3, result.output
     assert "ABORTED" in result.output
     assert "review-security" in result.output
@@ -751,11 +900,23 @@ def test_eval_aborts_loudly_on_api_error(tmp_path, monkeypatch):
 def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     assert (
-        runner.invoke(app, ["eval", "security", "--fixtures", str(tmp_path)]).exit_code
+        runner.invoke(
+            app,
+            ["eval", "security", "--fixtures", str(tmp_path), "--backend", "api"],
+        ).exit_code
         == 0
     )
     r = runner.invoke(
-        app, ["eval", "security", "--fixtures", str(tmp_path), "--require-fixtures"]
+        app,
+        [
+            "eval",
+            "security",
+            "--fixtures",
+            str(tmp_path),
+            "--require-fixtures",
+            "--backend",
+            "api",
+        ],
     )
     assert r.exit_code == 1
     assert "no fixtures" in r.output
@@ -763,14 +924,16 @@ def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
 
 def test_eval_repeat_zero_is_rejected(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
-    result = runner.invoke(app, ["eval", "security", "--repeat", "0"])
+    result = runner.invoke(
+        app, ["eval", "security", "--repeat", "0", "--backend", "api"]
+    )
     assert result.exit_code == 2
     assert "--repeat must be >= 1" in result.output
 
 
 def test_eval_unknown_agent_errors(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
-    result = runner.invoke(app, ["eval", "nonsense-agent"])
+    result = runner.invoke(app, ["eval", "nonsense-agent", "--backend", "api"])
     assert result.exit_code == 1
     assert "unknown review agent" in result.output
 
@@ -843,6 +1006,14 @@ def test_eval_subagent_backend_flows_without_key(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_EVAL_API_KEY", raising=False)
     monkeypatch.setattr(climod, "_make_backend", _capture_make_backend)
     monkeypatch.setattr(climod, "realize_cached", _fake_realize_cached)
+    # Stub resolution so it resolves subagent regardless of whether `claude` is on PATH
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": "subagent", "reason": "resolved", "intent": "subagent"}
+        )(),
+    )
     _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
     result = runner.invoke(
         app,
@@ -893,8 +1064,16 @@ def test_review_subagent_backend_skips_key_check(monkeypatch):
     monkeypatch.setattr(
         climod, "_review_diff", lambda: "+++ b/src/app/main.py\n# change\n"
     )
+    # Stub resolution so it resolves subagent regardless of whether `claude` is on PATH
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **kw: type(
+            "R", (), {"backend": "subagent", "reason": "resolved", "intent": "subagent"}
+        )(),
+    )
     result = runner.invoke(app, ["review", "security", "--backend", "subagent"])
-    assert "skipped (no ANTHROPIC_RUNTIME_API_KEY)" not in result.output, (
+    assert "skipped" not in result.output.lower(), (
         "subagent backend must not skip on missing key"
     )
     assert _make_backend_calls == ["subagent"], (
@@ -1045,7 +1224,17 @@ def test_eval_repeat_averages_rates(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli_mod, "_eval_run", flaky)
     result = runner.invoke(
-        app, ["eval", "security", "--fixtures", str(tmp_path), "--repeat", "2"]
+        app,
+        [
+            "eval",
+            "security",
+            "--fixtures",
+            str(tmp_path),
+            "--repeat",
+            "2",
+            "--backend",
+            "api",
+        ],
     )
     assert "recall 0.50" in result.output  # 1 hit / 2 repeats on the single bad fixture
 
@@ -1151,6 +1340,7 @@ def test_dev_combos_rejects_unknown_strategy():
 
 
 def test_review_reads_runtime_key_not_shared_or_eval(monkeypatch):
+    """review uses RUNTIME_KEY for API availability; ANTHROPIC_API_KEY is not honoured."""
     import framework_cli.cli as cli_mod
     from framework_cli.cli import app
     from typer.testing import CliRunner
@@ -1164,10 +1354,12 @@ def test_review_reads_runtime_key_not_shared_or_eval(monkeypatch):
         cli_mod, "_review_run", lambda diff, spec, force_agentic=False, **kw: []
     )
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    assert runner.invoke(app, ["review", "security"]).exit_code == 0
+    # --backend api + RUNTIME_KEY present → should run (not skip)
+    assert runner.invoke(app, ["review", "security", "--backend", "api"]).exit_code == 0
+    # Only ANTHROPIC_API_KEY set (wrong scope) → should skip (api-unavailable)
     monkeypatch.delenv("ANTHROPIC_RUNTIME_API_KEY", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
-    res = runner.invoke(app, ["review", "security"])
+    res = runner.invoke(app, ["review", "security", "--backend", "api"])
     assert res.exit_code == 0 and "skipped" in res.stdout.lower()
 
 

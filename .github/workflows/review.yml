@@ -47,7 +47,7 @@ jobs:
         env:
           ANTHROPIC_RUNTIME_API_KEY: ${{ secrets.ANTHROPIC_FRAMEWORK_CI_RUNTIME }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: uv run framework review ${{ matrix.agent }} --target framework --findings-out findings/${{ matrix.agent }}.json
+        run: uv run framework review ${{ matrix.agent }} --target framework --backend api --findings-out findings/${{ matrix.agent }}.json
       - name: upload findings
         if: always()
         uses: actions/upload-artifact@v6

@@ -400,18 +400,22 @@ def _resolve_review_backend(*, flag: str | None, key_env: str) -> object:
     )
 
 
+def _no_backend_message(reason: str, *, key_env: str) -> str:
+    """Human-readable explanation for a no-backend resolution, by reason code."""
+    if reason == "api-unavailable":
+        return f"backend 'api' selected but {key_env} is unset"
+    if reason == "subagent-unavailable":
+        return "backend 'subagent' selected but the `claude` CLI was not found"
+    return (
+        "no review backend enabled "
+        "(set --backend, FRAMEWORK_REVIEW_BACKEND, or `framework review-config set-backend`)"
+    )
+
+
 def _explain_no_backend(res: object, *, command: str) -> None:
     """Print a human-readable explanation when no backend could be resolved."""
     reason = getattr(res, "reason", "")
-    if reason == "api-unavailable":
-        msg = "review backend 'api' selected but no API key is set"
-    elif reason == "subagent-unavailable":
-        msg = "review backend 'subagent' selected but the `claude` CLI was not found"
-    else:
-        msg = (
-            "no review backend enabled "
-            "(set --backend, FRAMEWORK_REVIEW_BACKEND, or `framework review-config set-backend`)"
-        )
+    msg = _no_backend_message(reason, key_env=RUNTIME_KEY_ENV)
     typer.echo(f"{command}: {msg}", err=True)
 
 
@@ -917,10 +921,11 @@ def eval_agents(
         "--findings-out",
         help="Directory to write per-(agent,fixture,repeat) findings JSON for diagnosis.",
     ),
-    backend: str = typer.Option(
-        "api",
+    backend: str | None = typer.Option(
+        None,
         "--backend",
-        help="Model backend: 'api' (paid) or 'subagent' (free claude -p).",
+        help="Model backend: 'api' (paid) or 'subagent' (free claude -p). "
+        "Default None: resolves from FRAMEWORK_REVIEW_BACKEND env or review.toml config.",
     ),
 ) -> None:
     """Run golden fixtures through the review agents and score recall/precision (spec §20).
@@ -937,11 +942,17 @@ def eval_agents(
         score_agent,
     )
 
-    if backend == "api" and not os.environ.get(EVAL_KEY_ENV):
+    res = _resolve_review_backend(flag=backend or None, key_env=EVAL_KEY_ENV)
+    if res.backend is None:  # type: ignore[attr-defined]
+        reason = getattr(res, "reason", "")
+        msg = _no_backend_message(reason, key_env=EVAL_KEY_ENV)
         if require_key:
-            typer.echo("eval: ANTHROPIC_EVAL_API_KEY is required but unset", err=True)
+            typer.echo(
+                f"eval: {msg}; a backend is required (--require-key is set)",
+                err=True,
+            )
             raise typer.Exit(1)
-        typer.echo("eval: skipped (no ANTHROPIC_EVAL_API_KEY)")
+        typer.echo(f"eval: skipped ({msg})")
         raise typer.Exit(0)
 
     if repeat < 1:
@@ -954,7 +965,7 @@ def eval_agents(
 
     from framework_cli.review.findings import FindingsParseError
 
-    _backend = _make_backend(backend, EVAL_KEY_ENV)
+    _backend = _make_backend(res.backend, EVAL_KEY_ENV)  # type: ignore[attr-defined]
     root = Path(fixtures)
     _base_dir = Path(tempfile.mkdtemp(prefix="evalbase-"))
     _combo_cache: dict = {}
@@ -1659,10 +1670,11 @@ def review(
     target: str = typer.Option(
         "project", "--target", help="Review target: 'project' (default) or 'framework'."
     ),
-    backend: str = typer.Option(
-        "api",
+    backend: str | None = typer.Option(
+        None,
         "--backend",
-        help="Model backend: 'api' (paid) or 'subagent' (free claude -p).",
+        help="Model backend: 'api' (paid) or 'subagent' (free claude -p). "
+        "Default None: resolves from FRAMEWORK_REVIEW_BACKEND env or review.toml config.",
     ),
 ) -> None:
     """Run a Layer-3 review agent over the PR diff and post a GitHub Check Run."""
@@ -1680,16 +1692,17 @@ def review(
         if findings_out:
             write_findings(Path(findings_out), spec.name, conclusion, found)
 
-    if backend == "api" and not os.environ.get(RUNTIME_KEY_ENV):
-        payload = neutral_payload(
-            spec.name, "review skipped — set ANTHROPIC_RUNTIME_API_KEY to enable."
-        )
+    res = _resolve_review_backend(flag=backend or None, key_env=RUNTIME_KEY_ENV)
+    if res.backend is None:  # type: ignore[attr-defined]
+        reason = getattr(res, "reason", "")
+        msg = _no_backend_message(reason, key_env=RUNTIME_KEY_ENV)
+        payload = neutral_payload(spec.name, f"review skipped — {msg}")
         post_or_skip(payload, token=token, repo=repo, sha=sha)
         _emit(payload.conclusion, [])
-        typer.echo(f"{spec.name}: skipped (no ANTHROPIC_RUNTIME_API_KEY)")
+        typer.echo(f"{spec.name}: skipped ({reason})")
         raise typer.Exit(0)
 
-    _backend = _make_backend(backend, RUNTIME_KEY_ENV)
+    _backend = _make_backend(res.backend, RUNTIME_KEY_ENV)  # type: ignore[attr-defined]
     try:
         diff = framework_diff() if target == "framework" else _review_diff()
         if spec.trigger_globs and not matches_globs(

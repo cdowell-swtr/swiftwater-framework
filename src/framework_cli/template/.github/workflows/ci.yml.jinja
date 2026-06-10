@@ -258,7 +258,7 @@ jobs:
         env:
           ANTHROPIC_RUNTIME_API_KEY: {% raw %}${{ secrets.ANTHROPIC_{% endraw %}{{ package_name | upper }}{% raw %}_CI_RUNTIME }}{% endraw %}
           GITHUB_TOKEN: {% raw %}${{ github.token }}{% endraw %}
-        run: framework review {% raw %}${{ matrix.agent }}{% endraw %} --findings-out findings/{% raw %}${{ matrix.agent }}{% endraw %}.json
+        run: framework review {% raw %}${{ matrix.agent }}{% endraw %} --backend api --findings-out findings/{% raw %}${{ matrix.agent }}{% endraw %}.json
       - name: upload findings
         if: always()
         uses: actions/upload-artifact@v6

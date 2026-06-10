@@ -111,7 +111,9 @@ def test_review_command_target_framework_sources_framework_diff(monkeypatch):
     monkeypatch.setattr(
         cli_mod, "framework_diff", lambda: ""
     )  # empty diff → no findings
-    result = CliRunner().invoke(app, ["review", "security", "--target", "framework"])
+    result = CliRunner().invoke(
+        app, ["review", "security", "--target", "framework", "--backend", "api"]
+    )
     assert result.exit_code == 0
 
 
