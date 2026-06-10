@@ -33,6 +33,8 @@
 
 **Scratch dirs:** `.framework/plan21/` (workflow artifacts) is gitignored like the rest of `.framework/`. Eval findings that we keep go under `docs/superpowers/eval-scorecards/<date>-<slug>/`.
 
+**Durability — push at every stage boundary (against disk/WSL loss):** the LLM-bought workflow artifacts under `.framework/plan21/` are gitignored, so a bare `git push` does **not** preserve them. At each checkpoint we therefore **mirror the stage's scratch artifacts into a tracked dir, commit, then `git push`**. Tracked mirror: `docs/superpowers/eval-scorecards/2026-06-10-plan21-audit/<stage>/`. Checkpoints that commit **and push**: end of Phase 0c; and each of Phase 1's four stage boundaries (Audit, Synthesis, Meta, Adversarial). Because Phase 1's stages are hard barriers (synthesis needs all audits; meta needs all syntheses; adversarial needs the changelist), each runs as its **own separate Workflow invocation** — the controller commits+pushes between them (a single Workflow run cannot hand control back mid-script). These tracked mirrors also make resume robust across a new session: a re-run reads the committed artifacts, not just the scratch dir.
+
 ---
 
 ## Phase 0a — Fixture well-formedness guard (deterministic, zero quota)
@@ -328,13 +330,20 @@ git add docs/superpowers/eval-scorecards/2026-06-10-plan21-baseline CLAUDE.md do
 git commit -m "docs(plan21): baseline scorecard on parity'd path (Phase 0c anchor)"
 ```
 
+- [ ] **Step 5: Push the branch (durability checkpoint) + STOP for review**
+
+```bash
+git push -u origin plan-21-reviewer-tuning
+```
+**Hard stop here.** This is the agreed 0a–0c checkpoint: present the baseline scorecard (`docs/superpowers/eval-scorecards/2026-06-10-plan21-baseline/scorecard.md`) to the user and get an explicit go-ahead before spending quota on the Phase 1 audit workflow.
+
 > **Natural merge checkpoint.** Phases 0a–0c are self-contained and low-risk (a new guard, cleaner fixtures, a committed baseline). They may be merged to `master` here before the heavier Phase 1+ work, or carried on the same branch — controller's call.
 
 ---
 
 ## Phase 1 — Prompt + fixture audit workflow (ultracode, Opus, file-backed)
 
-**This phase is run as an ultracode Workflow** (explicit multi-agent orchestration). The Workflow is authored once (Task 7) and run/resumed (Task 8); the controller then sanity-checks against the Plan 18 regression checklist (Task 9).
+**This phase runs as four separate ultracode Workflow invocations** (Tasks 8a–8d), one per stage, so the controller can **commit + push at every stage boundary** for durability. The stages are hard barriers, so splitting costs no parallelism. Task 7 authors the draft rubric; Task 9 sanity-checks against the Plan 18 regression checklist.
 
 **File structure:**
 - Create: `docs/superpowers/specs/plan21-rubric-draft.md` — the draft shared rubric (input to the workflow; the workflow emits the finalized version).
@@ -378,33 +387,36 @@ Stay within this agent's domain (stated per-agent). Do not flag issues another a
 Return JSON ONLY — an array of {"path","line","severity","message","suggestion"}; [] if none.
 ```
 
-- [ ] **Step 2: Author the Workflow script (do not run yet)**
+- [ ] **Step 2: Note — the script is split across Tasks 8a–8d**
 
-Write the script inline to the Workflow tool in Task 8. Its shape (pipeline-by-default, file-backed via agent-written outputs, batched adversarial). The literal `meta` + body is given in Task 8 Step 1 so the executor pastes it directly.
+Each stage is its own Workflow invocation so the controller can commit+push between stages. The four scripts share `args` = `{ agents: [...all registered agent tokens...], baselineDir: "docs/superpowers/eval-scorecards/2026-06-10-plan21-baseline/findings", rubric: "docs/superpowers/specs/plan21-rubric-draft.md" }`. All judgment agents run on Opus; every agent reads inputs from disk and writes its output (skip-if-exists) so re-runs after a quota/disk interruption skip completed work.
 
-### Task 8: Run the audit Workflow (resumable)
+**Common durability tail (run at the end of each of Tasks 8a–8d), `<stage>` ∈ {audit, synthesis, meta, adversarial}:**
+```bash
+mkdir -p docs/superpowers/eval-scorecards/2026-06-10-plan21-audit/<stage>
+cp -r .framework/plan21/<stage>/. docs/superpowers/eval-scorecards/2026-06-10-plan21-audit/<stage>/ 2>/dev/null || true
+# (meta stage also copies changelist.json + rubric.final.md; adversarial also copies verdicts/)
+git add docs/superpowers/eval-scorecards/2026-06-10-plan21-audit CLAUDE.md docs/superpowers/plans/2026-05-20-meta-plan.md
+```
+```bash
+git commit -m "docs(plan21): audit workflow <stage> artifacts (Phase 1)"
+```
+```bash
+git push origin plan-21-reviewer-tuning
+```
 
-- [ ] **Step 1: Invoke the Workflow**
+### Task 8a: Audit stage — fan-out one Opus agent per prompt
 
-Run the Workflow tool with this script (agents read inputs from disk and write outputs to disk so re-runs skip completed work; all judgment agents on Opus):
+- [ ] **Step 1: Run the Audit Workflow**
 
 ```javascript
 export const meta = {
-  name: 'plan21-reviewer-audit',
-  description: 'Audit every review-agent prompt + fixtures, synthesize via judge panel, adversarially verify each proposed change',
-  phases: [
-    { title: 'Audit', detail: 'one Opus agent per prompt' },
-    { title: 'Synthesis', detail: '3-way judge panel' },
-    { title: 'Meta', detail: 'merge candidate syntheses' },
-    { title: 'Adversarial', detail: 'refute each proposed change, batched' },
-  ],
+  name: 'plan21-audit',
+  description: 'Audit every review-agent prompt + fixtures (one Opus agent per prompt)',
+  phases: [{ title: 'Audit', detail: 'one Opus agent per prompt' }],
 }
-
-// args = { agents: ["accessibility", ...], baselineDir: "docs/.../findings", rubric: "docs/.../plan21-rubric-draft.md" }
-const AGENTS = args.agents
-
 phase('Audit')
-const audits = await parallel(AGENTS.map(a => () =>
+await parallel(args.agents.map(a => () =>
   agent(
     `You are auditing the prompt for review agent "${a}".\n` +
     `Read: src/framework_cli/review/agents/${a}.md (the prompt); its fixtures under ` +
@@ -416,39 +428,91 @@ const audits = await parallel(AGENTS.map(a => () =>
     `verdicts (is each good genuinely clean? each bad an unambiguous defect?); and ` +
     `proposed COUPLED prompt+fixture edits + a proposed block_threshold.\n` +
     `Write your JSON report to .framework/plan21/audit/${a}.json . If that file ` +
-    `already exists with valid content, do nothing and report "cached".`,
+    `already exists with valid content, do nothing and report "cached". If you hit a ` +
+    `quota/rate error, say "QUOTA" explicitly so a re-run retries (do not return empty).`,
     { label: `audit:${a}`, phase: 'Audit', model: 'opus' }
   )
-)).then(r => r.filter(Boolean))
+))
+return { audits: '.framework/plan21/audit/' }
+```
 
+- [ ] **Step 2: Verify completeness, then run the durability tail (`<stage>` = `audit`)**
+
+Confirm one `.framework/plan21/audit/<a>.json` exists for every agent (re-run on any `QUOTA`/missing). Then commit+push per the common durability tail.
+
+### Task 8b: Synthesis stage — 3-way judge panel
+
+- [ ] **Step 1: Run the Synthesis Workflow**
+
+```javascript
+export const meta = {
+  name: 'plan21-synthesis',
+  description: '3 independent judges each consolidate all audit findings',
+  phases: [{ title: 'Synthesis', detail: '3-way judge panel' }],
+}
 phase('Synthesis')
-const panel = await parallel([1, 2, 3].map(n => () =>
+await parallel([1, 2, 3].map(n => () =>
   agent(
     `Synthesis judge #${n}. Read ALL per-agent audit reports under ` +
     `.framework/plan21/audit/*.json and the draft rubric at ${args.rubric}.\n` +
     `Produce ONE candidate consolidated changelist: reconcile severity bars ACROSS ` +
     `agents (flag where agent X calls a class high but agent Y calls it low), enforce ` +
     `scope boundaries, and propose a refined shared rubric.\n` +
-    `Write your candidate to .framework/plan21/synthesis/${n}.json (skip if it exists).`,
+    `Write your candidate to .framework/plan21/synthesis/${n}.json (skip if it exists; ` +
+    `say "QUOTA" on a rate error rather than returning empty).`,
     { label: `synthesis:${n}`, phase: 'Synthesis', model: 'opus' }
   )
-)).then(r => r.filter(Boolean))
+))
+return { synthesis: '.framework/plan21/synthesis/' }
+```
 
+- [ ] **Step 2: Verify all 3 candidates exist, then durability tail (`<stage>` = `synthesis`)**
+
+### Task 8c: Meta stage — merge into one changelist + final rubric
+
+- [ ] **Step 1: Run the Meta Workflow**
+
+```javascript
+export const meta = {
+  name: 'plan21-meta',
+  description: 'Judge + merge the 3 candidate syntheses into one changelist + final rubric',
+  phases: [{ title: 'Meta', detail: 'merge candidate syntheses' }],
+}
 phase('Meta')
 await agent(
   `Meta-synthesis. Read the 3 candidate syntheses under .framework/plan21/synthesis/*.json. ` +
   `Judge and MERGE them into ONE changelist: the finalized shared rubric, and per-agent ` +
   `{prompt_rewrite, fixture_edits, block_threshold, needs_second_good_fixture}. Base ` +
   `needs_second_good_fixture on which agents the baseline shows borderline-on-precision.\n` +
-  `Write .framework/plan21/changelist.json (an array of per-change objects, each with a ` +
-  `stable "id"). Write the finalized rubric to .framework/plan21/rubric.final.md.`,
+  `Write .framework/plan21/meta/changelist.json (an array of per-change objects, each with ` +
+  `a stable "id") and .framework/plan21/meta/rubric.final.md.`,
   { label: 'meta-synthesis', phase: 'Meta', model: 'opus' }
 )
+return { changelist: '.framework/plan21/meta/changelist.json' }
+```
 
+- [ ] **Step 2: Durability tail (`<stage>` = `meta`)**
+
+The meta stage's tail also copies `changelist.json` + `rubric.final.md` into the tracked `meta/` mirror, and additionally copies the final rubric to the spec home:
+```bash
+cp .framework/plan21/meta/rubric.final.md docs/superpowers/specs/plan21-rubric-final.md
+git add docs/superpowers/specs/plan21-rubric-final.md
+```
+(then the common add/commit/push).
+
+### Task 8d: Adversarial stage — refute each change, batched ≤24
+
+- [ ] **Step 1: Run the Adversarial Workflow**
+
+```javascript
+export const meta = {
+  name: 'plan21-adversarial',
+  description: 'Refute each proposed change; a change ships only if not refuted',
+  phases: [{ title: 'Adversarial', detail: 'refute each proposed change, batched' }],
+}
 phase('Adversarial')
-// Read the changelist the meta agent wrote, then refute each change in batches of <=24.
 const changelist = JSON.parse(await agent(
-  `Read .framework/plan21/changelist.json and return its raw contents verbatim.`,
+  `Read .framework/plan21/meta/changelist.json and return its raw contents verbatim.`,
   { label: 'load-changelist', phase: 'Adversarial', model: 'opus' }
 ))
 const BATCH = 24
@@ -462,47 +526,47 @@ for (let start = 0; start < changelist.length; start += BATCH) {
       `loosened bar let a bad fixture slip? Was it tuned against a dirty good fixture? ` +
       `Does a fixture edit make the bad case ambiguous? Verify against the actual files.\n` +
       `Return JSON {"id","refuted":bool,"reason"} and write it to ` +
-      `.framework/plan21/verdicts/${c.id}.json (skip if it exists).`,
+      `.framework/plan21/adversarial/${c.id}.json (skip if it exists; "QUOTA" on rate error).`,
       { label: `refute:${c.id}`, phase: 'Adversarial', model: 'opus' }
     )
   ))
   log(`adversarial batch ${start}-${start + slice.length} of ${changelist.length} done`)
 }
-return { changelist: '.framework/plan21/changelist.json', verdicts: '.framework/plan21/verdicts/' }
+return { verdicts: '.framework/plan21/adversarial/' }
 ```
 
-Pass `args` = `{ agents: [...all registered agent tokens...], baselineDir: "docs/superpowers/eval-scorecards/2026-06-10-plan21-baseline/findings", rubric: "docs/superpowers/specs/plan21-rubric-draft.md" }`.
+- [ ] **Step 2: Build the surviving changelist**
 
-- [ ] **Step 2: On quota abort, resume**
+A change *ships* only if its verdict is `refuted: false`. Write the surviving set + the kicked-back set (with refutation reasons — do NOT silently drop them) to `.framework/plan21/meta/changelist.vetted.json`.
 
-If the run stops on quota, wait for reset and re-invoke (same session: `resumeFromRunId`; otherwise re-run — completed agents' output files are skipped). Confirm every `.framework/plan21/audit/*.json`, `synthesis/*.json`, `changelist.json`, and one `verdicts/*.json` per change exist before proceeding.
+- [ ] **Step 3: Verify one verdict per change, then durability tail (`<stage>` = `adversarial`)**
 
-- [ ] **Step 3: Build the surviving changelist**
-
-A change *ships* only if its verdict is `refuted: false`. List refuted changes with their reasons (these are kicked back for a human/next-round call — do NOT silently drop them). Record the surviving set + the kicked-back set in `.framework/plan21/changelist.vetted.json` (controller writes this by filtering).
+The adversarial tail also copies `changelist.vetted.json` into the tracked `adversarial/` mirror before commit+push.
 
 ### Task 9: Controller regression-checklist review
 
 - [ ] **Step 1: Check the audit independently surfaced the known Plan 18 classes**
 
-The Plan 18 paid defect classes (the controller's checklist — NOT fed to the auditors): `data-integrity` over-strict/internally-inconsistent on a clean bulk insert; `observability` per-endpoint-SLO over-reach; good-fixture over-flagging on `compliance`, `data-integrity`, `env-parity`, `observability`, `observability-infra`. Confirm the surviving changelist addresses each, or has an explicit reasoned verdict for why not. If a known class was missed entirely, re-run that agent's audit with the class named as a prompt (this is the only place the Plan 18 evidence enters, and only after the independent pass).
+The Plan 18 paid defect classes (the controller's checklist — NOT fed to the auditors): `data-integrity` over-strict/internally-inconsistent on a clean bulk insert; `observability` per-endpoint-SLO over-reach; good-fixture over-flagging on `compliance`, `data-integrity`, `env-parity`, `observability`, `observability-infra`. Confirm the surviving changelist addresses each, or has an explicit reasoned verdict for why not. If a known class was missed entirely, re-run that agent's audit (Task 8a, single agent) with the class named as a prompt (this is the only place the Plan 18 evidence enters, and only after the independent pass).
 
-- [ ] **Step 2: Commit the workflow artifacts kept in-repo**
+- [ ] **Step 2: Commit the rubric draft + STOP for review**
 
-Keep the draft + final rubric and the vetted changelist summary in `docs/`:
 ```bash
-cp .framework/plan21/rubric.final.md docs/superpowers/specs/plan21-rubric-final.md
-git add docs/superpowers/specs/plan21-rubric-draft.md docs/superpowers/specs/plan21-rubric-final.md CLAUDE.md docs/superpowers/plans/2026-05-20-meta-plan.md
+git add docs/superpowers/specs/plan21-rubric-draft.md CLAUDE.md docs/superpowers/plans/2026-05-20-meta-plan.md
 ```
 ```bash
-git commit -m "docs(plan21): audit workflow output — finalized rubric + vetted changelist (Phase 1)"
+git commit -m "docs(plan21): rubric draft + Phase 1 regression-checklist sign-off"
 ```
+```bash
+git push origin plan-21-reviewer-tuning
+```
+Present the vetted changelist + the kicked-back set to the user before starting Phase 2 (the apply phase changes real prompts/fixtures).
 
 ---
 
 ## Phase 2 — Apply + per-agent re-tune (subagent-driven)
 
-For **each agent with a surviving change** in `.framework/plan21/changelist.vetted.json`, run the task below. The *content* of each edit is data — it comes from the changelist — but the procedure is fixed. Process one agent fully before the next (tight feedback loop).
+For **each agent with a surviving change** in `.framework/plan21/meta/changelist.vetted.json`, run the task below. The *content* of each edit is data — it comes from the changelist — but the procedure is fixed. Process one agent fully before the next (tight feedback loop).
 
 ### Task 10 (repeat per agent): Apply + re-tune one agent
 
@@ -614,6 +678,7 @@ Fast-forward merge once CI is all-green; update the meta-plan row to ✅ Done wi
 
 ## Self-review notes (author)
 
-- **Spec coverage:** 0a guard+truncation → Tasks 1–3; 0b representativeness → Tasks 4–5; 0c anchor → Task 6; shared rubric → Task 7 (draft) + Task 8 Meta stage (final); fan-out/judge-panel/meta/adversarial → Task 8; Plan-18-as-checklist-not-input → Task 9; apply+retune → Task 10; thresholds-last + paid spot-confirm → Task 11; branch-end review → Task 12. All spec sections mapped.
+- **Spec coverage:** 0a guard+truncation → Tasks 1–3; 0b representativeness → Tasks 4–5; 0c anchor → Task 6; shared rubric → Task 7 (draft) + Task 8c Meta stage (final); fan-out/judge-panel/meta/adversarial → Tasks 8a/8b/8c/8d; Plan-18-as-checklist-not-input → Task 9; apply+retune → Task 10; thresholds-last + paid spot-confirm → Task 11; branch-end review → Task 12. All spec sections mapped.
+- **Durability:** commit+push at the 0c checkpoint and at each of the four Phase 1 stage boundaries (Tasks 8a–8d), mirroring gitignored `.framework/plan21/` artifacts into the tracked `docs/superpowers/eval-scorecards/2026-06-10-plan21-audit/` so a push actually preserves the LLM-bought work.
 - **Data-driven tasks:** Phase 2's edit *content* is produced by Phase 1 (it cannot be literal in the plan); the *procedure*, files, commands, and gates are fully concrete — not placeholders.
 - **Type consistency:** `validate_patch_hunks(patch: str) -> list[str]` is referenced identically in Tasks 1, 2, 10. Eval commands use the confirmed real flags (`--repeat`, `--backend`, `--findings-out`, `eval-analyze --scorecard-dir --margin`).
