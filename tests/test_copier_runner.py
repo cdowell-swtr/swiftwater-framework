@@ -3141,3 +3141,18 @@ def test_oasdiff_gated_on_base_spec_existence(tmp_path):
     assert "base_has_openapi=true" in ci and "base_has_openapi=false" in ci
     assert "curl -sfI" in ci  # probes the base branch's openapi.json over HTTP
     assert "steps.spec.outputs.base_has_openapi == 'true'" in ci  # oasdiff gated on it
+
+
+def test_rendered_project_uses_in_process_review(tmp_path: Path):
+    """The rendered project ships the in-process review gate, not the dead JS/prepare path."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    # the dead Workflow JS is gone from the rendered project
+    assert not (dest / ".claude" / "workflows" / "reviewers-audit.js").exists()
+    assert not (dest / ".claude" / "workflows" / "reviewers-gate.js").exists()
+
+    # the rendered gate hook invokes `framework gate` (in-process), not gate-prepare
+    hook = (dest / ".claude" / "hooks" / "reviewers-gate-check.sh").read_text()
+    assert "framework gate" in hook
+    assert "gate-prepare" not in hook
