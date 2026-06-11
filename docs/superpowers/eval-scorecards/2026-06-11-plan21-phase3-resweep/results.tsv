@@ -1,1 +1,11 @@
 agent	result	timestamp
+accessibility	review-accessibility    recall 1.00  fp 0.00    PASS	time=04:12
+api-design	review-api-design    recall 0.83  fp 0.00    PASS	time=04:17
+application-logic	review-application-logic    recall 1.00  fp 0.00    PASS	time=04:21
+architecture	review-architecture    recall 0.67  fp 0.00    FAIL (recall 0.67 < 0.90)	time=04:29
+compliance	review-compliance    recall 1.00  fp 1.00    FAIL (fp 1.00 > 0.10)	time=04:36
+contracts	review-contracts    recall 0.83  fp 0.00    PASS	time=04:43
+data-integrity	review-data-integrity    recall 1.00  fp 0.00    PASS	time=04:47
+data-lineage	review-data-lineage    recall 1.00  fp 0.00    PASS	time=04:49
+dependency	review-dependency    recall 1.00  fp 1.00    PASS	time=04:51
+documentation	review-documentation    recall 1.00  fp 0.67    PASS	time=04:57
