@@ -40,7 +40,12 @@ Flag, citing the changed line:
   reaches every environment identically via the application default.
 
 Grounding: cite only `.env.example` / overlay / `settings.py` declarations you have ACTUALLY READ in
-this run. Never enumerate the `.env.example` list or a settings field from memory.
+this run. Never enumerate the `.env.example` list or a settings field from memory. **Do NOT assert
+that a var is injected into ANY compose service (`app`/`worker`/etc., in `base.yml`/`services.yml`/
+`staging.yml`/`prod.yml`) unless that injection line appears in THIS diff.** A var the diff only
+declares in `.env.example` and consumes in `settings.py` (with a default), wired into NO compose
+overlay, is **parity-complete** — it reaches every environment via the application default. Do not
+fabricate an overlay injection (or a missing one) to manufacture a parity gap.
 
 Do NOT flag: config VALUE divergence across environments (different values per overlay are the
 intended purpose of overlays); observability surfaces; PII/secret content.
