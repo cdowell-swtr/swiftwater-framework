@@ -3156,3 +3156,21 @@ def test_rendered_project_uses_in_process_review(tmp_path: Path):
     hook = (dest / ".claude" / "hooks" / "reviewers-gate-check.sh").read_text()
     assert "framework gate" in hook
     assert "gate-prepare" not in hook
+
+
+def test_render_docs_battery_adds_docs_dependency_group(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "mkdocs-material" in pyproject
+    assert "mike" in pyproject
+    assert "mkdocs-render-swagger-plugin" in pyproject
+    assert "mkdocstrings[python]" in pyproject
+
+
+def test_render_without_docs_battery_has_no_docs_deps(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "mkdocs" not in pyproject
+    assert "mike" not in pyproject
