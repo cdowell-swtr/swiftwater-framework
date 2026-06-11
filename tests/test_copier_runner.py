@@ -3194,7 +3194,10 @@ def test_render_docs_battery_creates_mkdocs_site(tmp_path: Path):
     assert "Demo" in mkdocs  # title interpolated from project_name
 
     assert "::: demo" in (dest / "documentation" / "api" / "python.md").read_text()
-    assert "!!swagger openapi.json!!" in (dest / "documentation" / "api" / "rest.md").read_text()
+    assert (
+        "!!swagger openapi.json!!"
+        in (dest / "documentation" / "api" / "rest.md").read_text()
+    )
 
 
 def test_render_without_docs_battery_has_no_mkdocs(tmp_path: Path):

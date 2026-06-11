@@ -1602,7 +1602,9 @@ def test_rendered_project_docs_battery_builds_strict(tmp_path: Path):
         capture_output=True,
         text=True,
     )
-    assert build.returncode == 0, f"mkdocs --strict build failed:\n{build.stdout}\n{build.stderr}"
+    assert build.returncode == 0, (
+        f"mkdocs --strict build failed:\n{build.stdout}\n{build.stderr}"
+    )
     assert (dest / "site" / "index.html").is_file()
 
 
