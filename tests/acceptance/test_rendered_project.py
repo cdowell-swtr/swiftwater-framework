@@ -1550,6 +1550,34 @@ def test_rendered_project_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Pa
     assert not bad, f"root/non-host-owned files left behind: {bad[:5]}"
 
 
+@pytest.mark.skipif(
+    shutil.which("uv") is None,
+    reason="uv required to build the rendered project's docs site",
+)
+def test_rendered_project_docs_battery_builds_strict(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+
+    assert (dest / "mkdocs.yml").is_file()
+    assert (dest / "documentation" / "index.md").is_file()
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    export = subprocess.run(["bash", "scripts/export-openapi.sh"], cwd=dest)
+    assert export.returncode == 0, "OpenAPI export failed"
+    shutil.copyfile(dest / "openapi.json", dest / "documentation" / "openapi.json")
+
+    build = subprocess.run(
+        ["uv", "run", "--group", "docs", "mkdocs", "build", "--strict"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert build.returncode == 0, f"mkdocs --strict build failed:\n{build.stdout}\n{build.stderr}"
+    assert (dest / "site" / "index.html").is_file()
+
+
 def test_frontend_dev_command_uses_npm_ci_not_install(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["react"]})
