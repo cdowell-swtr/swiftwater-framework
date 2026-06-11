@@ -71,7 +71,9 @@ def test_fixture_corpus_is_present():
     assert _PATCHES, f"no change.patch files found under {_FIXTURES_ROOT}"
 
 
-@pytest.mark.parametrize("patch_path", _PATCHES, ids=lambda p: str(p.relative_to(_FIXTURES_ROOT)))
+@pytest.mark.parametrize(
+    "patch_path", _PATCHES, ids=lambda p: str(p.relative_to(_FIXTURES_ROOT))
+)
 def test_fixtures_are_wellformed(patch_path: Path):
     errors = validate_patch_hunks(patch_path.read_text())
     assert errors == [], f"{patch_path} has malformed hunks: {errors}"
