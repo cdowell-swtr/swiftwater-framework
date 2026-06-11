@@ -406,6 +406,34 @@ def test_rendered_project_precommit_runs_clean(tmp_path: Path):
     )
 
 
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("git") is None,
+    reason="uv and git are required for this test",
+)
+def test_rendered_project_precommit_clean_with_docs_battery(tmp_path: Path):
+    # The docs battery adds mkdocs.yml, documentation/*.md, docs.yml, and
+    # documentation/.gitignore. A freshly generated docs-battery project must
+    # make a clean first pass on the NO-DOCKER hooks.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+
+    subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    result = subprocess.run(
+        ["uv", "run", "pre-commit", "run", "--all-files"],
+        cwd=dest,
+        env={**os.environ, "SKIP": "coverage-threshold"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"pre-commit hooks did not pass cleanly on a docs-battery project:\n{result.stdout}\n{result.stderr}"
+    )
+
+
 @pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
 def test_rendered_project_exports_openapi(tmp_path: Path):
     # The export needs the app importable (uv sync) but NOT a database — create_app()
