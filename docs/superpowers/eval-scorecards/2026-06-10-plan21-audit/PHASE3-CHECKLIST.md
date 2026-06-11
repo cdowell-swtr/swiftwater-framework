@@ -1,0 +1,5 @@
+PHASE3 CHECKLIST — 2nd good fixtures to author before whole-set re-sweep: security, data-integrity (both fp-1.00 agents fixed on a single good fixture; widen precision coverage).
+- observability: tighten bad/uninstrumented-route (strip cross-domain bait: commit/idempotency/inline-import) so the bad fixture is a clean single-dimension discriminator (hygiene; metrics already met).
+- performance: author 2nd good fixture (bounded query matching repo idiom); --repeat 3 confirm.
+- ALL applied agents: --repeat 3 re-sweep before eval-analyze threshold re-derivation (Phase-2 evals were --repeat 1 to conserve quota).
+- api-design: add good/graphql-additive-field (additive optional GraphQL field returns []) — current good is REST-only/degenerate.
