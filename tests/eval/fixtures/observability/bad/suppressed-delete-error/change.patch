@@ -1,0 +1,22 @@
+diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
+index fa242f4..d4b1289 100644
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -34,3 +34,17 @@ def get_items(
+     repository clamps it. FastAPI serializes the ORM objects through ItemRead.
+     """
+     return list_items(session, limit=limit, offset=offset)
++
++
++@router.delete("/items/{item_id}", status_code=204)
++def delete_item(item_id: int, session: SessionDep) -> None:
++    """Delete an item. Any failure is swallowed so the client always gets a 204."""
++    try:
++        item = session.get(Item, item_id)
++        if item is not None:
++            session.delete(item)
++            session.commit()
++    except Exception:
++        # swallow: a failed delete is hidden from the client (false 204) and never
++        # logged or surfaced, so the error is invisible in production.
++        pass

@@ -27,7 +27,7 @@ def test_observability_is_bundle_strategy():
 def test_observability_bundle_pulls_obs_subtree(tmp_path: Path):
     spec = get_agent("observability")
     root, diff = _realize(
-        _FIXTURES / "observability" / "bad" / "uninstrumented-route", tmp_path
+        _FIXTURES / "observability" / "bad" / "suppressed-delete-error", tmp_path
     )
     bundle = assemble(diff, root, spec.context, model=spec.model)
     paths = [p for p, _ in bundle.context_files]

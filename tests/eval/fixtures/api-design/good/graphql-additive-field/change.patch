@@ -1,0 +1,17 @@
+diff --git a/src/demo/graphql/schema.py b/src/demo/graphql/schema.py
+index 2133e67..87e8b2f 100644
+--- a/src/demo/graphql/schema.py
++++ b/src/demo/graphql/schema.py
+@@ -18,6 +18,12 @@ class Item:
+     name: str
+     created_at: datetime.datetime
+ 
++    @strawberry.field
++    def tags(self) -> list[str]:
++        # Additive, backwards-compatible field: tagging isn't modelled yet, so this
++        # returns a fixed empty list (bounded, not a growable collection).
++        return []
++
+ 
+ def _to_item(row: ItemModel) -> Item:
+     return Item(id=row.id, name=row.name, created_at=row.created_at)

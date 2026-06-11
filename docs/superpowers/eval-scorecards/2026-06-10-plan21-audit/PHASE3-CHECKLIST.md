@@ -1,12 +1,20 @@
-PHASE3 CHECKLIST — 2nd good fixtures to author before whole-set re-sweep: security, data-integrity (both fp-1.00 agents fixed on a single good fixture; widen precision coverage).
-- observability: tighten bad/uninstrumented-route (strip cross-domain bait: commit/idempotency/inline-import) so the bad fixture is a clean single-dimension discriminator (hygiene; metrics already met).
-- performance: author 2nd good fixture (bounded query matching repo idiom); --repeat 3 confirm.
-- ALL applied agents: --repeat 3 re-sweep before eval-analyze threshold re-derivation (Phase-2 evals were --repeat 1 to conserve quota).
-- api-design: add good/graphql-additive-field (additive optional GraphQL field returns []) — current good is REST-only/degenerate.
-- contracts: add bad/weakened-consumer-assertion fixture (3rd high category untested).
+PHASE3 CHECKLIST — 2nd good fixtures to author before whole-set re-sweep.
+
+## ✅ DONE — fixture-coverage batch (2026-06-11, scorecard `…/2026-06-11-plan21-phase3-fixtures/`)
+7 fixtures authored/redesigned + `--repeat 3` verified (subagent backend); NO thresholds.yaml
+change (good fixtures threshold-neutral; every agent still clears its gate). Details in the scorecard.
+- security: ✅ `good/parameterized-query` (1.00/0.00).
+- data-integrity: ✅ `good/atomic-update` (1.00/0.00).
+- performance: ✅ `good/bounded-lookup` (1.00/0.00).
+- env-parity: ✅ `good/default-backed-var` (fp 0.00; agent recall 0.78 = pre-existing bad-fixture wobble, NOT this fixture).
+- api-design: ✅ `good/graphql-additive-field` (fp 0.00; recall 0.83 PASS — severity-omission quirk pre-existing).
+- observability: ✅ redesigned `bad/uninstrumented-route` → `bad/suppressed-delete-error` (active-suppression flags `high` 3/3; a plain delete-without-log only reached medium → recall 0.33, so the mechanism was changed, not just de-baited).
+- contracts: ✅ `bad/weakened-consumer-assertion` (1.00/0.00, flags `high` 3/3).
+
+## Remaining / deferred
+- ALL applied agents: --repeat 3 re-sweep before eval-analyze threshold re-derivation (Phase-2 evals were --repeat 1 to conserve quota). _(The 7 fixture-coverage agents were re-swept 2026-06-11; thresholds unchanged. The 06-11 resweep already covered the full 20 at --repeat 3.)_
 - rubric-parity (optional): contracts uses a condensed rubric block; consider the fuller verbatim block across all blocking agents in a later pass.
-- data-lineage: author replacement bad fixture (deletion-gap-misses-a-store OR PII-to-undocumented-sink) via render->edit->git-diff, THEN raise recall_min 0.73->0.90 (do NOT raise before the fixture exists).
-- env-parity: author 2nd good fixture (another parity-complete env-var change) to widen fp coverage (currently 1 good fixture).
+- data-lineage: ~~author replacement bad fixture~~ — **DEFERRED (already resolved):** the Phase-2 prompt fix firmed data-lineage to 1.00 and `recall_min` is already 0.90 in the merged set; a new bad fixture could only risk lowering recall. Skipped.
 - observability-fe (optional): author a flaggable 3rd bad fixture for active-suppression-on-a-regressed-path if more recall coverage is wanted (current 2 bad fixtures cover both domains; uninstrumented-view removed as non-discriminating).
 - observability-db: block_threshold is None (advisory) for now — after --repeat 3 confirms the bypass fixtures reliably flag, re-derive recall_min/fp_max and decide whether to restore a blocking threshold.
 

@@ -1,0 +1,17 @@
+diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
+index 862bafd..c4df1f8 100644
+--- a/src/demo/db/repository.py
++++ b/src/demo/db/repository.py
+@@ -28,3 +28,12 @@ def create_item(session: Session, name: str) -> Item:
+     session.commit()
+     session.refresh(item)
+     return item
++
++
++def get_item(session: Session, item_id: int) -> Item | None:
++    """Fetch a single item by primary key.
++
++    ``session.get`` is an indexed primary-key lookup — a bounded single-row read, never a
++    scan. Returns None when the id is unknown.
++    """
++    return session.get(Item, item_id)

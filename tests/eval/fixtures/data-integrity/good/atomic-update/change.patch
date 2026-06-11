@@ -1,0 +1,24 @@
+diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
+index 862bafd..55c1565 100644
+--- a/src/demo/db/repository.py
++++ b/src/demo/db/repository.py
+@@ -28,3 +28,19 @@ def create_item(session: Session, name: str) -> Item:
+     session.commit()
+     session.refresh(item)
+     return item
++
++
++def rename_item(session: Session, item_id: int, name: str) -> Item | None:
++    """Rename an item atomically.
++
++    A single ``get`` + ``commit`` in one transaction — the whole change commits together
++    or not at all (no in-loop commit, no partial-write window). Returns None if the item
++    does not exist.
++    """
++    item = session.get(Item, item_id)
++    if item is None:
++        return None
++    item.name = name
++    session.commit()
++    session.refresh(item)
++    return item

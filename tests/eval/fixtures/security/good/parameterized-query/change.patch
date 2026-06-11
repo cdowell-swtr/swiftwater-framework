@@ -1,0 +1,19 @@
+diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
+index 862bafd..3d6a14f 100644
+--- a/src/demo/db/repository.py
++++ b/src/demo/db/repository.py
+@@ -28,3 +28,14 @@ def create_item(session: Session, name: str) -> Item:
+     session.commit()
+     session.refresh(item)
+     return item
++
++
++def find_items_by_name(session: Session, name: str) -> list[Item]:
++    """Look up items with an exact-match name filter.
++
++    ``name`` is bound as a query parameter via SQLAlchemy's ``==`` operator (never
++    string-interpolated into SQL), so the lookup is injection-safe. The result set is
++    bounded by ``MAX_PAGE_SIZE``.
++    """
++    stmt = select(Item).where(Item.name == name).order_by(Item.id).limit(MAX_PAGE_SIZE)
++    return list(session.scalars(stmt))
