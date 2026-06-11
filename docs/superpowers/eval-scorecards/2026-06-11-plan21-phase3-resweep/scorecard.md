@@ -1,6 +1,6 @@
 # Plan 21 Phase 3 — whole-set re-sweep (--repeat 3, free subagent backend)
 
-13/20 agents recorded (resume-aware; raw findings in .framework/plan21/final-findings/ for eval-analyze).
+20/20 agents. Raw findings: .framework/plan21/final-findings/ → eval-analyze.
 
 | agent | recall | fp | verdict |
 |---|---|---|---|
@@ -17,5 +17,12 @@
 | env-parity | 0.89 | 0.33 | FAIL |
 | observability | 1.00 | 0.00 | PASS |
 | observability-db | 1.00 | 0.00 | PASS |
+| observability-fe | 1.00 | 0.00 | PASS |
+| observability-infra | 0.50 | 1.00 | FAIL |
+| performance | 1.00 | 0.00 | PASS |
+| privacy | 1.00 | 0.00 | PASS |
+| security | 1.00 | 0.00 | PASS |
+| test-quality | 1.00 | 0.00 | PASS |
+| usability | 1.00 | 0.00 | PASS |
 
-**10 PASS / 3 FAIL** so far. FAILs: architecture, compliance, env-parity
+**16 PASS / 4 FAIL** vs the CURRENT (pre-re-derivation) thresholds. FAILs: architecture, compliance, env-parity, observability-infra
