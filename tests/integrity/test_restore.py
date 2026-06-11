@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import yaml
+
 from framework_cli.copier_runner import render_project
 from framework_cli.integrity.checker import check
 from framework_cli.integrity.generate import write_manifest
@@ -74,6 +76,46 @@ def test_restore_hybrid_fixes_block_and_preserves_builder_content(tmp_path: Path
     restored = claude.read_text()
     assert "TAMPER" not in (section_content(restored) or "")  # block restored
     assert "MY BUILDER NOTE" in restored  # builder content outside the block preserved
+    assert check(proj, ci=True) == []
+
+
+def test_restore_precommit_preserves_builder_hooks(tmp_path: Path):
+    """The Meridian case: a project adds its own pre-commit hook below FRAMEWORK:END;
+    `framework restore` re-locks the framework region but keeps the project's hook, and the
+    result is still valid YAML with the hook in the `repos:` sequence."""
+    proj = _new_project(tmp_path)
+    cfg = proj / ".pre-commit-config.yaml"
+    original = cfg.read_text()
+    begin, _ = section_span(original)  # type: ignore[misc]  # markers must exist
+    lines = original.splitlines()
+    lines[begin + 1] = (
+        lines[begin + 1] + "  # TAMPER"
+    )  # edit inside the framework region
+    builder_hook = (
+        "  - repo: https://github.com/astral-sh/uv-pre-commit\n"
+        "    rev: 0.5.0\n"
+        "    hooks:\n"
+        "      - id: uv-lock\n"
+    )
+    cfg.write_text(
+        "\n".join(lines) + "\n" + builder_hook
+    )  # appended below FRAMEWORK:END
+
+    assert any(
+        f.path == ".pre-commit-config.yaml" and f.fatal for f in check(proj, ci=True)
+    )
+
+    restore_file(proj, ".pre-commit-config.yaml")
+
+    restored = cfg.read_text()
+    assert "TAMPER" not in (
+        section_content(restored) or ""
+    )  # framework region restored
+    assert "uv-pre-commit" in restored  # builder's hook outside the region preserved
+    repos = yaml.safe_load(restored)["repos"]  # still valid YAML, hook in the sequence
+    assert "https://github.com/astral-sh/uv-pre-commit" in [
+        r.get("repo") for r in repos
+    ]
     assert check(proj, ci=True) == []
 
 

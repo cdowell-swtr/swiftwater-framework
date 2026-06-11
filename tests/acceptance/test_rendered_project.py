@@ -966,14 +966,16 @@ def test_rendered_project_integrity_verifies_tamper_and_restore(tmp_path: Path):
     # Fresh project verifies clean.
     assert check(dest, ci=True) == []
 
-    # Tampering with a locked file is caught as fatal.
-    locked = dest / ".pre-commit-config.yaml"
+    # Tampering with a locked file is caught as fatal. (`.pre-commit-config.yaml` is no
+    # longer locked — it is hybrid, so appending below the marker is the builder's space;
+    # the hybrid tamper/restore path is covered by test_restore_precommit_preserves_builder_hooks.)
+    locked = dest / "alembic.ini"
     locked.write_text(locked.read_text() + "\n# sneaky edit\n")
     findings = check(dest, ci=True)
-    assert any(f.path == ".pre-commit-config.yaml" and f.fatal for f in findings)
+    assert any(f.path == "alembic.ini" and f.fatal for f in findings)
 
     # Restore returns it to canonical and the project verifies clean again.
-    restore_file(dest, ".pre-commit-config.yaml")
+    restore_file(dest, "alembic.ini")
     assert check(dest, ci=True) == []
 
 
