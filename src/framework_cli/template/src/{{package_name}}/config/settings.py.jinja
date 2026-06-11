@@ -55,7 +55,9 @@ class Settings(BaseSettings):
 {%- endif %}
 {%- if "graphql" in batteries %}
 
-    # GraphQL IDE (GraphiQL) + schema introspection: enabled outside production only.
+    # GraphQL IDE (GraphiQL) + schema introspection: enabled only in the dev/test
+    # environments (the Compose stack sets APP_ENVIRONMENT to prod/staging in the
+    # production-like environments, so introspection is off there — fail-closed).
     # Explicit override; if None, resolved_graphql_ide derives it from environment.
     graphql_ide_enabled: bool | None = None
 {%- endif %}
@@ -95,7 +97,7 @@ class Settings(BaseSettings):
     def resolved_graphql_ide(self) -> bool:
         if self.graphql_ide_enabled is not None:
             return self.graphql_ide_enabled
-        return self.environment != "production"
+        return self.environment in ("dev", "test")
 {%- endif %}
 
 

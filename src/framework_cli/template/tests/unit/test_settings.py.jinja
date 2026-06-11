@@ -45,3 +45,29 @@ def test_database_url_env_override(monkeypatch):
         "APP_DATABASE_URL", "postgresql+psycopg://u:p@db.example:5432/app"
     )
     assert Settings().database_url == "postgresql+psycopg://u:p@db.example:5432/app"
+{%- if "graphql" in batteries %}
+
+
+@pytest.mark.parametrize("env", ["prod", "staging"])
+def test_graphql_ide_disabled_in_production_like_envs(env):
+    # The compose stack sets APP_ENVIRONMENT to prod/staging (never the literal
+    # "production"), so introspection/GraphiQL must be OFF for those tokens.
+    assert Settings(environment=env).resolved_graphql_ide is False
+
+
+@pytest.mark.parametrize("env", ["dev", "test"])
+def test_graphql_ide_enabled_in_dev_and_test(env):
+    assert Settings(environment=env).resolved_graphql_ide is True
+
+
+def test_graphql_ide_disabled_for_unknown_env():
+    # Fail-closed: an unrecognized environment token must not expose introspection.
+    assert Settings(environment="qa").resolved_graphql_ide is False
+
+
+def test_graphql_ide_explicit_override_wins():
+    assert Settings(environment="prod", graphql_ide_enabled=True).resolved_graphql_ide
+    assert not Settings(
+        environment="dev", graphql_ide_enabled=False
+    ).resolved_graphql_ide
+{%- endif %}
