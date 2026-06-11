@@ -1,0 +1,29 @@
+diff --git a/.env.example b/.env.example
+index 27db54c..dd113b1 100644
+--- a/.env.example
++++ b/.env.example
+@@ -20,6 +20,9 @@ APP_ALERT_WEBHOOK_URL=
+ 
+ # Your app's config below.
+ 
++# Outbound HTTP client timeout in seconds (override per environment).
++APP_HTTP_CLIENT_TIMEOUT_SECONDS=5.0
++
+ # --- compose-over-SSH turnkey deploy target (DEPLOY_TARGET=compose-ssh) ---
+ # Set these as GitHub Environment variables (not app runtime config).
+ # DEPLOY_TARGET=compose-ssh
+diff --git a/src/demo/config/settings.py b/src/demo/config/settings.py
+index e6fb558..0a51272 100644
+--- a/src/demo/config/settings.py
++++ b/src/demo/config/settings.py
+@@ -33,6 +33,10 @@ class Settings(BaseSettings):
+     # testcontainers Postgres (overridden per session).
+     database_url: str = "postgresql+psycopg://app:app@postgres:5432/app"
+ 
++    # Outbound HTTP client timeout (seconds). Same default in every environment;
++    # override per env via APP_HTTP_CLIENT_TIMEOUT_SECONDS.
++    http_client_timeout_seconds: float = 5.0
++
+     @property
+     def resolved_log_level(self) -> str:
+         if self.log_level is not None:
