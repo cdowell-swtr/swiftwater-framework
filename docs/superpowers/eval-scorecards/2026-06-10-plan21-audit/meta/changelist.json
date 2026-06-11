@@ -1,0 +1,461 @@
+[
+  {
+    "id": "universal-rubric-001",
+    "agent": "ALL",
+    "scope": "all 20 review-* agents",
+    "summary": "Prepend the finalized shared rubric (.framework/plan21/meta/rubric.final.md) verbatim to every prompt. This is the single highest-leverage change: every good-fixture over-flag in the baseline traces to an agent not inheriting these clauses (severity ladder, codebase-bar incl. auto-instrumentation + hardening-is-info carve-outs, internal-consistency, scope discipline, grounding/diff-awareness, JSON-only output).",
+    "prompt_rewrite": "Prepend rubric.final.md verbatim above each agent's domain-specific body. Then add the per-agent scope carve-outs and clauses listed in each agent's entry below.",
+    "fixture_edits": [],
+    "block_threshold": "unchanged (see per-agent)",
+    "needs_second_good_fixture": false,
+    "priority": "P0"
+  },
+  {
+    "id": "observability-001",
+    "agent": "observability",
+    "verdict": "MAJOR_REWORK",
+    "priority": "P0",
+    "prompt_rewrite": "Rewrite: enumerate what the framework auto-provides (auto correlation_id/trace via structlog processors + FastAPIInstrumentor span + ObservabilityMiddleware request log/metrics) and instruct NOT to flag its absence. Remove the three template-contradicting flag clauses: (a) missing manual span/metric/log on an auto-instrumented route, (b) missing correlation_id on error paths (auto-injected), (c) missing per-endpoint SLO (template ships fleet-wide SLOs only). Reserve high for a genuine in-domain gap: a mutation/business path with NO structured log of its own, a path that BYPASSES the auto-instrumented seam, or active error suppression. Add scope carve-out: do NOT flag DB transaction/rollback/session state (data-integrity owns it) or idempotency/business correctness (application-logic owns it).",
+    "fixture_edits": [
+      {
+        "fixture": "bad/uninstrumented-route",
+        "action": "tighten",
+        "detail": "The one in-domain defect (no structured log on the mutation path) is buried under cross-domain bait (commit-failure, double-prefix idempotency, inline HTTPException import). Strip the bait; pin expect.json to the structured-logging-absence dimension."
+      },
+      {
+        "fixture": "good/correlation-id-logging",
+        "action": "keep",
+        "detail": "Genuinely clean (more instrumented than shipped get_items); should score [] once prompt is fixed."
+      },
+      {
+        "fixture": "good/instrumented-route",
+        "action": "keep",
+        "detail": "Genuinely clean; all 5 baseline findings are below the codebase bar."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": false,
+    "notes": "Keystone of the over-flag cohort: its three flag clauses each contradict the shipped template. Already has 2 good fixtures, so no additional good fixture needed. Audit-proposed start recall_min 0.50 / fp_max 0.10; re-derive Phase 3."
+  },
+  {
+    "id": "observability-db-001",
+    "agent": "observability-db",
+    "verdict": "BROKEN_RECALL_0",
+    "priority": "P0",
+    "prompt_rewrite": "Rewrite the trigger: it currently describes the codebase's default-and-only idiom (auto-instrumented engine), so it would flag every query in the repo. Re-scope to instrumentation-BYPASS: a non-instrumented store/path (raw DBAPI call, second engine not registered with SQLAlchemyInstrumentor, background path), a new DB client with no /health, or a data-layer error swallowed without correlation_id. Defer pagination/unbounded-query to performance.",
+    "fixture_edits": [
+      {
+        "fixture": "bad/unindexed-unobserved-query",
+        "action": "replace",
+        "detail": "Byte-identical body to the good fixture; auto-instrumented + bounded (a non-defect). Replace with raw-connection-bypasses-instrumentation (a second un-registered engine / raw DBAPI call)."
+      },
+      {
+        "fixture": "bad/write-path-no-metric",
+        "action": "replace",
+        "detail": "The delete is auto-instrumented like create_item; the 'invisible to observability' docstring is factually false. Replace with new-client-no-health OR db-error-no-correlation-id."
+      }
+    ],
+    "block_threshold": "defer-to-phase-3 (null now)",
+    "needs_second_good_fixture": false,
+    "notes": "Coupled prompt+fixture redesign. Both bad fixtures are non-defects -> recall structurally 0. Do NOT set a block_threshold until the redesign produces a true-positive signal (Phase 3). good fixture is fine; no second needed."
+  },
+  {
+    "id": "observability-fe-001",
+    "agent": "observability-fe",
+    "verdict": "STRICTER_THAN_CODEBASE",
+    "priority": "P1",
+    "prompt_rewrite": "Re-key bullets 1+2 from 'view with no RUM' (the global window error/unhandledrejection handler already covers views) to ACTIVE error suppression: a catch that stops the rejection reaching the global handler / js-errors counter, or an error boundary returning null. Narrow bullet 4 (beacon allowlist) to the unbounded-label-cardinality core; cross-reference privacy for the PII angle (privacy owns beacon PII).",
+    "fixture_edits": [
+      {
+        "fixture": "bad/uninstrumented-view",
+        "action": "re-author",
+        "detail": "The global window handler covers the unhandled rejection exactly like App.tsx, so 0/3 'miss' is correct reviewer behavior. Re-author into an ACTIVE-suppression variant (.catch(()=>{}) / error boundary returning null)."
+      },
+      {
+        "fixture": "good/capped-label",
+        "action": "re-author",
+        "detail": "INVALID-GOOD: device_class is stripped server-side by the fail-closed allowlist (dead-on-arrival), so reviewers correctly flag it. Add device_class to the allowlist in-patch OR use an allowlisted/server-derived dimension."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": false,
+    "notes": "Good fixture is being re-authored to genuine-clean, not added to. medium 'no alert/dashboard for new signal' findings are valid but advisory; do not gate. recall_min 0.90 / fp_max 0.10."
+  },
+  {
+    "id": "observability-infra-001",
+    "agent": "observability-infra",
+    "verdict": "FIXTURE_DEFECT_AND_PROMPT_GAP",
+    "priority": "P1",
+    "prompt_rewrite": "Add a diff-awareness clause: files added in THIS diff are present; only flag a missing alert/dashboard when absent from BOTH diff and tree (an r1 repeat hallucinated a high for an alert the patch ADDS). Pin severities deterministically: PRIMARY wiring break (exporter with no scrape / scrape with no exporter / dev-only obs that never reaches prod / new prod surface with no obs) = HIGH (blocks); SECONDARY parity gap (surface scraped but no alert, or no dashboard) = MEDIUM (stable, no block). Soften the per-alert-receiver clause (template uses a catch-all route).",
+    "fixture_edits": [
+      {
+        "fixture": "good/complete-obs-surface",
+        "action": "repair-patch",
+        "detail": "NOT-CLEAN: the dev.yml redis block is indented under volumes: not services: (parses as a malformed volume), which r0/r2 correctly flag. Repair the placement under services:."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": false,
+    "notes": "Repairs cross-repeat severity wobble (high/medium on the same satellite gap) and the diff-awareness hallucination. Good fixture is repaired, not added to."
+  },
+  {
+    "id": "compliance-001",
+    "agent": "compliance",
+    "verdict": "FP_1.00_REWRITE",
+    "priority": "P0",
+    "prompt_rewrite": "Rewrite to inherit the rubric and NARROW the domain to AUDIT-GAP + RETENTION-PATH + ERASURE-PATH only. Defer ALL raw-PII handling to privacy (currently 2 of 3 bad-fixture findings per repeat are privacy's domain). Add codebase-bar clause: do NOT flag structured get_logger().info() of an OPAQUE identifier or absence of a per-line retention policy (the template's own observability middleware and webhook inbox log this way). High is reserved for: a sensitive state-changing op with NO audit record, or persisted personal data with NO retention/deletion path anywhere reachable.",
+    "fixture_edits": [
+      {
+        "fixture": "bad/logs-pii-in-handler",
+        "action": "re-target",
+        "detail": "Valid defect but mis-targeted: its loud defect is raw-email-in-logs (privacy's domain) while the compliance defect (audit gap) is buried. Re-author to a true compliance defect (sensitive-op-with-no-audit-record OR persisted-PII-with-no-deletion-path); move the email-logging case to the privacy corpus."
+      },
+      {
+        "fixture": "good/audit-logged-action",
+        "action": "keep",
+        "detail": "Genuinely clean (opaque-id structured log). The prompt is what must change to stop flagging it."
+      },
+      {
+        "fixture": "good/<new-second-good>",
+        "action": "add",
+        "detail": "Add a 2nd clean good fixture (e.g. a sensitive op that DOES write an audit record + has a deletion path) to widen fp coverage on this fp-1.00 agent."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": true,
+    "notes": "fp 1.00 on a single good fixture -> borderline-on-precision; add a 2nd good fixture to widen fp coverage. Treat high as ADVISORY (non-blocking) until the rewrite + re-author drop fp from 1.00; re-derive recall_min 0.90 / fp_max 0.10 in Phase 3."
+  },
+  {
+    "id": "data-integrity-001",
+    "agent": "data-integrity",
+    "verdict": "FP_1.00_PROMPT",
+    "priority": "P0",
+    "prompt_rewrite": "Rewrite to inherit the rubric; replace the unbounded 'at least high' floor with a demonstrability gate (high requires a concrete demonstrable data-loss/atomicity defect). Add codebase-bar note: the session factory sets expire_on_commit=False and created_at uses server_default, so a missing post-commit refresh is NOT a defect (do not hallucinate 'created_at=None'); items.name has no UNIQUE constraint, so absence of de-dup is not a violated invariant. High stays for the genuine planted defect (the in-loop session.commit() that breaks batch atomicity).",
+    "fixture_edits": [
+      {
+        "fixture": "good/atomic-bulk-insert",
+        "action": "align-to-codebase",
+        "detail": "Clean as a data-integrity matter, but its docstring 'no per-row refresh' hands the agent the false created_at=None FP. Align the docstring to the template idiom (note expire_on_commit=False) so it stops baiting the over-flag."
+      },
+      {
+        "fixture": "good/<new-second-good>",
+        "action": "add",
+        "detail": "Add a 2nd clean good fixture (a different atomic write path) to widen fp coverage on this fp-1.00 agent."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": true,
+    "notes": "fp 1.00 on a single good fixture -> borderline-on-precision; add a 2nd good fixture. Expect fp to drop to ~0-0.33 after the codebase-bar clause + good-fixture alignment."
+  },
+  {
+    "id": "security-001",
+    "agent": "security",
+    "verdict": "OVER_FLAG_GOOD_SEVERITY_UNSTABLE",
+    "priority": "P0",
+    "prompt_rewrite": "Prepend rubric; add a clause binding 'secret-exposing' to an ACTUAL committed/leaked secret VALUE on a changed line (hardcoded default, key in code/config, secret in a logged field). Forbid hardening-as-high/medium: SecretStr / min_length / rotation / .env handling are info at most (template uses plain str signing secrets; .env is already gitignored). Enforce added/modified-lines-only review (stop reaching into lru_cache/env_file/model_dump out-of-diff). Add scope carve-out: field naming is code-quality/usability, not security.",
+    "fixture_edits": [
+      {
+        "fixture": "good/env-sourced-secret",
+        "action": "keep",
+        "detail": "GENUINELY CLEAN (api_secret_key: str matches template webhook_signing_secret: str). The over-flag is 100% prompt defect; no change to change.patch needed. OPTIONAL: re-theme to mirror the HMAC idiom for representativeness."
+      },
+      {
+        "fixture": "good/<new-second-good>",
+        "action": "add",
+        "detail": "Add a 2nd clean good fixture (e.g. an env-sourced secret consumed via get_secret-style accessor) to widen fp coverage on this fp-1.00 agent."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": true,
+    "notes": "fp 1.00 (2-3 findings on the good fixture every run) + severity instability (SecretStr high in r1, medium in r0/r2) -> borderline-on-precision; add a 2nd good fixture. The load-bearing fix is the prompt clause forbidding hardening-as-high; a threshold change alone will not fix r1's escalation. bad fixture (hardcoded default) is a clean discriminating critical."
+  },
+  {
+    "id": "test-quality-001",
+    "agent": "test-quality",
+    "verdict": "FP_1.00_COUPLED",
+    "priority": "P1",
+    "prompt_rewrite": "Anchor redundant/duplicate-coverage explicitly to LOW/INFO (advisory, never blocks). Reserve high STRICTLY for 'a test that cannot fail' (tautology, mock of the symbol-under-test, interface-mismatch mock, unhappy-path-without-failure-assert). Add codebase-bar note: per-field env-override tests match the existing suite idiom.",
+    "fixture_edits": [
+      {
+        "fixture": "good/meaningful-assert",
+        "action": "replace-redundant-test",
+        "detail": "INVALID: test_resolved_log_level_prod_is_info is a VERBATIM duplicate of an existing parametrized [prod] case (visible via the bundle context), which reviewers correctly flag. Replace the duplicate with a genuinely additive distinct-behavior test."
+      },
+      {
+        "fixture": "good/<new-second-good>",
+        "action": "add",
+        "detail": "Add a 2nd clean good fixture (a meaningful additive test) to widen fp coverage on this fp-1.00 agent."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": true,
+    "notes": "fp 1.00 driven by the verbatim-duplicate test + an unanchored prompt that rated the SAME duplicate high/low/medium across repeats. Coupled fixture+prompt fix; add a 2nd good fixture to widen coverage. Recall (a-test-that-cannot-fail) is perfect and stable."
+  },
+  {
+    "id": "env-parity-001",
+    "agent": "env-parity",
+    "verdict": "FIXTURE_DRIVEN_FP",
+    "priority": "P1",
+    "prompt_rewrite": "Add a container-reach clause: a var wired only into a dev/test overlay (base.yml) but needed in prod is a real parity gap when prod.yml/staging.yml have no env_file passthrough. Resolve the container-reach seam deterministically. Add grounding clause (an r2 repeat fabricated a .env.example list from memory). Scope carve-out: config VALUE divergence / observability / PII content are other agents' domains.",
+    "fixture_edits": [
+      {
+        "fixture": "good/parity-preserved",
+        "action": "rewrite",
+        "detail": "INVALID: the base.yml-only var wiring IS a genuine staging/prod parity gap; the compose hunk is byte-identical to the bad fixture, distinguished only by a parity-irrelevant .env.example line. Rewrite to a pure consumed+declared env-var change with NO base.yml hunk."
+      },
+      {
+        "fixture": "good/<new-second-good>",
+        "action": "add",
+        "detail": "Add a 2nd clean good fixture (another parity-complete env-var change) to widen fp coverage given the current 0.67."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": true,
+    "notes": "fp 0.67 from one mis-authored good fixture on an unresolved container-reach seam (recall is a clean 1.00) -> borderline-on-precision; add a 2nd good fixture. Do NOT widen fp_max to absorb 0.67; fix the fixture+prompt. Keep recall_min 0.90 / fp_max 0.10."
+  },
+  {
+    "id": "performance-001",
+    "agent": "performance",
+    "verdict": "NEEDS_TUNING",
+    "priority": "P2",
+    "prompt_rewrite": "Prepend rubric; add a bounded-reads codebase-bar clause: bounded reads (capped by MAX_PAGE_SIZE) that hydrate full ORM rows match the repo idiom (the template's own list_items does select(Item) and discards created_at unflagged) and are NOT defects at any severity. Keep high for unbounded scans / N+1 / pool exhaustion / super-linear-on-unbounded-input (all correctly rated today).",
+    "fixture_edits": [
+      {
+        "fixture": "good/<existing-good>",
+        "action": "align-to-codebase",
+        "detail": "Make the good fixture unambiguously clean so it yields [] (its get_item_names reuses list_items and discards a hydrated column, the exact codebase-bar/internal-consistency pattern the bad fixture's own suggested projection fix penalizes)."
+      },
+      {
+        "fixture": "good/<new-second-good>",
+        "action": "add",
+        "detail": "Add a 2nd clean good fixture (a bounded query matching the repo idiom) to widen fp coverage; the single good fixture currently draws a low-severity codebase-bar over-flag on all 3 repeats."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": true,
+    "notes": "Good fixture over-flags (low) on all 3 repeats via a codebase-bar violation -> borderline-on-precision; add a 2nd good fixture. At block=high the good fixture already passes (low does not block); target is a literal [] via the codebase-bar clause. Bad-fixture detection (N+1 + unbounded scan, high 3/3) is excellent."
+  },
+  {
+    "id": "privacy-001",
+    "agent": "privacy",
+    "verdict": "HEALTHY",
+    "priority": "P2",
+    "prompt_rewrite": "Prepend rubric (replace the ad-hoc flat rule; outcome unchanged \u2014 PII logged/echoed/captured-into-telemetry stays high). Add an explicit scope line: personal-data only; defer authz->security, validation/correctness->application-logic, contract->contracts, observability coverage->observability. privacy is the SOLE owner of whether personal data leaks; other agents cross-reference but never re-flag.",
+    "fixture_edits": [
+      {
+        "fixture": "bad/pii-in-response",
+        "action": "de-compound",
+        "detail": "De-compound to a single response-leak so the expected dimension is unambiguous."
+      },
+      {
+        "fixture": "good/<new-second-good>",
+        "action": "add",
+        "detail": "Add a 2nd good fixture (pii-redacted-log: an opaque-id structured log that is correctly clean) to widen fp coverage; only 1 good case exists today on this high-stakes sole-owner agent."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": true,
+    "notes": "Cleanest agent in the corpus (recall 1.00 / fp 0.00) but only ONE good fixture. Borderline-on-precision-COVERAGE rather than borderline-on-fp: a single good case gives weak fp signal for the agent that owns every PII boundary, so add a 2nd good fixture (synthesis-recommended). recall_min 0.90 / fp_max 0.10."
+  },
+  {
+    "id": "contracts-001",
+    "agent": "contracts",
+    "verdict": "HEALTHY_FIXTURE_BUG",
+    "priority": "P0",
+    "prompt_rewrite": "KEEP the prompt (scope-disciplined, fp 0.00; the reviewers' info classifications for stale-pact / optional-undeclared-read are CORRECT). Prepend rubric and add a hard-vs-optional-dependency clarifier: a HARD undeclared dependency (int(data['field']) -> KeyError) is high; an OPTIONAL undeclared read (data.get(...)) or a not-yet-regenerated pact is info, never blocking. The recall 0.50 FAIL is a FIXTURE-grading bug, not a prompt or threshold problem.",
+    "fixture_edits": [
+      {
+        "fixture": "bad/client-pact-divergence",
+        "action": "redesign-to-high",
+        "detail": "INVALID as a high-graded bad: exercises only info-tier behavior (stale pact + optional .get() read) but is scored against block_threshold=high. Convert the optional read into a HARD undeclared dependency (int(data['field']) -> KeyError with no pact declaration) so it becomes a genuine high."
+      },
+      {
+        "fixture": "bad/weakened-consumer-assertion",
+        "action": "add",
+        "detail": "MISSING: the prompt's third high category (weakened consumer assertion) is untested. Add a bad fixture for it."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": false,
+    "notes": "Recall 0.50 fix is entirely in the FIXTURE, not the threshold or a 2nd good fixture. fp is a clean 0.00, so no precision concern -> no second good fixture."
+  },
+  {
+    "id": "data-lineage-001",
+    "agent": "data-lineage",
+    "verdict": "FIXTURE_DEFECT",
+    "priority": "P0",
+    "prompt_rewrite": "KEEP the prompt's correct high bar (PII to undocumented store / deletion gap missing a store / stale documented-or-indexed derived field). Prepend rubric and add a normalization codebase-bar carve-out (the template's create_item stores name verbatim, unflagged; absence of strip/lower normalization is NOT a lineage concern). Add a derived-field-desync class pinned high. The recall 0.17 FAIL is a FIXTURE defect; the reviewers correctly abstained.",
+    "fixture_edits": [
+      {
+        "fixture": "bad/untransformed-write",
+        "action": "replace",
+        "detail": "INVALID: demands flagging verbatim-name storage the template's create_item does unflagged (codebase-bar) AND is out of domain (no PII sink, no deletion gap). Sole cause of recall 0.17. Replace with deletion-gap-misses-a-store OR PII-to-undocumented-sink."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": false,
+    "notes": "Recall 0.17 fix is replacing one invalid bad fixture; fp is a clean 0.00 -> no precision concern, no second good fixture. Raise recall_min to 0.90 after the replacement."
+  },
+  {
+    "id": "documentation-001",
+    "agent": "documentation",
+    "verdict": "ADVISORY_LEAKY",
+    "priority": "P2",
+    "prompt_rewrite": "Rewrite to inherit the rubric; cap output at low/info (advisory, never high/medium). Add a scope fence: docstrings (when siblings document) / .env.example vars / README-or-spec staleness / complex-logic comments only \u2014 disclaim correctness, response_model/typing, openapi.json regen, page-size-cap, and CI-contract jobs (those belong to contracts/api-design/performance). Pin the doc-completeness finding at a single severity (low). Add grounding clause (cite the changed line).",
+    "fixture_edits": [
+      {
+        "fixture": "good/documented-public-function",
+        "action": "re-author",
+        "detail": "NOT CLEAN: count_items uses list_items (bounded to DEFAULT_PAGE_SIZE) while the docstring promises a true total, which reviewers correctly flag as a doc-vs-impl mismatch. Re-author to a true aggregate OR an honest bounded docstring."
+      }
+    ],
+    "block_threshold": "high (effectively unreachable; capped low/info)",
+    "needs_second_good_fixture": false,
+    "notes": "Advisory agent (fp_max 1.00 by design). fp 1.00 is surfacing-by-design, not a real false positive; fix the good fixture's genuine doc-vs-impl mismatch rather than add a 2nd good fixture. recall_min 0.90 / fp_max 1.00."
+  },
+  {
+    "id": "dependency-001",
+    "agent": "dependency",
+    "verdict": "ADVISORY_NOISY",
+    "priority": "P2",
+    "prompt_rewrite": "Add a scope-discipline clause: you see ONLY the manifest diff, not call sites \u2014 do NOT reason about runtime/async/event-loop behavior or invent httpx.AsyncClient refactors. Add a no-fabrication clause: no unverifiable CVE ids; phrase pin-floor concerns generically. Explicitly opt out of the medium tier (cap at low even for a convention violation); keep a single narrow optional high ONLY for a concrete supply-chain compromise (malicious/typosquat/yanked), advisory until a fixture proves high-precision detection.",
+    "fixture_edits": [
+      {
+        "fixture": "good/pinned-reputable-dep",
+        "action": "fix-pin",
+        "detail": "NOT-UNAMBIGUOUSLY-CLEAN: httpx>=0.27,<1.0 diverges below the template >=0.28 floor and adds a non-template upper cap; correctly flagged. Change to httpx>=0.28 and drop the cap."
+      }
+    ],
+    "block_threshold": "none (advisory)",
+    "needs_second_good_fixture": false,
+    "notes": "Advisory agent (fp_max 1.00). fp 1.00 is surfacing-by-design; fix the good fixture's actual pin divergence rather than add a 2nd good fixture. recall_min 0.90 / fp_max 1.00."
+  },
+  {
+    "id": "usability-001",
+    "agent": "usability",
+    "verdict": "ADVISORY_MISCALIBRATED",
+    "priority": "P2",
+    "prompt_rewrite": "Prompt: add a scope exclusion (a new component not yet wired into a parent is NOT a usability defect \u2014 integration completeness is no agent's concern). Allow low for concrete defects (silent mutation failure, no error branch) while keeping info for taste. Harden JSON-only output (output exactly [] when nothing to flag). The fp 0.33 FAIL is a CALIBRATION artifact, not a prompt defect.",
+    "fixture_edits": [
+      {
+        "fixture": "bad/delete-no-confirm",
+        "action": "regenerate-diff-header",
+        "detail": "Valid defect, but change.patch lacks the diff --git/index header -> inconsistent line anchoring across repeats. Regenerate as a full git-formatted diff; do NOT change the defect."
+      }
+    ],
+    "block_threshold": "none (advisory)",
+    "needs_second_good_fixture": false,
+    "notes": "fp 0.33 is purely a thresholds.yaml mismatch (advisory agent held to a blocking fp_max 0.10), NOT borderline-on-precision -> no second good fixture. The fix is the calibration change (see usability-calibration-001), not the fixture or prompt. recall_min 0.90 / fp_max 1.00."
+  },
+  {
+    "id": "application-logic-001",
+    "agent": "application-logic",
+    "verdict": "PASS_HARDENING",
+    "priority": "P2",
+    "prompt_rewrite": "Prepend rubric; add an explicit CORRECTNESS-only domain line and a high/medium calibration line (a defect real TODAY = high; a latent fragility relying on accidental correctness = medium). Add codebase-bar note: the template uses both `if not X` and `if X is None` legitimately \u2014 do not flag the codebase's own falsy guards. Scope carve-out: defer contract/schema/api-design/security/data-integrity concerns.",
+    "fixture_edits": [
+      {
+        "fixture": "bad/falsy-none-check",
+        "action": "fix-comment",
+        "detail": "WEAK/BORDERLINE + factually-WRONG inline comment ('returns 404 for any id=0' is false \u2014 item is the ORM object, not item_id). Fix the comment to state the real latent-ORM-truthiness defect; optionally upgrade to an unambiguous present-tense defect."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": false,
+    "notes": "PASS today (recall 1.00 / fp 0.00). No precision concern -> no second good fixture. Treat medium as advisory until a true-high bad fixture exists."
+  },
+  {
+    "id": "architecture-001",
+    "agent": "architecture",
+    "verdict": "PASS_ADDITIVE",
+    "priority": "P2",
+    "prompt_rewrite": "Prepend rubric; add a scope clause excluding import-hygiene/dead-code/naming/style (code-quality owns those). Add a secondary-finding-folding clause: report one root layering defect ONCE at high and fold in-domain secondary symptoms into it rather than double-counting as independent blockers.",
+    "fixture_edits": [
+      {
+        "fixture": "good/clean-layering",
+        "action": "keep-add-coverage",
+        "detail": "Valid + clean. Add a good/lightweight-inline-handler good fixture to pin the heavy-vs-lightweight inline-handler carve-out (the prompt's untested second domain)."
+      },
+      {
+        "fixture": "bad/heavy-inline-handler",
+        "action": "add",
+        "detail": "Add to cover the prompt's untested second domain alongside the new lightweight good fixture."
+      },
+      {
+        "fixture": "bad/duplicate-data-layer",
+        "action": "do-not-touch",
+        "detail": "Valid multi-file fixture \u2014 the documented Phase-0a hunk-counter FALSE POSITIVE. Do NOT regenerate or 'fix' it."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": false,
+    "notes": "PASS today (recall 1.00 / fp 0.00). The good-fixture additions are coverage for the inline-handler domain, NOT a precision fix -> needs_second_good_fixture=false (the additions are coverage-driven, tracked under fixture_edits, not the precision signal)."
+  },
+  {
+    "id": "api-design-001",
+    "agent": "api-design",
+    "verdict": "PASS_WITH_FIXES",
+    "priority": "P2",
+    "prompt_rewrite": "Prepend rubric; re-map the two flag-as-info categories (nullability, mutation-design) to LOW (advisory) so 'flag' always carries an actionable severity; never block on them. Add a codebase-bar carve-out for the bare-payload/non-null template idiom. Scope: GraphQL (Strawberry, code-first) schema only \u2014 defer REST/OpenAPI parity to contracts.",
+    "fixture_edits": [
+      {
+        "fixture": "bad/graphql-rest-divergence",
+        "action": "rename",
+        "detail": "Valid defect (breaking field rename) but the name implies a REST-parity responsibility the prompt does not own. Rename to graphql-breaking-field-rename."
+      },
+      {
+        "fixture": "good/graphql-rest-aligned",
+        "action": "augment",
+        "detail": "WEAK/DEGENERATE: REST-only, tests only scope-obedience not GraphQL judgment. Add a genuine GraphQL additive good fixture (graphql-additive-field: an additive optional GraphQL field returns [])."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": false,
+    "notes": "PASS today (recall 1.00 / fp 0.00). The added GraphQL good fixture is coverage of the real over-flag boundary, not a fp-precision rescue -> needs_second_good_fixture=false (coverage-driven add, tracked under fixture_edits)."
+  },
+  {
+    "id": "accessibility-001",
+    "agent": "accessibility",
+    "verdict": "HEALTHY_COVERAGE_GAP",
+    "priority": "P2",
+    "prompt_rewrite": "Prepend rubric; allow stepping a single non-essential-control finding down to medium. Otherwise unchanged.",
+    "fixture_edits": [
+      {
+        "fixture": "good+bad/non-semantic-interactive",
+        "action": "add",
+        "detail": "Add a good+bad pair for the div-onClick-as-button category (untested high category)."
+      },
+      {
+        "fixture": "good+bad/keyboard-inaccessibility",
+        "action": "add",
+        "detail": "Add a good+bad pair for keyboard-inaccessibility (untested high category). Only img-alt is currently exercised."
+      }
+    ],
+    "block_threshold": "high",
+    "needs_second_good_fixture": false,
+    "notes": "Healthy (bad_recall 1.00 / good_fp 0.00). The added good fixtures are coverage for two untested high categories, not a precision rescue -> needs_second_good_fixture=false (coverage-driven add, tracked under fixture_edits)."
+  },
+  {
+    "id": "usability-calibration-001",
+    "agent": "usability",
+    "verdict": "CALIBRATION_FIX",
+    "priority": "P2",
+    "summary": "Realign tests/eval/fixtures/thresholds.yaml usability fp_max from 0.10 -> 1.00 to match block_threshold=None advisory semantics (mirroring dependency/documentation). usability's baseline fp 0.33 'FAIL' is entirely this threshold-semantics mismatch: an advisory agent (engine treats block_threshold=None) scored at a blocking fp_max. This is the ONLY genuine threshold bug in the corpus.",
+    "prompt_rewrite": "(none \u2014 see usability-001 for the prompt clauses)",
+    "fixture_edits": [],
+    "block_threshold": "none (advisory)",
+    "needs_second_good_fixture": false,
+    "eval_thresholds": "recall_min 0.90 / fp_max 1.00"
+  },
+  {
+    "id": "threshold-rederivation-001",
+    "agent": "ALL",
+    "verdict": "PHASE_3_DEFERRAL",
+    "priority": "P3",
+    "summary": "Do NOT widen any fp_max to 'absorb' a current baseline over-flag \u2014 every elevated fp in this baseline is a prompt or fixture defect, not real over-flagging; widening would mask future regressions. After all coupled prompt+fixture edits land, re-derive every numeric recall_min/fp_max via `framework eval-analyze` on a post-fix --repeat sweep (Phase 3). observability-db's threshold is deferred entirely until its coupled prompt+fixture redesign produces a true-positive signal.",
+    "prompt_rewrite": "(none)",
+    "fixture_edits": [],
+    "block_threshold": "see per-agent entries (high for all blocking agents; null/none for dependency, documentation, usability; deferred for observability-db)",
+    "needs_second_good_fixture": false
+  }
+]
