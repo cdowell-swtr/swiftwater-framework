@@ -79,4 +79,4 @@ test-quality:
   fp_max: 0.10  # observed 0.00
 usability:
   recall_min: 0.90  # observed 1.00
-  fp_max: 0.10  # observed 0.00
+  fp_max: 1.00  # advisory (block_threshold=None, never blocks); surfaces low/info by design — Plan 21 calibration fix (was 0.10, a blocking-semantics mismatch)

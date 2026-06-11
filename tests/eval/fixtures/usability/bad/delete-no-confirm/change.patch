@@ -1,3 +1,5 @@
+diff --git a/frontend/src/Items.tsx b/frontend/src/Items.tsx
+index f94b2c6..b7e0d21 100644
 --- a/frontend/src/Items.tsx
 +++ b/frontend/src/Items.tsx
 @@ -1,4 +1,4 @@
