@@ -30,5 +30,11 @@ validation:
     anchors: warn
     unrecognized_links: warn
 
+markdown_extensions:
+  - mkdocs-typer
+
 nav:
   - Home: index.md
+  - Reference:
+      - CLI: reference/cli.md
+      - Python API: reference/api.md
