@@ -9,3 +9,6 @@ data-integrity	review-data-integrity    recall 1.00  fp 0.00    PASS	time=04:47
 data-lineage	review-data-lineage    recall 1.00  fp 0.00    PASS	time=04:49
 dependency	review-dependency    recall 1.00  fp 1.00    PASS	time=04:51
 documentation	review-documentation    recall 1.00  fp 0.67    PASS	time=04:57
+env-parity	review-env-parity    recall 0.89  fp 0.33    FAIL (recall 0.89 < 0.90; fp 0.33 > 0.10)	time=05:13
+observability	review-observability    recall 1.00  fp 0.00    PASS	time=05:21
+observability-db	review-observability-db    recall 1.00  fp 0.00    PASS	time=05:25
