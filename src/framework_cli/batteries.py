@@ -82,6 +82,11 @@ _BATTERIES: dict[str, BatterySpec] = {
         gates_agents=("contracts",),
         obs="rides-existing",
     ),
+    "docs": BatterySpec(
+        "docs",
+        "Versioning-ready MkDocs+Material documentation site (mkdocstrings Python API, static OpenAPI render, mike per-version docs)",
+        obs="rides-existing",
+    ),
 }
 
 
