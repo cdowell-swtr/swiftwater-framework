@@ -1,0 +1,45 @@
+site_name: {{ project_name }} docs
+site_description: Documentation for the {{ project_name }} service.
+docs_dir: documentation
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+
+# Tag-driven per-version docs via mike (see docs.yml). `latest` is the default.
+extra:
+  version:
+    provider: mike
+    default: latest
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: false
+            docstring_style: google
+  - render_swagger
+
+# MkDocs 1.6+ native validation — `--strict` turns these into build failures.
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - API reference:
+      - REST API: api/rest.md
+      - Python modules: api/python.md
+  - See also: see-also.md

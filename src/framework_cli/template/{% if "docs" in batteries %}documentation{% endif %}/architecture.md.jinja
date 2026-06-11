@@ -1,0 +1,18 @@
+# Architecture
+
+{{ project_name }} is a FastAPI service scaffolded by the swiftwater-framework. This page is a starting
+point — expand it as the service grows.
+
+## Shape
+
+- **Entry point:** `src/{{ package_name }}/main.py` builds the app via `create_app()`.
+- **Routes:** `src/{{ package_name }}/routes/` — each module registers a router; `include_routers` wires them in.
+- **Persistence:** PostgreSQL via SQLAlchemy (`src/{{ package_name }}/db/`), migrations under `migrations/`.
+- **Observability:** OpenTelemetry traces/metrics/logs are auto-instrumented; see the framework's
+  [observability guide](https://cdowell-swtr.github.io/swiftwater-framework/working/observability/).
+
+## Conventions
+
+This service inherits the framework's conventions for quality gates, environment parity, and secrets.
+Rather than restate them here, see **[See also](see-also.md)**, which links to the in-repo operational
+docs and the framework's published site.

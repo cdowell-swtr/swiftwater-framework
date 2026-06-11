@@ -3174,3 +3174,31 @@ def test_render_without_docs_battery_has_no_docs_deps(tmp_path: Path):
     pyproject = (dest / "pyproject.toml").read_text()
     assert "mkdocs" not in pyproject
     assert "mike" not in pyproject
+
+
+def test_render_docs_battery_creates_mkdocs_site(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    assert (dest / "mkdocs.yml").is_file()
+    assert (dest / "documentation" / "index.md").is_file()
+    assert (dest / "documentation" / "architecture.md").is_file()
+    assert (dest / "documentation" / "api" / "rest.md").is_file()
+    assert (dest / "documentation" / "api" / "python.md").is_file()
+    assert (dest / "documentation" / "see-also.md").is_file()
+
+    mkdocs = (dest / "mkdocs.yml").read_text()
+    assert "material" in mkdocs
+    assert "provider: mike" in mkdocs
+    assert "mkdocstrings" in mkdocs
+    assert "render_swagger" in mkdocs
+    assert "Demo" in mkdocs  # title interpolated from project_name
+
+    assert "::: demo" in (dest / "documentation" / "api" / "python.md").read_text()
+    assert "!!swagger openapi.json!!" in (dest / "documentation" / "api" / "rest.md").read_text()
+
+
+def test_render_without_docs_battery_has_no_mkdocs(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / "mkdocs.yml").exists()
+    assert not (dest / "documentation").exists()

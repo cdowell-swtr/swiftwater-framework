@@ -1,0 +1,15 @@
+# {{ project_name }} docs
+
+Welcome to the documentation site for **{{ project_name }}**.
+
+This site is generated with [MkDocs](https://www.mkdocs.org/) + [Material](https://squidfunk.github.io/mkdocs-material/)
+and is versioned with [mike](https://github.com/jimporter/mike) — use the version selector in the header to
+switch between released versions of these docs.
+
+- **[Architecture](architecture.md)** — how this service is put together.
+- **[REST API](api/rest.md)** — the live OpenAPI contract, rendered in-page.
+- **[Python modules](api/python.md)** — auto-generated reference for the `{{ package_name }}` package.
+- **[See also](see-also.md)** — operational docs (secrets, deploy, services) and framework conventions.
+
+> Serve this site locally with `task docs:serve` (versioned view via `mike serve`), or build the static
+> site with `task docs:build`.
