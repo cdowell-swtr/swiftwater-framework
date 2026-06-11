@@ -67,7 +67,7 @@ _SPECS: dict[str, AgentSpec] = {
     "data-integrity": AgentSpec(
         "review-data-integrity",
         _prompt("data-integrity"),
-        "info",
+        "high",
         "always",
         DEFAULT_MODEL,
         on_push=True,

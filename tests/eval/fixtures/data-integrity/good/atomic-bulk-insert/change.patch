@@ -13,9 +13,9 @@ index 862bafd..8766707 100644
 +
 +    Each name is stripped and validated (non-empty, within the 255-char column);
 +    the batch is de-duplicated (order preserved) and capped to avoid an unbounded
-+    insert. All rows commit together or none do. Server-assigned ids are populated
-+    by the flush inside ``session.commit()``, so the created rows are returned
-+    directly (no per-row refresh).
++    insert. All rows commit together or none do. The session uses
++    ``expire_on_commit=False``, so server-assigned columns (id and the
++    server-default created_at) survive the commit and the rows are returned directly.
 +
 +    Raises ``ValueError`` on an invalid name or an over-cap batch, and propagates
 +    ``sqlalchemy.exc.IntegrityError`` (e.g. a unique-constraint violation) — the
