@@ -3202,3 +3202,23 @@ def test_render_without_docs_battery_has_no_mkdocs(tmp_path: Path):
     render_project(dest, DATA)
     assert not (dest / "mkdocs.yml").exists()
     assert not (dest / "documentation").exists()
+
+
+def test_render_docs_battery_adds_taskfile_tasks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "docs:serve" in taskfile
+    assert "docs:build" in taskfile
+    assert "docs:deploy" in taskfile
+    assert "mike serve" in taskfile
+    assert "mkdocs build --strict" in taskfile
+    # docs:build must run inside the `ci` task so the render-matrix (`task ci`) exercises it.
+    ci_section = taskfile.split("ci:", 1)[1].split("push:", 1)[0]
+    assert "docs:build" in ci_section
+
+
+def test_render_without_docs_battery_has_no_docs_tasks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert "docs:serve" not in (dest / "Taskfile.yml").read_text()
