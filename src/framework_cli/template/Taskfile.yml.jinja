@@ -187,7 +187,28 @@ tasks:
     desc: Export the OpenAPI schema to openapi.json (commit it; CI diffs it).
     cmds:
       - bash scripts/export-openapi.sh
+{% if "docs" in batteries %}
+  docs:build:
+    desc: Build the static docs site (regenerates the OpenAPI spec, then strict-builds MkDocs).
+    cmds:
+      - task: openapi:export
+      - cp openapi.json documentation/openapi.json
+      - uv run --group docs mkdocs build --strict
 
+  docs:serve:
+    desc: Serve the versioned docs locally (mike) at http://127.0.0.1:8000.
+    cmds:
+      - task: openapi:export
+      - cp openapi.json documentation/openapi.json
+      - uv run --group docs mike serve
+
+  docs:deploy:
+    desc: Publish the current git tag's docs to the gh-pages branch (mike). Run from a vX.Y.Z tag.
+    cmds:
+      - task: openapi:export
+      - cp openapi.json documentation/openapi.json
+      - uv run --group docs mike deploy --push --update-aliases "$(git describe --tags --abbrev=0 | sed 's/^v//' | cut -d. -f1,2)" latest
+{% endif %}
   audit:
     desc: Scan dependencies for known vulnerabilities (CVEs).
     cmds:
@@ -203,7 +224,8 @@ tasks:
       - task: test:cov:ci
       - task: audit
       - task: openapi:export
-
+{% if "docs" in batteries %}      - task: docs:build
+{% endif %}
   push:
     desc: Push the current branch — triggers the authoritative GitHub Actions CI pipeline.
     cmds:

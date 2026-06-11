@@ -19,3 +19,6 @@ build/
 .framework/audit/
 # Plan 21 audit-workflow scratch (mirrored to docs/.../plan21-audit/ for durability)
 .framework/plan21/
+
+# MkDocs build output
+site/

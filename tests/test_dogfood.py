@@ -6,6 +6,7 @@ from pathlib import Path
 from framework_cli.dogfood import (
     ALL_BATTERIES,
     BASELINE,
+    BATTERY_JOBS,
     DogfoodConfig,
     RunResult,
     classify_jobs,
@@ -50,6 +51,12 @@ def test_config_without_conditional_batteries_omits_those_jobs():
     cfg = DogfoodConfig(name="x", batteries=("workers",))
     assert "frontend" not in cfg.expected_jobs()
     assert "contracts" not in cfg.expected_jobs()
+
+
+def test_docs_battery_expects_a_docs_ci_job():
+    assert BATTERY_JOBS.get("docs") == "docs"
+    cfg = DogfoodConfig(name="docs", batteries=("docs",))
+    assert "docs" in cfg.expected_jobs()
 
 
 # ---------------------------------------------------------------------------

@@ -406,6 +406,34 @@ def test_rendered_project_precommit_runs_clean(tmp_path: Path):
     )
 
 
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("git") is None,
+    reason="uv and git are required for this test",
+)
+def test_rendered_project_precommit_clean_with_docs_battery(tmp_path: Path):
+    # The docs battery adds mkdocs.yml, documentation/*.md, docs.yml, and
+    # documentation/.gitignore. A freshly generated docs-battery project must
+    # make a clean first pass on the NO-DOCKER hooks.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+
+    subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    result = subprocess.run(
+        ["uv", "run", "pre-commit", "run", "--all-files"],
+        cwd=dest,
+        env={**os.environ, "SKIP": "coverage-threshold"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"pre-commit hooks did not pass cleanly on a docs-battery project:\n{result.stdout}\n{result.stderr}"
+    )
+
+
 @pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required for this test")
 def test_rendered_project_exports_openapi(tmp_path: Path):
     # The export needs the app importable (uv sync) but NOT a database — create_app()
@@ -1548,6 +1576,36 @@ def test_rendered_project_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Pa
     me = os.getuid()
     bad = [p for p in (dest / "src").rglob("*") if p.stat().st_uid != me]
     assert not bad, f"root/non-host-owned files left behind: {bad[:5]}"
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None,
+    reason="uv required to build the rendered project's docs site",
+)
+def test_rendered_project_docs_battery_builds_strict(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+
+    assert (dest / "mkdocs.yml").is_file()
+    assert (dest / "documentation" / "index.md").is_file()
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    export = subprocess.run(["bash", "scripts/export-openapi.sh"], cwd=dest)
+    assert export.returncode == 0, "OpenAPI export failed"
+    shutil.copyfile(dest / "openapi.json", dest / "documentation" / "openapi.json")
+
+    build = subprocess.run(
+        ["uv", "run", "--group", "docs", "mkdocs", "build", "--strict"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert build.returncode == 0, (
+        f"mkdocs --strict build failed:\n{build.stdout}\n{build.stderr}"
+    )
+    assert (dest / "site" / "index.html").is_file()
 
 
 def test_frontend_dev_command_uses_npm_ci_not_install(tmp_path: Path):

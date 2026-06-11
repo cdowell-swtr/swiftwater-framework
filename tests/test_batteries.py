@@ -162,3 +162,14 @@ def test_battery_obs_surface(name, expected):
     from framework_cli.batteries import get_battery
 
     assert get_battery(name).obs == expected
+
+
+def test_docs_battery_is_registered_as_rides_existing():
+    from framework_cli.batteries import battery_names, get_battery
+
+    assert "docs" in battery_names()
+    spec = get_battery("docs")
+    assert spec.obs == "rides-existing"
+    # The docs battery is pure scaffolding: it gates no review agents and implies no batteries.
+    assert spec.gates_agents == ()
+    assert spec.requires == ()

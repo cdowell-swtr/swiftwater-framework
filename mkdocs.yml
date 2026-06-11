@@ -1,0 +1,62 @@
+site_name: swiftwater-framework
+site_description: An opinionated Python scaffold framework with TDD, quality gates, observability, and environment parity built in.
+repo_url: https://github.com/cdowell-swtr/swiftwater-framework
+docs_dir: documentation
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: false
+            docstring_style: google
+
+# MkDocs 1.6+ native validation — `--strict` turns these into build failures.
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+
+markdown_extensions:
+  - mkdocs-typer
+
+nav:
+  - Home: index.md
+  - Overview:
+      - Why this framework: overview/why.md
+      - What you get: overview/what-you-get.md
+      - Quickstart: overview/quickstart.md
+  - Using the framework:
+      - Install: using/install.md
+      - New project & batteries: using/new-and-batteries.md
+      - Add/remove batteries: using/batteries-add-remove.md
+      - Upgrading (planned): using/upgrading.md
+      - The CLI: using/the-cli.md
+  - Working in your project:
+      - Project structure: working/structure.md
+      - Run locally: working/run-locally.md
+      - Observability: working/observability.md
+      - Quality gates: working/quality-gates.md
+      - Deploy: working/deploy.md
+      - Services: working/services.md
+      - Secrets & environment parity: working/secrets-and-env-parity.md
+      - Your project's interfaces: working/interfaces.md
+      - The review system: working/review-system.md
+      - Design principles: working/design-principles.md
+  - Reference:
+      - CLI: reference/cli.md
+      - Python API: reference/api.md
+  - Contributing: contributing/index.md

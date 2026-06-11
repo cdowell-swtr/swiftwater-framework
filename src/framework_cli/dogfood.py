@@ -29,7 +29,11 @@ ALWAYS_ON_JOBS: frozenset[str] = frozenset(
 )
 
 #: Battery -> the conditional ci.yml job it adds.
-BATTERY_JOBS: dict[str, str] = {"react": "frontend", "consumers": "contracts"}
+BATTERY_JOBS: dict[str, str] = {
+    "react": "frontend",
+    "consumers": "contracts",
+    "docs": "docs",
+}
 
 
 @dataclass(frozen=True)

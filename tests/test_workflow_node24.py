@@ -53,7 +53,9 @@ def _collect_uses(directory: Path) -> list[tuple[Path, int, str]]:
     (`uses: ./...`) are files, not marketplace actions, and are skipped.
     """
     found: list[tuple[Path, int, str]] = []
-    files = sorted(directory.glob("*.yml")) + sorted(directory.glob("*.yml.jinja"))
+    # `*.jinja` (not just `*.yml.jinja`) so brace-templated workflow filenames like
+    # `{{ 'docs.yml' if 'docs' in batteries else '' }}.jinja` are scanned too.
+    files = sorted(directory.glob("*.yml")) + sorted(directory.glob("*.jinja"))
     for path in files:
         for i, line in enumerate(path.read_text().splitlines(), start=1):
             m = _USES_RE.match(line)

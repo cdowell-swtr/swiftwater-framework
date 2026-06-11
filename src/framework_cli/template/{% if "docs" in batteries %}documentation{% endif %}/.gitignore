@@ -1,0 +1,2 @@
+# Built artifact: the OpenAPI spec is copied here at docs-build time (see Taskfile docs:build).
+openapi.json

@@ -3156,3 +3156,109 @@ def test_rendered_project_uses_in_process_review(tmp_path: Path):
     hook = (dest / ".claude" / "hooks" / "reviewers-gate-check.sh").read_text()
     assert "framework gate" in hook
     assert "gate-prepare" not in hook
+
+
+def test_render_docs_battery_adds_docs_dependency_group(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "mkdocs-material" in pyproject
+    assert "mike" in pyproject
+    assert "mkdocs-render-swagger-plugin" in pyproject
+    assert "mkdocstrings[python]" in pyproject
+
+
+def test_render_without_docs_battery_has_no_docs_deps(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "mkdocs" not in pyproject
+    assert "mike" not in pyproject
+
+
+def test_render_docs_battery_creates_mkdocs_site(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    assert (dest / "mkdocs.yml").is_file()
+    assert (dest / "documentation" / "index.md").is_file()
+    assert (dest / "documentation" / "architecture.md").is_file()
+    assert (dest / "documentation" / "api" / "rest.md").is_file()
+    assert (dest / "documentation" / "api" / "python.md").is_file()
+    assert (dest / "documentation" / "see-also.md").is_file()
+
+    mkdocs = (dest / "mkdocs.yml").read_text()
+    assert "material" in mkdocs
+    assert "provider: mike" in mkdocs
+    assert "mkdocstrings" in mkdocs
+    assert "render_swagger" in mkdocs
+    assert "Demo" in mkdocs  # title interpolated from project_name
+
+    assert "::: demo" in (dest / "documentation" / "api" / "python.md").read_text()
+    assert (
+        "!!swagger openapi.json!!"
+        in (dest / "documentation" / "api" / "rest.md").read_text()
+    )
+
+
+def test_render_without_docs_battery_has_no_mkdocs(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / "mkdocs.yml").exists()
+    assert not (dest / "documentation").exists()
+
+
+def test_render_docs_battery_adds_taskfile_tasks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "docs:serve" in taskfile
+    assert "docs:build" in taskfile
+    assert "docs:deploy" in taskfile
+    assert "mike serve" in taskfile
+    assert "mkdocs build --strict" in taskfile
+    # docs:build must run inside the `ci` task so the render-matrix (`task ci`) exercises it.
+    ci_section = taskfile.split("ci:", 1)[1].split("push:", 1)[0]
+    assert "docs:build" in ci_section
+
+
+def test_render_without_docs_battery_has_no_docs_tasks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert "docs:serve" not in (dest / "Taskfile.yml").read_text()
+
+
+def test_render_docs_battery_adds_ci_docs_job(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    ci = yaml.safe_load((dest / ".github" / "workflows" / "ci.yml").read_text())
+    assert "docs" in ci["jobs"], "the docs battery must add a `docs` job to ci.yml"
+    steps = ci["jobs"]["docs"]["steps"]
+    flat = " ".join(str(s.get("run", "")) for s in steps)
+    assert "mkdocs build --strict" in flat
+
+
+def test_render_without_docs_battery_has_no_ci_docs_job(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    ci = yaml.safe_load((dest / ".github" / "workflows" / "ci.yml").read_text())
+    assert "docs" not in ci["jobs"]
+
+
+def test_render_docs_battery_adds_publish_workflow(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    path = dest / ".github" / "workflows" / "docs.yml"
+    assert path.is_file(), "the docs battery must ship a docs.yml publish workflow"
+    wf = yaml.safe_load(path.read_text())
+    # PyYAML parses the bare `on:` key as boolean True — assert on that key.
+    triggers = wf[True]
+    assert "tags" in triggers["push"], "publish must be tag-triggered"
+    body = path.read_text()
+    assert "mike deploy" in body
+    assert "contents: write" in body  # needed to push the gh-pages branch
+
+
+def test_render_without_docs_battery_has_no_publish_workflow(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / ".github" / "workflows" / "docs.yml").exists()
