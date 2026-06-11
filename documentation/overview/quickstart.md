@@ -45,10 +45,15 @@ When the command completes, a directory named `my-app` exists in your current di
 
 ---
 
-## 3. Enter the project and install dependencies
+## 3. Enter the project, set up git, and install dependencies
+
+`framework new` renders files but does not initialise a git repository, so do that first (the later `task push` step needs it):
 
 ```bash
 cd my-app
+git init
+git add -A          # includes the generated uv.lock
+git commit -m "Initial scaffold from swiftwater-framework"
 uv sync
 ```
 
