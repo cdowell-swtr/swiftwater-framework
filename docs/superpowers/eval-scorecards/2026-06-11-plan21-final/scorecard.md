@@ -3,7 +3,7 @@
 ## Summary
 - Agents: 20
 - Calls: 159 (bad: 93, good: 66)
-- Total cost (est., USD): $63.46
+- Total cost (est., USD): $59.00
 
 ## Scorecard
 | Agent | Recall | FP | Status |
@@ -11,14 +11,14 @@
 | review-accessibility | 1.00 | 0.00 | PASS |
 | review-api-design | 0.83 | 0.00 | PASS |
 | review-application-logic | 1.00 | 0.00 | PASS |
-| review-architecture | 0.67 | 0.00 | FAIL (recall 0.67 < 0.90) |
+| review-architecture | 1.00 | 0.00 | PASS |
 | review-compliance | 1.00 | 1.00 | FAIL (fp 1.00 > 0.10) |
 | review-contracts | 0.83 | 0.00 | PASS |
 | review-data-integrity | 1.00 | 0.00 | PASS |
 | review-data-lineage | 1.00 | 0.00 | PASS |
 | review-dependency | 1.00 | 1.00 | PASS |
 | review-documentation | 1.00 | 0.67 | PASS |
-| review-env-parity | 0.89 | 0.33 | FAIL (recall 0.89 < 0.90; fp 0.33 > 0.10) |
+| review-env-parity | 1.00 | 0.00 | PASS |
 | review-observability | 1.00 | 0.00 | PASS |
 | review-observability-db | 1.00 | 0.00 | PASS |
 | review-observability-fe | 1.00 | 0.00 | PASS |
@@ -35,14 +35,14 @@
 | review-accessibility | claude-sonnet-4-6 | 6 | 18 | 985 | 93458 | $0.17 |
 | review-api-design | claude-opus-4-8 | 9 | 19750 | 14077 | 484991 | $3.87 |
 | review-application-logic | claude-sonnet-4-6 | 6 | 18 | 15715 | 99822 | $0.36 |
-| review-architecture | claude-opus-4-8 | 15 | 32038 | 32603 | 803894 | $7.87 |
+| review-architecture | claude-opus-4-8 | 15 | 41782 | 25241 | 1070507 | $8.46 |
 | review-compliance | claude-sonnet-4-6 | 6 | 18 | 22245 | 104840 | $0.47 |
 | review-contracts | claude-opus-4-8 | 9 | 20533 | 25432 | 759427 | $5.25 |
 | review-data-integrity | claude-sonnet-4-6 | 6 | 18 | 13041 | 101514 | $0.32 |
 | review-data-lineage | claude-opus-4-8 | 6 | 8944 | 8137 | 300766 | $2.25 |
 | review-dependency | claude-sonnet-4-6 | 6 | 18 | 5124 | 95972 | $0.19 |
 | review-documentation | claude-sonnet-4-6 | 6 | 18 | 20624 | 142130 | $0.52 |
-| review-env-parity | claude-opus-4-8 | 12 | 41435 | 68888 | 1279834 | $17.26 |
+| review-env-parity | claude-opus-4-8 | 12 | 33806 | 57163 | 1194589 | $12.22 |
 | review-observability | claude-sonnet-4-6 | 9 | 27 | 27529 | 181944 | $0.67 |
 | review-observability-db | claude-opus-4-8 | 9 | 18155 | 13547 | 575178 | $4.05 |
 | review-observability-fe | claude-opus-4-8 | 9 | 17376 | 12250 | 374226 | $3.55 |
@@ -74,10 +74,10 @@
 
 ### review-architecture
 - [caught] `duplicate-data-layer` r0 — seeded=`src/demo/routes/items.py`, other_findings=0
-- [MISSED] `duplicate-data-layer` r1 — seeded=`src/demo/routes/items.py`, other_findings=0
+- [caught] `duplicate-data-layer` r1 — seeded=`src/demo/routes/items.py`, other_findings=0
 - [caught] `duplicate-data-layer` r2 — seeded=`src/demo/routes/items.py`, other_findings=0
 - [caught] `heavy-inline-handler` r0 — seeded=`src/demo/routes/items.py`, other_findings=0
-- [MISSED] `heavy-inline-handler` r1 — seeded=`src/demo/routes/items.py`, other_findings=0
+- [caught] `heavy-inline-handler` r1 — seeded=`src/demo/routes/items.py`, other_findings=0
 - [caught] `heavy-inline-handler` r2 — seeded=`src/demo/routes/items.py`, other_findings=0
 - [caught] `layering-violation` r0 — seeded=`src/demo/routes/items.py`, other_findings=0
 - [caught] `layering-violation` r1 — seeded=`src/demo/routes/items.py`, other_findings=0
@@ -124,7 +124,7 @@
 - [caught] `compose-var-not-declared` r1 — seeded=`infra/compose/base.yml`, other_findings=0
 - [caught] `compose-var-not-declared` r2 — seeded=`infra/compose/base.yml`, other_findings=0
 - [caught] `env-var-consumed-not-declared` r0 — seeded=`src/demo/config/settings.py`, other_findings=0
-- [MISSED] `env-var-consumed-not-declared` r1 — seeded=`src/demo/config/settings.py`, other_findings=0
+- [caught] `env-var-consumed-not-declared` r1 — seeded=`src/demo/config/settings.py`, other_findings=0
 - [caught] `env-var-consumed-not-declared` r2 — seeded=`src/demo/config/settings.py`, other_findings=0
 - [caught] `service-dev-only` r0 — seeded=`infra/compose/dev.yml`, other_findings=0
 - [caught] `service-dev-only` r1 — seeded=`infra/compose/dev.yml`, other_findings=0
@@ -227,10 +227,6 @@
 - `documented-public-function` r2 → 1 findings:
   - `README.md:78` info — The parenthetical '(typed response)' is uninformative as written: every endpoint in this file uses a typed/schema-backed response, yet none of the others carry that note. Readers gain no actionable information from it.
 
-### review-env-parity
-- `parity-preserved` r0 → 1 findings:
-  - `.env.example:19` high — APP_WIDGET_API_URL defaults to http://widget:9000, and the var is injected into prod-reaching services (app in staging.yml/prod.yml, worker in services.yml). But the `widget` service it names is defined ONLY in infra/compose/dev.yml (reached by dev via Taskfile, NOT by staging/prod). dev.yml is a dev-only overlay; staging/prod compose <env>.yml + services.yml + observability.yml only. So in staging/prod the app and worker will resolve http://widget:9000 to a non-existent host — the widget dependency silently fails to ship to prod. `widgetcorp/widget:1.4` is an upstream app dependency, not local-developer tooling (mail catcher / TLS / DB UI), so it cannot be excused as dev-only.
-
 ### review-observability
 - `correlation-id-logging` r0 → 1 findings:
   - `src/demo/routes/items.py:58` low — The `_log.error('delete_item_failed', ...)` call omits `exc_info=True`, so the structured log event carries no exception class, message, or traceback. The exception is re-raised and the ObservabilityMiddleware will record the resulting 5xx, but the log event itself is non-diagnostic: when triaging a production commit or delete failure you must cross-correlate via `correlation_id` across a second log entry (the exception handler) rather than reading one self-contained structured event.
@@ -278,9 +274,9 @@
 - Top paths/patterns: `src/demo/graphql/schema.py`×2, `src/demo/**/*.py`×1, `src/demo/db/repository.py`×1, `src/demo`×1, `def create_item`×1
 
 ### review-architecture
-- Calls: 15, avg turns: 1.4, max-cap hits: 0
-- Tools: read_file×9, glob×4, grep×1
-- Top paths/patterns: `src/demo/db/repository.py`×5, `src/demo/db/item_service.py`×2, `src/demo/routes/items.py`×2, `src/demo/db/*.py`×1, `**/db/*.py`×1
+- Calls: 15, avg turns: 1.6, max-cap hits: 0
+- Tools: read_file×7, grep×6, glob×3
+- Top paths/patterns: `src/demo/db/repository.py`×8, `def create_item`×3, `src/demo/db/*.py`×2, `src/demo/routes/items.py`×2, `src/demo/db/item_service.py`×1
 
 ### review-contracts
 - Calls: 9, avg turns: 1.3, max-cap hits: 0
@@ -293,9 +289,9 @@
 - Top paths/patterns: `src/demo/db/models.py`×1, `src/demo/db/repository.py`×1, `src/demo`×1, `slug|normaliz|create_item|name`×1
 
 ### review-env-parity
-- Calls: 12, avg turns: 1.8, max-cap hits: 0
-- Tools: read_file×21, glob×10, grep×5
-- Top paths/patterns: `.env.example`×5, `infra/compose/prod.yml`×3, `infra/compose/*.yml`×2, `WIDGET`×2, `infra/compose/staging.yml`×2
+- Calls: 12, avg turns: 1.7, max-cap hits: 0
+- Tools: read_file×7, glob×5, grep×3
+- Top paths/patterns: `**/.env.example`×3, `src/demo/config/settings.py`×3, `.env.example`×3, `WIDGET|widget`×2, `**/settings.py`×1
 
 ### review-observability-db
 - Calls: 9, avg turns: 1.3, max-cap hits: 0
@@ -321,19 +317,22 @@
 - ⚠ `api-design` / `graphql-mutation-input-mismatch` r1 — disallowed tools: glob×1, read_file×2
 - ⚠ `api-design` / `graphql-mutation-input-mismatch` r2 — disallowed tools: grep×1, read_file×1
 - ⚠ `architecture` / `duplicate-data-layer` r0 — disallowed tools: glob×1, read_file×2
-- ⚠ `architecture` / `duplicate-data-layer` r2 — disallowed tools: glob×3, read_file×3
-- ⚠ `architecture` / `layering-violation` r2 — disallowed tools: read_file×3
+- ⚠ `architecture` / `duplicate-data-layer` r1 — disallowed tools: glob×1
+- ⚠ `architecture` / `heavy-inline-handler` r0 — disallowed tools: read_file×2
+- ⚠ `architecture` / `heavy-inline-handler` r2 — disallowed tools: glob×1, grep×1
+- ⚠ `architecture` / `layering-violation` r0 — disallowed tools: read_file×2
+- ⚠ `architecture` / `clean-layering` r0 — disallowed tools: grep×1
+- ⚠ `architecture` / `clean-layering` r1 — disallowed tools: grep×2
 - ⚠ `architecture` / `lightweight-inline-handler` r0 — disallowed tools: read_file×1
-- ⚠ `architecture` / `lightweight-inline-handler` r2 — disallowed tools: grep×1
+- ⚠ `architecture` / `lightweight-inline-handler` r2 — disallowed tools: grep×2
 - ⚠ `contracts` / `client-missing-pact-field` r2 — disallowed tools: grep×2
 - ⚠ `contracts` / `client-pact-divergence` r1 — disallowed tools: read_file×1
 - ⚠ `contracts` / `client-pact-covered` r1 — disallowed tools: read_file×1
 - ⚠ `data-lineage` / `normalized-write` r2 — disallowed tools: grep×1, read_file×2
-- ⚠ `env-parity` / `compose-var-not-declared` r0 — disallowed tools: glob×1, grep×2, read_file×3
-- ⚠ `env-parity` / `compose-var-not-declared` r2 — disallowed tools: glob×4, read_file×11
-- ⚠ `env-parity` / `env-var-consumed-not-declared` r0 — disallowed tools: glob×2, grep×1, read_file×2
-- ⚠ `env-parity` / `service-dev-only` r1 — disallowed tools: glob×1, grep×1, read_file×5
-- ⚠ `env-parity` / `parity-preserved` r2 — disallowed tools: glob×2, grep×1
+- ⚠ `env-parity` / `env-var-consumed-not-declared` r0 — disallowed tools: glob×1, read_file×1
+- ⚠ `env-parity` / `env-var-consumed-not-declared` r1 — disallowed tools: glob×3, grep×1, read_file×2
+- ⚠ `env-parity` / `env-var-consumed-not-declared` r2 — disallowed tools: glob×1, grep×2, read_file×2
+- ⚠ `env-parity` / `parity-preserved` r0 — disallowed tools: read_file×2
 - ⚠ `observability-db` / `db-error-no-correlation-id` r2 — disallowed tools: grep×1, read_file×2
 - ⚠ `observability-db` / `raw-connection-bypass` r0 — disallowed tools: glob×1, grep×1
 - ⚠ `observability-db` / `observed-query` r2 — disallowed tools: read_file×1
@@ -364,7 +363,7 @@ application-logic:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 architecture:
-  recall_min: 0.57  # observed 0.67
+  recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 compliance:
   recall_min: 0.90  # observed 1.00
@@ -385,8 +384,8 @@ documentation:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.77  # observed 0.67
 env-parity:
-  recall_min: 0.79  # observed 0.89
-  fp_max: 0.43  # observed 0.33
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
 observability:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00

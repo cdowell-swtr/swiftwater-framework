@@ -8,7 +8,7 @@ application-logic:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 architecture:
-  recall_min: 0.57  # observed 0.67
+  recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 compliance:
   recall_min: 0.90  # observed 1.00
@@ -29,8 +29,8 @@ documentation:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.77  # observed 0.67
 env-parity:
-  recall_min: 0.79  # observed 0.89
-  fp_max: 0.43  # observed 0.33
+  recall_min: 0.90  # observed 1.00
+  fp_max: 0.10  # observed 0.00
 observability:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00

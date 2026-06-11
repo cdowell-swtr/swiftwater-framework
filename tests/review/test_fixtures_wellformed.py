@@ -1,3 +1,7 @@
+from pathlib import Path
+
+import pytest
+
 from framework_cli.review.evals import validate_patch_hunks
 
 _WELLFORMED = """\
@@ -57,10 +61,6 @@ index 3333333..4444444 100644
 def test_validate_passes_a_multifile_diff():
     assert validate_patch_hunks(_MULTIFILE_WELLFORMED) == []
 
-
-from pathlib import Path
-
-import pytest
 
 _FIXTURES_ROOT = Path(__file__).resolve().parents[2] / "tests" / "eval" / "fixtures"
 _PATCHES = sorted(_FIXTURES_ROOT.glob("*/*/*/change.patch"))

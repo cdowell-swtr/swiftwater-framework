@@ -16,6 +16,15 @@
 #             advisory dependency/documentation fp_max (surface-by-design) + gave data-lineage/
 #             observability-db a recall variance margin. Scorecard 2026-06-03-36a1b00.
 
+#   54e3236+ — PLAN 21 re-tune: Phase-2 retuned 15 agents to the shared rubric; Phase-3
+#             --repeat-3 re-sweep + eval-analyze re-derivation (this set). architecture &
+#             env-parity wobbles were PROMPT bugs (severity-field omission; fabricated
+#             overlay injection), firmed -> 1.00/0.00. Advisory agents (observability-db,
+#             documentation, dependency, usability) pinned fp_max 1.00 (never block).
+#             compliance + observability-infra LEFT STRICT (their Phase-1 fixes were
+#             adversarially REFUTED) -> they FAIL by design = REQUIRES REWORK, not masked.
+#             agent-evals CI is opt-in/skip-neutral, so these 2 do not gate merge.
+
 accessibility:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
@@ -29,42 +38,38 @@ architecture:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 compliance:
-  recall_min: 0.90  # observed 1.00
-  fp_max: 0.10  # observed 0.00
+  recall_min: 0.90  # REQUIRES REWORK (refuted Phase 1); re-sweep observed recall 1.00
+  fp_max: 0.10  # REQUIRES REWORK; re-sweep observed fp 1.00 — kept strict, NOT masked
 contracts:
-  recall_min: 0.57  # observed 0.67 — agent under-finds consistently; floor honest about that
+  recall_min: 0.73  # observed 0.83
   fp_max: 0.10  # observed 0.00
 data-integrity:
   recall_min: 0.90  # observed 1.00
-  fp_max: 0.43  # observed 0.33
+  fp_max: 0.10  # observed 0.00
 data-lineage:
-  recall_min: 0.73  # observed 0.83 — 1-case severity wobble at repeat=3; variance margin (36a1b00)
+  recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 dependency:
   recall_min: 0.90  # observed 1.00
-  fp_max: 1.00  # advisory (never blocks); surfaces info/low by design — observed 1.00 (36a1b00)
+  fp_max: 1.00  # advisory (block_threshold=None, never blocks); surfaces by design — observed 1.00
 documentation:
   recall_min: 0.90  # observed 1.00
-  fp_max: 1.00  # advisory (never blocks); surfaces info/low by design — observed 1.00 (36a1b00)
+  fp_max: 1.00  # advisory (block_threshold=None, never blocks); surfaces by design — observed 0.67
 env-parity:
-  # Recall-first: a missed parity gap is the dev-only-not-prod defect that shipped twice
-  # (OBS-PROD, SVC-PROD) — protect recall; the greedy posture is safe because intentional
-  # dev-only choices are acknowledged via the decisions log. fp_max may rise toward 0.43 if
-  # the greedy posture later trips a good fixture under variance.
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 observability:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 observability-db:
-  recall_min: 0.73  # observed 0.83 — 1-case wobble at repeat=3; variance margin (36a1b00)
-  fp_max: 0.10  # observed 0.00
+  recall_min: 0.90  # observed 1.00
+  fp_max: 1.00  # advisory (block_threshold=None, never blocks); surfaces by design — observed 0.00
 observability-fe:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 observability-infra:
-  recall_min: 0.90  # observed 1.00
-  fp_max: 0.43  # observed 0.33
+  recall_min: 0.90  # REQUIRES REWORK (refuted Phase 1); re-sweep observed recall 0.50
+  fp_max: 0.43  # REQUIRES REWORK; re-sweep observed fp 1.00 — kept strict, NOT masked
 performance:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
@@ -79,4 +84,4 @@ test-quality:
   fp_max: 0.10  # observed 0.00
 usability:
   recall_min: 0.90  # observed 1.00
-  fp_max: 1.00  # advisory (block_threshold=None, never blocks); surfaces low/info by design — Plan 21 calibration fix (was 0.10, a blocking-semantics mismatch)
+  fp_max: 1.00  # advisory (block_threshold=None, never blocks); surfaces by design — observed 0.00
