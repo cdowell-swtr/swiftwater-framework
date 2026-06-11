@@ -15,6 +15,6 @@ index 2f78780..01bc110 100644
      res.raise_for_status()
 -    return int(res.json()["in_stock"])
 +    data = res.json()
-+    # surface the item's location for downstream display
-+    _ = data.get("location")
-+    return int(data["in_stock"])
++    # 'location' is read as a HARD dependency (KeyError if absent); the consumer pact
++    # interaction does not declare it — a real contract divergence pact verify won't catch.
++    return int(data["in_stock"]) if data["location"] else 0

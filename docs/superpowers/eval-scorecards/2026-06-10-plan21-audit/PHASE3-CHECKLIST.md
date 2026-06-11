@@ -3,3 +3,5 @@ PHASE3 CHECKLIST — 2nd good fixtures to author before whole-set re-sweep: secu
 - performance: author 2nd good fixture (bounded query matching repo idiom); --repeat 3 confirm.
 - ALL applied agents: --repeat 3 re-sweep before eval-analyze threshold re-derivation (Phase-2 evals were --repeat 1 to conserve quota).
 - api-design: add good/graphql-additive-field (additive optional GraphQL field returns []) — current good is REST-only/degenerate.
+- contracts: add bad/weakened-consumer-assertion fixture (3rd high category untested).
+- rubric-parity (optional): contracts uses a condensed rubric block; consider the fuller verbatim block across all blocking agents in a later pass.
