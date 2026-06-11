@@ -17,3 +17,6 @@ build/
 
 # Local reviewers (audit + gate) ephemeral outputs
 .framework/audit/
+
+# MkDocs build output
+site/

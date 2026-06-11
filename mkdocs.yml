@@ -1,0 +1,34 @@
+site_name: swiftwater-framework
+site_description: An opinionated Python scaffold framework with TDD, quality gates, observability, and environment parity built in.
+repo_url: https://github.com/cdowell-swtr/swiftwater-framework
+docs_dir: documentation
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: false
+            docstring_style: google
+
+# MkDocs 1.6+ native validation — `--strict` turns these into build failures.
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
