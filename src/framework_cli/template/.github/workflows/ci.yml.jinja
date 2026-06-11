@@ -140,6 +140,23 @@ jobs:
           PACT_BROKER_TOKEN: {% raw %}${{ secrets.PACT_BROKER_TOKEN }}{% endraw %}
         run: bash scripts/pact-publish.sh
 {%- endif %}
+{%- if "docs" in batteries %}
+
+  # Docs (docs battery): regenerate the OpenAPI spec for the documentation render, then run
+  # mkdocs build --strict to catch broken links, missing references, or bad config.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --frozen
+      - name: regenerate the OpenAPI spec for the docs render
+        run: |
+          bash scripts/export-openapi.sh
+          cp openapi.json documentation/openapi.json
+      - name: mkdocs build (strict)
+        run: uv run --group docs mkdocs build --strict
+{%- endif %}
 
   # Step 7: OpenAPI contract — the committed spec must be current; breaking changes fail.
   contract:

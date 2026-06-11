@@ -3222,3 +3222,20 @@ def test_render_without_docs_battery_has_no_docs_tasks(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     assert "docs:serve" not in (dest / "Taskfile.yml").read_text()
+
+
+def test_render_docs_battery_adds_ci_docs_job(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    ci = yaml.safe_load((dest / ".github" / "workflows" / "ci.yml").read_text())
+    assert "docs" in ci["jobs"], "the docs battery must add a `docs` job to ci.yml"
+    steps = ci["jobs"]["docs"]["steps"]
+    flat = " ".join(str(s.get("run", "")) for s in steps)
+    assert "mkdocs build --strict" in flat
+
+
+def test_render_without_docs_battery_has_no_ci_docs_job(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    ci = yaml.safe_load((dest / ".github" / "workflows" / "ci.yml").read_text())
+    assert "docs" not in ci["jobs"]
