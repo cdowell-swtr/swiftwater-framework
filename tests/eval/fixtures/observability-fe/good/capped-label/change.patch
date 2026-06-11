@@ -1,8 +1,20 @@
+diff --git a/src/demo/config/settings.py b/src/demo/config/settings.py
+index dcf064e..f016387 100644
+--- a/src/demo/config/settings.py
++++ b/src/demo/config/settings.py
+@@ -42,6 +42,7 @@ class Settings(BaseSettings):
+         "utm_campaign",
+         "utm_term",
+         "utm_content",
++        "device_class",
+     ]
+ 
+     @property
 diff --git a/src/demo/frontend_rum/metrics.py b/src/demo/frontend_rum/metrics.py
-index 53e573e..83d5778 100644
+index 2df18ef..e30c538 100644
 --- a/src/demo/frontend_rum/metrics.py
 +++ b/src/demo/frontend_rum/metrics.py
-@@ -90,6 +90,7 @@ class FrontendMetrics:
+@@ -91,6 +91,7 @@ class FrontendMetrics:
      MAX_ROUTES = 32
      MAX_ATTRIBUTION = 64
      MAX_REFERRERS = 32
@@ -10,7 +22,7 @@ index 53e573e..83d5778 100644
  
      def __init__(self) -> None:
          self._lock = threading.Lock()
-@@ -99,6 +100,7 @@ class FrontendMetrics:
+@@ -100,6 +101,7 @@ class FrontendMetrics:
          self._attribution: dict[tuple[str, str, str], int] = {}
          self._referrers: dict[str, int] = {}
          self._beacons: dict[str, int] = {}
@@ -18,7 +30,7 @@ index 53e573e..83d5778 100644
  
      def observe_web_vital(self, name: str, value: float) -> None:
          key = name.lower()
-@@ -117,8 +119,15 @@ class FrontendMetrics:
+@@ -120,8 +122,15 @@ class FrontendMetrics:
      ) -> None:
          route = _san(route)
          attribution = tuple(_san(params.get(k, "")) for k in _ATTRIBUTION_KEYS)
@@ -34,7 +46,7 @@ index 53e573e..83d5778 100644
              if any(attribution):
                  self._bump_capped(
                      self._attribution,
-@@ -189,6 +198,16 @@ class FrontendMetrics:
+@@ -192,6 +201,16 @@ class FrontendMetrics:
                      [(f'status="{s}"', n) for s, n in sorted(self._beacons.items())],
                  )
              )
@@ -51,7 +63,7 @@ index 53e573e..83d5778 100644
          return "".join(parts)
  
      @staticmethod
-@@ -211,6 +230,7 @@ class FrontendMetrics:
+@@ -214,6 +233,7 @@ class FrontendMetrics:
              self._attribution.clear()
              self._referrers.clear()
              self._beacons.clear()
