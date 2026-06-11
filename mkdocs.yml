@@ -59,3 +59,4 @@ nav:
   - Reference:
       - CLI: reference/cli.md
       - Python API: reference/api.md
+  - Contributing: contributing/index.md
