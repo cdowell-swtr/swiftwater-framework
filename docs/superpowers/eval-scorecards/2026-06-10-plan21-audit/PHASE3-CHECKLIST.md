@@ -13,3 +13,7 @@ PHASE3 CHECKLIST — 2nd good fixtures to author before whole-set re-sweep: secu
 ## REQUIRES REWORK (refuted in Phase 1, never retuned — do NOT mask via thresholds)
 - compliance: re-sweep fp 1.00 (over-flags). Needs a fresh vetted fix or explicit known-degraded exclusion.
 - observability-infra: re-sweep recall 0.50 / fp 1.00. Needs a fresh vetted fix or explicit known-degraded exclusion.
+
+## Branch-end review follow-ups (non-blocking, 2026-06-11)
+- env-parity.md: normalize to carry the shared rubric's explicit severity-ladder + codebase-bar sections (currently inlines grounding/scope/JSON only; scores 1.00/0.00 so non-blocking — single-severity domain).
+- plan21-rubric-final.md:22 advisory-agent list is stale — add observability-db (now block_threshold=None) alongside dependency/documentation/usability (doc-text fix; registry is authoritative).
