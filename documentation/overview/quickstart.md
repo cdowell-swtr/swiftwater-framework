@@ -72,7 +72,7 @@ If you are on a resource-constrained machine and want to skip the observability 
 task dev:lite
 ```
 
-This starts only the application services, database, and Redis.
+This starts the application and its database (plus any datastores your selected batteries add, such as Redis).
 
 ---
 
@@ -82,7 +82,7 @@ This starts only the application services, database, and Redis.
 task test
 ```
 
-This runs the full test suite in an isolated test environment (separate Docker Compose profile). All tests pass on a freshly generated project.
+This runs the full test suite (unit, functional, and end-to-end) in-process via `pytest`. All tests pass on a freshly generated project.
 
 To run only unit tests without Docker:
 

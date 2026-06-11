@@ -58,7 +58,7 @@ Batteries are opt-in feature sets activated at scaffold time. Each battery is in
 | `webhooks` | Signed inbound webhook ingress (HMAC) with an idempotent inbox |
 | `websockets` | FastAPI WebSocket routes + connection manager |
 | `graphql` | Strawberry code-first GraphQL endpoint; activates `review-api-design` |
-| `react` | React + TypeScript SPA, Vitest, Playwright, axe-core; activates accessibility and usability review agents |
+| `react` | React + TypeScript SPA, Vitest, Playwright, axe-core; activates accessibility, usability, and frontend-observability review agents |
 | `consumers` | Pact consumer-driven contract testing; activates `review-contracts` |
 | `redis` | Redis key/value store (cache/sessions) |
 | `mongodb` | MongoDB document store with full observability |

@@ -74,7 +74,7 @@ The `websockets` battery adds a WebSocket route at `/ws` (`src/<package>/routes/
 
 The `consumers` battery adds [Pact](https://docs.pact.io/) consumer-driven contract testing, which covers the *other* side of integration: the HTTP dependencies your project calls and the consumers that call you. It exercises both roles:
 
-- **As a consumer** — `src/<package>/clients/inventory.py` is an example downstream client (`get_stock(base_url, item_id)`); the consumer Pact test runs it against a Pact mock server and writes the resulting contract to a pact file under `pacts/` (e.g. `pacts/examplewebapp-app.json`).
+- **As a consumer** — `src/<package>/clients/inventory.py` is an example downstream client (`get_stock(base_url, item_id)`); the consumer Pact test runs it against a Pact mock server and writes the resulting contract to a pact file under `pacts/` (e.g. `pacts/<package>-inventory.json`).
 - **As a provider** — `tests/contract/test_provider_pact.py` starts the **real app** over a throwaway Postgres, seeds the required provider state ("items exist"), and verifies the live `/items` API actually satisfies the committed example pact. This is the gate that catches a provider drifting away from what consumers expect.
 
 Run both sides locally with:
