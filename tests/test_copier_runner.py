@@ -591,7 +591,12 @@ def test_render_dependency_security(tmp_path: Path):
     assert dependabot.is_file()
     cfg = yaml.safe_load(dependabot.read_text())
     ecosystems = {u["package-ecosystem"] for u in cfg["updates"]}
-    assert {"uv", "github-actions"} <= ecosystems
+    # Dependabot manages app deps (uv) only. GitHub Actions are framework-owned:
+    # pinned + APPROVED_ACTIONS-gated and living in integrity-locked workflow files,
+    # so a github-actions bump PR is born red (drift + unapproved version). Excluded
+    # by design; action freshness is the framework's job (propagated via upgrade).
+    assert "uv" in ecosystems
+    assert "github-actions" not in ecosystems
 
 
 def test_render_workflow_and_shell_linters(tmp_path: Path):

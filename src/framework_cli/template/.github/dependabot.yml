@@ -1,12 +1,13 @@
 # Weekly dependency-update PRs. pip-audit (CI) gates known CVEs; dependabot keeps deps fresh.
+#
+# App deps (uv) only. GitHub Actions are intentionally NOT managed here: they are
+# framework-owned — pinned, gated by APPROVED_ACTIONS, and living in integrity-locked
+# workflow files — so a dependabot github-actions bump PR is born red (integrity drift
+# + an unapproved version). Action freshness is the framework's responsibility and is
+# propagated by `framework upgrade`. Do not re-add the github-actions ecosystem.
 version: 2
 updates:
   - package-ecosystem: "uv"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-  - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
