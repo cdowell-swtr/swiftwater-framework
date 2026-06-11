@@ -8,3 +8,4 @@ PHASE3 CHECKLIST — 2nd good fixtures to author before whole-set re-sweep: secu
 - data-lineage: author replacement bad fixture (deletion-gap-misses-a-store OR PII-to-undocumented-sink) via render->edit->git-diff, THEN raise recall_min 0.73->0.90 (do NOT raise before the fixture exists).
 - env-parity: author 2nd good fixture (another parity-complete env-var change) to widen fp coverage (currently 1 good fixture).
 - observability-fe (optional): author a flaggable 3rd bad fixture for active-suppression-on-a-regressed-path if more recall coverage is wanted (current 2 bad fixtures cover both domains; uninstrumented-view removed as non-discriminating).
+- observability-db: block_threshold is None (advisory) for now — after --repeat 3 confirms the bypass fixtures reliably flag, re-derive recall_min/fp_max and decide whether to restore a blocking threshold.

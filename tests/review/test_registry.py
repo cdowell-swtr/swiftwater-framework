@@ -240,7 +240,9 @@ def test_observability_split_db():
 
     spec = get_agent("observability-db")
     assert spec.name == "review-observability-db"
-    assert spec.block_threshold == "high"
+    # Plan 21: deferred high->None (advisory) until the bypass-redesign's true-positive
+    # signal is confirmed + the threshold re-derived in Phase 3.
+    assert spec.block_threshold is None
     assert spec.active_when == "file-trigger"
     # data-layer globs, NOT battery-gated (baseline always ships postgres).
     assert spec.trigger_globs and "*/db/*" in spec.trigger_globs

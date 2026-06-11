@@ -1,0 +1,27 @@
+diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
+index 862bafd..caf98df 100644
+--- a/src/demo/db/repository.py
++++ b/src/demo/db/repository.py
+@@ -1,4 +1,4 @@
+-from sqlalchemy import select
++from sqlalchemy import create_engine, select, text
+ from sqlalchemy.orm import Session
+ 
+ from .models import Item
+@@ -28,3 +28,16 @@ def create_item(session: Session, name: str) -> Item:
+     session.commit()
+     session.refresh(item)
+     return item
++
++
++def count_items_via_replica(replica_url: str) -> int:
++    """Count items against a read replica.
++
++    BUG: opens a SECOND engine that is never registered with SQLAlchemyInstrumentor and
++    runs a raw SQL query through it. This read path BYPASSES the auto-instrumented engine
++    entirely — no span, no trace, no metric — so replica query latency and errors are
++    invisible to observability, unlike every query through the app's instrumented session.
++    """
++    replica = create_engine(replica_url, future=True)  # not registered with the instrumentor
++    with replica.connect() as conn:
++        return int(conn.execute(text("SELECT count(*) FROM items")).scalar_one())
