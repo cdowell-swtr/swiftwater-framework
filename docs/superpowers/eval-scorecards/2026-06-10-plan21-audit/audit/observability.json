@@ -1,0 +1,82 @@
+{
+  "agent": "observability",
+  "verdict": "MAJOR_REWORK",
+  "summary": "The observability prompt is the primary driver of Plan 18 / Plan 21 baseline over-flagging. It instructs the reviewer to flag 'new code paths with no metric/log/trace', 'error paths not logged with the correlation id', and 'missing or undefined SLO thresholds for new endpoints' at HIGH severity. But the shipped template holds NONE of those at the per-endpoint level: correlation_id is auto-injected by the structlog `add_correlation_id` processor (endpoints never pass it), traces are auto-created by FastAPIInstrumentor, request success/failure is logged + metered by ObservabilityMiddleware, and SLOs are fleet-wide only (slo.py defines exactly two: request_latency_p99_ms, error_rate_pct). The canonical route (template routes/items.py::get_items) has no per-endpoint log, no business metric, no per-endpoint SLO, no manual span. The prompt thus holds new code to a standard the codebase itself does not meet, producing 4-5 false findings on BOTH good fixtures (baseline good-fixture fp ~0.83-1.00).",
+  "codebase_bar": {
+    "auto_correlation_id": "logging_config.py::add_correlation_id reads correlation_id_var (set per-request by middleware/observability.py) and injects correlation_id into EVERY structlog event. add_trace_context injects trace_id/span_id. Endpoints MUST NOT pass correlation_id manually; flagging its absence is a hallucination of the wiring.",
+    "auto_trace": "Routes rely on FastAPIInstrumentor for the request span (tracing.py.jinja). No template route creates a manual tracer or sets span attributes. 'No manual span' / 'no span attribute' is below the codebase bar.",
+    "middleware_logs_and_meters": "middleware/observability.py logs 'request' (success) and 'request_failed' (exception, with method/path/duration) AND calls metrics.record_request on every non-monitoring path. Unguarded session.commit() failures are caught here AND by middleware/errors.py::handle_unhandled_exception (which logs unhandled_exception + records recoverability). So 'unobserved commit failure path' is false: the failure IS logged and metered centrally.",
+    "fleet_wide_slos_only": "observability/slo.py::default_slos returns exactly request_latency_p99_ms and error_rate_pct — both fleet-wide. There is NO per-endpoint SLO anywhere in the template. 'No SLO threshold for the new endpoint' would flag every endpoint the framework ships, including get_items.",
+    "no_per_endpoint_business_metric": "Only ObservabilityMiddleware.record_request (generic HTTP) exists for HTTP routes; the only domain counters are frontend RUM, retry/recoverability, and worker dead-letter — none per-CRUD-endpoint. The shipped items.py route has no business counter."
+  },
+  "issues": [
+    {
+      "type": "severity_bar",
+      "severity": "high",
+      "detail": "Prompt hard-codes 'A new untraced/unmetered code path is high.' But under the template's auto-instrumentation EVERY route is auto-traced (FastAPIInstrumentor) and auto-metered (ObservabilityMiddleware.record_request). The literal premise 'untraced/unmetered' is almost never true for a FastAPI route in this codebase, yet the reviewer fires high anyway (instrumented-route good fixture got high findings). The high bar must require a demonstrable observability gap relative to what the template provides, not the mere absence of a manual log/metric/span."
+    },
+    {
+      "type": "stricter_than_codebase",
+      "severity": "high",
+      "detail": "'error paths not logged with the correlation id' — the correlation id is auto-attached by add_correlation_id; an endpoint that emits ANY structlog event on the error path already carries it. The reviewer repeatedly flagged 'logs item_id but no correlation_id' (instrumented-route r1/r2, correlation-id-logging) which is factually wrong for this codebase. Stricter-than-codebase + hallucination of the wiring."
+    },
+    {
+      "type": "stricter_than_codebase",
+      "severity": "high",
+      "detail": "'missing or undefined SLO thresholds for new endpoints' — no template endpoint has a per-endpoint SLO; slo.py is fleet-wide by design. Flagging 'no per-endpoint SLO' fires on every fixture (all 6 good-fixture runs + bad runs) and would fire on get_items. Must be removed or downgraded to info, gated on 'the codebase defines a per-endpoint SLO convention' (it does not)."
+    },
+    {
+      "type": "scope_creep",
+      "severity": "high",
+      "detail": "Good-fixture findings strayed far outside observability: 'No session.rollback() before raise' / 'session left dirty / connection pool corruption' (data-integrity), 'exc_info=True missing' (a logging-style nit), 're-archiving double-prefixes [archived]' (application-logic / idempotency), '_log bound at import before configure_logging' (application-logic). The prompt has no scope-discipline clause; it should inherit the rubric's 'stay in your domain' and explicitly disclaim DB-transaction, idempotency, and business-correctness findings (owned by data-integrity / application-logic)."
+    },
+    {
+      "type": "hallucination",
+      "severity": "high",
+      "detail": "Multiple findings invent uncertainty about wiring that the codebase resolves: 'IF ObservabilityMiddleware does not bind a correlation_id...' (it does, line 38), 'IF the logger is imported before configure_logging...'. Speculative IF-then findings against established framework wiring are over-reach and should be disallowed."
+    },
+    {
+      "type": "internal_consistency",
+      "severity": "medium",
+      "detail": "The good instrumented-route adds a structured log on every path AND relies on the same auto-instrumentation the codebase ships, yet was flagged as heavily as the bad uninstrumented-route. The reviewer applies no consistent 'does this match the template idiom?' oracle. Adding the codebase-bar + good-fixture consistency clause fixes this."
+    }
+  ],
+  "fixture_validity": {
+    "bad/uninstrumented-route": {
+      "verdict": "VALID_BUT_NARROW",
+      "is_unambiguous_defect": true,
+      "detail": "archive_item emits NO structured log on any path (no success log, no 404 warning), unlike both good variants which add structlog events. Relative to the template idiom (a mutation endpoint should emit a domain event so the operation is queryable beyond the generic 'request' log), this is a genuine, in-domain observability gap — the ONE legitimately-high finding ('new mutation path with zero structured logging'). PROBLEM: the baseline runs reached this verdict partly via OUT-OF-DOMAIN reasons (commit-failure=data-integrity, double-prefix idempotency=application-logic, inline import=style, no per-endpoint SLO=below-bar). The fixture should be tightened so the ONLY in-domain defect is 'no structured log on the mutation path', and expect.json should pin the line/dimension. Recommend updating expect.json to assert the structured-logging-absence finding specifically rather than just {\"file\": ...}."
+    },
+    "good/correlation-id-logging": {
+      "verdict": "GENUINELY_CLEAN",
+      "is_clean": true,
+      "detail": "delete_item emits _log.warning (404), _log.info (ok), _log.error (failure) — correlation_id auto-injected. This is MORE instrumented than the shipped get_items route. All 4 baseline findings (exc_info missing, no business counter, no per-endpoint SLO, item_id not a span attribute) are below the codebase bar. Should score 0 findings. Currently a false-positive magnet."
+    },
+    "good/instrumented-route": {
+      "verdict": "GENUINELY_CLEAN",
+      "is_clean": true,
+      "detail": "archive_item with _log.warning/_log.info + auto span + auto correlation_id + response_model. Matches/exceeds the template idiom. All 5 baseline findings (missing correlation_id [false: auto-injected], commit unobserved [false: middleware+errors.py log it], no per-endpoint SLO [below bar], no span attribute [below bar], refresh-after-commit silent [application-logic scope]) are invalid. Should score 0 findings."
+    }
+  },
+  "proposed_prompt": "You are `review-observability`. Review ONLY the unified diff for gaps in observability of NEW server code, judged against what this codebase already provides.\n\nWhat the framework provides automatically — do NOT flag its absence:\n- correlation_id and trace_id/span_id are injected into EVERY structlog event by the `add_correlation_id` / `add_trace_context` processors. Endpoints never pass `correlation_id` manually.\n- request spans are auto-created by FastAPIInstrumentor; DB spans by SQLAlchemyInstrumentor. Manual tracers / span attributes are NOT the codebase idiom.\n- ObservabilityMiddleware logs `request` / `request_failed` and records fleet-wide metrics (latency p99, 5xx rate) for every non-monitoring path; the global exception handler logs `unhandled_exception`. So an unguarded `commit()` failure IS already logged and metered centrally.\n- SLOs are fleet-wide only (request_latency_p99_ms, error_rate_pct). There is NO per-endpoint SLO convention — do NOT ask for one.\n\nFlag ONLY (cite the changed line):\n- high: a new business/mutation code path that emits NO structured log event of its own on its primary path, so the operation is invisible beyond the generic `request` log (the template idiom is one structlog event per meaningful operation/outcome). Confirm the diff truly adds no structlog call before flagging.\n- medium: an error/exception branch in the new code that swallows the error with no event and no re-raise, so the failure reaches neither the middleware nor the handler.\n\nDo NOT flag: missing per-endpoint SLOs; missing per-endpoint/business metrics; missing manual spans or span attributes; missing manual correlation_id; `exc_info=` style; or anything owned by another agent — DB transaction/rollback/session state (data-integrity), idempotency/business correctness (application-logic), import-ordering/style. Apply the codebase bar: if the shipped `routes/items.py` does not do it, do not require it. Be internally consistent: do not flag a good instance of a pattern you would not flag elsewhere. Speculative \"IF the middleware does not...\" findings against established wiring are disallowed.\n\nReturn JSON ONLY — an array of {\"path\",\"line\",\"severity\",\"message\",\"suggestion\"}; [] if none.",
+  "proposed_fixture_edits": [
+    {
+      "fixture": "bad/uninstrumented-route",
+      "edit": "Keep the core defect (archive_item with no structured log on any path) but remove the incidental cross-domain bait: hoist the inline `from fastapi import HTTPException` to module top (kills the import-style finding), and either remove the re-archive double-prefix or make it irrelevant to observability (kills the application-logic idempotency finding). Update expect.json from {\"file\": \"src/demo/routes/items.py\"} to also pin the dimension/line of the structured-logging-absence finding so recall is scored on the IN-DOMAIN defect, not on accidental cross-domain hits."
+    },
+    {
+      "fixture": "good/correlation-id-logging",
+      "edit": "No content change needed — it is genuinely clean. It exists to assert ZERO findings once the prompt is fixed. (Optional: drop the `except Exception: _log.error(...); raise` block if it keeps tempting data-integrity-style rollback findings, but the cleaner fix is the prompt scope clause; prefer keeping the realistic error-logging path to prove the auto-correlation_id point.)"
+    },
+    {
+      "fixture": "good/instrumented-route",
+      "edit": "No content change needed — genuinely clean, asserts ZERO findings post-fix. Optionally add a one-line code comment already present ('relies on FastAPI auto-instrumentation ... no manual tracer') is good; keep it as the explicit codebase-idiom signal."
+    }
+  ],
+  "proposed_block_threshold": {
+    "recall_min": 0.50,
+    "fp_max": 0.10,
+    "rationale": "fp_max must drop to 0.10 (from the de-facto-broken 1.00 baseline): the two good fixtures are genuinely clean and MUST score 0 once the prompt stops requiring per-endpoint SLOs/metrics/manual-spans and stops hallucinating missing correlation_ids. recall_min set to 0.50 (not 0.90) because the bad fixture has effectively ONE legitimate in-domain defect (no structured log on the mutation path); at --repeat 3 a single-defect fixture has real severity/detection wobble, and the tightened expect.json scores on that one dimension. Re-derive both bounds from a post-fix --repeat 3 sweep in Phase 3 (eval-analyze); these are the audit-proposed starting bars, not final calibration."
+  },
+  "notes": "Highest-priority agent in the over-flagging cohort: the prompt's three explicit flag clauses (untraced/unmetered=high, error-not-logged-with-cid, missing per-endpoint SLO) each contradict the shipped template, so every fix here is also a template-derived fact, not a judgment call. observability-db/-fe/-infra likely share the same 'flag absence of manual instrumentation the template auto-provides' defect (per Phase 0b headline) and should get the same codebase-bar treatment."
+}

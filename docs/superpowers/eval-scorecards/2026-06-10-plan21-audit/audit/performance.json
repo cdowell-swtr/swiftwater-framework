@@ -1,0 +1,74 @@
+{
+  "agent": "performance",
+  "verdict": "needs-tuning",
+  "summary": "Bad-fixture detection is excellent (3/3 reps flag the N+1 + unbounded scan as high). The problem is the GOOD fixture: all 3 reps emit a low-severity finding on it, and that finding is a codebase-bar violation. The good fixture reuses the template's own `list_items` (which does `select(Item)` and hydrates id/name/created_at), then discards everything but `name`. The reviewer flags 'full-row hydration when only name is consumed' as wasteful — but the template's own unflagged `/items` endpoint does the identical thing (hydrates created_at, serializes only id+name via ItemRead). Holding the new code to a stricter standard than the surrounding codebase is exactly the Plan-18 over-flagging mechanism. Fix is a coupled prompt clause (codebase-bar / projection-over-fetch is not a defect when bounded and consistent with the repo) plus making the good fixture unambiguously clean.",
+  "severity_bar_issues": [
+    {
+      "issue": "Good-fixture over-flag at low severity",
+      "detail": "On good/single-query all 3 reps emit a `low` finding: 'list_items() fetches full ORM rows but only name is consumed (~2x over-fetch)'. The prompt already says speculative micro-optimisation is 'low', and the reviewers correctly self-rate it low and note 'bounded at MAX_PAGE_SIZE=100 so impact is negligible'. But a clean good fixture should yield [] — emitting any finding (even low) on it is a false positive that drives the good-fixture FP rate up. The over-fetch is bounded (<=100 rows) and matches the established repo idiom; per the rubric codebase-bar + scope-discipline clauses it should not be flagged at all."
+    }
+  ],
+  "scope_creep": [
+    {
+      "issue": "None observed on the bad fixture",
+      "detail": "Bad-fixture findings (unbounded scan, N+1, connection-pool hold) are all squarely in the performance domain. r2 adds a third 'connection-pool exhaustion' finding that is a restatement of the same loop already covered by the N+1 finding — borderline double-counting but in-domain and not scope creep."
+    }
+  ],
+  "hallucination_overreach": [
+    {
+      "issue": "No hallucinations on the bad fixture",
+      "detail": "All bad-fixture claims are grounded in the diff (the `select(Item.id)` scan, the `session.get` in the loop, MAX_PAGE_SIZE=100 on the sibling endpoint). The good-fixture finding is also factually accurate (select(Item) does hydrate created_at) — it is not a hallucination, it is a codebase-bar violation: the reviewer flags a real but acceptable, repo-standard pattern."
+    }
+  ],
+  "stricter_than_codebase": [
+    {
+      "issue": "Full-ORM-row over-fetch flagged on the good fixture",
+      "evidence": "template src/{{package_name}}/db/repository.py:21 `select(Item).order_by(Item.id).limit(bounded)` hydrates all of Item (id, name, created_at). template routes/items.py GET /items serializes via ItemRead {id, name} — created_at is hydrated and discarded, UNFLAGGED, on every request. The good fixture's get_item_names reuses the exact same list_items helper and discards the same column.",
+      "conclusion": "Flagging the good fixture's over-fetch holds new code to a stricter standard than the surrounding template, which the reviewer never flags. Per rubric Codebase-bar principle, do not flag."
+    }
+  ],
+  "internal_consistency_violations": [
+    {
+      "issue": "Cross-fixture inconsistency on identical pattern",
+      "detail": "In the bad fixture the reviewer's own suggested fix is `select(Item.name)...` (a projection), implying full-row fetch is the inferior pattern; in the good fixture it then penalises the bounded full-row fetch. But the template ships full-row fetch (`select(Item)`) as the standard everywhere. The reviewer should treat bounded full-row fetch as the accepted baseline (it is the repo norm), not flag it. This is the same one-standard-per-pattern lesson as create_item/bulk-insert."
+    }
+  ],
+  "fixture_validity": {
+    "bad/n-plus-one-query": {
+      "verdict": "valid",
+      "reasoning": "Unambiguous defect: explicit N+1 (session.get(Item, iid) per id in a loop) plus an unbounded `select(Item.id)` scan with no LIMIT, in contrast to the bounded sibling endpoint. The docstring even labels it N+1. Detected high by all 3 reps. expect.json correctly seeds src/demo/routes/items.py. Keep."
+    },
+    "good/single-query": {
+      "verdict": "weak-clean",
+      "reasoning": "It IS the correct, bounded single-query approach (reuses list_items, one query, capped at MAX_PAGE_SIZE) so it is functionally clean and contrasts correctly with the bad fixture. BUT it is not UNAMBIGUOUSLY clean: it leaves a residual, defensible nit (bounded over-fetch of created_at) that all 3 reps latch onto. Because that nit mirrors the template's own unflagged idiom, the right fix is a prompt codebase-bar clause; the fixture can additionally be hardened so the over-fetch reading is impossible (see coupled edits). Currently this fixture is the agent's only good case, so a single residual nit = 100% good-fixture FP."
+    }
+  },
+  "proposed_coupled_edits": {
+    "prompt": {
+      "rationale": "Add an explicit codebase-bar / bounded-projection clause so the reviewer stops penalising bounded full-row hydration that matches the repo idiom, and require [] when the only issue is a bounded micro-cost already consistent with the surrounding code. Also import the shared rubric.",
+      "additions": [
+        "Prepend the shared rubric (docs .../plan21-rubric-draft.md) including the Codebase-bar principle and Scope discipline clauses.",
+        "Add: 'Bounded reads (capped result sets, e.g. a hard MAX_PAGE_SIZE) are NOT performance defects. Do not flag full-ORM-row hydration, projection over-fetch, or extra-column transfer when the result set is bounded AND the surrounding codebase fetches rows the same way. Reserve findings for UNbounded scans, N+1 round-trips, accidentally super-linear work on unbounded input, or a clear SLO regression.'",
+        "Add: 'If your only finding would be a speculative bounded micro-optimisation that the existing code already does unflagged, return [].'"
+      ]
+    },
+    "fixture": {
+      "good/single-query": [
+        "Option A (preferred, minimal): leave change.patch as-is and rely on the prompt clause; this keeps the good fixture as a faithful real-world 'reuse the bounded repo helper' idiom. Re-baseline to confirm it now returns [].",
+        "Option B (belt-and-suspenders): add a one-line comment in get_item_names noting the bounded over-fetch is intentional and matches the /items endpoint, so the over-fetch reading is explicitly acknowledged. Do NOT switch to a hand-rolled select(Item.name) projection — that would diverge from the template idiom and weaken the codebase-bar test."
+      ],
+      "bad/n-plus-one-query": [
+        "No change needed; keep as the canonical N+1 + unbounded-scan defect."
+      ]
+    }
+  },
+  "proposed_block_threshold": {
+    "value": "high",
+    "reasoning": "The agent's genuine defects (N+1, unbounded scan, pool exhaustion) are all correctly rated high and are concrete, demonstrable regressions on unbounded input -> they should block a builder. Everything this agent legitimately emits below high is bounded micro-optimisation / speculative (the prompt itself defines those as low). So block on high only; never block on medium/low for performance. This also means the residual good-fixture low finding (if any survives tuning) would not block, but the goal is to eliminate it via the prompt+fixture edits so the good fixture returns []."
+  },
+  "metrics_observed": {
+    "bad_recall_high": "3/3 reps detect the N+1 and unbounded scan at high",
+    "good_false_positive_rate": "3/3 reps emit a (low) finding on the clean fixture -> 1.00 FP at finding-granularity; 0.00 at block-threshold=high",
+    "note": "At block_threshold=high the good fixture would PASS (no high findings) and the bad fixture would PASS (high findings present). The tuning target is to also get the good fixture to a literal [] so finding-granularity FP drops to 0 and the consistency oracle is clean."
+  }
+}

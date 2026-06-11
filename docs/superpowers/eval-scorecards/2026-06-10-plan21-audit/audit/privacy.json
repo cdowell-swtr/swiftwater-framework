@@ -1,0 +1,80 @@
+{
+  "agent": "privacy",
+  "summary": "The privacy agent is healthy: baseline scored recall 1.00 / fp 0.00 (all 3 good repeats returned [], all 3 bad cases flagged the seeded defect at high). Prompt is tight and on-domain (PII logged/echoed, unnecessary collection, retention-beyond-purpose). Fixtures are well-grounded against the real template codebase-bar: the RUM allowlist (utm_* only) exists verbatim in template settings.py.jinja with a comment that literally names adding \"email\" as a review-privacy violation, and the observability middleware logs only method/path/correlation_id (never the request body), which validates the good fixture's no-leak claims. No over-flagging, no scope-creep, no stricter-than-codebase or internal-consistency violations were observed. Recommended changes are low-risk hardening only: (1) inherit the shared rubric so privacy uses the common severity scale instead of an ad-hoc 'high' for two specific patterns; (2) add a second, structurally-different good fixture to broaden fp coverage (currently only 1 good case).",
+  "severity_bar_issues": [
+    {
+      "issue": "Prompt hard-codes 'PII in logs or unnecessary PII collection is high' as a flat rule rather than deriving from the shared rubric's high/medium/low/info scale.",
+      "assessment": "Not harmful in practice — PII-in-logs and unjustified PII collection ARE genuine high-severity privacy breaches per the rubric's 'high = privacy breach in changed code' clause, and the baseline severities (high for the response-leak, log-leak, and RUM cases) were correct and stable. But the flat rule risks future mis-calibration on borderline cases (e.g. the 'collected-but-dropped' sub-finding came back high/high/medium across repeats — a legitimately debatable severity). Inheriting the rubric makes the high-bar derivable instead of asserted.",
+      "recommended_severity": "keep high for: PII written to logs, PII echoed in external responses, PII captured into telemetry/RUM. Treat 'PII accepted but silently dropped (never stored, only a dangling field)' as MEDIUM (data-minimization hygiene, no active leak) unless it is simultaneously logged/echoed (then the leak finding carries the high)."
+    }
+  ],
+  "scope_creep": [],
+  "scope_creep_note": "No scope creep observed in the baseline. Every finding stayed within PII-leak / unnecessary-collection / retention. The agent did not stray into security (authz), api-design, or observability territory even though the diffs touched routes and logging. Recommend adding an explicit scope line to the prompt (see prompt edits) to lock this in, since logging/response diffs are exactly where a privacy reviewer could drift into observability or contract concerns.",
+  "hallucination_overreach": [],
+  "hallucination_note": "No hallucinations. Findings cited real changed lines and accurately quoted the in-diff PII annotation. The agent correctly used tool calls (grep/read create_item) to CONFIRM that owner_email is not persisted before claiming 'collected but unused' — it verified rather than assumed.",
+  "stricter_than_codebase_violations": [],
+  "stricter_than_codebase_note": "Checked template/ for the codebase-bar. The template's own RUM allowlist contains ONLY non-PII utm_* keys (settings.py.jinja:78-84) and the observability middleware never logs request bodies (only method/path/correlation_id). So the baseline (which itself ships zero PII-in-logs / PII-in-response) is stricter-clean: the agent is NOT holding new code to a higher bar than the template meets — the bad fixtures introduce genuinely new PII sinks the template deliberately avoids. The good fixture explicitly mirrors the template idiom (exclude PII from the response model; rely on body-free request logging) and was correctly passed.",
+  "internal_consistency_violations": [],
+  "internal_consistency_note": "Across the 3 repeats of each bad case the agent applied one standard consistently (it flagged the same lines each run). The only cross-repeat wobble was the severity of the secondary 'collected-but-dropped' finding (high/high/medium on pii-in-response), which is a calibration nuance, not an A-vs-B inconsistency. No same-diff identical-instance was flagged-then-ignored.",
+  "fixture_validity": {
+    "good/pii-excluded": {
+      "verdict": "valid-clean",
+      "reasoning": "Genuinely clean and representative of the real template idiom. owner_email is persisted (via create_item with the new param) for outreach, deliberately omitted from ItemRead, typed as EmailStr in the request body, and documented as PII. The 'request logs don't include the body' claim is TRUE against the actual observability middleware (logs only method/path/correlation_id). All 3 baseline repeats correctly returned []. This is the consistency oracle and it holds.",
+      "edits_needed": "none required"
+    },
+    "bad/pii-logged": {
+      "verdict": "valid-unambiguous-defect",
+      "reasoning": "Unambiguous: log.info(\"item_created\", ..., owner_email=payload.owner_email) writes a raw email to structured logs, directly contradicting the same diff's own model annotation. This is a textbook high-severity privacy breach and matches the template's documented prohibition. All 3 repeats flagged it high."
+    },
+    "bad/rum-allowlists-pii": {
+      "verdict": "valid-unambiguous-defect",
+      "reasoning": "Unambiguous and the BEST-anchored fixture: it adds \"email\" to frontend_rum_allowed_query_params, the precise action the template's settings.py.jinja comment names as 'flagged by review-privacy.' Captures PII from the untrusted query string into telemetry. All 3 repeats flagged high. Keep as-is."
+    },
+    "bad/pii-in-response": {
+      "verdict": "valid-but-compound",
+      "reasoning": "The seeded/primary defect (owner_email added to ItemRead → PII echoed in GET /items bulk listing + POST response) is a clean, unambiguous high. However the fixture is COMPOUND: post_item also calls create_item(session, payload.name) WITHOUT owner_email, so the same diff additionally contains a 'PII collected but silently dropped' defect that every repeat also flagged (high/high/medium). This is not wrong — both are real privacy issues — but it muddies what the fixture is testing and is the only place severity wobbled across repeats. Recommend a COUPLED edit: make this fixture test ONLY the response-leak (thread owner_email through create_item so collection is justified), and move the 'collected-but-dropped' scenario to its own dedicated fixture if that pattern is worth pinning. This sharpens recall measurement and removes the severity ambiguity.",
+      "coupled_edit": "In bad/pii-in-response/change.patch, change post_item to `return create_item(session, payload.name, owner_email=payload.owner_email)` (and add the owner_email param to create_item in the patch, mirroring the good fixture's repository.py change) so the ONLY remaining defect is the ItemRead response leak. Keep expect.json -> items.py. This makes the case single-defect and the expected severity stably 'high'."
+    }
+  },
+  "proposed_prompt_edits": [
+    {
+      "edit": "Prepend the shared rubric (severity scale + codebase-bar + internal-consistency + scope-discipline + output clauses) instead of the ad-hoc flat severity rule.",
+      "rationale": "Aligns privacy with all other agents and makes its 'high' derivable from the rubric rather than asserted, without changing the (correct) outcome that PII-in-logs/response/telemetry = high."
+    },
+    {
+      "edit": "Add an explicit scope line: 'Domain = personal-data handling only (PII logged, PII echoed in external responses, PII captured into telemetry/RUM, collection of PII not needed for the stated purpose, retention beyond purpose). Do NOT flag authorization, input validation, API-contract, or observability-coverage issues — other agents own those.'",
+      "rationale": "Locks the clean baseline behavior in. Logging/response diffs are exactly where a privacy reviewer could drift into observability/security; the prompt should fence it."
+    },
+    {
+      "edit": "Add a severity-nuance line: 'PII written to logs, echoed in responses, or captured into telemetry = high. PII accepted from a client but never stored/used (a dangling field with no active sink) = medium (data-minimization) — but if that same PII is also logged or echoed, raise the leak finding to high and do not double-count.'",
+      "rationale": "Removes the only observed severity wobble (the collected-but-dropped finding came back high/high/medium) by giving the agent a deterministic rule."
+    },
+    {
+      "edit": "Add: 'Before flagging a PII sink, confirm the value actually reaches the sink (e.g. that the field is passed through and logged/serialized), using read/grep — do not flag a field merely because it is named like PII.'",
+      "rationale": "The baseline already did this correctly; codifying it prevents future regressions toward name-based over-flagging."
+    }
+  ],
+  "proposed_fixture_edits": [
+    {
+      "fixture": "bad/pii-in-response",
+      "edit": "De-compound it to a single response-leak defect (see fixture_validity.bad/pii-in-response.coupled_edit): thread owner_email through create_item so only the ItemRead exposure remains."
+    },
+    {
+      "fixture": "good/ (new) pii-redacted-log",
+      "edit": "Add a SECOND good fixture to broaden fp coverage (currently only 1 good case). Suggested: a handler that logs item_created with item_id only (no owner_email) and/or uses a redaction filter — exercising the 'PII present in the system but correctly kept out of the log/response' negative. This guards against the agent flagging any owner_email mention regardless of whether it actually leaks.",
+      "optional": true
+    },
+    {
+      "fixture": "good/ (new) pii-collected-and-stored",
+      "edit": "Optional second good fixture: owner_email collected AND persisted via create_item for a documented outreach purpose, excluded from ItemRead, not logged — confirming the agent does not flag legitimate, purpose-justified PII collection as 'unnecessary collection'.",
+      "optional": true
+    }
+  ],
+  "proposed_block_threshold": {
+    "block_threshold": "high",
+    "recall_min": 0.90,
+    "fp_max": 0.10,
+    "rationale": "Block only on high. Privacy 'high' findings (PII written to logs, echoed in external responses, captured into telemetry, or unnecessary collection that constitutes an active leak) are concrete, demonstrable breaches in the changed code and warrant blocking a builder. Medium findings (dangling/unused PII field with no active sink, retention hygiene) should surface but NOT block. Keep recall_min 0.90 (observed 1.00) and fp_max 0.10 (observed 0.00) — the baseline has ample headroom; do not tighten beyond these or the single-good-fixture fp estimate becomes brittle (adding the proposed second good fixture is the right way to harden fp, not lowering fp_max)."
+  },
+  "baseline_scorecard_note": "Phase 0c baseline: privacy recall 1.00, fp 0.00 (3 good repeats all [], 3 bad cases all flagged high at the seeded line). One of the agent's two cleanest results in the corpus. The audit recommends no behavior-changing fixes — only rubric inheritance, an explicit scope fence, a severity-nuance rule for the collected-but-dropped pattern, and de-compounding the pii-in-response fixture plus optionally adding good fixtures to widen fp coverage."
+}

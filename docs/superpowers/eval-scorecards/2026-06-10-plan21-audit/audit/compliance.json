@@ -1,0 +1,91 @@
+{
+  "agent": "compliance",
+  "audited_at": "2026-06-10",
+  "prompt_path": "src/framework_cli/review/agents/compliance.md",
+  "domain_summary": "Owns GDPR/retention/audit gaps: personal data kept with no retention/deletion path, right-to-erasure not covered, sensitive operations with no audit log. Current prompt is a 5-line one-shot with no inherited rubric (no severity bar, no codebase-bar clause, no scope clause).",
+  "baseline": {
+    "recall": 1.00,
+    "fp": 1.00,
+    "threshold_recall_min": 0.90,
+    "threshold_fp_max": 0.10,
+    "verdict": "Recall is fine; FP=1.00 is the dominant defect — every repeat over-flags the GOOD fixture with high-severity findings. The recorded thresholds (fp_max 0.10 'observed 0.00') are STALE relative to this baseline run, which shows fp 1.00."
+  },
+  "severity_bar_issues": [
+    {
+      "issue": "Prompt declares 'A clear regulatory violation is high' but gives no medium/low/info gradations. In practice the agent emits high for everything, including speculative 'name_filter MIGHT contain PII' and 'log line has no declared retention period' — neither of which is a concrete, demonstrable regulatory violation in the changed code.",
+      "severity": "high",
+      "fix": "Adopt the shared rubric's 4-tier severity. Reserve 'high' for a demonstrable gap the changed code introduces (e.g. a sensitive mutation with NO audit record at all). 'No per-line log-retention policy' and 'free-text field could contain PII' are at most low/info given the codebase baseline."
+    }
+  ],
+  "scope_creep": [
+    {
+      "issue": "The compliance agent's findings are dominated by PII-in-logs and PII-via-query-param flags. There is a dedicated `privacy` agent (privacy.md) that explicitly owns 'PII logged or echoed' and rates 'PII in logs' as high. On the bad fixture, 2 of 3 findings per repeat are PII-logging/PII-transmission — privacy's domain, not compliance's. On the good fixture, the same PII-logging frame is what drives the false positives.",
+      "severity": "high",
+      "fix": "Add an explicit scope clause directing compliance to the AUDIT-GAP / RETENTION-PATH / ERASURE-PATH axis and to defer raw PII-in-logs / PII-collection to `privacy`. Compliance should flag a sensitive operation with NO audit log, or persisted personal data with NO retention/deletion mechanism existing anywhere — not the mere act of a logger receiving an identifier."
+    },
+    {
+      "issue": "Findings also stray into application-logic (name_filter accepted but discarded / list_items called without pagination — r0/r1/r2 good fixture). That is application-logic / api-design territory, unrelated to GDPR.",
+      "severity": "medium",
+      "fix": "Scope clause + 'do not flag issues another agent owns' (rubric scope-discipline line)."
+    }
+  ],
+  "hallucination_overreach": [
+    {
+      "issue": "Repeatedly invents specific GDPR article citations (Art. 5(1)(e), Art. 17, Art. 25, Art. 4(1)) and asserts 'no maximum log-retention period is declared or enforced' as a violation — but the diff is a single route handler; a route handler is not where a service declares its log-retention policy. The agent treats the ABSENCE of policy text in the changed hunk as a regulatory breach, which is a structural over-reach (almost any handler would 'violate' this).",
+      "severity": "high",
+      "fix": "Instruct: judge only what the CHANGED CODE introduces or removes; do not treat the absence of org-wide policy boilerplate in a code diff as a violation. A finding must point at a concrete operation in the diff that is itself the gap."
+    },
+    {
+      "issue": "On the GOOD fixture, claims logging an OPAQUE user_id with no deletion path is a high GDPR violation. The good fixture was deliberately authored to be clean (opaque id, structured event). Calling it a violation is the over-flagging mechanism (mirrors Plan 18).",
+      "severity": "high"
+    }
+  ],
+  "codebase_bar_violations": [
+    {
+      "issue": "The agent holds new code to a STRICTER standard than the template baseline. The template's own observability middleware logs request metadata on EVERY request — `get_logger().info('request', method=..., path=request.url.path, status=..., duration_ms=...)` (src/framework_cli/template/src/{{package_name}}/middleware/observability.py:59-65) — with NO per-line retention policy, NO deletion path, NO erasure mechanism. The template also emits structured events like `webhook_inbox_pruned` and `graphql_ide_configured` the same way. The good fixture's `get_logger().info('items_searched', user_id=..., filter=...)` is BYTE-IDENTICAL in idiom to the sanctioned template pattern, yet the agent flags it high. This is the direct cause of FP=1.00.",
+      "severity": "high",
+      "evidence": "src/framework_cli/template/src/{{package_name}}/middleware/observability.py:59-65 ; src/framework_cli/template/src/{{package_name}}/logging_config.py:53-54 (get_logger is the canonical structured logger) ; webhooks/inbox.py:39-44",
+      "fix": "Add the rubric codebase-bar clause: structured `get_logger().info(event, key=value)` with an opaque identifier is the template's sanctioned idiom and must NOT be flagged. Retention/erasure for application logs is a service-level concern the template handles outside route handlers (e.g. tasks/retention.py for the webhooks battery) — do not flag a route handler for lacking it."
+    }
+  ],
+  "internal_consistency_violations": [
+    {
+      "issue": "Across the two fixtures the agent applies an inconsistent standard. The bad fixture logs a raw EMAIL (genuine PII) and the good fixture logs an opaque USER_ID (pseudonymous, by-design clean). Both receive essentially the same high-severity 'logged with no retention/deletion path' finding. The agent fails to discriminate the one real distinction the fixture pair was built to test (raw email vs opaque id), so it cannot tell clean from dirty — the consistency-oracle (good fixture) is being flagged identically to the defect.",
+      "severity": "high",
+      "fix": "Make the prompt key on the OPAQUE-vs-DIRECT-identifier distinction explicitly, and add the rubric internal-consistency clause so an opaque-id log is treated as clean."
+    }
+  ],
+  "fixture_validity": {
+    "bad/logs-pii-in-handler": {
+      "verdict": "VALID but MIS-TARGETED for this agent. It is an unambiguous defect, but the defect it most loudly exhibits is raw-EMAIL-in-logs — which is PRIMARILY privacy's domain. The compliance-specific defect (a sensitive personalised-search operation recorded only as a plain stdlib INFO line, i.e. no tamper-evident/queryable audit record) is present and real, but it is the agent's THIRD finding, buried under the PII flags. Recommend re-anchoring the fixture's expect/intent on the AUDIT-GAP so it tests compliance's actual domain, and let privacy own the email-logging.",
+      "is_unambiguous_defect": true
+    },
+    "good/audit-logged-action": {
+      "verdict": "GENUINELY CLEAN. Opaque user_id, structured `get_logger().info('items_searched', ...)` — byte-identical idiom to the template's own request logging. All flags against it are false positives driven by the codebase-bar and scope-creep defects above. KEEP as-is; the prompt is what must change to stop flagging it. (Note: the fixture name 'audit-logged-action' slightly oversells it — it is really 'clean structured logging of an opaque id', not a demonstration of a tamper-evident audit store; consider renaming, but the diff itself is correctly clean.)",
+      "is_genuinely_clean": true
+    }
+  },
+  "coupled_edits": [
+    {
+      "target": "src/framework_cli/review/agents/compliance.md",
+      "change": "Rewrite to inherit the shared rubric (severity tiers + codebase-bar + internal-consistency + scope-discipline) and tighten domain. Proposed body: 'You are `review-compliance`. Review ONLY the unified diff. Your domain is AUDIT and RETENTION/ERASURE GAPS, not raw PII handling (privacy owns that). Flag, citing the changed line: (1) a sensitive state-changing operation (create/update/delete of records, auth/permission changes, money/PII mutations) that produces NO audit record at all; (2) newly-persisted personal data with NO retention or deletion path existing ANYWHERE the change could reach. Do NOT flag: structured `get_logger().info(event, key=value)` events (the template's sanctioned idiom — observability.py logs every request this way); logs that carry an OPAQUE identifier; the mere absence of an org-wide log-retention policy in a route handler; or anything privacy/application-logic/api-design owns. Before flagging a pattern, confirm the template/baseline does not already do the same thing unflagged. high = a demonstrable audit/retention gap the change introduces; medium = a real but non-blocking gap; low/info = advisory. Return JSON ONLY ...'",
+      "rationale": "Eliminates the codebase-bar FP source, the privacy scope-creep, and the hallucinated-policy over-reach while preserving the legitimate audit-gap recall."
+    },
+    {
+      "target": "tests/eval/fixtures/compliance/bad/logs-pii-in-handler/",
+      "change": "Re-author the bad fixture so its UNAMBIGUOUS defect is a COMPLIANCE one, not a privacy one: a state-changing/sensitive operation (e.g. a soft-delete or a consent/permission update) performed with NO audit record, OR personal data persisted to a table with no retention column / no prune path while a sibling table (webhooks) has one. Keep the email-in-logs case in the PRIVACY corpus instead. Update expect.json to point at the audit/retention line. Rename the case to e.g. 'sensitive-op-no-audit-record'.",
+      "rationale": "Makes the bad fixture exercise compliance's actual domain so recall is measured on the right axis; removes the privacy overlap that inflates both recall (luckily) and the temptation to over-flag."
+    },
+    {
+      "target": "tests/eval/fixtures/compliance/good/audit-logged-action/",
+      "change": "Keep the diff (it is genuinely clean). Optionally rename to 'structured-event-log-clean' to match the redefined domain, and/or add a second good fixture that performs a sensitive op WITH a proper audit record so the agent learns the positive pattern. No content change required to stop the FPs — those are fixed in the prompt.",
+      "rationale": "The good fixture is the consistency oracle and is correct; the fix belongs in the prompt."
+    }
+  ],
+  "proposed_block_threshold": {
+    "block_severity": "high",
+    "rationale": "Compliance's true-positive content (a sensitive operation with NO audit record; persisted personal data with NO retention/deletion path) is genuinely merge-blocking when real, so high should block. But this is only safe AFTER the prompt rewrite + fixture re-author drop FP from 1.00 toward ~0. Recommend gating the block on the re-tuned thresholds: recall_min ~0.90, fp_max 0.10, re-derived in Phase 3 against the redefined fixtures. Until then (post-Phase-1, pre-retune) treat compliance high as ADVISORY (non-blocking) given the current FP=1.00.",
+    "recommended_thresholds_after_retune": {"recall_min": 0.90, "fp_max": 0.10}
+  },
+  "headline": "compliance recall is fine (1.00) but FP is 1.00 — driven by (a) a codebase-bar violation: it flags structured get_logger().info() with an opaque id, which is the template's own sanctioned request-logging idiom (observability.py:59-65); (b) scope-creep into the dedicated privacy agent (PII-in-logs) and into application-logic; (c) hallucinated 'no log-retention policy declared' over-reach treating absence of org boilerplate in a route handler as a GDPR breach. Fix = rewrite prompt to inherit the rubric + narrow to audit/retention/erasure GAPS and defer PII to privacy; re-author the bad fixture to a true compliance defect; keep the good fixture (genuinely clean). Block on high only after retune; advisory until then."
+}

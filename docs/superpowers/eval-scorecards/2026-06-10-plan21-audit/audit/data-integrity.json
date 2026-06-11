@@ -1,0 +1,59 @@
+{
+  "agent": "data-integrity",
+  "audited_at": "2026-06-10",
+  "prompt_path": "src/framework_cli/review/agents/data-integrity.md",
+  "baseline": {
+    "recall_min_threshold": 0.90,
+    "fp_max_threshold": 0.43,
+    "observed_recall": 1.00,
+    "observed_fp": 1.00,
+    "verdict": "Recall is healthy (the planted non-atomic-commit defect is caught high in all 3 repeats). The agent FAILS on false positives: the clean good fixture is flagged with HIGH-severity findings in all 3 repeats (fp 1.00 >> 0.43 cap). This reproduces the Plan-18 over-flagging; the work is in the prompt + the good fixture's claims."
+  },
+  "prompt_issues": {
+    "severity_bar": [
+      {
+        "issue": "The prompt's closing line 'Any genuine data-integrity risk is at least high' creates a severity FLOOR with no ceiling discipline. Combined with no codebase-bar clause, the agent treats speculative/contract-style concerns (e.g. 'returns objects without refresh', 'no UNIQUE constraint', 'cap counts deduped not raw') as high. The rubric defines high as 'a concrete, demonstrable defect that will cause incorrect behavior / data loss / broken contract in the changed code' — most of the good-fixture flags are not demonstrable defects.",
+        "severity": "high"
+      }
+    ],
+    "missing_rubric_inheritance": [
+      "The prompt predates the Plan-21 shared rubric and inherits NONE of it: no Codebase-bar principle, no Internal-consistency clause, no Scope-discipline clause, no high/medium/low/info definitions. This is the root cause of the over-flagging.",
+      "No codebase-bar anchor means the agent does not check the surrounding template before flagging. The template's own create_item DOES call session.refresh, the model uses server_default=func.now(), engine.py sets expire_on_commit=False, and the items table has NO UNIQUE constraint on name — yet the agent flags the good fixture for omitting refresh (claiming created_at=None) and for lacking a UNIQUE constraint it never had."
+    ],
+    "scope_creep": [
+      "Bad-fixture repeats r0/r2 add validation/unbounded-input findings (L33/L37: 'names is unbounded', 'no String(255) length check', 'no empty-string guard'). These are input-validation concerns adjacent to the planted defect (non-atomicity). They are arguably in-domain (validation is listed in the prompt) but the inconsistency is the tell: the GOOD fixture ADDS exactly this validation (strip, len<=255, non-empty, 1000-row cap, dedup) and is STILL flagged high — so the agent is not rewarding the very mitigations it demands. That is an internal-consistency failure across the good/bad pair."
+    ],
+    "hallucination_overreach": [
+      "FALSE 'created_at=None' claim (good r0 L57, r1 L59, r2 L60, all HIGH): the agent asserts that returning ORM objects without session.refresh leaves server-generated columns unpopulated. created_at uses server_default=func.now(); whether the Python attribute is loaded is a lazy/expire concern, not data CORRUPTION, and the column IS populated in the DB. This is the model's #1 FP and it is hallucinated/over-reached to high.",
+      "Stricter-than-codebase 'no UNIQUE constraint on name' (good r2 L58, medium): migration 0001 declares only NOT NULL; the template has never had unique-name semantics and create_item inserts duplicates freely. Flagging the good fixture for within-batch dedup 'not preventing cross-batch duplicates' holds new code to a constraint the codebase does not impose.",
+      "Pedantic 'cap counts deduped not raw' (good r0/r1/r2): a deliberate, documented design choice in the good fixture (dedup then cap the cleaned list). Not a defect; at most low/info. Flagged high (r0) / medium."
+    ]
+  },
+  "fixture_validity": {
+    "good/atomic-bulk-insert": {
+      "is_clean": true,
+      "verdict": "GENUINELY CLEAN as a data-integrity matter: single atomic commit via add_all, input validation, length cap, dedup, bounded batch. However the fixture HANDS THE AGENT ITS FALSE POSITIVE: the docstring omits refresh and asserts 'Server-assigned ids are populated by the flush inside session.commit(), so the created rows are returned directly (no per-row refresh)'. This invites the 'stale/None attributes' critique. The fixture diverges from the codebase idiom — template create_item DOES refresh after commit. Recommend ALIGNING the good fixture to the template idiom so the omission is no longer a plausible flag.",
+      "coupled_edit": "Either (a) add a single post-commit refresh-equivalent that matches the codebase (e.g. session.refresh on the batch, or rely on expire_on_commit=False which the template already sets) AND drop the docstring's defensive 'no per-row refresh' justification; or (b) keep the no-refresh design but add a docstring sentence noting expire_on_commit=False is set in build_session_factory so attributes survive commit — removing the hallucination hook. Also soften the cap docstring to state the cap is applied to the de-duplicated set by design."
+    },
+    "bad/non-atomic-bulk-insert": {
+      "is_unambiguous_defect": true,
+      "verdict": "UNAMBIGUOUS DEFECT: session.commit() inside the loop breaks batch atomicity (partial writes on mid-batch failure). Correctly the single planted defect. expect.json is file-level only ({\"file\": ...}) so scoring is presence-based; recall is solid. No change needed to the defect itself, but the per-line expect could be tightened to anchor on the in-loop commit so adjacent scope-creep findings are not silently rewarded as the 'catch'."
+    }
+  },
+  "internal_consistency_violations": [
+    "The good/bad pair differ ONLY in atomicity + the addition of validation/cap/dedup. The agent flags the bad fixture for MISSING validation/cap (r0/r2) AND flags the good fixture HIGH despite it HAVING that validation/cap. One standard is not applied across the pair — the canonical Plan-18 create_item/bulk-insert lesson the rubric calls out by name."
+  ],
+  "stricter_than_codebase_violations": [
+    "Refresh/created_at: template create_item refreshes and the model has server_default; agent treats the good fixture's documented no-refresh design as a high data-integrity defect.",
+    "UNIQUE constraint: template items table has no UNIQUE on name; agent flags absence of cross-batch dedup as a data-integrity issue."
+  ],
+  "proposed_prompt_edit": {
+    "rationale": "Inherit the shared rubric and replace the unbounded 'at least high' floor with a demonstrability gate plus an explicit refresh/created_at and UNIQUE non-issue note, so the agent stops manufacturing high findings on clean code.",
+    "new_prompt": "You are `review-data-integrity`. Review ONLY the unified diff. Flag data-model and persistence risks: missing/incorrect validation, nullable/constraint mistakes, migrations that lose or corrupt data or are not backward-compatible, broken store invariants, and inconsistent writes across stores (e.g. a multi-row write that is not atomic). Cite the specific changed line.\n\nSeverity floor: a CONCRETE, DEMONSTRABLE data-integrity defect in the changed code (data loss, corruption, a partial/non-atomic write, a violated declared constraint) is at least \"high\". A merely theoretical hardening (extra validation the surrounding codebase does not require, a constraint the schema does not declare) is at most \"low\"/\"info\".\n\nCodebase-bar: before flagging, check the surrounding template. Do NOT flag a pattern the baseline already uses unflagged. In particular: the session factory sets `expire_on_commit=False`, so ORM attributes survive `commit()` WITHOUT a `refresh()` — a missing post-commit refresh is NOT a data-integrity defect. The `items.name` column has NO UNIQUE constraint, so absence of de-duplication is NOT a violated invariant unless the diff itself declares one.\n\nInternal consistency: apply one standard across the whole diff. If one write path is acceptable without a given guard, an identical path is too.\n\nReturn JSON ONLY — a single array of {\"path\",\"line\",\"severity\",\"message\",\"suggestion\"} (suggestion optional); [] if none."
+  },
+  "proposed_block_threshold": {
+    "block_threshold": "high",
+    "rationale": "Once the prompt's severity floor is demoted to demonstrable-only, the legitimate planted defect (non-atomic in-loop commit) remains high and should block, while the demoted hardening observations land at low/info and do not. Blocking at 'high' preserves recall on the real defect while the codebase-bar clause clears the good-fixture false positives. Recommend re-measuring fp after the coupled prompt+good-fixture edits; target fp_max stays at 0.43 but expected observed fp drops to ~0.0-0.33."
+  },
+  "summary": "Recall is fine; the agent fails on false positives (fp 1.00). Root cause: the prompt predates the Plan-21 rubric — it has an unbounded 'at least high' severity floor and no codebase-bar / internal-consistency clause. It hallucinates a high 'created_at=None / no refresh' defect (the model has server_default and the factory sets expire_on_commit=False, and the template's own create_item refreshes) and applies a stricter-than-codebase UNIQUE-constraint and validation standard to the clean good fixture while the SAME validation is demanded of the bad fixture. Coupled fix: rewrite the prompt to inherit the rubric + add explicit refresh/UNIQUE non-issue notes, and align the good fixture to the template idiom (or annotate expire_on_commit=False) so the no-refresh design is no longer a plausible flag. block_threshold: high."
+}

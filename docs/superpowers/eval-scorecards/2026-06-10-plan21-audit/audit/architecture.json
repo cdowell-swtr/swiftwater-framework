@@ -1,0 +1,97 @@
+{
+  "agent": "architecture",
+  "audited_at": "2026-06-10",
+  "baseline_summary": {
+    "verdict": "PASS",
+    "recall_observed": 1.0,
+    "fp_observed": 0.0,
+    "good_findings_per_repeat": [0, 0, 0],
+    "bad_layering-violation_top_severity_per_repeat": ["high", "high", "high"],
+    "bad_duplicate-data-layer_top_severity_per_repeat": ["high", "high", "high"],
+    "note": "Architecture is one of the 9 PASS agents in the Phase 0c baseline. Good fixture stays clean across all 3 repeats; both bad fixtures are flagged high every repeat. No over-flagging on this agent's good fixture (unlike compliance/data-integrity/security)."
+  },
+  "severity_bar_issues": [
+    {
+      "severity": "low",
+      "issue": "The prompt pins 'layering violation, circular dependency, or heavy inline handler' all to 'high' with no medium/low calibration guidance. This is correct for the three core defect classes, but it leaves no rubric-anchored home for the genuinely-secondary findings the reviewer keeps emitting on the duplicate-data-layer fixture (the 'transaction-management leaks into the route' finding came back as high/high/medium across repeats, and an 'unused import' finding as low). The transaction-leak observation is real and in-domain, but it is a SECONDARY symptom of the same root duplicate-layer defect, not an independent blocker; emitting it at 'high' double-counts the same problem.",
+      "fix_via": "rubric_inheritance"
+    }
+  ],
+  "scope_creep_issues": [
+    {
+      "severity": "low",
+      "issue": "The baseline 'unused import (fetch_all_items)' finding (r0 low, r2 low) is dead-code/import hygiene, which is closer to code-quality than architecture. It is harmless here (it reinforces the correct high finding and never appears on the good fixture) but is technically out of this agent's stated domain (layering / circular deps / coupling / heavy inline work).",
+      "fix_via": "prompt_scope_clause",
+      "blocks_pass": false
+    }
+  ],
+  "hallucination_or_overreach": [
+    {
+      "severity": "none",
+      "finding": "No hallucinations detected. Every baseline finding cites a real changed line and a real, verifiable codebase fact (repository.create_item exists and owns commit/refresh; SessionDep/get_session is the established seam; get_items delegates to list_items). All cross-file claims were grounded by actual read_file/glob tool calls on src/demo/db/repository.py and engine.py, which mirror the template idiom."
+    }
+  ],
+  "stricter_than_codebase_violations": [
+    {
+      "severity": "none",
+      "finding": "NO stricter-than-codebase violations. I verified the template (src/framework_cli/template/src/{{package_name}}/) directly: db/repository.py exposes create_item(session, name) that adds+commits+refreshes; routes/items.py uses SessionDep = Annotated[Session, Depends(get_session)] and its GET handler delegates to list_items; db/engine.py defines SessionLocal and get_session. The bad fixtures violate exactly this established seam (open SessionLocal() inline / introduce a parallel item_service), and the good fixture follows it exactly (post_item -> repository.create_item). The reviewer is holding new code to the SAME bar the template already meets, not a stricter one."
+    }
+  ],
+  "internal_consistency_violations": [
+    {
+      "severity": "none",
+      "finding": "No internal-consistency violations in the baseline. The reviewer applies one standard: the GET/read path through the repository is held up as the correct pattern and is consistently NOT flagged, while the new write path that bypasses it IS flagged. The good fixture (which uses the same repository seam for the write) is correctly left clean. Note: 'architecture/bad/duplicate-data-layer' is the documented Phase-0a false-positive of the naive hunk-counter (a real multi-file fixture); it must NOT be 'fixed' and its patch is valid."
+    }
+  ],
+  "fixture_validity": {
+    "good/clean-layering": {
+      "verdict": "valid_clean",
+      "reasoning": "post_item delegates to repository.create_item(session, payload.name) via the SessionDep dependency — this is byte-for-byte the template idiom. Genuinely clean; correctly produced 0 findings x3.",
+      "representativeness": "Representative of the real template write path. CAVEAT: this is the ONLY good fixture for a recall_min 0.90 / fp_max 0.10 agent. A second good fixture exercising the heavy-inline-handler clause (a lightweight inline handler that should NOT be flagged, e.g. a single small insert or a quick log) is recommended to pin the false-positive floor for the prompt's second domain."
+    },
+    "bad/layering-violation": {
+      "verdict": "valid_unambiguous_defect",
+      "reasoning": "Route imports SessionLocal from ..db.engine and opens its own session inline, bypassing the repository layer that already exposes create_item. Unambiguous layering violation; correctly flagged high x3. As a bonus the inline version also drops the commit (repository.create_item commits), reinforcing that the seam exists for a reason."
+    },
+    "bad/duplicate-data-layer": {
+      "verdict": "valid_unambiguous_defect",
+      "reasoning": "Introduces a parallel ..db.item_service (add_item/fetch_all_items) duplicating the existing ..db.repository, and wires the POST route to it while GET still uses repository — two competing persistence owners for the same Item aggregate. Unambiguous duplicate-data-layer/coupling defect; correctly flagged high x3. This is the Phase-0a hunk-counter false-positive fixture — patch is well-formed; do not regenerate."
+    }
+  },
+  "uncovered_prompt_behavior": [
+    {
+      "severity": "medium",
+      "issue": "The prompt's SECOND domain — 'HEAVY synchronous work inside a request/webhook handler -> recommend the workers battery / dispatch to tasks/' — has ZERO fixture coverage. There is no bad fixture exercising a heavy inline handler (so the high-severity recommendation path is untested) and, more importantly, no good fixture pinning the explicit 'do NOT flag lightweight inline handlers (a quick log, a single small insert)' carve-out. This is exactly the kind of subjective heavy-vs-lightweight judgment that drives over-flagging, and it is currently unverified by the eval. The template does ship optional webhooks/websockets routes and a workers/tasks battery, so this domain is real and could fire in production.",
+      "fix_via": "add_fixture_pair"
+    }
+  ],
+  "proposed_edits": {
+    "prompt_rewrite": {
+      "rationale": "Architecture is already a PASS agent — keep the working core verbatim and make only additive, no-regression changes: (1) prepend the shared rubric so severity/codebase-bar/internal-consistency clauses are explicit (currently only implied), (2) add a one-line scope clause keeping import-hygiene/dead-code findings out (they belong to code-quality), (3) tighten the secondary-finding guidance so a single root layering defect is reported once at high rather than fanned out into multiple high findings.",
+      "new_prompt": "You are `review-architecture`.\n\n[SHARED RUBRIC — inherited verbatim from docs/superpowers/specs/plan21-rubric-draft.md: severity definitions; codebase-bar principle (do not hold new code to a stricter standard than the template already meets — the established seam is routes -> repository, sessions via the get_session/SessionDep dependency, transaction ownership inside the repository); internal-consistency (one standard per pattern in a diff); scope discipline; JSON-only output.]\n\nReview ONLY the unified diff. Flag layering violations (e.g. a route opening its own DB session via SessionLocal or calling the ORM/engine directly instead of going through the repository seam), circular dependencies, and inappropriate coupling across module boundaries (e.g. introducing a second, parallel data-access module that duplicates an existing repository). Cite the changed line. Report ONE finding per root architectural defect at 'high'; do not split a single root violation into multiple high findings for its secondary symptoms (e.g. transaction commit/refresh leaking into the handler is a CONSEQUENCE of bypassing the repository — fold it into the one layering finding).\n\nAlso flag HEAVY synchronous work inside a request handler / webhook handler — external HTTP calls, large or long-running DB writes, time.sleep, or loops over remote I/O — that blocks the response. Recommend moving it to a background worker: the `workers` battery (`framework upskill --with workers`), dispatching from the handler seam. If a `tasks/` package is already present, recommend dispatching to it rather than running inline. Do NOT flag lightweight inline handlers (a quick log, a single small insert, a single bounded query) — only genuinely heavy/blocking work. Such a finding is 'high'.\n\nStay in your domain: do NOT flag import hygiene, dead code, naming, or style (other agents own those). Return JSON ONLY — an array of {\"path\",\"line\",\"severity\",\"message\",\"suggestion\"}; [] if none. A layering violation, circular dependency, or heavy inline handler is 'high'."
+    },
+    "fixture_edits": [
+      {
+        "action": "add",
+        "path": "tests/eval/fixtures/architecture/bad/heavy-inline-handler/",
+        "kind": "bad",
+        "purpose": "Cover the prompt's second domain (heavy synchronous work in a handler). A POST/webhook handler that performs a long-running external HTTP call or a loop over remote I/O inline (blocking the response) — expected: one 'high' recommending the workers battery / tasks dispatch.",
+        "expect": {"file": "src/demo/routes/<handler>.py"}
+      },
+      {
+        "action": "add",
+        "path": "tests/eval/fixtures/architecture/good/lightweight-inline-handler/",
+        "kind": "good",
+        "purpose": "Pin the explicit carve-out: a handler doing only a quick log + a single small repository insert/query inline must NOT be flagged. Guards the heavy-vs-lightweight boundary against over-flagging and gives the recall_min/fp_max agent a needed second good fixture."
+      }
+    ],
+    "needs_second_good_fixture": true
+  },
+  "proposed_block_threshold": {
+    "value": "high",
+    "current": "high",
+    "change": false,
+    "rationale": "Keep 'high'. Architecture is a hard-blocking technical agent (always-run), its baseline is clean (recall 1.00, fp 0.00 at the high bar), and every legitimate defect it targets (layering violation, circular dep, heavy inline handler) is correctly emitted at 'high'. The good fixture produces zero findings, so a 'high' threshold yields no false blocks. No evidence for loosening to 'medium' or removing the block. Advisory status is not applicable (this is a core technical agent)."
+  },
+  "overall_assessment": "Architecture is a healthy, PASS-state agent — no severity-bar inflation on its good fixture, no hallucination, and NO stricter-than-codebase or internal-consistency violations (verified directly against the template's repository.create_item / SessionDep / get_items seam). Both bad fixtures are unambiguous defects and the good fixture is genuinely clean and template-idiomatic. The two real, low-risk improvements are: (1) explicitly inherit the shared rubric and add a scope clause + secondary-finding-folding guidance (additive, no expected regression), and (2) close the coverage gap on the prompt's heavy-inline-handler clause by adding a bad+good fixture pair (the good one doubles as the recommended 2nd good fixture). block_threshold stays 'high'."
+}
