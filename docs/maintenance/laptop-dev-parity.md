@@ -72,8 +72,8 @@ claude --version     # expect 2.1.x
 The canonical checkout path mirrors the primary box — **note the space in "Claude Code"**, so
 quote it:
 ```bash
-mkdir -p ~/"Claude Code/Projects"
-cd ~/"Claude Code/Projects"
+mkdir -p ~/"Claude Code/projects"
+cd ~/"Claude Code/projects"
 gh repo clone cdowell-swtr/swiftwater-framework
 cd swiftwater-framework
 git checkout plan-21-reviewer-tuning
