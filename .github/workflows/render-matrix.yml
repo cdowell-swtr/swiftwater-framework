@@ -75,3 +75,18 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+
+  # Stable, requireable umbrella over the dynamic render matrix: the per-combo
+  # `render (...)` job names vary by seed/strategy, so branch protection requires
+  # this single context instead. Fails unless the whole matrix succeeded.
+  render-complete:
+    needs: [generate-matrix, render]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate on the full render matrix
+        run: |
+          echo "generate-matrix: ${{ needs.generate-matrix.result }}"
+          echo "render:          ${{ needs.render.result }}"
+          [ "${{ needs.generate-matrix.result }}" = "success" ] \
+            && [ "${{ needs.render.result }}" = "success" ]
