@@ -25,7 +25,7 @@ This puts a `framework` executable on your PATH, isolated in its own environment
 To install a specific tagged release instead of the default branch, append the tag:
 
 ```bash
-uv tool install git+https://github.com/cdowell-swtr/swiftwater-framework@v0.1.9
+uv tool install git+https://github.com/cdowell-swtr/swiftwater-framework@v0.2.0
 ```
 
 The version you install is recorded into every project you scaffold (in its `.copier-answers.yml`), which is what later lets a project be brought forward onto a newer framework release.
