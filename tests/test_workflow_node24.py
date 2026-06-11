@@ -28,9 +28,10 @@ APPROVED_ACTIONS: dict[str, dict] = {
     "actions/upload-artifact": {"runtime": "node", "min_major": 6},
     "actions/download-artifact": {"runtime": "node", "min_major": 7},
     "softprops/action-gh-release": {"runtime": "node", "min_major": 3},
-    "arduino/setup-task": {
-        "runtime": "node20-forced"
-    },  # no Node-24 release as of 2026-06-04
+    # arduino/setup-task removed 2026-06-11: no Node-24 release exists at any ref, so it
+    # would be force-run on Node 24 on 2026-06-16. `task` (go-task) is now installed
+    # directly via the official install.sh (pinned version) — see
+    # docs/maintenance/github-actions-node-runtime.md.
     "oasdiff/oasdiff-action/breaking": {"runtime": "docker"},
     "gitleaks/gitleaks-action": {"runtime": "docker"},
 }
@@ -102,6 +103,25 @@ def _check(directory: Path) -> None:
                     f"{where} {ref} is below the Node-24 floor v{policy['min_major']} (got {version!r})"
                 )
     assert not violations, "Node-24 action policy violations:\n" + "\n".join(violations)
+
+
+def test_no_node20_forced_actions() -> None:
+    """No action may carry the `node20-forced` exception.
+
+    The category exists for actions with no Node-24 release yet (GHA force-runs them on
+    Node 24). The last such action, `arduino/setup-task`, was dropped — `task` is now
+    installed directly. If a future action legitimately needs this category, that is a
+    conscious tradeoff to make here; this test is the friction that forces the decision.
+    """
+    forced = [
+        action
+        for action, policy in APPROVED_ACTIONS.items()
+        if policy["runtime"] == "node20-forced"
+    ]
+    assert not forced, (
+        "node20-forced actions are no longer permitted (GHA forces Node 24 on "
+        f"2026-06-16): {forced}"
+    )
 
 
 def test_framework_workflows_use_node24_actions() -> None:
