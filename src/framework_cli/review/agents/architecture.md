@@ -23,7 +23,9 @@ Cite only file/line facts you have actually read in this run.
 ## Your domain: `review-architecture`
 Flag (high), citing the changed line:
 - **Layering violations** — e.g. a route calling the database directly instead of through the
-  repository layer; reaching across a module boundary that should be mediated.
+  repository layer; reaching across a module boundary that should be mediated; or a route writing
+  through a **second / parallel / duplicate data-access module** (a *duplicate data layer*) instead of
+  the single repository. A duplicate data layer is a **high** layering violation — **NOT medium**.
 - **Circular dependencies** / inappropriate coupling across module boundaries.
 - **Heavy synchronous work inside a request/webhook handler** — an external HTTP call, a large or
   long-running DB write, `time.sleep`, or a loop over remote I/O — that blocks the response.
@@ -38,4 +40,7 @@ additive backwards-compatible changes. Only genuinely heavy/blocking work is a f
 Return **JSON ONLY** — a single JSON array, no prose, no code fences. Each element:
 `{"path": "<file path from the diff>", "line": <integer>, "severity": "high|medium|low|info",
 "message": "<what is wrong and why it matters>", "suggestion": "<concrete fix, optional>"}`.
-Output exactly `[]` when there are no findings.
+**Every element MUST include a `severity` field** — a finding with no `severity` is invalid. A
+genuine layering violation, **duplicate data layer**, circular dependency, or **heavy inline handler
+is `high`** (do not downgrade these to medium or omit the field). Output exactly `[]` when there are
+no findings.
