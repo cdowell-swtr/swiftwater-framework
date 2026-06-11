@@ -53,6 +53,9 @@ nav:
       - Deploy: working/deploy.md
       - Services: working/services.md
       - Secrets & environment parity: working/secrets-and-env-parity.md
+      - Your project's interfaces: working/interfaces.md
+      - The review system: working/review-system.md
+      - Design principles: working/design-principles.md
   - Reference:
       - CLI: reference/cli.md
       - Python API: reference/api.md

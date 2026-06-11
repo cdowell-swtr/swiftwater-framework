@@ -20,7 +20,7 @@ The pre-commit layer has no AI and no network calls. It catches the majority of 
 
 ## AI review agents (CI)
 
-A suite of domain-specific AI review agents gate your changes at commit and in CI — each covering one concern (security, data integrity, observability, test quality, and more), with additional agents activating for batteries that need them. The agents run in-process via the `framework` CLI and support two backends: a paid API backend (Anthropic API key in CI) and a free subagent backend (the `claude` CLI). Both backends use the same engine; the reviewer pipeline is identical regardless of which backend is active.
+A suite of domain-specific AI review agents gate your changes at commit and in CI — each covering one concern (security, data integrity, observability, test quality, and more), with additional agents activating for batteries that need them. The agents run in-process via the `framework` CLI and support two backends: a paid API backend (Anthropic API key in CI) and a free subagent backend (the `claude` CLI). Both backends use the same engine; the reviewer pipeline is identical regardless of which backend is active. See [The review system](../working/review-system.md) for the concept and architecture.
 
 ## Observability stack
 
