@@ -45,6 +45,14 @@ nav:
       - Add/remove batteries: using/batteries-add-remove.md
       - Upgrading (planned): using/upgrading.md
       - The CLI: using/the-cli.md
+  - Working in your project:
+      - Project structure: working/structure.md
+      - Run locally: working/run-locally.md
+      - Observability: working/observability.md
+      - Quality gates: working/quality-gates.md
+      - Deploy: working/deploy.md
+      - Services: working/services.md
+      - Secrets & environment parity: working/secrets-and-env-parity.md
   - Reference:
       - CLI: reference/cli.md
       - Python API: reference/api.md
