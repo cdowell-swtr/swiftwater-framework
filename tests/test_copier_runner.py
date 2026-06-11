@@ -3239,3 +3239,23 @@ def test_render_without_docs_battery_has_no_ci_docs_job(tmp_path: Path):
     render_project(dest, DATA)
     ci = yaml.safe_load((dest / ".github" / "workflows" / "ci.yml").read_text())
     assert "docs" not in ci["jobs"]
+
+
+def test_render_docs_battery_adds_publish_workflow(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    path = dest / ".github" / "workflows" / "docs.yml"
+    assert path.is_file(), "the docs battery must ship a docs.yml publish workflow"
+    wf = yaml.safe_load(path.read_text())
+    # PyYAML parses the bare `on:` key as boolean True — assert on that key.
+    triggers = wf[True]
+    assert "tags" in triggers["push"], "publish must be tag-triggered"
+    body = path.read_text()
+    assert "mike deploy" in body
+    assert "contents: write" in body  # needed to push the gh-pages branch
+
+
+def test_render_without_docs_battery_has_no_publish_workflow(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / ".github" / "workflows" / "docs.yml").exists()
