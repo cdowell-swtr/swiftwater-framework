@@ -5,3 +5,4 @@ PHASE3 CHECKLIST — 2nd good fixtures to author before whole-set re-sweep: secu
 - api-design: add good/graphql-additive-field (additive optional GraphQL field returns []) — current good is REST-only/degenerate.
 - contracts: add bad/weakened-consumer-assertion fixture (3rd high category untested).
 - rubric-parity (optional): contracts uses a condensed rubric block; consider the fuller verbatim block across all blocking agents in a later pass.
+- data-lineage: author replacement bad fixture (deletion-gap-misses-a-store OR PII-to-undocumented-sink) via render->edit->git-diff, THEN raise recall_min 0.73->0.90 (do NOT raise before the fixture exists).
