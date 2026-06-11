@@ -1,0 +1,56 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "PII logged: the owner's email address is written to the application log in the item_created event. The Item model's own comment explicitly states owner_email is PII and must not be included in logs. Emails in logs leak into log aggregation/retention systems beyond the stated creation purpose.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Drop owner_email from the log call. Log only non-PII identifiers for the audit event, e.g. log.info(\"item_created\", item_id=item.id). If owner attribution is required, log a non-reversible reference (e.g. a hashed owner id) rather than the raw email."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "PII collected without being used for the stated purpose: ItemCreate accepts owner_email, but create_item(session, payload.name) never persists it \u2014 the value is only routed into a log line. Collecting an email that is not stored or used for the item-creation purpose is unnecessary PII collection.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Either remove owner_email from ItemCreate if it is not actually needed, or persist it through create_item for a documented purpose with appropriate access controls \u2014 do not collect it solely to emit it to logs."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 36468,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": \"log.info(\\\"item_created\\\", item_id=item.id, owner_email=payload.owner_email)\",\n    \"severity\": \"high\",\n    \"message\": \"PII logged: the owner's email address is written to the application log in the item_created event. The Item model's own comment explicitly states owner_email is PII and must not be included in logs. Emails in logs leak into log aggregation/retention systems beyond the stated creation purpose.\",\n    \"suggestion\": \"Drop owner_email from the log call. Log only non-PII identifiers for the audit event, e.g. log.info(\\\"item_created\\\", item_id=item.id). If owner attribution is required, log a non-reversible reference (e.g. a hashed owner id) rather than the raw email.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": \"owner_email: str | None = None\",\n    \"severity\": \"high\",\n    \"message\": \"PII collected without being used for the stated purpose: ItemCreate accepts owner_email, but create_item(session, payload.name) never persists it \u2014 the value is only routed into a log line. Collecting an email that is not stored or used for the item-creation purpose is unnecessary PII collection.\",\n    \"suggestion\": \"Either remove owner_email from ItemCreate if it is not actually needed, or persist it through create_item for a documented purpose with appropriate access controls \u2014 do not collect it solely to emit it to logs.\"\n  }\n]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "-A": 15,
+        "output_mode": "content",
+        "path": "src/demo/db/repository.py",
+        "pattern": "def create_item"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/routes/items.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 15773,
+    "cache_read_input_tokens": 35836,
+    "input_tokens": 5095,
+    "output_tokens": 2213
+  }
+}

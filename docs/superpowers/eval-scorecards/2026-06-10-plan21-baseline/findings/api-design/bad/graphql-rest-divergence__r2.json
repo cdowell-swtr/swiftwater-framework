@@ -1,0 +1,37 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 18,
+      "message": "Breaking schema change: the `Item.name` field is renamed to `title` (and `_to_item` now maps `row.name` into `title`) with no compatible path. Any existing GraphQL client selecting `name` will get a validation error since the field no longer exists in the schema.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Keep `name` available during a deprecation window instead of an in-place rename. Add `title` as a new field and retain `name` as a deprecated alias, e.g. `name: str = strawberry.field(deprecation_reason=\"use `title`\")` resolving to the same value, then remove `name` only after clients have migrated."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 23062,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/graphql/schema.py\",\n    \"line\": 18,\n    \"severity\": \"high\",\n    \"message\": \"Breaking schema change: the `Item.name` field is renamed to `title` (and `_to_item` now maps `row.name` into `title`) with no compatible path. Any existing GraphQL client selecting `name` will get a validation error since the field no longer exists in the schema.\",\n    \"suggestion\": \"Keep `name` available during a deprecation window instead of an in-place rename. Add `title` as a new field and retain `name` as a deprecated alias, e.g. `name: str = strawberry.field(deprecation_reason=\\\"use `title`\\\")` resolving to the same value, then remove `name` only after clients have migrated.\"\n  }\n]",
+  "repeat": 2,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/graphql/schema.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 15797,
+    "cache_read_input_tokens": 35190,
+    "input_tokens": 5095,
+    "output_tokens": 1380
+  }
+}

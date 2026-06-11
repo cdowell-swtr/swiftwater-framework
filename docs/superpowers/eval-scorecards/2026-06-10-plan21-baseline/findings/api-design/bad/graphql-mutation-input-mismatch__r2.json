@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 43,
+      "message": "Adding the non-null required argument `description: str` to the existing `create_item` mutation is a breaking schema change. In Strawberry a bare `str` argument is non-null/required, so every existing client that calls `createItem(name: \"...\")` without `description` will now fail validation. There is no compatible path (no default, not nullable).",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Make the new argument optional to preserve backwards compatibility: `description: str | None = None` (nullable with a default). Note the new input is also dropped on the floor \u2014 `repository.create_item(session, name)` never receives `description` \u2014 so it currently has no effect regardless."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 15228,
+  "raw_text": "[{\"path\": \"src/demo/graphql/schema.py\", \"line\": 43, \"severity\": \"high\", \"message\": \"Adding the non-null required argument `description: str` to the existing `create_item` mutation is a breaking schema change. In Strawberry a bare `str` argument is non-null/required, so every existing client that calls `createItem(name: \\\"...\\\")` without `description` will now fail validation. There is no compatible path (no default, not nullable).\", \"suggestion\": \"Make the new argument optional to preserve backwards compatibility: `description: str | None = None` (nullable with a default). Note the new input is also dropped on the floor \u2014 `repository.create_item(session, name)` never receives `description` \u2014 so it currently has no effect regardless.\"}]",
+  "repeat": 2,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 5091,
+    "cache_read_input_tokens": 22494,
+    "input_tokens": 2,
+    "output_tokens": 912
+  }
+}

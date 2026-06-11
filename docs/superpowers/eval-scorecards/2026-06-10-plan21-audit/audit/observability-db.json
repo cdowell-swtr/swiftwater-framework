@@ -1,0 +1,97 @@
+{
+  "agent": "observability-db",
+  "verdict": "BROKEN — prompt trigger describes the codebase's default-and-only idiom; both bad fixtures are non-defects, recall is structurally 0",
+  "summary": "The prompt's primary trigger — 'a new data-store query or write path with no metric or span around it' (high) — describes exactly how the template's data layer works. The template auto-instruments at the engine/client level (SQLAlchemyInstrumentor().instrument(engine=engine) in observability/datastores.py, plus Pymongo/Redis instrumentors) and has ZERO manual spans or metrics in any repository function. The template's own create_item and list_items have no manual instrumentation. Taken literally, the prompt would flag every repository function in the codebase, including the template's own. The reviewer correctly applies the codebase-bar and refuses, returning [] on all 3 repeats of BOTH bad fixtures and the good fixture. Net effect: recall is structurally 0 and cannot be fixed by tuning a threshold — the prompt asks for a defect class that does not exist in this codebase.",
+  "baseline_observed": {
+    "good/observed-query": "[] x3 (correct — clean)",
+    "bad/unindexed-unobserved-query": "[] x3 (reviewer cites engine-level auto-instrumentation; bounded single-row .first())",
+    "bad/write-path-no-metric": "[] x3 (reviewer notes the delete is auto-instrumented like create_item/list_items above it)",
+    "recall": 0.0,
+    "good_fp": 0.0,
+    "note": "0c recall flagged as unreliable in CLAUDE.md / PHASE0B-FINDINGS.md; this audit confirms WHY: the bad fixtures are not defects."
+  },
+  "severity_bar_issues": [
+    {
+      "id": "SB-1",
+      "severity_of_issue": "high",
+      "where": "prompt lines 3-4, 7-8",
+      "problem": "'a new data-store query or write path with no metric or span around it' is asserted as a defect ('high' on the last line), but the template instruments ALL DB access at the engine level — no repository function has a manual span. The trigger fires on the codebase's universal, correct idiom. This is the Plan-18 over-flagging mechanism: the rule, if obeyed, flags every repo function.",
+      "fix": "Re-scope the trigger to defects that are real given auto-instrumentation: (a) DB access on a NON-auto-instrumented store/path (a raw driver, a new engine not registered with the instrumentor, a background path outside the instrumented session); (b) an unbounded read with no limit/pagination (a genuine, codebase-visible gap — the template caps with MAX_PAGE_SIZE); (c) a new store client/connection added with no /health wiring; (d) a data-layer error swallowed / not logged with correlation_id. Drop 'no manual span/metric' as a standalone high trigger."
+    }
+  ],
+  "scope_creep": [
+    {
+      "id": "SC-1",
+      "where": "prompt line 4-5 'an unbounded query (no limit/pagination) with no latency or row-count metric'",
+      "problem": "Unbounded-query / pagination is primarily a PERFORMANCE concern (owned by review-performance). Conflating it with observability blurs ownership. Keep only the observability slice (is the unbounded scan invisible to tracing on a non-instrumented path) and let performance own the pagination defect itself.",
+      "fix": "Narrow to: an unbounded read on a path the auto-instrumentor does NOT cover. Otherwise defer pagination to review-performance per scope discipline."
+    }
+  ],
+  "hallucination_overreach": [
+    {
+      "id": "HO-1",
+      "note": "No hallucinations observed in baseline output — the reviewer's reasoning is accurate and grounded (it correctly reads datastores.py and cites engine-level instrumentation). The OVER-REACH risk is latent in the PROMPT, not in current behavior: a stricter model or a future variant obeying the literal trigger would flag every repository function. The current model self-corrects; the prompt must be fixed so correctness does not depend on the model overriding it."
+    }
+  ],
+  "stricter_than_codebase": [
+    {
+      "id": "STC-1",
+      "where": "prompt vs src/framework_cli/template/src/{{package_name}}/db/repository.py + observability/datastores.py",
+      "problem": "Codebase-bar violation. The prompt demands per-query manual spans/metrics; the template ships none and is considered correct (it auto-instruments). Holding a new repo function to 'must have a manual span' is strictly stricter than create_item/list_items.",
+      "evidence": "datastores.py:26 SQLAlchemyInstrumentor().instrument(engine=engine); repository.py create_item/list_items have no manual spans; grep for start_as_current_span/Counter/Histogram in template db code returns nothing."
+    }
+  ],
+  "internal_consistency": [
+    {
+      "id": "IC-1",
+      "problem": "Within a single diff, the prompt would flag a new get_item_by_name while NOT flagging the adjacent unchanged create_item that is identically uninstrumented — violating the internal-consistency clause (the create_item/bulk-insert lesson). The reviewer noted this directly in write-path-no-metric__r0 ('the same is true of create_item and list_items directly above it')."
+    }
+  ],
+  "fixture_validity": {
+    "good/observed-query": {
+      "verdict": "VALID — genuinely clean",
+      "reason": "Adds get_item_by_name using session.scalars(select(...).where(name==)).first(); engine-level auto-instrumentation traces it; bounded single-row read. Docstring correctly states the codebase idiom. Reviewer returns [] x3."
+    },
+    "bad/unindexed-unobserved-query": {
+      "verdict": "INVALID — not a defect",
+      "reason": "The added function is BYTE-IDENTICAL (code body) to the good fixture's added function — only the docstring differs. There is no behavioral defect: the query is auto-instrumented and bounded (.first()). The case name promises 'unindexed' (a schema/index concern, not even observability) AND 'unobserved' (false — it IS observed). This is the headline Phase-0b finding made literal: good == bad."
+    },
+    "bad/write-path-no-metric": {
+      "verdict": "INVALID — not a defect",
+      "reason": "delete_items_by_prefix is auto-instrumented at the engine level exactly like create_item above it. The docstring asserts 'invisible to observability', which is factually false for this codebase. A self-described defect that the codebase's instrumentation contradicts is not an unambiguous defect. (Secondary real concern — an unbounded prefix delete with no batching — is a performance/data-integrity issue, not observability-db.)"
+    }
+  },
+  "proposed_coupled_edits": {
+    "prompt_rewrite": "Replace the trigger set so it targets defects that EXIST given auto-instrumentation:\n\nYou are `review-observability-db`. Review ONLY the unified diff of data-access code (repositories, models, migrations, query paths, datastore clients in db/, vectors/, mongo/, cache/, timeseries/, graph/).\n\nThis codebase auto-instruments its data stores at the engine/client level (SQLAlchemyInstrumentor/Pymongo/Redis), so a plain repository function that runs through the instrumented session/engine is ALREADY traced — do NOT flag it for lacking a manual span or metric. The template's own create_item/list_items carry no manual spans and are correct.\n\nFlag only: (1) DB access that BYPASSES the auto-instrumented path — a raw driver, a second engine/connection not registered with the instrumentor, or a background path outside the instrumented session; (2) a new datastore client or connection added with no /health signal; (3) a data-layer error that is swallowed or logged WITHOUT the correlation id. Cite the changed line. Return JSON ONLY — an array of {\"path\",\"line\",\"severity\",\"message\",\"suggestion\"}; [] if none. A new datastore access path that bypasses instrumentation is \"high\"; a missing /health on a new client is \"medium\".\n\n(Inherit the shared rubric: severity definitions, codebase-bar, internal consistency, scope discipline.)",
+    "fixture_changes": [
+      {
+        "fixture": "bad/unindexed-unobserved-query",
+        "action": "REPLACE with a real defect: a new repository function that opens a SECOND raw engine/connection (e.g. create_engine(...) used directly, or a psycopg/raw-DBAPI call) that is NOT passed to SQLAlchemyInstrumentor — i.e. genuinely escapes auto-instrumentation. Rename to bad/raw-connection-bypasses-instrumentation. This is an unambiguous, codebase-grounded observability gap."
+      },
+      {
+        "fixture": "bad/write-path-no-metric",
+        "action": "REPLACE with a new datastore client added with no /health wiring (e.g. a new redis/mongo/vector client constructed but never added to the health/readiness probe), OR a data-layer except branch that logs the error without correlation_id. Rename to bad/new-client-no-health (or bad/db-error-no-correlation-id). Remove the false 'invisible to observability' docstring framing."
+      },
+      {
+        "fixture": "good/observed-query",
+        "action": "KEEP as-is. It correctly demonstrates the auto-instrumented idiom and the reviewer correctly passes it. Consider ADDING a second good fixture that constructs a new engine and DOES register it with SQLAlchemyInstrumentor, to anchor the contrast with the rewritten bad/raw-connection fixture."
+      }
+    ],
+    "coupling_note": "The prompt rewrite and the bad-fixture replacement MUST land together. Rewriting the prompt without replacing the bad fixtures leaves recall undefined-but-0 (no true defect to catch). Replacing fixtures without rewriting the prompt leaves the literal trigger still over-flagging. This is the observability* prompt+bad-fixture redesign called out as Phase 1 in CLAUDE.md / PHASE0B-FINDINGS.md."
+  },
+  "proposed_block_threshold": {
+    "value": null,
+    "recommendation": "Do NOT set or re-derive a block_threshold for observability-db from the current corpus — the bad fixtures are non-defects so any threshold is meaningless. After the coupled prompt+fixture redesign lands and a fresh --repeat sweep produces a true-positive signal on the rewritten bad fixtures, derive the threshold then (Phase 3 eval-analyze). Interim guidance: because the surviving real triggers (instrumentation-bypass = high, missing /health = medium) are unambiguous and low-frequency, a strict single-occurrence block (block_threshold = 1 on high) is the likely target — but defer the number to post-redesign data.",
+    "defer_to_phase": 3
+  },
+  "confidence": "high",
+  "evidence_paths": [
+    "src/framework_cli/review/agents/observability-db.md",
+    "src/framework_cli/template/src/{{package_name}}/observability/datastores.py.jinja",
+    "src/framework_cli/template/src/{{package_name}}/db/repository.py",
+    "tests/eval/fixtures/observability-db/good/observed-query/change.patch",
+    "tests/eval/fixtures/observability-db/bad/unindexed-unobserved-query/change.patch",
+    "tests/eval/fixtures/observability-db/bad/write-path-no-metric/change.patch",
+    "docs/superpowers/eval-scorecards/2026-06-10-plan21-baseline/findings/observability-db/"
+  ]
+}

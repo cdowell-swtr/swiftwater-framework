@@ -1,0 +1,102 @@
+{
+  "agent": "usability",
+  "status": "ok",
+  "summary": "review-usability is an advisory (never-blocks) agent whose prompt mandates 'info' for every finding. Its baseline FP failure (fp 0.33 on the good fixture) is a CALIBRATION ARTIFACT, not a prompt defect: the thresholds.yaml entry holds it to fp_max 0.10 like a blocking agent, while the engine treats it as advisory (block_threshold=None) and the eval scorer counts ANY surfaced finding as a positive. Advisory agents that surface reasonable info observations on clean code MUST be calibrated like dependency/documentation (fp_max 1.00). The good fixture is genuinely clean and the bad fixture is an unambiguous defect cluster; both are valid. The primary fixes are (1) realign the threshold to advisory semantics, (2) tighten scope to keep the agent on the changed-line's UX (not feature-integration completeness), and (3) harden the JSON-only output to stop the verbose-prose parse failures observed at repeat=0.",
+  "codebase_bar": {
+    "checked": true,
+    "evidence": "template frontend/src/Items.tsx explicitly handles loading ('Loading…'), error (role=alert 'Failed to load items.'), and empty ('No items yet.') states; api.ts checks res.ok and throws on non-2xx. The template therefore SETS a real codebase bar for async-state + error handling on the frontend.",
+    "verdict": "The bad fixture (DeleteButton: no confirm, no pending/disabled state, no res.ok check, unconditional window.location.reload() even on HTTP error or thrown rejection) is genuinely BELOW the template bar — these are not stricter-than-codebase nitpicks. The agent is justified in surfacing them. No codebase-bar violation: the agent does not hold new code to a standard the surrounding code fails to meet."
+  },
+  "severity_bar_issues": [
+    {
+      "issue": "Prompt hard-codes 'info' for all three finding categories and declares 'advisory (never blocks)'. Under the draft rubric, 'no error feedback on a mutation' and 'unconditional reload that masks a failed DELETE' are real, demonstrable defects (rubric 'low' at minimum, arguably 'medium' for the silent-failure-of-a-mutation). Flattening everything to 'info' under-rates genuine defects relative to the shared severity ladder.",
+      "recommendation": "Keep the agent advisory and non-blocking, but let it use 'low' for concrete defects (silent mutation failure, no error branch) and reserve 'info' for taste/heuristic observations (confirmation-dialog ergonomics, success-toast). This aligns the agent with the rubric's severity definitions without making it a gate."
+    }
+  ],
+  "scope_creep": [
+    {
+      "evidence": "good/delete-with-confirm r0: 'DeleteButton is exported but never used inside Items ... users have no path to the new functionality.'",
+      "issue": "Feature-integration / wiring completeness is out of usability's stated domain (unhandled async states, action feedback, confusing flow IN the changed code). The fixture deliberately adds an isolated component; flagging it as a usability gap is scope creep toward 'is the feature finished'.",
+      "recommendation": "Add an explicit exclusion: 'Do NOT flag that a new component is not yet wired into a parent / not yet used — integration completeness is not a usability defect of the changed code.'"
+    },
+    {
+      "evidence": "bad r1: 'window.location.reload() ... is a coarse full-page reload ... update items state directly instead' (performance/architecture taste, not a usability defect).",
+      "issue": "Minor preference creep — full-page reload is a valid (if blunt) feedback mechanism; the real defect is reloading on FAILURE, which other findings already cover.",
+      "recommendation": "No prompt change strictly needed, but the scope line should anchor on user-observable harm (blank/frozen/silent-failure UI) rather than implementation taste."
+    }
+  ],
+  "hallucination_overreach": [
+    {
+      "evidence": "good r0/r1: 'window.confirm can be silently suppressed in cross-origin iframes / auto-dismissed / blocked on mobile'.",
+      "assessment": "Technically true but speculative for this app (the template app is not iframed); it is advisory-info noise, not a hallucination. It only becomes a 'false positive' because the threshold treats info surfacing as a failure. Acceptable for an advisory agent IF the threshold is fixed; otherwise re-author the good fixture away from window.confirm."
+    },
+    {
+      "evidence": "Inconsistent line numbers across repeats on the SAME bad fixture (line 37 in r0/r2 vs 28/30/33 in r1).",
+      "assessment": "The bad fixture's change.patch lacks the 'diff --git a/... b/...' header that the good fixture has, so line anchoring is ambiguous between diff-relative and file-relative; not a hallucination but a fixture well-formedness gap (Phase 0a territory)."
+    }
+  ],
+  "internal_consistency": {
+    "violation": false,
+    "notes": "Within each run the agent applies one standard consistently (it flags every async-state gap it sees). No A-vs-identical-B asymmetry observed. The cross-fixture asymmetry (clean good still gets 3 info findings) is the advisory surfacing-by-design behavior, not an inconsistency."
+  },
+  "stricter_than_codebase": {
+    "violation": false,
+    "notes": "The template handles loading/error/empty and checks res.ok; the agent's bar matches the codebase rather than exceeding it. The good-fixture info findings (success-toast, confirm ergonomics, error-dismiss) are above-and-beyond niceties but are surfaced as info, consistent with advisory posture."
+  },
+  "fixture_validity": [
+    {
+      "fixture": "good/delete-with-confirm",
+      "verdict": "valid_clean",
+      "rationale": "Confirms before delete, tracks pending state, disables button + aria-busy while in flight, checks res.ok and surfaces a role=alert error, shows 'Deleting…' label. This is a genuinely clean, idiomatic React mutation handler that MEETS and exceeds the template bar. The 3 info findings it draws are taste-level, not defects.",
+      "caveat": "Because it uses window.confirm and has no success toast, it predictably attracts advisory info noise. If the threshold is NOT realigned to advisory semantics, this fixture will keep failing fp_max. Preferred fix is the threshold; secondary option is to keep window.confirm (it is a legitimate pattern) and simply accept info surfacing."
+    },
+    {
+      "fixture": "bad/delete-no-confirm",
+      "verdict": "valid_unambiguous_defect",
+      "rationale": "DeleteButton: irreversible destructive action with no confirmation, no pending/disabled state (duplicate-request risk), no res.ok check, and unconditional window.location.reload() that masks a failed DELETE and is not wrapped in try/catch (a thrown fetch aborts the reload, freezing the UI with no feedback). Multiple independent, demonstrable usability defects below the template bar. Correctly detected in all 3 repeats.",
+      "caveat": "change.patch lacks the 'diff --git' header present in the good fixture, producing inconsistent line anchoring across repeats. Regenerate with a full git-formatted diff for stable line numbers (Phase 0a/0b hygiene). expect.json only asserts file=frontend/src/Items.tsx, so detection is not line-sensitive, but the inconsistency is a smell."
+    }
+  ],
+  "parse_failures": [
+    {
+      "run": "good/delete-with-confirm r0",
+      "cause": "4340 output tokens; model emitted a valid array but the scorer reported 'no JSON array found' — the advisory observations triggered verbose prose around/within the payload. Prompt says 'Return JSON ONLY' but the model over-explains on this fixture.",
+      "fix": "Strengthen the output constraint: 'Output ONLY the JSON array — no prose, no code fence, no commentary before or after. If you have nothing to flag, output exactly []'. This is the same hardening dependency/documentation use."
+    }
+  ],
+  "proposed_coupled_edits": [
+    {
+      "target": "prompt",
+      "change": "Add scope exclusion for integration/wiring completeness: a new component not yet used by a parent is NOT a usability defect."
+    },
+    {
+      "target": "prompt",
+      "change": "Allow 'low' for concrete defects (no error branch on a mutation; success path that masks a failed request) while keeping 'info' for ergonomic/taste observations (confirmation-dialog choice, success toast, error-dismiss). Keep the agent advisory/never-blocks."
+    },
+    {
+      "target": "prompt",
+      "change": "Harden the output contract to JSON-only-no-prose with explicit 'output exactly []' for the empty case, to eliminate the repeat=0 verbose parse failure."
+    },
+    {
+      "target": "prompt",
+      "change": "Re-anchor the scope on user-observable harm (blank/frozen/silent-failure UI; unrecoverable misclick) rather than implementation taste (full-page reload vs state update)."
+    },
+    {
+      "target": "fixture:bad/delete-no-confirm",
+      "change": "Regenerate change.patch as a full git-formatted diff (include 'diff --git'/index header) so line anchoring is stable across repeats. Content of the defect is correct — do NOT change the defect itself."
+    },
+    {
+      "target": "fixture:good/delete-with-confirm",
+      "change": "No content change required (it is genuinely clean). OPTIONAL: keep window.confirm; the right fix for its info-noise is the threshold, not the fixture. Do not over-engineer the good fixture to silence advisory info."
+    },
+    {
+      "target": "thresholds.yaml:usability",
+      "change": "Realign to advisory semantics. Set fp_max: 1.00 (mirroring dependency/documentation — 'advisory (never blocks); surfaces info/low by design'). Keep recall on the bad fixture high (recall_min ~0.90, observed 1.00). The current fp_max 0.10 is mis-calibrated for a block_threshold=None agent."
+    }
+  ],
+  "proposed_block_threshold": {
+    "value": null,
+    "rationale": "Usability is heuristic and advisory by design; it should NEVER gate a commit. Keep block_threshold=None (matches current registry). The fix is to stop SCORING it as if it were a blocking agent (fp_max 1.00), and to let it use low/info severities per the rubric. Recommend recall_min 0.90 / fp_max 1.00 in thresholds.yaml."
+  },
+  "confidence": "high"
+}

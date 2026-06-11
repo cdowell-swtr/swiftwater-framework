@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 43,
+      "message": "Adding the required (non-null) argument `description: str` to the existing `create_item` mutation is a breaking schema change. Existing clients that call `create_item(name: \"...\")` without `description` will now fail GraphQL validation, with no compatible migration path.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Make the new argument optional with a default so the change stays backwards-compatible, e.g. `description: str | None = None` (or `description: Optional[str] = strawberry.UNSET`), and have the resolver actually forward it: `repository.create_item(session, name, description)`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 16768,
+  "raw_text": "[{\"path\": \"src/demo/graphql/schema.py\", \"line\": 43, \"severity\": \"high\", \"message\": \"Adding the required (non-null) argument `description: str` to the existing `create_item` mutation is a breaking schema change. Existing clients that call `create_item(name: \\\"...\\\")` without `description` will now fail GraphQL validation, with no compatible migration path.\", \"suggestion\": \"Make the new argument optional with a default so the change stays backwards-compatible, e.g. `description: str | None = None` (or `description: Optional[str] = strawberry.UNSET`), and have the resolver actually forward it: `repository.create_item(session, name, description)`.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 5091,
+    "cache_read_input_tokens": 22494,
+    "input_tokens": 2,
+    "output_tokens": 1137
+  }
+}

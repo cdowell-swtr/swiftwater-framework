@@ -1,0 +1,61 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 12,
+      "message": "The client now sends a new query parameter `include_location=true`, but the committed consumer pact in tests/functional/test_consumer_inventory.py declares the interaction as `with_request(\"GET\", \"/inventory/1\")` with no query parameters. The published pact therefore won't document that the consumer now calls the endpoint with `include_location=true`, so provider verification has no way to confirm the provider honors that parameter. Regenerate/republish the pact (and update the consumer test's `with_request` to include the query param) so the published contract matches the client's actual request shape.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Add the query parameter to the consumer interaction, e.g. `.with_query_parameter(\"include_location\", \"true\")`, then re-run the consumer test to regenerate pacts/demo-inventory.json and republish."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 71153,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/clients/inventory.py\",\n    \"line\": 12,\n    \"severity\": \"info\",\n    \"message\": \"The client now sends a new query parameter `include_location=true`, but the committed consumer pact in tests/functional/test_consumer_inventory.py declares the interaction as `with_request(\\\"GET\\\", \\\"/inventory/1\\\")` with no query parameters. The published pact therefore won't document that the consumer now calls the endpoint with `include_location=true`, so provider verification has no way to confirm the provider honors that parameter. Regenerate/republish the pact (and update the consumer test's `with_request` to include the query param) so the published contract matches the client's actual request shape.\",\n    \"suggestion\": \"Add the query parameter to the consumer interaction, e.g. `.with_query_parameter(\\\"include_location\\\", \\\"true\\\")`, then re-run the consumer test to regenerate pacts/demo-inventory.json and republish.\"\n  }\n]",
+  "repeat": 0,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "glob": "**/*.py",
+        "pattern": "in_stock"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "glob": "**/*",
+        "pattern": "include_location"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/pacts/**"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "glob": "**/test*.py",
+        "pattern": "get_stock|inventory"
+      },
+      "tool": "grep",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 28470,
+    "cache_read_input_tokens": 105371,
+    "input_tokens": 10461,
+    "output_tokens": 4019
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "The rename_item route updates item.name directly and commits without recalculating slug, breaking a documented derived-field invariant. models.py explicitly states slug 'is always derived from name' and 'must stay in sync with name \u2014 update both together via repository helpers', and repository.py provides update_item_name() precisely to keep them consistent. This route bypasses that helper, so after a rename the slug (a unique, indexed lookup key) diverges from name. The docstring even acknowledges this ('slug is not recalculated so it diverges from name'). Two write paths now mutate the same logical entity with conflicting consistency rules: create_item/update_item_name keep slug in sync, while this route silently desyncs it. Stale slugs corrupt lookups and can collide with the unique constraint on a future re-derive/backfill.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Route the rename through the existing consistency helper instead of mutating fields inline: call update_item_name(session, item_id, payload.name) (returning 404 when it yields None). That re-derives slug via _make_slug so the derived field and its unique index stay consistent across all write paths."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 23771,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": \"item.name = payload.name\",\n    \"severity\": \"high\",\n    \"message\": \"The rename_item route updates item.name directly and commits without recalculating slug, breaking a documented derived-field invariant. models.py explicitly states slug 'is always derived from name' and 'must stay in sync with name \u2014 update both together via repository helpers', and repository.py provides update_item_name() precisely to keep them consistent. This route bypasses that helper, so after a rename the slug (a unique, indexed lookup key) diverges from name. The docstring even acknowledges this ('slug is not recalculated so it diverges from name'). Two write paths now mutate the same logical entity with conflicting consistency rules: create_item/update_item_name keep slug in sync, while this route silently desyncs it. Stale slugs corrupt lookups and can collide with the unique constraint on a future re-derive/backfill.\",\n    \"suggestion\": \"Route the rename through the existing consistency helper instead of mutating fields inline: call update_item_name(session, item_id, payload.name) (returning 404 when it yields None). That re-derives slug via _make_slug so the derived field and its unique index stay consistent across all write paths.\"\n  }\n]",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 5091,
+    "cache_read_input_tokens": 23288,
+    "input_tokens": 2,
+    "output_tokens": 1497
+  }
+}

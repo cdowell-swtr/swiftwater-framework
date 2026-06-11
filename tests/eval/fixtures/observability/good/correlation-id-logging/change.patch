@@ -1,38 +1,49 @@
 diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
-index fa242f4..cd7252d 100644
+index fa242f4..37ef5b2 100644
 --- a/src/demo/routes/items.py
 +++ b/src/demo/routes/items.py
-@@ -34,3 +34,33 @@ def get_items(
+@@ -1,15 +1,18 @@
+ from typing import Annotated
+ 
+-from fastapi import APIRouter, Depends, Query
++from fastapi import APIRouter, Depends, HTTPException, Query
+ from pydantic import BaseModel, ConfigDict
+ from sqlalchemy.orm import Session
+ 
+ from ..db.engine import get_session
+ from ..db.models import Item
+ from ..db.repository import MAX_PAGE_SIZE, list_items
++from ..logging_config import get_logger
+ 
+ router = APIRouter()
+ 
++_log = get_logger()
++
+ SessionDep = Annotated[Session, Depends(get_session)]
+ 
+ 
+@@ -34,3 +37,24 @@ def get_items(
      repository clamps it. FastAPI serializes the ORM objects through ItemRead.
      """
      return list_items(session, limit=limit, offset=offset)
 +
 +
-+from ..logging_config import correlation_id_var, get_logger
-+
-+_log = get_logger()
-+
-+
 +@router.delete("/items/{item_id}", status_code=204)
 +def delete_item(item_id: int, session: SessionDep) -> None:
-+    """Delete an item by id — logs errors with the request correlation id per the obs contract."""
-+    from fastapi import HTTPException
++    """Delete an item by id.
++
++    The request correlation id is injected automatically by the
++    ``add_correlation_id`` structlog processor — events are emitted without a
++    manual ``correlation_id`` kwarg.
++    """
 +    item = session.get(Item, item_id)
 +    if item is None:
-+        _log.warning(
-+            "delete_item_not_found",
-+            item_id=item_id,
-+            correlation_id=correlation_id_var.get(),
-+        )
++        _log.warning("delete_item_not_found", item_id=item_id)
 +        raise HTTPException(status_code=404, detail="Item not found")
 +    try:
 +        session.delete(item)
 +        session.commit()
 +        _log.info("delete_item_ok", item_id=item_id)
 +    except Exception:
-+        _log.error(
-+            "delete_item_failed",
-+            item_id=item_id,
-+            correlation_id=correlation_id_var.get(),
-+        )
++        _log.error("delete_item_failed", item_id=item_id)
 +        raise

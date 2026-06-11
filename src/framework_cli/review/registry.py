@@ -67,7 +67,7 @@ _SPECS: dict[str, AgentSpec] = {
     "data-integrity": AgentSpec(
         "review-data-integrity",
         _prompt("data-integrity"),
-        "info",
+        "high",
         "always",
         DEFAULT_MODEL,
         on_push=True,
@@ -130,7 +130,10 @@ _SPECS: dict[str, AgentSpec] = {
     "observability-db": AgentSpec(
         "review-observability-db",
         _prompt("observability-db"),
-        "high",
+        # Plan 21: deferred to None until the bypass-redesign's true-positive signal is
+        # confirmed + threshold re-derived in Phase 3 (was "high"; the old trigger flagged
+        # every auto-instrumented query). Advisory for now — surfaces, never blocks.
+        None,
         "file-trigger",
         AGENTIC_MODEL,
         trigger_globs=(

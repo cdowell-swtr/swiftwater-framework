@@ -1,0 +1,56 @@
+{
+  "agent": "dependency",
+  "case": "pinned-reputable-dep",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "Version floor mismatch between production and dev: production allows 'httpx>=0.27' while [dependency-groups].dev already pins 'httpx>=0.28'. This means production could resolve to an older minor than what is exercised in tests, undermining parity.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Raise the production floor to match dev: \"httpx>=0.28,<1.0\" (or unify both to a single floor)."
+    },
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "'httpx' is already declared in [dependency-groups].dev. Adding it to the production [project].dependencies is only justified if production application code (not just tests or TestClient) makes HTTP calls. The diff contains no accompanying source change to confirm a production use-case.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Verify a production code path actually imports httpx before promoting it out of dev. If it is only used via FastAPI's TestClient or similar, remove it from [project].dependencies and keep it only in dev."
+    },
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "The '<1.0' upper bound is conservative and correct today (httpx is pre-1.0 as of 0.2x), but will silently block upgrades when httpx 1.0 ships and may cause resolver conflicts downstream.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Track the httpx 1.0 release; plan a coordinated bump of the upper bound at that time. Consider adding a TODO comment or a Dependabot/Renovate alert rule."
+    },
+    {
+      "acknowledged": null,
+      "line": 19,
+      "message": "Supply-chain note (informational): httpx (encode/httpx, Tom Christie) is actively maintained, widely adopted, and has a clean release history. No elevated supply-chain risk identified.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "No action required; flagged for completeness."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 41674,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"low\",\n    \"message\": \"Version floor mismatch between production and dev: production allows 'httpx>=0.27' while [dependency-groups].dev already pins 'httpx>=0.28'. This means production could resolve to an older minor than what is exercised in tests, undermining parity.\",\n    \"suggestion\": \"Raise the production floor to match dev: \\\"httpx>=0.28,<1.0\\\" (or unify both to a single floor).\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"low\",\n    \"message\": \"'httpx' is already declared in [dependency-groups].dev. Adding it to the production [project].dependencies is only justified if production application code (not just tests or TestClient) makes HTTP calls. The diff contains no accompanying source change to confirm a production use-case.\",\n    \"suggestion\": \"Verify a production code path actually imports httpx before promoting it out of dev. If it is only used via FastAPI's TestClient or similar, remove it from [project].dependencies and keep it only in dev.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"info\",\n    \"message\": \"The '<1.0' upper bound is conservative and correct today (httpx is pre-1.0 as of 0.2x), but will silently block upgrades when httpx 1.0 ships and may cause resolver conflicts downstream.\",\n    \"suggestion\": \"Track the httpx 1.0 release; plan a coordinated bump of the upper bound at that time. Consider adding a TODO comment or a Dependabot/Renovate alert rule.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 19,\n    \"severity\": \"info\",\n    \"message\": \"Supply-chain note (informational): httpx (encode/httpx, Tom Christie) is actively maintained, widely adopted, and has a clean release history. No elevated supply-chain risk identified.\",\n    \"suggestion\": \"No action required; flagged for completeness.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 20254,
+    "input_tokens": 3,
+    "output_tokens": 2128
+  }
+}

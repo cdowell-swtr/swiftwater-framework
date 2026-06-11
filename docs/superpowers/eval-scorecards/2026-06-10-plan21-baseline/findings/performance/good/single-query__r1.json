@@ -1,0 +1,29 @@
+{
+  "agent": "performance",
+  "case": "single-query",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 46,
+      "message": "list_items() fetches full ORM rows (id, name, created_at) but get_item_names() discards every column except name. Two lists are materialised: one of Item objects from the repository, one of bare strings. At the current MAX_PAGE_SIZE=100 cap the waste is small (~1\u20132 KB of extra column data per request), but the pattern couples this endpoint's cost to future column additions on the Item model without any visible callsite change.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add a targeted query helper \u2014 e.g. `list_item_names(session)` \u2014 that issues `SELECT name FROM items ORDER BY id LIMIT \u2026` via `session.scalars(select(Item.name).order_by(Item.id).limit(bounded))`. This returns strings directly, eliminates the ORM object allocation, and makes the column projection explicit at the call site. Alternatively, accept the current approach and leave a comment acknowledging the bounded over-fetch is intentional."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 52348,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 46,\n    \"severity\": \"low\",\n    \"message\": \"list_items() fetches full ORM rows (id, name, created_at) but get_item_names() discards every column except name. Two lists are materialised: one of Item objects from the repository, one of bare strings. At the current MAX_PAGE_SIZE=100 cap the waste is small (~1\u20132 KB of extra column data per request), but the pattern couples this endpoint's cost to future column additions on the Item model without any visible callsite change.\",\n    \"suggestion\": \"Add a targeted query helper \u2014 e.g. `list_item_names(session)` \u2014 that issues `SELECT name FROM items ORDER BY id LIMIT \u2026` via `session.scalars(select(Item.name).order_by(Item.id).limit(bounded))`. This returns strings directly, eliminates the ORM object allocation, and makes the column projection explicit at the call site. Alternatively, accept the current approach and leave a comment acknowledging the bounded over-fetch is intentional.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 21851,
+    "input_tokens": 3,
+    "output_tokens": 2600
+  }
+}

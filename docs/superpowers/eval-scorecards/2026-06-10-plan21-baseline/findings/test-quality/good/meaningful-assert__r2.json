@@ -1,0 +1,38 @@
+{
+  "agent": "test-quality",
+  "case": "meaningful-assert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 55,
+      "message": "`test_resolved_log_level_prod_is_info` is an exact duplicate of the existing parametrized case `test_resolved_log_level_is_info_outside_dev[prod]` (line 17\u201319 in the full file). Both call `Settings(environment=\"prod\").resolved_log_level` and assert `== \"INFO\"`. They are fully coupled: any regression that breaks one breaks the other, so the new test contributes zero additive coverage. The 'data-leak' comment does not change the code path exercised.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Remove `test_resolved_log_level_prod_is_info`. If the security rationale ('never DEBUG in prod') merits explicit documentation, add a comment to the existing `@pytest.mark.parametrize` block \u2014 do not duplicate the assertion."
+    },
+    {
+      "acknowledged": null,
+      "line": 49,
+      "message": "`test_slo_request_latency_p99_env_override` exercises the same mechanism already covered by `test_env_vars_override` (which already asserts a `float` field \u2014 `slo_error_rate_pct` \u2014 is overridden from env). pydantic-settings applies the same coercion uniformly to every scalar field; a second single-field float override test adds no new failure mode. The only distinct value would be verifying the exact env-var-name-to-attribute mapping for this specific field.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Either (a) fold this assertion into `test_env_vars_override` as an additional `setenv`/`assert` line alongside the existing float check, or (b) keep it only if the field-name mapping (`APP_SLO_REQUEST_LATENCY_P99_MS` \u2192 `.slo_request_latency_p99_ms`) is a documented contract requirement worth a dedicated test."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 68107,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"tests/unit/test_settings.py\",\n    \"line\": 55,\n    \"severity\": \"medium\",\n    \"message\": \"`test_resolved_log_level_prod_is_info` is an exact duplicate of the existing parametrized case `test_resolved_log_level_is_info_outside_dev[prod]` (line 17\u201319 in the full file). Both call `Settings(environment=\\\"prod\\\").resolved_log_level` and assert `== \\\"INFO\\\"`. They are fully coupled: any regression that breaks one breaks the other, so the new test contributes zero additive coverage. The 'data-leak' comment does not change the code path exercised.\",\n    \"suggestion\": \"Remove `test_resolved_log_level_prod_is_info`. If the security rationale ('never DEBUG in prod') merits explicit documentation, add a comment to the existing `@pytest.mark.parametrize` block \u2014 do not duplicate the assertion.\"\n  },\n  {\n    \"path\": \"tests/unit/test_settings.py\",\n    \"line\": 49,\n    \"severity\": \"low\",\n    \"message\": \"`test_slo_request_latency_p99_env_override` exercises the same mechanism already covered by `test_env_vars_override` (which already asserts a `float` field \u2014 `slo_error_rate_pct` \u2014 is overridden from env). pydantic-settings applies the same coercion uniformly to every scalar field; a second single-field float override test adds no new failure mode. The only distinct value would be verifying the exact env-var-name-to-attribute mapping for this specific field.\",\n    \"suggestion\": \"Either (a) fold this assertion into `test_env_vars_override` as an additional `setenv`/`assert` line alongside the existing float check, or (b) keep it only if the field-name mapping (`APP_SLO_REQUEST_LATENCY_P99_MS` \u2192 `.slo_request_latency_p99_ms`) is a documented contract requirement worth a dedicated test.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 42053,
+    "input_tokens": 3,
+    "output_tokens": 4392
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "agent": "dependency",
+  "case": "unpinned-risky-dep",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 18,
+      "message": "No version constraint on 'requests': every other production dependency in this file carries a minimum-version floor (e.g. '>=X.Y'). An unconstrained specifier allows any version, including old releases with known CVEs (e.g. pre-2.32.0 versions are affected by CVE-2024-35195 \u2013 cert verification bypass under certain redirect scenarios).",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add a minimum version floor, e.g. \"requests>=2.32\" to align with the project's existing pinning convention and exclude known-vulnerable releases."
+    },
+    {
+      "acknowledged": null,
+      "line": 18,
+      "message": "'requests' is a synchronous HTTP client. This project is a FastAPI application (async runtime). Calling 'requests' from an async request handler blocks the event loop, reducing throughput and potentially causing timeouts under load.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Prefer 'httpx' with its AsyncClient for async contexts. 'httpx>=0.28' is already present in the [dependency-groups] dev group \u2014 consider promoting it to the production dependencies list instead of adding 'requests', or use 'httpx' in synchronous mode for non-async call sites."
+    },
+    {
+      "acknowledged": null,
+      "line": 18,
+      "message": "'httpx>=0.28' is already declared as a dev dependency, so HTTP client capability is effectively present in every local environment. Adding a separate 'requests' production dependency duplicates this capability and widens the production attack surface without clear justification visible in this diff.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Evaluate whether the code that needs HTTP calls can use 'httpx' directly. If 'httpx' is required at runtime (not just in tests), move it to the production dependencies list and drop the 'requests' addition."
+    },
+    {
+      "acknowledged": null,
+      "line": 18,
+      "message": "No code change accompanies this dependency addition in the diff, so the justification for introducing 'requests' is not visible. The OpenTelemetry packages and other existing dependencies may already pull in 'requests' as a transitive dependency, making an explicit production declaration redundant.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Verify with 'uv tree | grep requests' whether 'requests' is already transitively available. If it is, an explicit top-level declaration is unnecessary and adds maintenance overhead (version-conflict surface)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 33915,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 18,\n    \"severity\": \"low\",\n    \"message\": \"No version constraint on 'requests': every other production dependency in this file carries a minimum-version floor (e.g. '>=X.Y'). An unconstrained specifier allows any version, including old releases with known CVEs (e.g. pre-2.32.0 versions are affected by CVE-2024-35195 \u2013 cert verification bypass under certain redirect scenarios).\",\n    \"suggestion\": \"Add a minimum version floor, e.g. \\\"requests>=2.32\\\" to align with the project's existing pinning convention and exclude known-vulnerable releases.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 18,\n    \"severity\": \"low\",\n    \"message\": \"'requests' is a synchronous HTTP client. This project is a FastAPI application (async runtime). Calling 'requests' from an async request handler blocks the event loop, reducing throughput and potentially causing timeouts under load.\",\n    \"suggestion\": \"Prefer 'httpx' with its AsyncClient for async contexts. 'httpx>=0.28' is already present in the [dependency-groups] dev group \u2014 consider promoting it to the production dependencies list instead of adding 'requests', or use 'httpx' in synchronous mode for non-async call sites.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 18,\n    \"severity\": \"info\",\n    \"message\": \"'httpx>=0.28' is already declared as a dev dependency, so HTTP client capability is effectively present in every local environment. Adding a separate 'requests' production dependency duplicates this capability and widens the production attack surface without clear justification visible in this diff.\",\n    \"suggestion\": \"Evaluate whether the code that needs HTTP calls can use 'httpx' directly. If 'httpx' is required at runtime (not just in tests), move it to the production dependencies list and drop the 'requests' addition.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": 18,\n    \"severity\": \"info\",\n    \"message\": \"No code change accompanies this dependency addition in the diff, so the justification for introducing 'requests' is not visible. The OpenTelemetry packages and other existing dependencies may already pull in 'requests' as a transitive dependency, making an explicit production declaration redundant.\",\n    \"suggestion\": \"Verify with 'uv tree | grep requests' whether 'requests' is already transitively available. If it is, an explicit top-level declaration is unnecessary and adds maintenance overhead (version-conflict surface).\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": "pyproject.toml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 20234,
+    "input_tokens": 3,
+    "output_tokens": 1628
+  }
+}

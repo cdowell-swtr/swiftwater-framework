@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "swallowed-error",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "loadItemsQuietly() catches fetchItems() failures and returns [] with no rethrow and no telemetry. The prior code set error state (role=\"alert\") on failure; the new code drops the .catch path entirely, so a failed item load now renders as an empty list. The failure reaches neither the window 'error' handler nor the RUM js-errors counter (POST /internal/rum), making backend/API load failures completely invisible to monitoring \u2014 fetch errors will show as silent zero-result views rather than alertable error signals.",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Do not swallow the rejection. Either rethrow after reporting (so the window 'error'/unhandledrejection handler and js-errors counter fire), or explicitly increment the RUM error signal before returning a fallback \u2014 e.g. report to the FrontendMetrics beacon and keep setError(true) so the failure is both user-visible and counted. Silent return [] hides a real outage."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 19289,
+  "raw_text": "[{\"path\":\"frontend/src/Items.tsx\",\"line\":\"return []; // error swallowed: no rethrow, no telemetry\",\"severity\":\"high\",\"message\":\"loadItemsQuietly() catches fetchItems() failures and returns [] with no rethrow and no telemetry. The prior code set error state (role=\\\"alert\\\") on failure; the new code drops the .catch path entirely, so a failed item load now renders as an empty list. The failure reaches neither the window 'error' handler nor the RUM js-errors counter (POST /internal/rum), making backend/API load failures completely invisible to monitoring \u2014 fetch errors will show as silent zero-result views rather than alertable error signals.\",\"suggestion\":\"Do not swallow the rejection. Either rethrow after reporting (so the window 'error'/unhandledrejection handler and js-errors counter fire), or explicitly increment the RUM error signal before returning a fallback \u2014 e.g. report to the FrontendMetrics beacon and keep setError(true) so the failure is both user-visible and counted. Silent return [] hides a real outage.\"}]",
+  "repeat": 1,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 5091,
+    "cache_read_input_tokens": 22771,
+    "input_tokens": 2,
+    "output_tokens": 1180
+  }
+}

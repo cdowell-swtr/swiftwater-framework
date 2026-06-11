@@ -1,0 +1,56 @@
+{
+  "agent": "documentation",
+  "case": "undocumented-public-function",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "Public endpoint `count_items` has no docstring. Every other route in this file documents its behaviour, response contract, and any caveats (see `get_items` at line 25).",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Add a docstring that describes the response shape `{\"count\": int}` and explicitly notes the silent cap behaviour (see next finding)."
+    },
+    {
+      "acknowledged": null,
+      "line": 41,
+      "message": "`list_items(session)` is called with no `limit` argument, so it uses `DEFAULT_PAGE_SIZE = 50`. `len(items)` therefore returns at most 50 even when the table has more rows. This materialises the entire page in memory just to count it, and the cap is undocumented.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Either (a) use a dedicated `SELECT COUNT(*)` query for correctness and efficiency, (b) pass `limit=MAX_PAGE_SIZE` and document the ceiling, or (c) add a docstring warning that the count is bounded by DEFAULT_PAGE_SIZE."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "The `## Endpoints` section does not list the new `GET /items/count` route. The section currently ends with `GET /items`.",
+      "path": "README.md",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Append `- \\`GET /items/count\\` \u2014 total number of seeded/created items (bounded by DEFAULT_PAGE_SIZE)` to the Endpoints list."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "README.md instructs contributors to run `task openapi:export` and commit the result after any route change; adding `/items/count` will make the committed `openapi.json` stale, and CI's contract-diff job will fail on the next push.",
+      "path": "openapi.json",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Run `task openapi:export` and commit the refreshed `openapi.json` in the same branch as this change."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 48479,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 40,\n    \"severity\": \"low\",\n    \"message\": \"Public endpoint `count_items` has no docstring. Every other route in this file documents its behaviour, response contract, and any caveats (see `get_items` at line 25).\",\n    \"suggestion\": \"Add a docstring that describes the response shape `{\\\"count\\\": int}` and explicitly notes the silent cap behaviour (see next finding).\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 41,\n    \"severity\": \"low\",\n    \"message\": \"`list_items(session)` is called with no `limit` argument, so it uses `DEFAULT_PAGE_SIZE = 50`. `len(items)` therefore returns at most 50 even when the table has more rows. This materialises the entire page in memory just to count it, and the cap is undocumented.\",\n    \"suggestion\": \"Either (a) use a dedicated `SELECT COUNT(*)` query for correctness and efficiency, (b) pass `limit=MAX_PAGE_SIZE` and document the ceiling, or (c) add a docstring warning that the count is bounded by DEFAULT_PAGE_SIZE.\"\n  },\n  {\n    \"path\": \"README.md\",\n    \"line\": null,\n    \"severity\": \"info\",\n    \"message\": \"The `## Endpoints` section does not list the new `GET /items/count` route. The section currently ends with `GET /items`.\",\n    \"suggestion\": \"Append `- \\\\`GET /items/count\\\\` \u2014 total number of seeded/created items (bounded by DEFAULT_PAGE_SIZE)` to the Endpoints list.\"\n  },\n  {\n    \"path\": \"openapi.json\",\n    \"line\": null,\n    \"severity\": \"info\",\n    \"message\": \"README.md instructs contributors to run `task openapi:export` and commit the result after any route change; adding `/items/count` will make the committed `openapi.json` stale, and CI's contract-diff job will fail on the next push.\",\n    \"suggestion\": \"Run `task openapi:export` and commit the refreshed `openapi.json` in the same branch as this change.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 31762,
+    "input_tokens": 3,
+    "output_tokens": 2678
+  }
+}

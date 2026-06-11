@@ -1,0 +1,72 @@
+{
+  "agent": "data-lineage",
+  "audited_at": "2026-06-10",
+  "baseline": {
+    "recall": 0.17,
+    "fp": 0.00,
+    "verdict": "FAIL (recall 0.17 < threshold 0.73)",
+    "diagnosis": "Under-finding driven entirely by one INVALID bad fixture (untransformed-write), not by a too-weak prompt. The reviewers behaved CORRECTLY by returning [] on it. The recall failure is a fixture defect, not a prompt defect."
+  },
+  "prompt_assessment": {
+    "domain": "PII reaching undocumented stores/logs/external calls; deletion/erasure paths missing a store; cross-paradigm writes with no consistency strategy; missing audit trails for sensitive ops.",
+    "severity_bar_issues": [
+      "Prompt hard-codes 'PII to an undocumented location or a deletion gap is high' but says nothing about the derived-field / stale-derived-data class that the only valid bad fixture (stale-derived-field) actually exercises. The result is severity wobble on that case: r0=medium, r1=medium, r2=high. The rubric's high bar (a concrete demonstrable defect causing incorrect behavior / broken contract) clearly fits stale-derived-field — it breaks a documented model invariant and corrupts a unique/indexed lookup key — yet 2/3 runs called it medium. The prompt should name the cross-write derived-field-desync case and rate it high so it is stable."
+    ],
+    "scope_creep": [
+      "Low risk as written. The good fixture (normalized-write) was not over-flagged (fp 0.00), and reviewers did NOT wander into application-logic/validation territory on untransformed-write — they correctly stayed in lane and returned []. No scope-creep observed in the baseline."
+    ],
+    "hallucination_overreach": [
+      "None observed. All non-empty findings cite real changed lines and real code (slug/_make_slug/update_item_name). raw_text 'line' fields were string code-snippets rather than integers (line normalized to 0 by the harness) — a minor output-format wobble, not a hallucination."
+    ],
+    "stricter_than_codebase_violations": [
+      "The untransformed-write 'bad' fixture demands the reviewer flag create_item() storing a name verbatim (without strip()/lower()). But src/framework_cli/template/src/{{package_name}}/db/repository.py::create_item does EXACTLY this — stores name verbatim, no normalization — and is unflagged baseline behavior. Flagging the fixture would hold new code to a stricter standard than the surrounding codebase (rubric Codebase-bar violation). The reviewers correctly declined. This violation is in the FIXTURE, and it is the sole cause of the recall miss."
+    ],
+    "internal_consistency_violations": [
+      "None within a single review. Across runs there is a severity-stability gap on stale-derived-field (medium/medium/high) — addressed by the proposed prompt edit pinning the derived-field-desync class to high."
+    ]
+  },
+  "fixture_validity": {
+    "good/normalized-write": {
+      "verdict": "VALID-CLEAN",
+      "reason": "Routes user input through create_item_normalized (strip+lower) with clear provenance docstrings; no lineage defect. Reviewers correctly returned [] 3/3. Keep as-is."
+    },
+    "bad/stale-derived-field": {
+      "verdict": "VALID-DEFECT",
+      "reason": "Genuine, unambiguous data-lineage defect: slug is a documented derived field of name; the rename_item route mutates name and commits without recomputing slug, bypassing the provided update_item_name() helper, leaving a stale unique/indexed derived store. Self-documented divergence makes it unambiguous. Reviewers caught it 3/3. This is the agent's true-domain anchor. Keep; only stabilize severity to high."
+    },
+    "bad/untransformed-write": {
+      "verdict": "INVALID-DEFECT (replace)",
+      "reason": "TWO problems. (1) Codebase-bar: storing a name verbatim with no strip/lower is exactly what the template's own create_item does, unflagged — so flagging it is stricter-than-codebase. (2) Out-of-domain / non-defect: skipping case+whitespace normalization is not a data-lineage concern (no PII destination, no deletion gap, no cross-paradigm write, no lost provenance); preserving user-supplied casing is arguably correct. This fixture single-handedly drives recall to 0.17 by penalizing correct reviewer behavior. It must be replaced with a real in-domain defect."
+    }
+  },
+  "coupled_edits": [
+    {
+      "type": "prompt",
+      "file": "src/framework_cli/review/agents/data-lineage.md",
+      "change": "Add the derived-field-desync class to the domain and pin its severity. Append after the existing trace-list: 'Also flag a derived/denormalized field (or a duplicated copy of a source value) that one write path keeps in sync but another write path updates without recomputing — leaving a stale derived store. A documented or unique/indexed derived field that diverges from its source is high.' Keep the PII/deletion-gap high clause. Inherit the shared rubric (severity, codebase-bar, internal-consistency, scope). The codebase-bar clause must explicitly cover normalization: do NOT flag the absence of casing/whitespace normalization on a value when the surrounding repository stores values verbatim — that is application-logic/validation, not data lineage.",
+      "rationale": "Stabilizes stale-derived-field at high (fixes the medium/medium/high wobble) and explicitly fences out the untransformed-write class so a future similar fixture cannot regress recall."
+    },
+    {
+      "type": "fixture",
+      "file": "tests/eval/fixtures/data-lineage/bad/untransformed-write/",
+      "change": "REPLACE with an in-domain bad. Proposed replacement: 'deletion-gap-leaves-derived-copy' or 'pii-to-undocumented-log'. Concrete suggestion (deletion gap): a delete_item path that removes the row from the primary store but leaves a denormalized/cached copy (e.g. a search-index row, an audit/event row carrying the name, or a slug-keyed cache) un-erased — a deletion path that misses a store. expect.json -> {\"file\": \"src/demo/routes/items.py\"}. This is unambiguous, in-domain (erasure path missing a store), and NOT something the template does unflagged. Alternatively: a route that logs the full request payload (containing a name treated as PII) into an undocumented sink. Either reliably scores recall=1 in-domain.",
+      "rationale": "Removes the codebase-bar/out-of-domain fixture that caused recall 0.17; restores a measurable in-domain bad so recall reflects prompt quality, not fixture invalidity."
+    },
+    {
+      "type": "threshold",
+      "file": "tests/eval/fixtures/thresholds.yaml",
+      "change": "After replacing untransformed-write with a valid in-domain bad, recall_min should be reset to expect both bads caught: set recall_min: 0.90 (allow a single severity-rounding wobble at repeat=3) and keep fp_max: 0.10 (observed 0.00). Do NOT lower recall_min to accommodate the invalid fixture.",
+      "rationale": "With two valid bads (stale-derived-field + replacement) the prompt should catch both; 0.90 leaves a one-call variance margin without hiding genuine misses."
+    }
+  ],
+  "proposed_block_threshold": {
+    "severity_to_block": "high",
+    "rationale": "data-lineage high findings (PII to undocumented location, deletion-gap missing a store, stale documented/indexed derived field) are concrete data-loss/privacy/contract defects that should block a builder per the rubric. Medium findings (e.g. a soft derived-field desync with no unique/index/contract guarantee) advise but do not block. With fp 0.00 on the good fixture, blocking on high is safe (no false-block risk observed).",
+    "thresholds_yaml": {
+      "recall_min": 0.90,
+      "fp_max": 0.10,
+      "note": "Conditional on replacing the invalid untransformed-write fixture. Until then, the 0.17 baseline recall is a fixture artifact, not a prompt signal."
+    }
+  },
+  "summary": "data-lineage's recall FAIL (0.17) is a FIXTURE defect, not a prompt defect: the untransformed-write 'bad' demands flagging verbatim-name storage that the template's own create_item does unflagged (codebase-bar violation) and which is out of the lineage domain — reviewers correctly returned []. The one valid bad (stale-derived-field) is caught 3/3 but wobbles medium/high. The good fixture is genuinely clean (fp 0.00). Fix = replace untransformed-write with an in-domain bad (deletion-gap-misses-a-store or PII-to-undocumented-sink), add the derived-field-desync class to the prompt pinned at high plus an explicit normalization codebase-bar carve-out, then raise recall_min to 0.90. block_threshold = high."
+}

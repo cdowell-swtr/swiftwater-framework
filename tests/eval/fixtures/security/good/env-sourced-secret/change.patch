@@ -1,13 +1,14 @@
+diff --git a/src/demo/config/settings.py b/src/demo/config/settings.py
+index e6fb558..229a958 100644
 --- a/src/demo/config/settings.py
 +++ b/src/demo/config/settings.py
-@@ -27,6 +27,9 @@
-     # Database connection (SQLAlchemy URL). The Compose stack injects the in-network URL
-     # via APP_DATABASE_URL; host tooling (alembic) uses the localhost form; tests use a
+@@ -33,6 +33,9 @@ class Settings(BaseSettings):
      # testcontainers Postgres (overridden per session).
      database_url: str = "postgresql+psycopg://app:app@postgres:5432/app"
-+
+ 
 +    # Secret sourced from environment — no default so startup fails fast if unset.
 +    api_secret_key: str
-
++
      @property
      def resolved_log_level(self) -> str:
+         if self.log_level is not None:

@@ -1,0 +1,430 @@
+{
+  "synthesis_judge": 2,
+  "synthesizer_model": "claude-opus-4-8",
+  "inputs": {
+    "audit_reports": 20,
+    "rubric_draft": "docs/superpowers/specs/plan21-rubric-draft.md"
+  },
+  "thesis": "Across all 20 per-agent audits the SAME three root causes recur: (1) prompts predate the Plan-21 rubric and either lack a severity ladder entirely or assert a flat one-rung bar, so equivalent issue classes get rated differently both across agents and across repeats of one agent; (2) prompts lack a codebase-bar clause, so reviewers hold new code to a standard the template itself does not meet (the dominant FP driver: compliance get_logger, security SecretStr, performance over-fetch, observability* manual-instrumentation, data-integrity refresh/UNIQUE); (3) prompts lack a scope-discipline clause, so agents leak into each other's domains. The single highest-leverage change is to inherit ONE shared rubric verbatim into every prompt and then resolve the small number of genuine CROSS-AGENT severity-class disagreements the rubric does not by itself settle.",
+  "cross_agent_severity_reconciliation": [
+    {
+      "issue_class": "Absent local instrumentation on an auto-instrumented path (server route / DB query / FE view with no manual span/metric/log/RUM)",
+      "disagreement": "observability rates 'new code path with no metric/log/trace' HIGH; observability-db rates 'new query/write with no span/metric' HIGH; observability-fe rates 'new view with no RUM' HIGH. ALL THREE are codebase-bar violations: the template auto-instruments (FastAPIInstrumentor/SQLAlchemyInstrumentor at engine level; structlog add_correlation_id/add_trace_context processors; window error/unhandledrejection global handler in rum.ts) and ships ZERO manual instrumentation in routes/repositories/components. Taken literally these rules flag every function/view in the template, including the template's own.",
+      "ruling": "NOT a finding on an auto-instrumented path. Reserve HIGH for ACTIVE suppression / instrumentation-bypass only: a path the auto-instrumentor does NOT cover (raw driver, new engine not registered with the instrumentor, background task outside the instrumented session), OR an error handler that actively swallows the error so it never reaches the global handler / errors middleware / js-errors counter. A new mutation/route/view that merely carries no LOCAL instrumentation but is covered by the auto layer is NOT a defect (not even low).",
+      "affected_agents": [
+        "observability",
+        "observability-db",
+        "observability-fe"
+      ],
+      "rubric_clause": "Codebase-bar principle; internal-consistency (the create_item/list_items lesson)"
+    },
+    {
+      "issue_class": "Missing-correlation-id / missing-SLO-threshold on a new endpoint",
+      "disagreement": "observability flags 'error paths not logged with correlation id' and 'missing/undefined SLO thresholds for new endpoints' at HIGH.",
+      "ruling": "Hallucinated wiring + stricter-than-codebase. correlation_id/trace_id are auto-injected into every structlog event (endpoints never pass them); SLOs are fleet-wide in middleware, not per-endpoint. Drop both as finding categories. This is the primary Plan-18/Plan-21 over-flag driver and must be removed, not merely re-graded.",
+      "affected_agents": [
+        "observability"
+      ],
+      "rubric_clause": "Codebase-bar principle; no-hallucination"
+    },
+    {
+      "issue_class": "PII written to logs / echoed in responses / captured into telemetry",
+      "disagreement": "BOTH privacy and compliance flag PII-in-logs/PII-in-response at HIGH. compliance's good-fixture FP=1.00 is driven by this overlap (2 of 3 findings per repeat are privacy's domain). observability-fe bullet 4 also reaches into the same PII/allowlist territory.",
+      "ruling": "privacy OWNS raw PII handling (logged/echoed/telemetry-captured/over-collected/retained-beyond-purpose) and HIGH is correct there. compliance must DEFER all raw-PII to privacy and confine itself to AUDIT-GAP and RETENTION/ERASURE-PATH defects (a sensitive mutation with NO audit record; persisted personal data with NO deletion path anywhere). observability-fe must narrow its beacon-field rule to the cardinality/unbounded-label core and cross-reference privacy for the PII angle. One owner per class.",
+      "affected_agents": [
+        "privacy",
+        "compliance",
+        "observability-fe"
+      ],
+      "rubric_clause": "Scope discipline (one owner per class)"
+    },
+    {
+      "issue_class": "Hardening advisories on config secrets (SecretStr-vs-str, min_length/entropy floor, rotation policy, .env handling)",
+      "disagreement": "security escalates these to medium/high (and is severity-unstable: SecretStr = HIGH in r1, MEDIUM in r0/r2 on the SAME good-fixture finding).",
+      "ruling": "Codebase-bar violation + severity drift. The template's own signing secret is plain `str` (webhook_signing_secret: str = \"\"); SecretStr/get_secret_value/min_length appear nowhere in the template. Bind 'secret-exposing' to an ACTUAL committed/leaked secret VALUE on a changed line (hardcoded default, key in code/config, secret in a logged field). The ABSENCE of defense-in-depth hardening is at most info/low and never blocks.",
+      "affected_agents": [
+        "security"
+      ],
+      "rubric_clause": "Codebase-bar principle; severity ladder (info=observation only)"
+    },
+    {
+      "issue_class": "Bounded full-ORM-row over-fetch / projection over-fetch",
+      "disagreement": "performance flags the good fixture's bounded full-row hydration as low (the template's own list_items does the identical `select(Item)` and discards created_at on every request, unflagged).",
+      "ruling": "Codebase-bar violation. Bounded reads (capped result set, e.g. MAX_PAGE_SIZE) that match the repo's full-row idiom are NOT performance defects — do not flag at any severity; the good fixture must return []. Reserve performance HIGH for unbounded/regression-on-unbounded-input cases (N+1, unbounded scan, pool exhaustion), which all three audits confirm are correctly HIGH.",
+      "affected_agents": [
+        "performance"
+      ],
+      "rubric_clause": "Codebase-bar principle; internal-consistency"
+    },
+    {
+      "issue_class": "Missing validation / UNIQUE constraint / created_at-refresh on a clean write path",
+      "disagreement": "data-integrity flags the good fixture HIGH for lacking validation/cap/dedup that the bad fixture is ALSO flagged for lacking, and demands a refresh/UNIQUE the template does not provide (model has server_default; items table has no UNIQUE on name; template create_item refreshes).",
+      "ruling": "Codebase-bar + internal-consistency violation (the canonical create_item/bulk-insert trap). Demote the unbounded 'at least high' floor to a demonstrability gate. HIGH stays for the genuine planted defect (non-atomic in-loop commit / inconsistent multi-store write). Absence of UNIQUE/extra-validation that the template also omits is not a finding.",
+      "affected_agents": [
+        "data-integrity"
+      ],
+      "rubric_clause": "Codebase-bar principle; internal-consistency"
+    },
+    {
+      "issue_class": "Structured request/event logging via get_logger().info() with an identifier and no per-line retention policy",
+      "disagreement": "compliance flags the good fixture's `get_logger().info('items_searched', user_id=...)` HIGH for 'no declared log-retention policy', byte-identical in idiom to the template's own observability middleware request log (observability.py:59-65).",
+      "ruling": "Codebase-bar violation + hallucinated org-boilerplate requirement. Absence of a per-line retention policy on a structured log is NOT a regulatory violation in changed code. compliance must key on the OPAQUE-id (clean) vs RAW-PII (privacy's domain) distinction and stop treating a logger receiving an identifier as an audit/compliance defect.",
+      "affected_agents": [
+        "compliance"
+      ],
+      "rubric_clause": "Codebase-bar principle; scope discipline; no-hallucination"
+    },
+    {
+      "issue_class": "Redundant / duplicate test coverage",
+      "disagreement": "test-quality rates the good fixture's duplicate test HIGH (r0) / LOW (r1) / MEDIUM (r2) — a 3-way self-disagreement on one finding — and it is the ONLY thing flagged on the good fixture, a category the prompt never authorized.",
+      "ruling": "Anchor redundant-coverage explicitly to LOW/INFO (advisory cleanup, never blocks). Reserve test-quality HIGH strictly for 'a test that cannot fail' (tautology, mock-of-subject-under-test, interface-mismatch mock, unhappy path with no failure assertion). Coupled fixture fix replaces the literal duplicate so the good fixture returns [].",
+      "affected_agents": [
+        "test-quality"
+      ],
+      "rubric_clause": "Severity ladder; internal-consistency"
+    },
+    {
+      "issue_class": "Flag-as-info / advisory categories used as actionable flags",
+      "disagreement": "api-design lists nullability/mutation-design categories typed 'info' but as things to FLAG; documentation/usability/accessibility flatten everything to a single rung (info-only or high-only). 'info' in the rubric = observation only, never implies action — so an info-typed flag has no actionable severity.",
+      "ruling": "Map every flag-as-info category to LOW (advisory) so it fits the ladder, OR drop it. Advisory agents (dependency, documentation, usability) cap at low/info and never emit high/medium; accessibility may step its single category down to medium for non-essential controls. Reconcile the rungs so 'flag' always carries an actionable (low+) severity and 'info' is reserved for pure observations.",
+      "affected_agents": [
+        "api-design",
+        "documentation",
+        "usability",
+        "accessibility",
+        "dependency"
+      ],
+      "rubric_clause": "Severity ladder (info vs low)"
+    },
+    {
+      "issue_class": "Satellite obs-parity gaps (alert-without-dashboard, surface-without-alert) and architecture secondary symptoms",
+      "disagreement": "observability-infra rates the SAME satellite parity gap HIGH in some repeats and MEDIUM in others; architecture fans one root layering defect into multiple HIGH findings (transaction-leak emitted high/high/medium as a separate blocker).",
+      "ruling": "Pin satellite/secondary findings at a FIXED severity below the primary defect: observability-infra primary wiring break (exporter-with-no-scrape / dev-only-obs-never-reaching-prod) = HIGH, satellite parity gaps = MEDIUM (stable). architecture reports one root defect ONCE at HIGH and folds in-domain secondary symptoms into that finding rather than double-counting them as independent blockers.",
+      "affected_agents": [
+        "observability-infra",
+        "architecture"
+      ],
+      "rubric_clause": "Internal-consistency; secondary-finding folding"
+    }
+  ],
+  "scope_boundary_enforcement": [
+    {
+      "owner": "privacy",
+      "owns": "raw PII handling: PII logged/echoed-in-response/captured-into-telemetry, unnecessary PII collection, retention beyond purpose",
+      "defer_from": [
+        "compliance (PII-in-logs)",
+        "observability-fe (beacon PII / allowlist re-apply)",
+        "security (PII echo)"
+      ],
+      "boundary": "privacy is the SOLE owner of whether personal data leaks. Other agents cross-reference but never flag it."
+    },
+    {
+      "owner": "compliance",
+      "owns": "audit-record gaps on sensitive mutations; retention/erasure-path absence",
+      "defer_to": [
+        "privacy (raw PII)",
+        "application-logic (validation/correctness)"
+      ],
+      "boundary": "compliance flags only structural audit/retention gaps, not PII content."
+    },
+    {
+      "owner": "performance",
+      "owns": "unbounded/pagination-defect itself, N+1, pool exhaustion",
+      "defer_from": [
+        "observability-db (unbounded-query-as-obs-gap)"
+      ],
+      "boundary": "observability-db keeps only the trace-visibility slice on non-instrumented paths; performance owns the pagination defect."
+    },
+    {
+      "owner": "dependency",
+      "owns": "the dependency manifest: justification, pin-consistency-with-siblings, health, duplication",
+      "defer_to": [
+        "performance/application-logic (runtime/event-loop behavior the manifest diff does not show)"
+      ],
+      "boundary": "dependency reasons ONLY about the manifest; it must not invent call sites (async-blocking) or cite unverifiable CVE ids."
+    },
+    {
+      "owner": "architecture",
+      "owns": "layering, circular deps, coupling, heavy inline handlers",
+      "defer_to": [
+        "code-quality (dead-code / unused-import hygiene)"
+      ],
+      "boundary": "import/dead-code hygiene is code-quality, not architecture."
+    },
+    {
+      "owner": "documentation",
+      "owns": "missing docstrings (when siblings document), config vars absent from .env.example, stale documented API entries, uncommented complex logic",
+      "defer_to": [
+        "contracts/api-design/performance (page-size cap, response_model/tags, openapi.json regen, query efficiency)"
+      ],
+      "boundary": "documentation never flags implementation correctness or contract/spec sync."
+    },
+    {
+      "owner": "usability",
+      "owns": "unhandled async states, missing action feedback, confusing flow IN the changed code",
+      "defer_to": [
+        "(integration completeness is no agent's defect)",
+        "performance/architecture (full-page-reload taste)"
+      ],
+      "boundary": "a new component not yet wired into a parent is NOT a usability defect; advisory only, never blocks."
+    },
+    {
+      "owner": "api-design",
+      "owns": "GraphQL (Strawberry, code-first) schema: N+1 resolver, breaking schema change, unbounded list field",
+      "defer_to": [
+        "contracts (REST/OpenAPI parity)"
+      ],
+      "boundary": "fixtures must be renamed off the 'graphql-rest-divergence/aligned' framing that advertises a REST-parity responsibility the prompt does not grant."
+    },
+    {
+      "owner": "security",
+      "owns": "exploitable defects + actual committed/leaked secret VALUES on changed lines",
+      "defer_to": [
+        "usability/code-quality (field naming)",
+        "(out-of-diff hardening is not a defect)"
+      ],
+      "boundary": "review only added/modified lines; absence of defense-in-depth hardening is not a security defect."
+    },
+    {
+      "owner": "observability-fe",
+      "owns": "active error suppression in a new view + unbounded RUM label cardinality",
+      "defer_to": [
+        "privacy (beacon PII)"
+      ],
+      "boundary": "no per-view-RUM requirement (global handler covers views)."
+    }
+  ],
+  "refined_shared_rubric": {
+    "intent": "One block, inherited VERBATIM at the top of every review-* prompt. Adds the missing clauses every audit asked for (the draft already had severity/codebase-bar/internal-consistency/scope/output; this version tightens info-vs-low, adds an advisory-cap declaration, a no-hallucination/diff-grounding clause, a secondary-finding-folding clause, and an explicit 'one owner per class' line).",
+    "markdown": "## Shared reviewer rubric (Plan 21)\nEvery review-* agent inherits these rules verbatim.\n\n### Severity (one scale across all agents)\n- **high** — blocks a builder: a concrete, demonstrable defect in the CHANGED code that will cause incorrect behavior, data loss, a security/privacy breach, or a broken contract.\n- **medium** — should fix before merge but does not block: a real issue with a plausible path to harm, or a clear violation of an established project convention.\n- **low** — advisory: a real but non-urgent improvement, minor clarity, or a cleanup. Carries an action but never blocks.\n- **info** — observation only; never implies an action is required. If you want the author to DO something, it is at least low, not info.\n\n### Codebase-bar principle (the dominant false-positive guard)\nDo not hold new code to a stricter standard than the surrounding template/baseline already meets. Before flagging a pattern, check whether the template already does the same thing UNFLAGGED (auto-instrumentation, plain-`str` secrets, bounded full-row fetch, structured logging of identifiers, non-null scalar fields, no per-line retention). If it does, do not flag the new instance.\n\n### Diff-grounding / no hallucination\nFlag only what the diff shows. Treat files created or modified in the SAME diff as present. Do not invent call sites, runtime context, wiring, retention/org boilerplate, or version-specific CVE claims you cannot verify from the diff.\n\n### Internal consistency within one review\nApply one standard to every instance of a pattern in the same diff. If you do not flag instance A, do not flag an identical instance B (the create_item / bulk-insert lesson). Report one root defect ONCE: fold in-domain secondary symptoms into that finding rather than emitting them as independent blockers.\n\n### Scope discipline (one owner per class)\nStay within this agent's stated domain. Do not flag issues another agent owns; cross-reference instead of re-flagging. (PII->privacy; pagination-defect->performance; dead-code->code-quality; REST/OpenAPI->contracts; runtime-from-manifest->not dependency.)\n\n### Advisory agents\ndependency, documentation, usability are advisory: cap output at low/info and NEVER emit high/medium. They surface freely and never block.\n\n### Output\nReturn JSON ONLY — an array of {\"path\",\"line\",\"severity\",\"message\",\"suggestion\"}; output exactly [] when there are no findings. No prose, no code fences."
+  },
+  "per_agent_changelist": [
+    {
+      "agent": "accessibility",
+      "verdict": "healthy-coverage-gap",
+      "changes": [
+        "Inherit shared rubric; allow stepping a single non-essential-control finding down to medium.",
+        "Add fixtures for the two untested high categories (div-onClick-as-button, no-keyboard-handler)."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "api-design",
+      "verdict": "pass-with-fixes",
+      "changes": [
+        "Re-map the two flag-as-info categories (nullability, mutation-design) to LOW; never block.",
+        "Add codebase-bar carve-out for bare-payload/non-null template idiom.",
+        "Rename fixtures off graphql-rest-divergence/aligned to describe the in-scope breaking-rename defect; add a genuine GraphQL good fixture."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "application-logic",
+      "verdict": "pass-hardening",
+      "changes": [
+        "Prepend shared rubric (severity/codebase-bar/consistency/scope); add explicit CORRECTNESS-only domain line.",
+        "Add codebase-bar note: template uses both `if not X` and `if X is None` legitimately — do not flag the codebase's own falsy guards.",
+        "Fix the bad fixture's factually-wrong inline comment (no real 404-on-id=0 bug)."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "architecture",
+      "verdict": "pass-additive",
+      "changes": [
+        "Prepend shared rubric; add scope clause excluding import/dead-code hygiene.",
+        "Add secondary-finding-folding so one root layering defect is reported once at high. DO NOT 'fix' architecture/bad/duplicate-data-layer (valid multi-file fixture; Phase-0a hunk-counter false positive)."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "compliance",
+      "verdict": "fp-1.00-rewrite",
+      "changes": [
+        "Rewrite to inherit rubric; narrow domain to AUDIT-GAP + RETENTION/ERASURE-PATH; defer raw PII to privacy.",
+        "Add codebase-bar clause: do not flag structured get_logger().info() of an opaque identifier (template idiom).",
+        "Re-author bad fixture to a genuine missing-audit-record / no-deletion-path defect keyed on raw-email-vs-opaque-id."
+      ],
+      "block_threshold": "high",
+      "block_change": false,
+      "block_caveat": "Treat high as ADVISORY (non-blocking) until post-retune FP drops from 1.00 toward ~0 (Phase 3 re-derive recall_min~0.90/fp_max~0.10)."
+    },
+    {
+      "agent": "contracts",
+      "verdict": "healthy-fixture-bug",
+      "changes": [
+        "KEEP prompt (scope-disciplined, fp 0.00). The recall 0.50 FAIL is a FIXTURE grading bug.",
+        "Redesign bad/client-pact-divergence from info-tier stale-pact into a genuine HIGH undeclared-dependency break; add the missing weakened-consumer-assertion fixture."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "data-integrity",
+      "verdict": "fp-1.00-prompt",
+      "changes": [
+        "Rewrite to inherit rubric; replace unbounded 'at least high' floor with a demonstrability gate.",
+        "Add codebase-bar note: model has server_default + create_item refreshes; items has no UNIQUE on name — do not flag their absence.",
+        "HIGH stays for the genuine non-atomic in-loop commit."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "data-lineage",
+      "verdict": "fixture-defect",
+      "changes": [
+        "Recall 0.17 FAIL is a FIXTURE defect (untransformed-write demands flagging verbatim-name storage the template's create_item does unflagged + out of domain).",
+        "Replace untransformed-write with an in-domain bad (deletion-gap / PII-to-undocumented-sink); add derived-field-desync class pinned high; inherit rubric with a normalization codebase-bar carve-out."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "dependency",
+      "verdict": "advisory-noisy",
+      "changes": [
+        "Add scope-discipline clause: manifest-only, no runtime/event-loop reasoning, no call-site invention.",
+        "Add no-fabrication clause: no unverifiable CVE ids; phrase pin-floor concerns generically.",
+        "Fix good fixture's httpx>=0.27 floor that diverges below the template >=0.28; explicitly opt out of the medium tier."
+      ],
+      "block_threshold": "none (advisory)",
+      "block_change": false,
+      "eval_thresholds": "recall_min 0.90 / fp_max 1.00"
+    },
+    {
+      "agent": "documentation",
+      "verdict": "advisory-leaky",
+      "changes": [
+        "Rewrite to inherit rubric; cap at low/info; add scope fence (no correctness/response_model/openapi-regen/CI-contract findings — those belong to contracts/api-design/performance).",
+        "Re-author good fixture so its doc-vs-impl count is genuinely total.",
+        "Pin the doc-completeness finding at a single severity (low)."
+      ],
+      "block_threshold": "high (unreachable; capped low/info)",
+      "block_change": false,
+      "eval_thresholds": "recall_min 0.90 / fp_max 1.00"
+    },
+    {
+      "agent": "env-parity",
+      "verdict": "fixture-driven-fp",
+      "changes": [
+        "FIX-1 fixture: rewrite good/parity-preserved to be unambiguously parity-complete (drop the base.yml-only hunk that is byte-identical to the bad fixture — the internal-consistency trap baked into the corpus).",
+        "FIX-2 prompt: resolve the container-reach seam deterministically."
+      ],
+      "block_threshold": "high",
+      "block_change": false,
+      "eval_thresholds": "recall_min 0.90 / fp_max 0.10 (do NOT widen fp_max to absorb the current 0.67)"
+    },
+    {
+      "agent": "observability",
+      "verdict": "MAJOR-REWORK",
+      "changes": [
+        "PRIMARY Plan-18 over-flag driver. Rewrite to enumerate what the framework provides automatically (auto correlation_id/trace, FastAPIInstrumentor span, ObservabilityMiddleware request log+metrics) and instruct: do NOT flag its absence.",
+        "Reserve high for a genuine in-domain gap (a mutation path with NO structured log at all).",
+        "Re-author bad/uninstrumented-route to remove cross-domain bait (inline HTTPException import, double-prefix idempotency); pin expect.json on the in-domain dimension."
+      ],
+      "block_threshold": "high",
+      "block_change": false,
+      "eval_thresholds": "recall_min 0.50 / fp_max 0.10 (audit-proposed start; re-derive Phase 3)"
+    },
+    {
+      "agent": "observability-db",
+      "verdict": "BROKEN-structural-recall-0",
+      "changes": [
+        "Prompt trigger describes the codebase's default-and-only idiom (auto-instrumented engine); both bad fixtures are non-defects. Rewrite trigger to instrumentation-bypass (non-instrumented store/path) + missing /health; defer pagination to performance.",
+        "Redesign both bad fixtures to genuine bypass defects; derive block_threshold ONLY post-redesign (Phase 3)."
+      ],
+      "block_threshold": "defer-to-phase-3 (null now)",
+      "block_change": "deferred"
+    },
+    {
+      "agent": "observability-fe",
+      "verdict": "stricter-than-codebase",
+      "changes": [
+        "Re-key bullets 1+2 from 'view with no RUM' to ACTIVE error suppression (a catch that stops the rejection reaching the global window handler / js-errors counter).",
+        "Narrow bullet 4 (beacon allowlist) to the cardinality core; cross-reference privacy for PII.",
+        "Re-author bad/uninstrumented-view into a genuine swallowed-error variant; fix the device_class fixture validity bug."
+      ],
+      "block_threshold": "high",
+      "block_change": false,
+      "eval_thresholds": "recall_min 0.90 / fp_max 0.10"
+    },
+    {
+      "agent": "observability-infra",
+      "verdict": "fixture-defect-and-prompt-gap",
+      "changes": [
+        "Repair good/complete-obs-surface dev.yml hunk (redis block must land under services:, not volumes:) so the good fixture is genuinely clean.",
+        "Add diff-awareness clause (files in the diff are present; only flag a missing alert/dashboard when absent from BOTH diff and tree).",
+        "Pin severities: primary wiring break = high, satellite parity gaps = medium; soften the per-alert-receiver clause (template uses a catch-all route)."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "performance",
+      "verdict": "needs-tuning",
+      "changes": [
+        "Add codebase-bar/bounded-projection clause: bounded reads (capped result set) that match the repo's full-row idiom are NOT defects; good fixture must return [].",
+        "Prepend shared rubric; keep high for N+1/unbounded-scan/pool-exhaustion (correctly rated)."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "privacy",
+      "verdict": "healthy",
+      "changes": [
+        "Prepend shared rubric (replace ad-hoc flat rule; outcome unchanged — PII-in-logs/response/telemetry stays high).",
+        "Add explicit scope line (personal-data only; defer authz/validation/contract/observability).",
+        "De-compound bad/pii-in-response to a single response-leak; add a second good fixture (pii-redacted-log)."
+      ],
+      "block_threshold": "high",
+      "block_change": false,
+      "eval_thresholds": "recall_min 0.90 / fp_max 0.10"
+    },
+    {
+      "agent": "security",
+      "verdict": "over-flagging-good-fixture",
+      "changes": [
+        "Prepend shared rubric; add clause binding 'secret-exposing' to an ACTUAL committed/leaked secret VALUE on a changed line.",
+        "Forbid hardening-as-high/medium (SecretStr/min_length/rotation/.env) — template uses plain str signing secrets; these are info/low at most.",
+        "Enforce added/modified-lines-only (stop reaching into lru_cache/env_file/model_dump out-of-diff)."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "test-quality",
+      "verdict": "fp-1.00-coupled",
+      "changes": [
+        "Anchor redundant-coverage explicitly to LOW/INFO (advisory, never blocks); reserve high for 'a test that cannot fail'.",
+        "Replace the verbatim duplicate test in good/meaningful-assert with an additive distinct-behavior test; add codebase-bar note that per-field env-override tests match the suite idiom."
+      ],
+      "block_threshold": "high",
+      "block_change": false
+    },
+    {
+      "agent": "usability",
+      "verdict": "advisory-miscalibrated",
+      "changes": [
+        "Calibration fix (NOT a prompt defect): score it as advisory in thresholds.yaml (fp_max 1.00) like dependency/documentation — current 0.10 holds an advisory agent to a blocking bar.",
+        "Allow low for concrete defects (silent mutation failure / no error branch) while keeping info for taste; add scope exclusion for integration/wiring completeness; harden JSON-only-no-prose output (output exactly [])."
+      ],
+      "block_threshold": "none (advisory)",
+      "block_change": false,
+      "eval_thresholds": "recall_min 0.90 / fp_max 1.00"
+    }
+  ],
+  "headline_recommendations": [
+    "Inherit the refined shared rubric VERBATIM at the top of all 20 prompts — this is the single highest-leverage change and resolves the bulk of cross-repeat severity drift.",
+    "The dominant FP driver is the missing codebase-bar clause; the observability cluster (observability/observability-db/observability-fe) is the worst offender because the template AUTO-instruments and the prompts demand manual instrumentation — observability=MAJOR_REWORK and observability-db=BROKEN (structural recall 0) are the two prompts that must be rewritten, not merely re-graded.",
+    "Three baseline FAILs are FIXTURE bugs, not prompt bugs and must NOT trigger a prompt change: contracts (recall 0.50, info-tier case mis-graded high), data-lineage (recall 0.17, out-of-domain untransformed-write), env-parity (fp 0.67, good fixture byte-identical to bad), and usability (fp 0.33, advisory agent scored at a blocking bar).",
+    "Scope overlap is concentrated on PII (privacy is sole owner; compliance + observability-fe must defer) and on dependency inventing runtime context it cannot see.",
+    "Advisory agents (dependency, documentation, usability) must be both prompt-capped at low/info AND scored with fp_max 1.00; do not block on them.",
+    "Re-derive all numeric recall_min/fp_max in Phase 3 eval-analyze AFTER the coupled prompt+fixture edits land; the values above are audit-proposed starting bars, not final calibration."
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "agent": "observability-fe",
+  "case": "capped-label",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": 96313,
+  "parse_error": "no JSON array found in agent response",
+  "raw_text": "",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/frontend_rum/*.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/frontend_rum",
+        "pattern": "_ATTRIBUTION_KEYS|allowlist|ALLOWLIST|allowed_params|device_class"
+      },
+      "tool": "grep",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 51246,
+    "cache_read_input_tokens": 60147,
+    "input_tokens": 10459,
+    "output_tokens": 7411
+  }
+}

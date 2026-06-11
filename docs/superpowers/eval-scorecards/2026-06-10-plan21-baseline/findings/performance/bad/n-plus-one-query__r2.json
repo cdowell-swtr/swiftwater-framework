@@ -1,0 +1,47 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 44,
+      "message": "Unbounded table scan: `select(Item.id)` has no LIMIT, so every row in `items` is fetched into application memory. The sibling endpoint enforces MAX_PAGE_SIZE=100 via `list_items`; this endpoint has no equivalent guard. On a large table this materialises the full ID set in RAM before a single name is returned.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `.limit(MAX_PAGE_SIZE)` (imported from `repository`) to the ID query, or accept `limit`/`offset` query params matching the convention on `GET /items`. Better still, collapse to one query (see N+1 finding below) and apply the limit there."
+    },
+    {
+      "acknowledged": null,
+      "line": 48,
+      "message": "N+1 query: `session.get(Item, iid)` inside a loop issues one SELECT per row. After fetching N IDs on line 44, this fires N additional round-trips \u2014 O(N) database queries for a single HTTP request. The docstring acknowledges it, but the code ships it.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Replace both lines 44\u201349 with a single query: `return list(session.scalars(select(Item.name).order_by(Item.id).limit(MAX_PAGE_SIZE)))`. One query, zero loop, bounded result."
+    },
+    {
+      "acknowledged": null,
+      "line": 46,
+      "message": "Connection-pool exhaustion under load: the SQLAlchemy session (and its underlying DBAPI connection) is held open for the entire N-iteration loop, each iteration issuing a synchronous round-trip. Under concurrent traffic, P parallel requests each holding a connection for N round-trips can exhaust the connection pool, causing new requests to queue or fail. This compounds with the unbounded read on line 44.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Collapse to a single query (eliminating the loop) so each request holds the connection for exactly one round-trip. If pagination cannot be added immediately, at minimum cap N with `.limit(MAX_PAGE_SIZE)` to bound the hold time."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 50424,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 44,\n    \"severity\": \"high\",\n    \"message\": \"Unbounded table scan: `select(Item.id)` has no LIMIT, so every row in `items` is fetched into application memory. The sibling endpoint enforces MAX_PAGE_SIZE=100 via `list_items`; this endpoint has no equivalent guard. On a large table this materialises the full ID set in RAM before a single name is returned.\",\n    \"suggestion\": \"Add `.limit(MAX_PAGE_SIZE)` (imported from `repository`) to the ID query, or accept `limit`/`offset` query params matching the convention on `GET /items`. Better still, collapse to one query (see N+1 finding below) and apply the limit there.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 48,\n    \"severity\": \"high\",\n    \"message\": \"N+1 query: `session.get(Item, iid)` inside a loop issues one SELECT per row. After fetching N IDs on line 44, this fires N additional round-trips \u2014 O(N) database queries for a single HTTP request. The docstring acknowledges it, but the code ships it.\",\n    \"suggestion\": \"Replace both lines 44\u201349 with a single query: `return list(session.scalars(select(Item.name).order_by(Item.id).limit(MAX_PAGE_SIZE)))`. One query, zero loop, bounded result.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 46,\n    \"severity\": \"high\",\n    \"message\": \"Connection-pool exhaustion under load: the SQLAlchemy session (and its underlying DBAPI connection) is held open for the entire N-iteration loop, each iteration issuing a synchronous round-trip. Under concurrent traffic, P parallel requests each holding a connection for N round-trips can exhaust the connection pool, causing new requests to queue or fail. This compounds with the unbounded read on line 44.\",\n    \"suggestion\": \"Collapse to a single query (eliminating the loop) so each request holds the connection for exactly one round-trip. If pagination cannot be added immediately, at minimum cap N with `.limit(MAX_PAGE_SIZE)` to bound the hold time.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 21943,
+    "input_tokens": 3,
+    "output_tokens": 2957
+  }
+}

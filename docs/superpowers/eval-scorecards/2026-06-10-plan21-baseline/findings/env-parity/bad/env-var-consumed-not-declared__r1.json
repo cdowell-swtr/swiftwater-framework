@@ -1,0 +1,51 @@
+{
+  "agent": "env-parity",
+  "case": "env-var-consumed-not-declared",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 23,
+      "message": "New pydantic setting `widget_timeout_s` (env_prefix `APP_` \u2192 `APP_WIDGET_TIMEOUT_S`) is consumed via Settings but is not declared in `.env.example`. Consumed-but-undeclared variables break DEV\u2192CI\u2192STAGE\u2192PROD parity: operators have no documented knob and each environment silently falls back to the in-code default 5.0 with no way to tune it per environment.",
+      "path": "src/demo/config/settings.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `APP_WIDGET_TIMEOUT_S=5.0` to the framework-managed block of `.env.example` (near the other `APP_*` settings), with a brief comment describing the widget service call timeout in seconds."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 43406,
+  "raw_text": "[{\"path\": \"src/demo/config/settings.py\", \"line\": 23, \"severity\": \"high\", \"message\": \"New pydantic setting `widget_timeout_s` (env_prefix `APP_` \u2192 `APP_WIDGET_TIMEOUT_S`) is consumed via Settings but is not declared in `.env.example`. Consumed-but-undeclared variables break DEV\u2192CI\u2192STAGE\u2192PROD parity: operators have no documented knob and each environment silently falls back to the in-code default 5.0 with no way to tune it per environment.\", \"suggestion\": \"Add `APP_WIDGET_TIMEOUT_S=5.0` to the framework-managed block of `.env.example` (near the other `APP_*` settings), with a brief comment describing the widget service call timeout in seconds.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/config/settings.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/.env.example"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/config/settings.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": ".env.example"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 27746,
+    "cache_read_input_tokens": 103666,
+    "input_tokens": 15552,
+    "output_tokens": 2255
+  }
+}

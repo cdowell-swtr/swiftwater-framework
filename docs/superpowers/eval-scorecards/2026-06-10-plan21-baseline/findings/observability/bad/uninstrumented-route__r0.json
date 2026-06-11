@@ -1,0 +1,74 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "archive_item is a new untraced business operation with no structured log on any code path. Auto-instrumentation (FastAPIInstrumentor) creates an HTTP span, but no item_id, outcome, or operation label is recorded in structured fields. A business-level metric (e.g. items_archived_total) is also absent, so archive operations are invisible in dashboards beyond the generic request counter.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Import get_logger from demo.logging_config and emit get_logger().info('item_archived', item_id=item_id) before the return. Add a counter increment via request.app.state.metrics or a module-level counter so archive volume is independently observable."
+    },
+    {
+      "acknowledged": null,
+      "line": 45,
+      "message": "404 error path raises HTTPException with no structured log. The item_id and correlation_id are not captured before raising, so the only signal is an HTTP 404 in the access log \u2014 there is no correlated log entry carrying item_id for post-hoc trace lookup.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Before raising, call get_logger().warning('item_not_found', item_id=item_id). The structlog context configured in logging_config.py injects the correlation_id automatically, producing a fully correlated log entry that links to the trace span."
+    },
+    {
+      "acknowledged": null,
+      "line": 47,
+      "message": "session.commit() is unguarded: a DB error (IntegrityError, OperationalError, DisconnectedError) propagates to the global exception handler with no log entry capturing item_id or operation context. The auto-instrumented SQLAlchemy span records the SQL error, but the FastAPI span above it carries no item_id or business context, making DB-level failures opaque.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Wrap in try/except SQLAlchemyError, emit get_logger().error('item_archive_failed', item_id=item_id, exc_info=True) and re-raise as HTTPException(500) so the structured log, the OTel span error flag, and the HTTP error counter all fire together."
+    },
+    {
+      "acknowledged": null,
+      "line": 44,
+      "message": "Deferred 'from fastapi import HTTPException' inside the function body delays any import-time OTel instrumentation hooks attached to the exception class and silences import errors until the 404 branch is first exercised in production.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Hoist the import to the module-level block alongside the existing 'from fastapi import APIRouter, Depends, Query'."
+    },
+    {
+      "acknowledged": null,
+      "line": 39,
+      "message": "No SLO threshold is defined for the new write endpoint. The existing SLOs in slo.py (request_latency_p99_ms, error_rate_pct) are global and will have their p99 skewed upward by the DB-write latency of this endpoint, potentially masking latency regressions on the read-only list endpoint \u2014 or triggering spurious SLO breaches as archive traffic grows.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Either add a per-operation SLO key (e.g. archive_latency_p99_ms) to slo.py/settings.py, or document explicitly that the global budget intentionally covers writes and re-derive the threshold with representative write-path load."
+    },
+    {
+      "acknowledged": null,
+      "line": 46,
+      "message": "Re-archive path is silently accepted: if item.name already starts with '[archived]', the prefix is prepended again with no log or metric, making repeated calls invisible in observability data and producing corrupted names with no alert.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Check 'if item.name.startswith(\"[archived]\")' and emit get_logger().warning('item_already_archived', item_id=item_id) (returning early or raising a 409), so duplicate archive calls appear as anomalies in structured logs and can be tracked as a counter."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 124833,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 40,\n    \"severity\": \"high\",\n    \"message\": \"archive_item is a new untraced business operation with no structured log on any code path. Auto-instrumentation (FastAPIInstrumentor) creates an HTTP span, but no item_id, outcome, or operation label is recorded in structured fields. A business-level metric (e.g. items_archived_total) is also absent, so archive operations are invisible in dashboards beyond the generic request counter.\",\n    \"suggestion\": \"Import get_logger from demo.logging_config and emit get_logger().info('item_archived', item_id=item_id) before the return. Add a counter increment via request.app.state.metrics or a module-level counter so archive volume is independently observable.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 45,\n    \"severity\": \"high\",\n    \"message\": \"404 error path raises HTTPException with no structured log. The item_id and correlation_id are not captured before raising, so the only signal is an HTTP 404 in the access log \u2014 there is no correlated log entry carrying item_id for post-hoc trace lookup.\",\n    \"suggestion\": \"Before raising, call get_logger().warning('item_not_found', item_id=item_id). The structlog context configured in logging_config.py injects the correlation_id automatically, producing a fully correlated log entry that links to the trace span.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 47,\n    \"severity\": \"high\",\n    \"message\": \"session.commit() is unguarded: a DB error (IntegrityError, OperationalError, DisconnectedError) propagates to the global exception handler with no log entry capturing item_id or operation context. The auto-instrumented SQLAlchemy span records the SQL error, but the FastAPI span above it carries no item_id or business context, making DB-level failures opaque.\",\n    \"suggestion\": \"Wrap in try/except SQLAlchemyError, emit get_logger().error('item_archive_failed', item_id=item_id, exc_info=True) and re-raise as HTTPException(500) so the structured log, the OTel span error flag, and the HTTP error counter all fire together.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 44,\n    \"severity\": \"medium\",\n    \"message\": \"Deferred 'from fastapi import HTTPException' inside the function body delays any import-time OTel instrumentation hooks attached to the exception class and silences import errors until the 404 branch is first exercised in production.\",\n    \"suggestion\": \"Hoist the import to the module-level block alongside the existing 'from fastapi import APIRouter, Depends, Query'.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 39,\n    \"severity\": \"medium\",\n    \"message\": \"No SLO threshold is defined for the new write endpoint. The existing SLOs in slo.py (request_latency_p99_ms, error_rate_pct) are global and will have their p99 skewed upward by the DB-write latency of this endpoint, potentially masking latency regressions on the read-only list endpoint \u2014 or triggering spurious SLO breaches as archive traffic grows.\",\n    \"suggestion\": \"Either add a per-operation SLO key (e.g. archive_latency_p99_ms) to slo.py/settings.py, or document explicitly that the global budget intentionally covers writes and re-derive the threshold with representative write-path load.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 46,\n    \"severity\": \"medium\",\n    \"message\": \"Re-archive path is silently accepted: if item.name already starts with '[archived]', the prefix is prepended again with no log or metric, making repeated calls invisible in observability data and producing corrupted names with no alert.\",\n    \"suggestion\": \"Check 'if item.name.startswith(\\\"[archived]\\\")' and emit get_logger().warning('item_already_archived', item_id=item_id) (returning early or raising a 409), so duplicate archive calls appear as anomalies in structured logs and can be tracked as a counter.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 25917,
+    "cache_read_input_tokens": 0,
+    "input_tokens": 3,
+    "output_tokens": 6601
+  }
+}

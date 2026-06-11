@@ -1,0 +1,45 @@
+diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
+index fa242f4..e4491f7 100644
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -1,12 +1,14 @@
+ from typing import Annotated
+ 
++import httpx
++
+ from fastapi import APIRouter, Depends, Query
+ from pydantic import BaseModel, ConfigDict
+ from sqlalchemy.orm import Session
+ 
+ from ..db.engine import get_session
+ from ..db.models import Item
+-from ..db.repository import MAX_PAGE_SIZE, list_items
++from ..db.repository import MAX_PAGE_SIZE, create_item, list_items
+ 
+ router = APIRouter()
+ 
+@@ -34,3 +36,24 @@ def get_items(
+     repository clamps it. FastAPI serializes the ORM objects through ItemRead.
+     """
+     return list_items(session, limit=limit, offset=offset)
++
++
++class ImportRequest(BaseModel):
++    urls: list[str]
++
++
++@router.post("/items/import")
++def import_items(payload: ImportRequest, session: SessionDep) -> dict[str, int]:
++    """BUG: heavy synchronous work runs inline in the request handler.
++
++    A blocking external HTTP call PER url, in a loop, fetches each remote payload
++    before the response can return — the request thread is held for the full batch.
++    This belongs in a background worker (the workers battery), dispatched from the
++    handler seam, not executed inline.
++    """
++    created = 0
++    for url in payload.urls:
++        resp = httpx.get(url, timeout=30.0)
++        create_item(session, resp.json()["name"])
++        created += 1
++    return {"imported": created}

@@ -1,6 +1,8 @@
+diff --git a/frontend/src/Items.tsx b/frontend/src/Items.tsx
+index f94b2c6..f5501e1 100644
 --- a/frontend/src/Items.tsx
 +++ b/frontend/src/Items.tsx
-@@ -23,3 +23,12 @@ export function Items() {
+@@ -23,3 +23,14 @@ export function Items() {
      </ul>
    );
  }

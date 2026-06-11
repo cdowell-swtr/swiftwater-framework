@@ -1,0 +1,35 @@
+{
+  "agent": "observability-db",
+  "case": "write-path-no-metric",
+  "findings": [],
+  "kind": "bad",
+  "latency_ms": 29254,
+  "raw_text": "[]",
+  "repeat": 1,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/db/repository.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "output_mode": "files_with_matches",
+        "pattern": "Instrumentor|instrument|tracer|start_span|metrics|Counter|Histogram"
+      },
+      "tool": "grep",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 18405,
+    "cache_read_input_tokens": 34778,
+    "input_tokens": 5095,
+    "output_tokens": 1700
+  }
+}

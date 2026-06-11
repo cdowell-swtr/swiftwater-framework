@@ -1,0 +1,62 @@
+{
+  "agent": "privacy",
+  "case": "pii-in-response",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 24,
+      "message": "ItemRead adds `owner_email` and is the response_model for both GET /items (a bulk listing) and POST /items, so the owner's email (PII) is echoed back in external API responses. This directly contradicts the field's own annotation in models.py (\"PII: owner email address \u2014 do not include in logs or external responses.\"). The GET path leaks owner emails for every item in the page to any caller.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Do not expose `owner_email` on the externally-serialized read schema. Drop the field from ItemRead, or split into an internal schema and a public ItemRead that omits PII; if owner contact must be returned, gate it behind authorization and return it only to the owner/authorized roles rather than in the unrestricted list endpoint."
+    },
+    {
+      "acknowledged": null,
+      "line": 43,
+      "message": "ItemCreate collects `owner_email` (PII) from request bodies, but post_item calls `create_item(session, payload.name)` and never passes/persists it \u2014 the email is accepted then silently dropped. Collecting PII that is not used for the stated purpose is unnecessary collection (and the dangling field invites later accidental logging/storage).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Either remove `owner_email` from ItemCreate if it is not actually needed, or, if owner contact is a real requirement, thread it through `create_item(...)` deliberately with a documented purpose and the same no-log/no-echo handling applied at the model layer."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 42428,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 24,\n    \"severity\": \"high\",\n    \"message\": \"ItemRead adds `owner_email` and is the response_model for both GET /items (a bulk listing) and POST /items, so the owner's email (PII) is echoed back in external API responses. This directly contradicts the field's own annotation in models.py (\\\"PII: owner email address \u2014 do not include in logs or external responses.\\\"). The GET path leaks owner emails for every item in the page to any caller.\",\n    \"suggestion\": \"Do not expose `owner_email` on the externally-serialized read schema. Drop the field from ItemRead, or split into an internal schema and a public ItemRead that omits PII; if owner contact must be returned, gate it behind authorization and return it only to the owner/authorized roles rather than in the unrestricted list endpoint.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 43,\n    \"severity\": \"high\",\n    \"message\": \"ItemCreate collects `owner_email` (PII) from request bodies, but post_item calls `create_item(session, payload.name)` and never passes/persists it \u2014 the email is accepted then silently dropped. Collecting PII that is not used for the stated purpose is unnecessary collection (and the dangling field invites later accidental logging/storage).\",\n    \"suggestion\": \"Either remove `owner_email` from ItemCreate if it is not actually needed, or, if owner contact is a real requirement, thread it through `create_item(...)` deliberately with a documented purpose and the same no-log/no-echo handling applied at the model layer.\"\n  }\n]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/db/repository.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo",
+        "pattern": "owner_email"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/routes/items.py",
+        "pattern": "log"
+      },
+      "tool": "grep",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 24696,
+    "cache_read_input_tokens": 24822,
+    "input_tokens": 10186,
+    "output_tokens": 2528
+  }
+}

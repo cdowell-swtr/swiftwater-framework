@@ -1,0 +1,40 @@
+diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
+index fa242f4..cc584ca 100644
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -1,12 +1,13 @@
+ from typing import Annotated
+ 
+ from fastapi import APIRouter, Depends, Query
+-from pydantic import BaseModel, ConfigDict
++from pydantic import BaseModel, ConfigDict, Field
+ from sqlalchemy.orm import Session
+ 
+ from ..db.engine import get_session
+ from ..db.models import Item
+-from ..db.repository import MAX_PAGE_SIZE, list_items
++from ..db.repository import MAX_PAGE_SIZE, create_item, list_items
++from ..logging_config import get_logger
+ 
+ router = APIRouter()
+ 
+@@ -34,3 +35,19 @@ def get_items(
+     repository clamps it. FastAPI serializes the ORM objects through ItemRead.
+     """
+     return list_items(session, limit=limit, offset=offset)
++
++
++class ItemCreate(BaseModel):
++    name: str = Field(min_length=1, max_length=255)
++
++
++@router.post("/items", response_model=ItemRead, status_code=201)
++def post_item(payload: ItemCreate, session: SessionDep) -> Item:
++    """Create an item via the repository, then emit ONE lightweight structured log.
++
++    A single structured log call is lightweight inline work (not heavy/blocking I/O),
++    so keeping it in the handler is correct — no background worker is warranted.
++    """
++    item = create_item(session, payload.name)
++    get_logger().info("item_created", item_id=item.id)
++    return item

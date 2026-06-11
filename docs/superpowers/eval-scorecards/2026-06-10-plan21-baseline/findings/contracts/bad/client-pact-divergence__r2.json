@@ -1,0 +1,73 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 12,
+      "message": "The client now adds a `include_location=true` query parameter to its request, but the consumer pact test (tests/functional/test_consumer_inventory.py) still declares `.with_request(\"GET\", \"/inventory/1\")` with no query parameter, so the committed pact (pacts/demo-inventory.json) no longer matches the client's actual request. The pact will be stale until regenerated/published, and provider verification replays only the recorded (query-less) request \u2014 so it won't confirm the provider honors `include_location`.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Add the query parameter to the consumer interaction (e.g. `.with_query_parameter(\"include_location\", \"true\")`) and regenerate + publish pacts/demo-inventory.json so the contract reflects the new request shape."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 79782,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/clients/inventory.py\",\n    \"line\": 12,\n    \"severity\": \"info\",\n    \"message\": \"The client now adds a `include_location=true` query parameter to its request, but the consumer pact test (tests/functional/test_consumer_inventory.py) still declares `.with_request(\\\"GET\\\", \\\"/inventory/1\\\")` with no query parameter, so the committed pact (pacts/demo-inventory.json) no longer matches the client's actual request. The pact will be stale until regenerated/published, and provider verification replays only the recorded (query-less) request \u2014 so it won't confirm the provider honors `include_location`.\",\n    \"suggestion\": \"Add the query parameter to the consumer interaction (e.g. `.with_query_parameter(\\\"include_location\\\", \\\"true\\\")`) and regenerate + publish pacts/demo-inventory.json so the contract reflects the new request shape.\"\n  }\n]",
+  "repeat": 2,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/*pact*"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/inventory*"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "output_mode": "files_with_matches",
+        "pattern": "include_location|in_stock|get_stock|location"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "tests/functional/test_consumer_inventory.py"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "pattern": "pacts/*"
+      },
+      "tool": "glob",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "tests/contract/test_provider_pact.py"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 28505,
+    "cache_read_input_tokens": 76521,
+    "input_tokens": 10190,
+    "output_tokens": 5003
+  }
+}

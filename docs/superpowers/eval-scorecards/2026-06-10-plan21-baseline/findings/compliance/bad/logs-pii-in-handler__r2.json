@@ -1,0 +1,56 @@
+{
+  "agent": "compliance",
+  "case": "logs-pii-in-handler",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 53,
+      "message": "Email address (GDPR personal data, Art. 4(1)) is logged verbatim at INFO level with no pseudonymisation. Any log-aggregation backend (ELK, CloudWatch, etc.) will retain the raw PII indefinitely; there is no retention limit and no erasure hook, violating GDPR Art. 5(1)(c) (data minimisation), Art. 5(1)(e) (storage limitation), and Art. 17 (right to erasure).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Remove the email from the log statement entirely, or substitute a one-way hash (e.g. hex(sha256(email))[:12]) so the log records an opaque, non-reversible correlation token. Log only non-identifying operational data such as the correlation_id already set by ObservabilityMiddleware."
+    },
+    {
+      "acknowledged": null,
+      "line": 41,
+      "message": "Email is accepted as a URL query parameter, causing it to be serialised into the request URL (e.g. /items/search?email=user@example.com). HTTP access logs, reverse-proxy logs, CDN access logs, and any infrastructure that records the full request line will capture and retain the PII outside the application's log-retention controls, violating GDPR Art. 5(1)(f) (integrity and confidentiality) and Art. 5(1)(c) (data minimisation).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Move the email to the POST request body (JSON payload) or an authenticated identity header (e.g. derived from a JWT/session token) so it is never serialised into the URL. Prefer resolving the caller's identity from an existing authenticated session rather than accepting a raw email as an untrusted input parameter."
+    },
+    {
+      "acknowledged": null,
+      "line": 52,
+      "message": "The application log records written by this handler contain the user's email address and have no defined retention period, no deletion mechanism, and no subject-erasure hook. A data-subject erasure request under GDPR Art. 17 cannot be honoured for entries already written to the log sink. GDPR Art. 5(1)(e) requires personal data to be kept 'no longer than is necessary'.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Either (a) eliminate the email from logs entirely (see finding on line 53), or (b) document and enforce a bounded log-retention policy (e.g. 30-day rolling purge) covering every log sink this handler writes to, and include log-sink purge in the erasure workflow triggered by Art. 17 requests."
+    },
+    {
+      "acknowledged": null,
+      "line": 52,
+      "message": "Processing a user's personal data to personalise search results is a data-processing activity that requires a tamper-evident, queryable record under GDPR Art. 5(2) (accountability principle) and Art. 30 (records of processing activities). The existing plain INFO log is neither tamper-evident nor queryable by data subject, and the docstring explicitly acknowledges there is no audit trail.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Emit a structured audit event (subject pseudonym/hash, operation name, timestamp, correlation_id, outcome) to a dedicated audit log store that is separate from the operational log, has its own access controls, and is included in subject-access-request (Art. 15) and erasure (Art. 17) workflows."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 69456,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 53,\n    \"severity\": \"high\",\n    \"message\": \"Email address (GDPR personal data, Art. 4(1)) is logged verbatim at INFO level with no pseudonymisation. Any log-aggregation backend (ELK, CloudWatch, etc.) will retain the raw PII indefinitely; there is no retention limit and no erasure hook, violating GDPR Art. 5(1)(c) (data minimisation), Art. 5(1)(e) (storage limitation), and Art. 17 (right to erasure).\",\n    \"suggestion\": \"Remove the email from the log statement entirely, or substitute a one-way hash (e.g. hex(sha256(email))[:12]) so the log records an opaque, non-reversible correlation token. Log only non-identifying operational data such as the correlation_id already set by ObservabilityMiddleware.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 41,\n    \"severity\": \"high\",\n    \"message\": \"Email is accepted as a URL query parameter, causing it to be serialised into the request URL (e.g. /items/search?email=user@example.com). HTTP access logs, reverse-proxy logs, CDN access logs, and any infrastructure that records the full request line will capture and retain the PII outside the application's log-retention controls, violating GDPR Art. 5(1)(f) (integrity and confidentiality) and Art. 5(1)(c) (data minimisation).\",\n    \"suggestion\": \"Move the email to the POST request body (JSON payload) or an authenticated identity header (e.g. derived from a JWT/session token) so it is never serialised into the URL. Prefer resolving the caller's identity from an existing authenticated session rather than accepting a raw email as an untrusted input parameter.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 52,\n    \"severity\": \"high\",\n    \"message\": \"The application log records written by this handler contain the user's email address and have no defined retention period, no deletion mechanism, and no subject-erasure hook. A data-subject erasure request under GDPR Art. 17 cannot be honoured for entries already written to the log sink. GDPR Art. 5(1)(e) requires personal data to be kept 'no longer than is necessary'.\",\n    \"suggestion\": \"Either (a) eliminate the email from logs entirely (see finding on line 53), or (b) document and enforce a bounded log-retention policy (e.g. 30-day rolling purge) covering every log sink this handler writes to, and include log-sink purge in the erasure workflow triggered by Art. 17 requests.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 52,\n    \"severity\": \"medium\",\n    \"message\": \"Processing a user's personal data to personalise search results is a data-processing activity that requires a tamper-evident, queryable record under GDPR Art. 5(2) (accountability principle) and Art. 30 (records of processing activities). The existing plain INFO log is neither tamper-evident nor queryable by data subject, and the docstring explicitly acknowledges there is no audit trail.\",\n    \"suggestion\": \"Emit a structured audit event (subject pseudonym/hash, operation name, timestamp, correlation_id, outcome) to a dedicated audit log store that is separate from the operational log, has its own access controls, and is included in subject-access-request (Art. 15) and erasure (Art. 17) workflows.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 23115,
+    "input_tokens": 3,
+    "output_tokens": 3936
+  }
+}

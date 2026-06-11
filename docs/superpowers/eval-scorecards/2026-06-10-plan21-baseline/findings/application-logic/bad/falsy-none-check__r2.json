@@ -1,0 +1,29 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 46,
+      "message": "Falsy truthiness check `if not item:` is the wrong sentinel for a missing ORM row. `session.get()` returns either `None` (not found) or a mapped `Item` instance (found). The code comment itself acknowledges the bug: if an Item with primary key 0 exists, `session.get(Item, 0)` returns a valid instance, but relying on `not instance` conflates None-ness with ORM object truthiness. SQLAlchemy ORM instances do not define `__bool__`, so they currently evaluate as truthy by Python's default object protocol\u2014but this is accidental correctness. If the model or a mixin ever adds `__bool__` or `__len__` (e.g. a collection-like mixin, or an accidental import of a query object instead of an instance), the check silently starts returning 404 for found items. The correct test is an identity check against `None`.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Replace `if not item:` with `if item is None:` to test explicitly and unambiguously for the not-found case, independent of ORM object truthiness."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 92343,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 46,\n    \"severity\": \"medium\",\n    \"message\": \"Falsy truthiness check `if not item:` is the wrong sentinel for a missing ORM row. `session.get()` returns either `None` (not found) or a mapped `Item` instance (found). The code comment itself acknowledges the bug: if an Item with primary key 0 exists, `session.get(Item, 0)` returns a valid instance, but relying on `not instance` conflates None-ness with ORM object truthiness. SQLAlchemy ORM instances do not define `__bool__`, so they currently evaluate as truthy by Python's default object protocol\u2014but this is accidental correctness. If the model or a mixin ever adds `__bool__` or `__len__` (e.g. a collection-like mixin, or an accidental import of a query object instead of an instance), the check silently starts returning 404 for found items. The correct test is an identity check against `None`.\",\n    \"suggestion\": \"Replace `if not item:` with `if item is None:` to test explicitly and unambiguously for the not-found case, independent of ORM object truthiness.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 21873,
+    "input_tokens": 3,
+    "output_tokens": 5561
+  }
+}

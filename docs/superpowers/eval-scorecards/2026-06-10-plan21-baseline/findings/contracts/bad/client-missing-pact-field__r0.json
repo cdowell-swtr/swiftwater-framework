@@ -1,0 +1,61 @@
+{
+  "agent": "contracts",
+  "case": "client-missing-pact-field",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 14,
+      "message": "get_stock now hard-depends on data[\"reserved_count\"], but the consumer pact in tests/functional/test_consumer_inventory.py declares only {item_id, in_stock} in with_body(...). The consumer contract therefore fails to pin a field the consumer actually requires: provider verification can pass while the provider omits reserved_count, and the real client will KeyError at runtime. This is exactly the gap the pact exists to catch \u2014 the contract under-specifies the consumer's true expectation (the inline comment even admits the field is 'not declared in the pact interaction').",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add reserved_count to the pact interaction so the contract pins it: .with_body({\"item_id\": match.int(1), \"in_stock\": match.int(5), \"reserved_count\": match.int(0)}), then regenerate/publish pacts/demo-inventory.json. (The consumer test's `== 5` assertion must also be updated for the new dict return, and will currently fail against the mock since the body lacks reserved_count.)"
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 46049,
+  "raw_text": "[{\"path\": \"src/demo/clients/inventory.py\", \"line\": 14, \"severity\": \"high\", \"message\": \"get_stock now hard-depends on data[\\\"reserved_count\\\"], but the consumer pact in tests/functional/test_consumer_inventory.py declares only {item_id, in_stock} in with_body(...). The consumer contract therefore fails to pin a field the consumer actually requires: provider verification can pass while the provider omits reserved_count, and the real client will KeyError at runtime. This is exactly the gap the pact exists to catch \u2014 the contract under-specifies the consumer's true expectation (the inline comment even admits the field is 'not declared in the pact interaction').\", \"suggestion\": \"Add reserved_count to the pact interaction so the contract pins it: .with_body({\\\"item_id\\\": match.int(1), \\\"in_stock\\\": match.int(5), \\\"reserved_count\\\": match.int(0)}), then regenerate/publish pacts/demo-inventory.json. (The consumer test's `== 5` assertion must also be updated for the new dict return, and will currently fail against the mock since the body lacks reserved_count.)\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/*inventory*"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "output_mode": "files_with_matches",
+        "pattern": "reserved_count"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "-n": true,
+        "output_mode": "content",
+        "pattern": "in_stock"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "tests/functional/test_consumer_inventory.py"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 37583,
+    "cache_read_input_tokens": 60711,
+    "input_tokens": 15281,
+    "output_tokens": 2604
+  }
+}

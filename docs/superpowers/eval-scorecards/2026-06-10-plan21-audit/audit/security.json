@@ -1,0 +1,96 @@
+{
+  "agent": "security",
+  "audited_at": "2026-06-10",
+  "prompt_path": "src/framework_cli/review/agents/security.md",
+  "summary": "The bad fixture works perfectly (unambiguous hardcoded-secret default; flagged critical 3/3). The good fixture (`api_secret_key: str` required field) was over-flagged on ALL 3 runs with 2-3 findings each. Every good-fixture finding is a stricter-than-codebase hardening advisory (SecretStr, min_length entropy floor, .env leakage, lru_cache rotation, field naming) raised to medium/high severity. ROOT CAUSE: the prompt has no severity rubric and no codebase-bar clause, so hardening nice-to-haves are emitted as merge-blocking findings, and the SAME issue (SecretStr) is rated medium in r0/r2 but high in r1 (severity instability).",
+  "verdict": "over-flagging on good fixture; severity-unstable; no codebase-bar / scope discipline. bad fixture is clean and discriminating.",
+
+  "severity_bar_issues": [
+    {
+      "issue": "No severity rubric in the prompt. The only guidance is one line: 'critical/high = exploitable or secret-exposing; medium = risky pattern; low/info = hardening or advisory.' This invites 'secret-exposing' to be stretched to cover theoretical repr/log exposure of a SecretStr-vs-str choice, escalating pure hardening to high.",
+      "evidence": "good/env-sourced-secret r1 rated 'SecretStr instead of str' as HIGH; r0 and r2 rated the SAME finding as MEDIUM. Self-contradictory across deterministic-intent runs.",
+      "fix": "Adopt the shared rubric's high/medium/low/info ladder verbatim and bind 'secret-exposing' to an ACTUAL committed/leaked secret value, not a type-annotation hardening preference."
+    },
+    {
+      "issue": "Hardening advisories (use SecretStr, add min_length, document rotation) are emitted at medium severity — i.e. 'should fix before merge'. These are info/low at most for a config field that the codebase itself does not harden.",
+      "evidence": "good r0/r1/r2 all emit SecretStr at medium-or-higher; r0/r1 emit min_length at low/medium.",
+      "fix": "Rubric line: 'A missing defense-in-depth hardening (SecretStr, length floor, rotation docs) is info, never medium/high, unless a concrete leak of a real value is demonstrable on a changed line.'"
+    }
+  ],
+
+  "scope_creep": [
+    {
+      "issue": "lru_cache secret-rotation finding (good r2) is an operational/lifecycle observation, not an application-security defect on a changed line — it comments on get_settings() which is NOT in the diff.",
+      "evidence": "good/env-sourced-secret r2 line 'Settings class is cached with @lru_cache ... no rotation path' — get_settings is unchanged template code, not added/modified by the patch."
+    },
+    {
+      "issue": "Field-naming suggestion (good r2 info: 'rename api_secret_key to jwt_signing_key') is a clarity/style point owned by usability/code-quality, not security.",
+      "evidence": "good/env-sourced-secret r2 info finding."
+    },
+    {
+      "issue": "Prompt says 'review ONLY the changes in it (added/modified lines)' but findings repeatedly reach into unchanged surrounding code (env_file binding line 10, lru_cache, model_dump paths) to manufacture risk.",
+      "evidence": "good r1 cites 'line 10' env_file; good r2 cites lru_cache."
+    }
+  ],
+
+  "hallucination_overreach": [
+    {
+      "issue": ".env-leakage finding asserts risk that the template already mitigates: .env IS in the template .gitignore (src/framework_cli/template/.gitignore.jinja:4). The finding presents an already-closed risk as open.",
+      "evidence": "good r1 low: '.env ... at risk of accidental VCS commit ... if .env is not in .gitignore'. It is."
+    },
+    {
+      "issue": "empty-string-bypass finding (good r1 medium) is technically true of pydantic but is a generic hardening note inflated to medium; not a defect introduced by the change."
+    }
+  ],
+
+  "stricter_than_codebase_violations": [
+    {
+      "issue": "DECISIVE: the template's own real signing secret is a plain str with no SecretStr, no length floor — `webhook_signing_secret: str = \"\"` (settings.py.jinja:38), consumed for HMAC-SHA256 in routes/webhooks.py:28. SecretStr / get_secret_value / min_length appear NOWHERE in src/framework_cli/template/ (grep: 0 hits each). The good fixture's `api_secret_key: str` is byte-idiomatic with the codebase. Every SecretStr/min_length finding holds the new code to a standard the surrounding codebase does not meet.",
+      "evidence": "grep SecretStr|get_secret_value|min_length over template => NONE; webhook_signing_secret: str = \"\" is the established secret idiom.",
+      "rubric_clause_violated": "Codebase-bar principle"
+    }
+  ],
+
+  "internal_consistency_violations": [
+    {
+      "issue": "Same finding, different severity across runs: 'use SecretStr' = HIGH (r1) vs MEDIUM (r0, r2). The prompt provides no anchor to stabilize this.",
+      "evidence": "good r1 vs r0/r2."
+    },
+    {
+      "issue": "Cross-fixture asymmetry: the bad fixture's suggestion ALSO recommends SecretStr (r1, r2) as defense-in-depth on top of removing the default — correctly treated there as a nicety. But on the good fixture the SAME SecretStr point is escalated to a standalone medium/high FINDING. One pattern, two standards."
+    }
+  ],
+
+  "fixture_validity": {
+    "good/env-sourced-secret": {
+      "verdict": "GENUINELY CLEAN",
+      "rationale": "`api_secret_key: str` with no default is the correct fix and matches the template's own webhook_signing_secret: str idiom exactly. A correctly-tuned security reviewer should return []. The fixture is a valid clean control; the over-flagging is entirely a PROMPT defect, not a fixture defect.",
+      "representativeness_note": "Could be made even more representative/discriminating by mirroring the template's actual webhook idiom (an HMAC signing secret consumed by a route), but not required — current form already exercises the over-flag."
+    },
+    "bad/hardcoded-secret": {
+      "verdict": "UNAMBIGUOUS DEFECT",
+      "rationale": "Hardcoded literal default 'super-secret-key-do-not-share' on a *_secret_key field directly violates the Settings docstring ('Never hardcode config'). Flagged critical 3/3. Clean, discriminating positive control.",
+      "expect_json": "{\"file\": \"src/demo/config/settings.py\"} — file-level expectation matches; correct."
+    }
+  },
+
+  "coupled_edits": [
+    {
+      "type": "prompt",
+      "path": "src/framework_cli/review/agents/security.md",
+      "change": "Prepend the shared rubric (severity ladder + codebase-bar + internal-consistency + scope discipline). Then ADD a security-specific clause: 'Flag a secret ONLY when an actual secret VALUE is committed/exposed on a changed line (hardcoded default, key in code/config, secret in a logged field). Do NOT flag the ABSENCE of defense-in-depth hardening — SecretStr vs str, min-length/entropy floors, rotation policy, .env handling — as medium or high. The template itself uses plain `str` for its signing secrets (webhook_signing_secret: str) and does not use SecretStr; do not hold new config to a stricter bar. Such hardening is info severity at most, and only if it would not already be redundant with existing repo mitigations (e.g. .env is already gitignored).' Keep the precision-over-volume line."
+    },
+    {
+      "type": "fixture",
+      "path": "tests/eval/fixtures/security/good/env-sourced-secret",
+      "change": "OPTIONAL (low priority): rename/retheme to mirror the template's webhook_signing_secret HMAC idiom so the clean control is maximally representative of the real codebase secret pattern. Not required for the prompt fix to land; the current fixture already validates the over-flag. If kept as-is, no change to change.patch/expect needed — good fixtures have no expect.json."
+    }
+  ],
+
+  "proposed_block_threshold": {
+    "value": "high",
+    "rationale": "Only critical/high security findings should block a commit gate. With the rubric in place, the bad fixture yields a critical (blocks, correct) and the good fixture should yield [] or at most info (does not block, correct). Setting block_threshold at 'high' makes the gate discriminate cleanly between the two fixtures while tolerating residual low/info hardening chatter without false-blocking. Pair with the prompt fix; threshold alone will NOT fix the good-fixture over-flag because r1 currently escalates a hardening note to 'high' — the prompt clause forbidding hardening-as-high is the load-bearing change."
+  },
+
+  "discrimination_after_fix": "bad => critical (blocks); good => [] or info (passes). Expected fp rate on good drops from 1.00 (3/3 runs flagged) to ~0."
+}

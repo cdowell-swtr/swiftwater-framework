@@ -1,0 +1,53 @@
+{
+  "agent": "observability-infra",
+  "case": "complete-obs-surface",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "New prod runtime surface `redis` (added to services.yml for staging/prod) gets a scrape job and a redis-exporter, but has NO alert rule. infra/observability/prometheus/alerts/ contains only postgres.yml, otel-collector.yml, and app.yml. Postgres ships PostgresDown + connection alerts; redis ships nothing \u2014 so a prod redis outage fires no alert and silently breaks Celery/cache that depend on it. A new prod data store with zero alerting is a real observability gap.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add infra/observability/prometheus/alerts/redis.yml (e.g. RedisDown on `redis_up == 0` for 1m, plus memory/eviction/connection warnings) and ensure it is picked up by the prometheus rule_files glob, mirroring postgres.yml."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "The new redis scrape job has no matching Grafana dashboard. infra/observability/grafana/dashboards/ contains only postgres.json, otel-collector.json, and app.json \u2014 there is no redis.json. The redis surface is now scraped (redis-exporter:9121) but never visualized, so the collected metrics are not usable for operators.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add infra/observability/grafana/dashboards/redis.json (uptime, used memory vs maxmemory, connected clients, ops/sec, keyspace hits/misses, evictions) provisioned via the existing dashboards provider, matching the postgres dashboard pattern."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 91684,
+  "raw_text": "[\n  {\n    \"path\": \"infra/observability/prometheus/prometheus.yml\",\n    \"line\": \"  - job_name: redis\",\n    \"severity\": \"high\",\n    \"message\": \"New prod runtime surface `redis` (added to services.yml for staging/prod) gets a scrape job and a redis-exporter, but has NO alert rule. infra/observability/prometheus/alerts/ contains only postgres.yml, otel-collector.yml, and app.yml. Postgres ships PostgresDown + connection alerts; redis ships nothing \u2014 so a prod redis outage fires no alert and silently breaks Celery/cache that depend on it. A new prod data store with zero alerting is a real observability gap.\",\n    \"suggestion\": \"Add infra/observability/prometheus/alerts/redis.yml (e.g. RedisDown on `redis_up == 0` for 1m, plus memory/eviction/connection warnings) and ensure it is picked up by the prometheus rule_files glob, mirroring postgres.yml.\"\n  },\n  {\n    \"path\": \"infra/observability/prometheus/prometheus.yml\",\n    \"line\": \"  - job_name: redis\",\n    \"severity\": \"medium\",\n    \"message\": \"The new redis scrape job has no matching Grafana dashboard. infra/observability/grafana/dashboards/ contains only postgres.json, otel-collector.json, and app.json \u2014 there is no redis.json. The redis surface is now scraped (redis-exporter:9121) but never visualized, so the collected metrics are not usable for operators.\",\n    \"suggestion\": \"Add infra/observability/grafana/dashboards/redis.json (uptime, used memory vs maxmemory, connected clients, ops/sec, keyspace hits/misses, evictions) provisioned via the existing dashboards provider, matching the postgres dashboard pattern.\"\n  }\n]",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "infra/observability/**"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 16262,
+    "cache_read_input_tokens": 59842,
+    "input_tokens": 10188,
+    "output_tokens": 6980
+  }
+}

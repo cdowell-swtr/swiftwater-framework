@@ -1,0 +1,29 @@
+{
+  "agent": "env-parity",
+  "case": "compose-var-not-declared",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 10,
+      "message": "`APP_WIDGET_API_URL: \"${APP_WIDGET_API_URL}\"` interpolates `${APP_WIDGET_API_URL}` but no `APP_WIDGET_API_URL` is declared in `.env.example` (only APP_ENVIRONMENT, APP_DATABASE_URL, APP_LOG_LEVEL, APP_OTLP_ENDPOINT, APP_SECRET_KEY, APP_ANTHROPIC_API_KEY are). With no declaration, compose substitutes an empty string, silently injecting a blank var into the app container. Additionally, `base.yml` is a DEV/TEST-ONLY overlay (it supplies the local build context, `APP_ENVIRONMENT: dev`, and Traefik labels) and is NOT part of the staging/prod deploy composition \u2014 so this variable wiring reaches dev/test only and will never reach staging/prod, even though the value (a widget API URL) is plainly an app-runtime concern that prod also needs.",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Declare `APP_WIDGET_API_URL=` (with a safe local-dev default) in `.env.example` so the interpolation resolves, and wire the variable into the deploy-reaching overlay (the self-contained `staging.yml`/`prod.yml` app service or `services.yml`) rather than only `base.yml`, so staging/prod actually receive it. If the app consumes it, ensure a matching pydantic `APP_`-prefixed field exists in `src/*/config/settings.py`."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 39980,
+  "raw_text": "[{\"path\":\"infra/compose/base.yml\",\"line\":10,\"severity\":\"high\",\"message\":\"`APP_WIDGET_API_URL: \\\"${APP_WIDGET_API_URL}\\\"` interpolates `${APP_WIDGET_API_URL}` but no `APP_WIDGET_API_URL` is declared in `.env.example` (only APP_ENVIRONMENT, APP_DATABASE_URL, APP_LOG_LEVEL, APP_OTLP_ENDPOINT, APP_SECRET_KEY, APP_ANTHROPIC_API_KEY are). With no declaration, compose substitutes an empty string, silently injecting a blank var into the app container. Additionally, `base.yml` is a DEV/TEST-ONLY overlay (it supplies the local build context, `APP_ENVIRONMENT: dev`, and Traefik labels) and is NOT part of the staging/prod deploy composition \u2014 so this variable wiring reaches dev/test only and will never reach staging/prod, even though the value (a widget API URL) is plainly an app-runtime concern that prod also needs.\",\"suggestion\":\"Declare `APP_WIDGET_API_URL=` (with a safe local-dev default) in `.env.example` so the interpolation resolves, and wire the variable into the deploy-reaching overlay (the self-contained `staging.yml`/`prod.yml` app service or `services.yml`) rather than only `base.yml`, so staging/prod actually receive it. If the app consumes it, ensure a matching pydantic `APP_`-prefixed field exists in `src/*/config/settings.py`.\"}]",
+  "repeat": 2,
+  "seeded_file": "infra/compose/base.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 28343,
+    "input_tokens": 2,
+    "output_tokens": 3199
+  }
+}

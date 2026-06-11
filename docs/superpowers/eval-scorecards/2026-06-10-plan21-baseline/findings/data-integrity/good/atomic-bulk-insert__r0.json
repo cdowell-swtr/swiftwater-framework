@@ -1,0 +1,38 @@
+{
+  "agent": "data-integrity",
+  "case": "atomic-bulk-insert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 57,
+      "message": "bulk_create_items returns ORM objects without refreshing server-generated columns. The session factory in engine.py is configured with expire_on_commit=False, so after session.commit() the objects are NOT expired and will not lazy-reload. The created_at column is a server_default (func.now()), meaning its value is never written into the in-memory objects during construction \u2014 only the database holds it. Callers that access item.created_at on a closed session (e.g. via FastAPI's get_session() context-manager dependency) will raise DetachedInstanceError; on an open session each access triggers an individual implicit SELECT (N+1). The existing create_item avoids exactly this by calling session.refresh(item) after commit.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "After session.commit(), reload server-generated fields. For a single round-trip: ids = [i.id for i in created]; return list(session.scalars(select(Item).where(Item.id.in_(ids)).order_by(Item.id))). Or, if N is small, call session.refresh(item) for each item in created before returning."
+    },
+    {
+      "acknowledged": null,
+      "line": 46,
+      "message": "The 1000-row cap is evaluated on the deduplicated cleaned list, not on the raw names input. A caller passing 1 001 names that are all duplicates of one another clears the cap check (cleaned has 1 item) and silently inserts 1 row. More critically: a caller passing exactly 1 001 distinct names is rejected. The docstring describes the cap as protecting against an 'unbounded insert', but the bound is applied after dedup, making the effective cap on caller-visible input non-deterministic. If the intent is to limit input size (DoS protection), the check should be on len(names) before dedup; if the intent is to limit DB rows, the current position is correct but the docstring and error message are misleading ('bulk insert of N exceeds the 1000-row limit' \u2014 N is the post-dedup count, not what the caller passed).",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Decide which invariant to enforce: (a) bound the caller-supplied list \u2014 move the check to before the dedup loop: if len(names) > 1000: raise ValueError(...); or (b) keep the post-dedup check but update the error message to clarify it is the deduplicated count, not the raw input count."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 129140,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 57,\n    \"severity\": \"high\",\n    \"message\": \"bulk_create_items returns ORM objects without refreshing server-generated columns. The session factory in engine.py is configured with expire_on_commit=False, so after session.commit() the objects are NOT expired and will not lazy-reload. The created_at column is a server_default (func.now()), meaning its value is never written into the in-memory objects during construction \u2014 only the database holds it. Callers that access item.created_at on a closed session (e.g. via FastAPI's get_session() context-manager dependency) will raise DetachedInstanceError; on an open session each access triggers an individual implicit SELECT (N+1). The existing create_item avoids exactly this by calling session.refresh(item) after commit.\",\n    \"suggestion\": \"After session.commit(), reload server-generated fields. For a single round-trip: ids = [i.id for i in created]; return list(session.scalars(select(Item).where(Item.id.in_(ids)).order_by(Item.id))). Or, if N is small, call session.refresh(item) for each item in created before returning.\"\n  },\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 46,\n    \"severity\": \"high\",\n    \"message\": \"The 1000-row cap is evaluated on the deduplicated cleaned list, not on the raw names input. A caller passing 1 001 names that are all duplicates of one another clears the cap check (cleaned has 1 item) and silently inserts 1 row. More critically: a caller passing exactly 1 001 distinct names is rejected. The docstring describes the cap as protecting against an 'unbounded insert', but the bound is applied after dedup, making the effective cap on caller-visible input non-deterministic. If the intent is to limit input size (DoS protection), the check should be on len(names) before dedup; if the intent is to limit DB rows, the current position is correct but the docstring and error message are misleading ('bulk insert of N exceeds the 1000-row limit' \u2014 N is the post-dedup count, not what the caller passed).\",\n    \"suggestion\": \"Decide which invariant to enforce: (a) bound the caller-supplied list \u2014 move the check to before the dedup loop: if len(names) > 1000: raise ValueError(...); or (b) keep the post-dedup check but update the error message to clarify it is the deduplicated count, not the raw input count.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 13141,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 7120
+  }
+}

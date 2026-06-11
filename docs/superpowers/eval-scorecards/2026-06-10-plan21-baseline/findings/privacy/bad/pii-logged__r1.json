@@ -1,0 +1,53 @@
+{
+  "agent": "privacy",
+  "case": "pii-logged",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "PII logged: the owner's email address is written into application logs via the structured log event. The model definition for `owner_email` explicitly warns 'PII: owner email address \u2014 do not include in logs or external responses,' and this log call violates that directive. Emails in logs create an uncontrolled secondary copy of PII subject to broad retention and access far beyond the stated creation purpose.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Do not log the email. Drop the `owner_email` field from the log event and audit on the non-PII identifier only, e.g. `log.info(\"item_created\", item_id=item.id)`. If owner attribution is genuinely required for audit, log a non-reversible token (e.g. a salted hash) or the item_id alone rather than the raw address."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "PII collected without a clear purpose or sink: the API accepts `owner_email`, but `create_item(session, payload.name)` never persists it \u2014 the column added on the model is not written. The only thing done with the collected email is to log it. Collecting PII that is not stored or used for the stated 'create an item' purpose (and only routed into logs) is unnecessary collection.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Either remove `owner_email` from `ItemCreate` if it is not needed, or, if owner attribution is a real requirement, persist it through `create_item` for a defined purpose and stop routing it to logs. Do not accept PII whose sole destination is the log stream."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 40284,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": \"log.info(\\\"item_created\\\", item_id=item.id, owner_email=payload.owner_email)\",\n    \"severity\": \"high\",\n    \"message\": \"PII logged: the owner's email address is written into application logs via the structured log event. The model definition for `owner_email` explicitly warns 'PII: owner email address \u2014 do not include in logs or external responses,' and this log call violates that directive. Emails in logs create an uncontrolled secondary copy of PII subject to broad retention and access far beyond the stated creation purpose.\",\n    \"suggestion\": \"Do not log the email. Drop the `owner_email` field from the log event and audit on the non-PII identifier only, e.g. `log.info(\\\"item_created\\\", item_id=item.id)`. If owner attribution is genuinely required for audit, log a non-reversible token (e.g. a salted hash) or the item_id alone rather than the raw address.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": \"owner_email: str | None = None\",\n    \"severity\": \"high\",\n    \"message\": \"PII collected without a clear purpose or sink: the API accepts `owner_email`, but `create_item(session, payload.name)` never persists it \u2014 the column added on the model is not written. The only thing done with the collected email is to log it. Collecting PII that is not stored or used for the stated 'create an item' purpose (and only routed into logs) is unnecessary collection.\",\n    \"suggestion\": \"Either remove `owner_email` from `ItemCreate` if it is not needed, or, if owner attribution is a real requirement, persist it through `create_item` for a defined purpose and stop routing it to logs. Do not accept PII whose sole destination is the log stream.\"\n  }\n]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/routes/items.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/db/repository.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 16388,
+    "cache_read_input_tokens": 69721,
+    "input_tokens": 6,
+    "output_tokens": 2320
+  }
+}

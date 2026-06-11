@@ -1,0 +1,81 @@
+{
+  "agent": "contracts",
+  "prompt_path": "src/framework_cli/review/agents/contracts.md",
+  "block_threshold_current": "high",
+  "baseline": {
+    "recall": 0.50,
+    "fp_rate": 0.00,
+    "verdict": "FAIL (recall 0.50 < threshold 0.57)",
+    "root_cause": "Severity/category mismatch, NOT a file-detection miss. The scorecard '[caught]' list (file-match presence) shows all 6 bad runs produced a finding on the seeded file, but contracts has block_threshold='high', so evals.flags() only counts findings at severity>=high as detection. client-missing-pact-field => high on all 3 runs (caught, 1.0). client-pact-divergence => 'info' on all 3 runs (NOT >= high => missed, 0.0). recall = mean([1.0, 0.0]) = 0.50."
+  },
+  "severity_bar_issues": [
+    {
+      "issue": "Prompt-vs-fixture severity contradiction on the divergence case is the entire recall failure.",
+      "detail": "The prompt explicitly classifies the two phenomena present in bad/client-pact-divergence as 'info': line 13 'Pact not regenerated/published after a provider change that alters the response. info' and line 14-15 'Provider-state drift ... info'. The client adds an undeclared query param (include_location=true) and reads an OPTIONAL field via data.get('location') (safe, no KeyError). Per the prompt's own taxonomy and the draft rubric, that is genuinely info/low (stale-pact / advisory), not a builder-blocking high. All 3 reviewer runs independently and correctly returned 'info'. The reviewers are RIGHT; the fixture is mis-graded as a high-expecting 'bad'.",
+      "severity_assessment": "The prompt's info classifications are correct and consistent. The defect is that a bad fixture demands high detection for a phenomenon the prompt rightly calls info."
+    },
+    {
+      "issue": "block_threshold='high' for an agent whose own taxonomy lists two info-tier categories.",
+      "detail": "Two of the five prompt categories (pact-not-regenerated, provider-state-drift) are info by design. With block_threshold='high', any fixture that exercises only those categories can never satisfy the recall gate. The agent's blocking surface is correctly narrow (provider break / uncompensated incompatible change / weakened consumer assertion), so the high threshold is defensible IF the bad-fixture corpus only contains high-tier defects."
+    }
+  ],
+  "scope_creep": [],
+  "hallucination_overreach": [
+    {
+      "note": "No hallucination observed. Reviewers grounded every claim by reading tests/functional/test_consumer_inventory.py and (where present) pacts/. The missing-pact-field finding correctly traced the KeyError-on-reserved_count to the un-pinned pact field. The divergence finding correctly noted that data.get('location') is additive/optional and NOT a concern (r1 explicitly says so), demonstrating good scope discipline."
+    }
+  ],
+  "stricter_than_codebase_violations": [],
+  "internal_consistency_violations": [],
+  "codebase_bar_check": {
+    "template_files": [
+      "src/{{package_name}}/.../clients/inventory.py",
+      "tests/functional/test_consumer_inventory.py.jinja",
+      "tests/contract/test_provider_pact.py.jinja",
+      "pacts/examplewebapp-app.json.jinja"
+    ],
+    "verdict": "Fixtures are byte-faithful derivations of the real template (same get_stock client, same Pact/match.int/with_body/with_request idiom, V4 spec). The good fixture mirrors the template's own consumer-test mutation pattern exactly. No stricter-than-codebase issue: the prompt does not demand anything the template doesn't already do. The template consumer test pins fields via with_body + match.int, which is exactly the contract the prompt asks reviewers to protect."
+  },
+  "fixture_validity": [
+    {
+      "fixture": "good/client-pact-covered",
+      "verdict": "VALID (genuinely clean)",
+      "detail": "Reshapes get_stock to return a dict including warehouse_id AND simultaneously pins warehouse_id in the consumer pact's with_body and updates the test assertion to the new dict shape. The consumer dependency is fully contracted. All 3 reviewer runs returned [] correctly. This is a model 'compensated change' good fixture."
+    },
+    {
+      "fixture": "bad/client-missing-pact-field",
+      "verdict": "VALID (unambiguous high defect)",
+      "detail": "get_stock hard-depends on data['reserved_count'] (int(...) -> KeyError if absent) but the consumer pact never declares reserved_count. This is a genuine 'weakened/under-specified consumer contract' high defect: provider verification passes while the real client breaks. All 3 runs correctly returned high. Keep as-is."
+    },
+    {
+      "fixture": "bad/client-pact-divergence",
+      "verdict": "INVALID as a 'high' bad — AMBIGUOUS / mis-graded",
+      "detail": "Adds query param include_location=true (pact declares no query) and reads data.get('location') (OPTIONAL, no hard dependency). Per the prompt's OWN taxonomy this is 'pact not regenerated' => info, and the optional read is explicitly additive/backwards-compatible (prompt line 17 says do NOT flag additive changes). All 3 reviewers correctly returned info. This fixture is the sole cause of the 0.50 recall: it lives in bad/ and is scored against block_threshold='high', but it is not a high-severity defect. It must either (a) be promoted into a genuine high defect, or (b) be removed from the high-graded bad corpus. It is NOT an unambiguous defect today."
+    }
+  ],
+  "proposed_coupled_edits": [
+    {
+      "type": "fixture_redesign",
+      "target": "tests/eval/fixtures/contracts/bad/client-pact-divergence",
+      "rationale": "Convert the ambiguous info-tier 'stale pact' case into an unambiguous HIGH consumer-contract break so the bad corpus matches block_threshold='high'. Make the client take a HARD (non-optional) dependency on a field/param that the committed consumer pact does NOT pin, mirroring the missing-pact-field mechanism but via the query/request side OR via a weakened assertion.",
+      "concrete_change": "Replace the optional `_ = data.get('location')` read with a hard dependency the pact fails to declare, e.g. the client now requires the response to be wrapped/branch on include_location and does int(data['location']['warehouse']) with NO corresponding with_query_parameter / with_body field in the consumer pact. This makes provider verification green while the real client KeyErrors -> genuine high. Then this fixture, like client-missing-pact-field, will be flagged 'high'."
+    },
+    {
+      "type": "fixture_addition",
+      "target": "tests/eval/fixtures/contracts/bad/weakened-consumer-assertion",
+      "rationale": "The prompt's third high category ('weakened consumer contract: replacing a concrete expected value with a permissive matcher that no longer pins the field') is currently UNTESTED by any fixture. Add a bad fixture: a consumer-test diff that swaps match.int(5) / a concrete value for a permissive match.type()/match.like() that stops pinning a field the consumer relies on. This both broadens high-tier coverage and protects the third blocking rule.",
+      "concrete_change": "In test_consumer_inventory.py, change .with_body({'item_id': match.int(1), 'in_stock': match.int(5)}) to drop the in_stock pin (e.g. remove in_stock from with_body, or replace match.int(5) with a matcher that does not constrain presence) while get_stock still hard-reads in_stock -> high."
+    },
+    {
+      "type": "prompt_clarification",
+      "target": "src/framework_cli/review/agents/contracts.md",
+      "rationale": "The prompt is already well-aligned and internally consistent; only minor reinforcement to lock severity boundaries and inherit the shared rubric.",
+      "concrete_change": "Prepend the shared rubric severity ladder (high/medium/low/info) + codebase-bar + internal-consistency + scope clauses. Add one explicit clarifier distinguishing a HARD undeclared dependency (KeyError -> high) from an OPTIONAL undeclared read (.get(...) -> info, do NOT flag as blocking). Optionally add a 'medium' tier for a stale-but-non-breaking pact divergence to give graceful degradation between info and high. Do NOT change the existing info classifications for pact-not-regenerated and provider-state-drift — they are correct."
+    }
+  ],
+  "proposed_block_threshold": {
+    "value": "high",
+    "rationale": "KEEP block_threshold='high'. The agent's blocking surface (provider break of a committed pact, uncompensated incompatible response change, weakened consumer assertion) genuinely warrants high. The recall failure is NOT caused by the threshold being wrong; it is caused by one bad fixture (client-pact-divergence) that exercises only info-tier behavior being graded against a high gate. Fix the fixture (coupled edit above), not the threshold. After the coupled fixture redesign + the new weakened-assertion fixture, all bad fixtures will be true high defects and recall should reach 1.0, comfortably clearing recall_min (currently 0.57; can be raised back toward 0.67/1.0 in Phase 3 re-derivation)."
+  },
+  "summary": "contracts is a healthy agent with a clean, scope-disciplined prompt and zero hallucination/over-reach/over-flagging (fp 0.00, good fixture correctly clean). The lone baseline FAIL (recall 0.50) is a FIXTURE-GRADING bug, not a prompt bug: bad/client-pact-divergence is an info-tier 'stale pact / optional read' case mis-filed as a high-expecting bad, and all 3 reviewer runs correctly returned info. Coupled fix = redesign client-pact-divergence into a genuine HARD undeclared-dependency high defect (+ add the missing weakened-consumer-assertion fixture to cover the prompt's untested third high rule). Keep block_threshold='high'. Add shared-rubric preamble + a hard-vs-optional-dependency clarifier; preserve the existing (correct) info classifications."
+}

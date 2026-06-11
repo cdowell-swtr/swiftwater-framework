@@ -1,0 +1,29 @@
+{
+  "agent": "application-logic",
+  "case": "falsy-none-check",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 46,
+      "message": "Falsy check `if not item:` relies on the truthiness of a SQLAlchemy ORM instance to detect a missing row. SQLAlchemy mapped objects do not override `__bool__`, so a found instance is always truthy today\u2014but this is an implicit contract that breaks if the Item class ever gains a `__bool__` (e.g. via a mixin or dataclass decorator) or if SQLAlchemy's behaviour changes, causing a valid item to be treated as not found and a spurious 404 to be returned. The correct sentinel for a cache-miss from `session.get()` is `None`.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Replace `if not item:` with `if item is None:` to test explicitly for the absence of a row rather than relying on the object's truthiness."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 84804,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 46,\n    \"severity\": \"medium\",\n    \"message\": \"Falsy check `if not item:` relies on the truthiness of a SQLAlchemy ORM instance to detect a missing row. SQLAlchemy mapped objects do not override `__bool__`, so a found instance is always truthy today\u2014but this is an implicit contract that breaks if the Item class ever gains a `__bool__` (e.g. via a mixin or dataclass decorator) or if SQLAlchemy's behaviour changes, causing a valid item to be treated as not found and a spurious 404 to be returned. The correct sentinel for a cache-miss from `session.get()` is `None`.\",\n    \"suggestion\": \"Replace `if not item:` with `if item is None:` to test explicitly for the absence of a row rather than relying on the object's truthiness.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 13393,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 5088
+  }
+}

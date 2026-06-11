@@ -1,0 +1,65 @@
+{
+  "agent": "observability",
+  "case": "instrumented-route",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 49,
+      "message": "404 warning log does not explicitly include a correlation_id. If ObservabilityMiddleware does not bind a request-scoped correlation_id into structlog contextvars before route dispatch, this warning event will be untrackable across service boundaries and the log\u2192trace link is broken for the not-found path.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Confirm ObservabilityMiddleware calls structlog.contextvars.bind_contextvars(correlation_id=...) on every request before yielding to the route. If not, pass it explicitly: _log.warning('archive_item_not_found', item_id=item_id, correlation_id=request.headers.get('x-request-id', ''))."
+    },
+    {
+      "acknowledged": null,
+      "line": 52,
+      "message": "session.commit() failure path is unobserved. If the commit raises (e.g., IntegrityError, stale connection), the exception propagates with no structured log capturing item_id or mutation intent. The registered exception handler will log a generic 500 with no route-level context, making the incident untriageable without a full trace.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add _log.debug('archive_item_committing', item_id=item_id) immediately before session.commit(), or wrap the commit in a try/except that logs item_id and re-raises, so every exit path from the mutation is observable."
+    },
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "No SLO threshold is defined for the new archive write endpoint. The fleet-wide request_latency_p99_ms and error_rate_pct in slo.py will absorb archive requests, but POST /items/{item_id}/archive includes a session.commit() and is structurally higher-latency than GET /items. A latency regression on this endpoint can silently inflate the fleet p99 without triggering a targeted alert.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add an endpoint-scoped SLO entry (e.g., key='archive_latency_p99_ms') to slo.py default_slos() and wire a corresponding PromQL expression in provisioning.py, or document explicitly why the shared fleet threshold is an acceptable ceiling for commit-path latency."
+    },
+    {
+      "acknowledged": null,
+      "line": 47,
+      "message": "item_id is not set as an application-level span attribute on the auto-instrumented trace. FastAPIInstrumentor records http.route and http.target (which includes the raw URL), but there is no app.item_id attribute, so filtering traces for a specific item in Tempo/Jaeger requires full-text URL matching rather than a typed attribute lookup. Log\u2194trace correlation by item is impossible without it.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add opentelemetry.trace.get_current_span().set_attribute('app.item_id', item_id) at the top of archive_item to enrich the auto-created span with a queryable application attribute."
+    },
+    {
+      "acknowledged": null,
+      "line": 51,
+      "message": "Re-archiving an already-archived item silently produces '[archived] [archived] item_name' with no warning log and no 4xx response. This non-idempotent mutation is invisible in both logs and metrics, making it impossible to detect or alert on repeated archive operations causing data drift.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Guard with if item.name.startswith('[archived]'): emit _log.warning('archive_item_already_archived', item_id=item_id) and raise HTTPException(status_code=409, detail='Item already archived'), or make the operation explicitly idempotent and document that contract."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 135059,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 49,\n    \"severity\": \"medium\",\n    \"message\": \"404 warning log does not explicitly include a correlation_id. If ObservabilityMiddleware does not bind a request-scoped correlation_id into structlog contextvars before route dispatch, this warning event will be untrackable across service boundaries and the log\u2192trace link is broken for the not-found path.\",\n    \"suggestion\": \"Confirm ObservabilityMiddleware calls structlog.contextvars.bind_contextvars(correlation_id=...) on every request before yielding to the route. If not, pass it explicitly: _log.warning('archive_item_not_found', item_id=item_id, correlation_id=request.headers.get('x-request-id', '')).\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 52,\n    \"severity\": \"medium\",\n    \"message\": \"session.commit() failure path is unobserved. If the commit raises (e.g., IntegrityError, stale connection), the exception propagates with no structured log capturing item_id or mutation intent. The registered exception handler will log a generic 500 with no route-level context, making the incident untriageable without a full trace.\",\n    \"suggestion\": \"Add _log.debug('archive_item_committing', item_id=item_id) immediately before session.commit(), or wrap the commit in a try/except that logs item_id and re-raises, so every exit path from the mutation is observable.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 40,\n    \"severity\": \"medium\",\n    \"message\": \"No SLO threshold is defined for the new archive write endpoint. The fleet-wide request_latency_p99_ms and error_rate_pct in slo.py will absorb archive requests, but POST /items/{item_id}/archive includes a session.commit() and is structurally higher-latency than GET /items. A latency regression on this endpoint can silently inflate the fleet p99 without triggering a targeted alert.\",\n    \"suggestion\": \"Add an endpoint-scoped SLO entry (e.g., key='archive_latency_p99_ms') to slo.py default_slos() and wire a corresponding PromQL expression in provisioning.py, or document explicitly why the shared fleet threshold is an acceptable ceiling for commit-path latency.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 47,\n    \"severity\": \"medium\",\n    \"message\": \"item_id is not set as an application-level span attribute on the auto-instrumented trace. FastAPIInstrumentor records http.route and http.target (which includes the raw URL), but there is no app.item_id attribute, so filtering traces for a specific item in Tempo/Jaeger requires full-text URL matching rather than a typed attribute lookup. Log\u2194trace correlation by item is impossible without it.\",\n    \"suggestion\": \"Add opentelemetry.trace.get_current_span().set_attribute('app.item_id', item_id) at the top of archive_item to enrich the auto-created span with a queryable application attribute.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 51,\n    \"severity\": \"low\",\n    \"message\": \"Re-archiving an already-archived item silently produces '[archived] [archived] item_name' with no warning log and no 4xx response. This non-idempotent mutation is invisible in both logs and metrics, making it impossible to detect or alert on repeated archive operations causing data drift.\",\n    \"suggestion\": \"Guard with if item.name.startswith('[archived]'): emit _log.warning('archive_item_already_archived', item_id=item_id) and raise HTTPException(status_code=409, detail='Item already archived'), or make the operation explicitly idempotent and document that contract.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 17785,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 8144
+  }
+}

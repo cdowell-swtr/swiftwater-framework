@@ -100,7 +100,9 @@ def test_advisory_and_filetrigger_config():
     dep = get_agent("dependency")
     assert dep.block_threshold is None and dep.active_when == "file-trigger"
     assert dep.trigger_globs and "pyproject.toml" in dep.trigger_globs
-    assert get_agent("data-integrity").block_threshold == "info"
+    # Plan 21: raised info->high so low/medium over-flags on clean code no longer block;
+    # only a demonstrable high atomicity/data-loss defect gates.
+    assert get_agent("data-integrity").block_threshold == "high"
 
 
 def test_active_agents_excludes_battery_agents_by_default():
@@ -238,7 +240,9 @@ def test_observability_split_db():
 
     spec = get_agent("observability-db")
     assert spec.name == "review-observability-db"
-    assert spec.block_threshold == "high"
+    # Plan 21: deferred high->None (advisory) until the bypass-redesign's true-positive
+    # signal is confirmed + the threshold re-derived in Phase 3.
+    assert spec.block_threshold is None
     assert spec.active_when == "file-trigger"
     # data-layer globs, NOT battery-gated (baseline always ships postgres).
     assert spec.trigger_globs and "*/db/*" in spec.trigger_globs

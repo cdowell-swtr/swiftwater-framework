@@ -1,0 +1,42 @@
+{
+  "agent": "observability-db",
+  "case": "unindexed-unobserved-query",
+  "findings": [],
+  "kind": "bad",
+  "latency_ms": 22850,
+  "raw_text": "Based on my exploration, the repository auto-instruments all SQLAlchemy queries via `SQLAlchemyInstrumentor().instrument(engine=engine)` (in `src/demo/observability/datastores.py`, wired through `tracing.py`). The new `get_item_by_name` function executes through that same instrumented engine, so it gets a span automatically \u2014 no manual instrumentation is the codebase idiom. The query is also bounded (single-row `.first()` with a `WHERE name ==` predicate), not an unbounded scan.\n\n[]",
+  "repeat": 0,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo",
+        "pattern": "SQLAlchemyInstrumentor|Instrumentor|instrument"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "src/demo/**/*.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/db/repository.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 21948,
+    "cache_read_input_tokens": 24267,
+    "input_tokens": 10186,
+    "output_tokens": 1228
+  }
+}

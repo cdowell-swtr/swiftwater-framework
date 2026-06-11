@@ -1,0 +1,29 @@
+{
+  "agent": "observability-fe",
+  "case": "swallowed-error",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "loadItemsQuietly() catches fetchItems() failures and returns an empty array with no rethrow and no telemetry. The previous code at least set an error state (rendering a role=alert); the new code swallows the failure entirely. The error never reaches the window 'error' handler or the js-errors RUM counter, so a fully broken Items view (backend down, network error) renders as a normal-looking empty list and is completely invisible to monitoring. The empty list is indistinguishable from a legitimately empty result.",
+      "path": "frontend/src/Items.tsx",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Do not swallow the error. Either rethrow after recording it, or explicitly increment the js-errors RUM counter / emit a beacon to POST /internal/rum before returning a fallback, and restore the user-visible error state (setError(true)) so the failure is both observable and surfaced. At minimum call the RUM error-reporting path (or rethrow so the window 'error'/unhandledrejection handler fires) in the catch block."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 20441,
+  "raw_text": "[{\"path\": \"frontend/src/Items.tsx\", \"line\": \"return []; // error swallowed: no rethrow, no telemetry\", \"severity\": \"high\", \"message\": \"loadItemsQuietly() catches fetchItems() failures and returns an empty array with no rethrow and no telemetry. The previous code at least set an error state (rendering a role=alert); the new code swallows the failure entirely. The error never reaches the window 'error' handler or the js-errors RUM counter, so a fully broken Items view (backend down, network error) renders as a normal-looking empty list and is completely invisible to monitoring. The empty list is indistinguishable from a legitimately empty result.\", \"suggestion\": \"Do not swallow the error. Either rethrow after recording it, or explicitly increment the js-errors RUM counter / emit a beacon to POST /internal/rum before returning a fallback, and restore the user-visible error state (setError(true)) so the failure is both observable and surfaced. At minimum call the RUM error-reporting path (or rethrow so the window 'error'/unhandledrejection handler fires) in the catch block.\"}]",
+  "repeat": 0,
+  "seeded_file": "frontend/src/Items.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 10864,
+    "cache_read_input_tokens": 11907,
+    "input_tokens": 5093,
+    "output_tokens": 1119
+  }
+}

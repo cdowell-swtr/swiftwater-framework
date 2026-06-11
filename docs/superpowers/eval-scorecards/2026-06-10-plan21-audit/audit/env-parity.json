@@ -1,0 +1,90 @@
+{
+  "agent": "env-parity",
+  "status": "ok",
+  "baseline": {
+    "recall": 1.00,
+    "fp_rate": 0.67,
+    "verdict": "FAIL (fp 0.67 > 0.10)",
+    "fp_surface": "Entire fp comes from the single good fixture `parity-preserved`: 2 of 3 judge repeats (r0, r2) flagged it high; r1 alone returned []."
+  },
+  "root_cause": "The good fixture `parity-preserved` is NOT genuinely clean. It wires APP_WIDGET_API_URL into base.yml's app `environment:` block only. Verified against src/framework_cli/template/infra/compose/: prod.yml.jinja and staging.yml.jinja are SELF-CONTAINED app definitions that do NOT compose base.yml, carry NO `env_file:`, and enumerate explicit environment keys (TZ, APP_ENVIRONMENT, APP_DATABASE_URL). Docker Compose injects into a container ONLY the vars listed in that service's `environment:`/`env_file:`; host process env is NOT auto-passed into containers. Therefore a var wired only into base.yml never reaches the staging/prod app container. Under the prompt's OWN dev-only-overlay model (base.yml = dev/test-only; deploy = <env>.yml + services.yml + observability.yml), this is exactly the parity gap the agent is built to catch. The judges that flagged it (r0/r2) were CORRECT; the abstaining judge (r1) rationalized it away by reading deploy/README.md line 81 ('every var in .env.example -> the target's environment -> the app reads config from the target's env') as host-env-reaches-the-app, which is false for a containerized app with no env_file passthrough. The fixture sits on a contested DEPLOY-CONTRACT seam the prompt never resolves -> non-determinism, not over-flagging by a too-strict prompt.",
+  "severity_bar_issues": [
+    {
+      "issue": "Prompt's closing line ('A service that won't reach prod or a consumed-but-undeclared variable is high') is well-calibrated to the rubric high bar (demonstrable defect: prod unconfigurable / silently-empty var). No severity inflation found in the BAD findings: all three bad cases produced exactly one high finding matching expect.json. Severity bar is sound.",
+      "verdict": "no-change"
+    }
+  ],
+  "scope_creep": [
+    {
+      "observed": "No cross-domain leakage in baseline findings. Every finding stayed in {service parity, env-var parity}; none touched observability/privacy/security/value-divergence. The explicit 'Do NOT flag' carve-outs (config VALUE divergence; observability; PII/secret content) are doing their job.",
+      "verdict": "no-change"
+    }
+  ],
+  "hallucination_overreach": [
+    {
+      "observed": "bad/compose-var-not-declared r2 returned a finding with ZERO tool calls (turns:1) and asserted a DIFFERENT .env.example var list ('APP_OTLP_ENDPOINT, APP_SECRET_KEY, APP_ANTHROPIC_API_KEY') than actually exists in the fixture (APP_ENVIRONMENT, APP_SLO_*, APP_DATABASE_URL, GRAFANA_ADMIN_PASSWORD, APP_ALERT_WEBHOOK_URL). The conclusion (var undeclared) happened to be right, but the evidence was fabricated from a prior environment's memory, not read. This is a latent hallucination risk masked by a correct verdict.",
+      "severity": "medium",
+      "fix": "Add an explicit grounding instruction: 'Cite only var names you have READ in this run. Do not enumerate .env.example contents from memory; if a read was not performed, do not assert what is or isn't declared.'"
+    },
+    {
+      "observed": "parity-preserved good r2 (118s) explicitly states 'The harness isn't returning tool results, so I'll proceed on ... my mandate' and still emitted a high finding on assumed facts. Combined with r0's full tool-call set reaching the same verdict, the finding is substantively defensible — but the abstain/flag split is driven by deploy-contract interpretation, not by tool grounding."
+    }
+  ],
+  "stricter_than_codebase": [
+    {
+      "observed": "No stricter-than-codebase violation. The agent flags the NEW base.yml-only wiring; the template's own base.yml never wires app-runtime config that prod also needs (prod/staging enumerate their own env). So the new instance is held to the same bar the template meets. Codebase-bar principle satisfied.",
+      "verdict": "no-change"
+    }
+  ],
+  "internal_consistency": [
+    {
+      "observed": "ACROSS the run, the SAME base.yml-only APP_WIDGET_API_URL wiring is the defect in BOTH bad/compose-var-not-declared (graded a true positive) AND good/parity-preserved (graded a false positive). The only diff between the two fixtures is whether .env.example declares the var. But declaring a var in .env.example does NOT change whether it reaches the prod container (no env_file passthrough) — so the parity gap is identical. The corpus thus asks the agent to flag the wiring in one case and NOT flag the byte-identical wiring in the other, where the distinguishing fact (.env.example declaration) is parity-irrelevant. This is the create_item/bulk-insert internal-consistency trap baked into the fixture design itself.",
+      "severity": "high",
+      "verdict": "FIXTURE DEFECT - drives the whole fp_rate"
+    }
+  ],
+  "fixture_validity": {
+    "good": [
+      {
+        "case": "parity-preserved",
+        "clean": false,
+        "verdict": "INVALID. The base.yml-only APP_WIDGET_API_URL wiring is a genuine staging/prod parity gap under the prompt's own composition model. Declaring the var in .env.example does NOT fix container-reach (prod.yml/staging.yml have no env_file: and don't list it). The fixture is byte-identical in the compose hunk to bad/compose-var-not-declared; the only delta (.env.example line) is parity-irrelevant. Cannot be a 'good' as written."
+      }
+    ],
+    "bad": [
+      {"case": "compose-var-not-declared", "unambiguous": true, "verdict": "VALID. ${APP_WIDGET_API_URL} interpolation in base.yml with no .env.example declaration -> compose substitutes empty string -> blank var in app. Unambiguous defect. Caught 3/3."},
+      {"case": "env-var-consumed-not-declared", "unambiguous": true, "verdict": "VALID. New pydantic field widget_timeout_s (APP_WIDGET_TIMEOUT_S) consumed via Settings, absent from .env.example. Unambiguous undeclared-consumed-var defect. Caught 3/3."},
+      {"case": "service-dev-only", "unambiguous": true, "verdict": "VALID. New widgetizer service (versioned registry image ghcr.io/acme/widgetizer:1.4.0, real postgres dependency) added only to dev.yml -> never reaches staging/prod, and is not local-dev tooling. Unambiguous service-parity defect. Caught 3/3."}
+    ]
+  },
+  "coupled_edits": [
+    {
+      "id": "FIX-1-fixture",
+      "type": "fixture",
+      "target": "tests/eval/fixtures/env-parity/good/parity-preserved/change.patch",
+      "problem": "As written, the good fixture commits a real parity gap (base.yml-only var wiring) and is byte-identical in the compose hunk to bad/compose-var-not-declared.",
+      "edit": "Rewrite parity-preserved so the change is UNAMBIGUOUSLY parity-complete. Recommended: make it a pure consumed-and-correctly-declared env-var change with NO compose wiring at all — add the pydantic field to settings.py AND the matching APP_WIDGET_API_URL line to the .env.example FRAMEWORK block, and DROP the base.yml hunk entirely. The deploy README contract (line 81: every .env.example var -> the target's environment) then makes it reach every env via the documented surface, with zero base.yml-only wiring to flag. This is the genuine 'consumed + declared + name-consistent = clean' good case the agent must NOT flag. (Alternative if a service good case is desired: add a prod-reaching service to services.yml so it composes into staging/prod — but the env-var variant is the cleaner, lower-variance choice.)"
+    },
+    {
+      "id": "FIX-2-prompt",
+      "type": "prompt",
+      "target": "src/framework_cli/review/agents/env-parity.md",
+      "problem": "The ENV-VAR PARITY section enumerates three triggers (undeclared interpolation / consumed-but-undeclared / name divergence) but never states the CONTAINER-REACH rule that distinguishes a clean .env.example declaration from a base.yml-only compose wiring. This is the exact seam the three judges disagreed on (r1 abstained on a host-env-reaches-app assumption).",
+      "edit": "Add a clause to the ENV-VAR PARITY section: 'A variable REACHES an environment's app container only via (a) the deploy contract surface — declared in .env.example, which the deploy injects into the target environment for the app process — OR (b) a `${APP_*}` passthrough listed in that service's compose `environment:`/`env_file:`. Compose does NOT auto-pass host env into containers. So a var wired ONLY into base.yml's `environment:` block (a dev/test-only overlay, not composed by staging/prod) does NOT reach the deployed app: treat a prod-needed var wired only into a dev-scoped overlay as a parity gap (high), the env-var analogue of the dev-only-service rule. Conversely, a var that is consumed in settings.py, declared in .env.example, with a consistent name and NO dev-only compose wiring is CLEAN — do not flag it.' This resolves the abstain/flag split deterministically and aligns the env-var rule with the existing greedy service-parity rule."
+    },
+    {
+      "id": "FIX-3-prompt",
+      "type": "prompt",
+      "target": "src/framework_cli/review/agents/env-parity.md",
+      "problem": "r2 fabricated a .env.example var list with zero reads. No grounding constraint in the prompt.",
+      "edit": "Append to the closing instruction: 'Ground every claim about what .env.example / settings.py declares on a file you actually READ this run; do not enumerate declarations from memory.'"
+    }
+  ],
+  "proposed_block_threshold": {
+    "recall_min": 0.90,
+    "fp_max": 0.10,
+    "rationale": "Keep the recall-first 0.90 floor (a missed parity gap is the twice-shipped dev-only-not-prod defect; greedy posture is safe because intentional dev-only choices are acknowledged via the decisions log). After FIX-1 makes the good fixture genuinely clean and FIX-2 resolves the container-reach seam deterministically, the observed fp should return to 0.00 and clear a strict 0.10 fp_max. Do NOT raise fp_max toward 0.43 to 'absorb' the current 0.67 — that fp is a fixture/prompt defect, not real over-flagging, and widening the gate would mask future genuine over-flags. Hold the bar; fix the fixture+prompt instead. Re-derive only if post-fix variance demonstrably trips a clean good fixture."
+  },
+  "confidence": "high",
+  "notes": "Recall is a clean 1.00 (3/3 on every bad case) and severity/scope/codebase-bar are all sound — the agent is NOT over-strict in posture. The entire FAIL is one mis-authored good fixture sitting on an unresolved container-reach seam in the prompt. This is a COUPLED fixture+prompt fix, not a threshold relaxation."
+}

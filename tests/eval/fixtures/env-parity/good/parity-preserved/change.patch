@@ -11,18 +11,6 @@ index 27db54c..3769b19 100644
  # FRAMEWORK:END
  
  # Your app's config below.
-diff --git a/infra/compose/base.yml b/infra/compose/base.yml
-index 89ddc59..19a9ea8 100644
---- a/infra/compose/base.yml
-+++ b/infra/compose/base.yml
-@@ -8,6 +8,7 @@ services:
-     environment:
-       TZ: UTC
-       APP_ENVIRONMENT: dev
-+      APP_WIDGET_API_URL: "${APP_WIDGET_API_URL}"
-     healthcheck:
-       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/heartbeat').status==200 else 1)"]
-       interval: 5s
 diff --git a/src/demo/config/settings.py b/src/demo/config/settings.py
 index e6fb558..2140afd 100644
 --- a/src/demo/config/settings.py

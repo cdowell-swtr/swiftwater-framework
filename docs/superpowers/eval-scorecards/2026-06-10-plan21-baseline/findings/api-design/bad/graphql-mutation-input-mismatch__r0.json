@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-mutation-input-mismatch",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 43,
+      "message": "Adding a required (non-null) argument `description: str` to the existing `create_item` mutation is a breaking schema change. Existing clients that call `create_item(name: ...)` without `description` will now fail validation, with no backwards-compatible path provided.",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Make the new argument nullable with a default so existing clients keep working: `description: str | None = None`. Deprecate the old form and require `description` only after clients migrate."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 14419,
+  "raw_text": "[{\"path\": \"src/demo/graphql/schema.py\", \"line\": 43, \"severity\": \"high\", \"message\": \"Adding a required (non-null) argument `description: str` to the existing `create_item` mutation is a breaking schema change. Existing clients that call `create_item(name: ...)` without `description` will now fail validation, with no backwards-compatible path provided.\", \"suggestion\": \"Make the new argument nullable with a default so existing clients keep working: `description: str | None = None`. Deprecate the old form and require `description` only after clients migrate.\"}]",
+  "repeat": 0,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 22494,
+    "cache_read_input_tokens": 0,
+    "input_tokens": 5093,
+    "output_tokens": 905
+  }
+}

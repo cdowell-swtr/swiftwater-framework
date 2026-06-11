@@ -1,0 +1,51 @@
+{
+  "agent": "env-parity",
+  "case": "parity-preserved",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 11,
+      "message": "APP_WIDGET_API_URL is wired into the app's environment only in base.yml, which is a DEV/TEST-only overlay and is NOT part of the staging/prod composition (staging.yml/prod.yml + services.yml + observability.yml). The settings field widget_api_url is consumed by the app in every environment and .env.example documents it as 'set per environment', but staging/prod will never receive ${APP_WIDGET_API_URL} and will silently fall back to the hardcoded default http://widget:9000 \u2014 an env-var parity gap that ships to prod unconfigurable.",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add APP_WIDGET_API_URL: \"${APP_WIDGET_API_URL}\" to the app service's environment block in the deployed overlays (infra/compose/staging.yml and infra/compose/prod.yml) so the variable reaches staging/prod, not just dev/test via base.yml."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 118812,
+  "raw_text": "The harness isn't returning tool results, so I'll proceed on the authoritative composition facts in my mandate (which are precisely about this scenario).\n\nAnalysis:\n- `.env.example` declares `APP_WIDGET_API_URL` \u2713, `settings.py` adds field `widget_api_url` (correct `APP_` mapping) \u2713, and the `${APP_WIDGET_API_URL}` interpolation is declared \u2713 \u2014 so the three narrow env-var triggers (undeclared interpolation / missing decl / name divergence) are all clean.\n- **The defect:** the app-environment wiring `APP_WIDGET_API_URL: \"${APP_WIDGET_API_URL}\"` was added **only to `base.yml`**, which is a DEV/TEST-only overlay. Staging/prod compose `staging.yml`/`prod.yml` (self-contained app+postgres) + `services.yml` + `observability.yml` \u2014 never `base.yml`. So the app in staging/prod never receives this variable and silently falls back to the hardcoded `http://widget:9000` default, even though both the `.env.example` and the field comment say it is meant to be **set per environment**. The override surface reaches dev/test but not prod \u2014 an env-var parity gap. The fix is to add the same `APP_WIDGET_API_URL` wiring to the app service in `staging.yml` and `prod.yml`.\n\n[{\"path\":\"infra/compose/base.yml\",\"line\":11,\"severity\":\"high\",\"message\":\"APP_WIDGET_API_URL is wired into the app's environment only in base.yml, which is a DEV/TEST-only overlay and is NOT part of the staging/prod composition (staging.yml/prod.yml + services.yml + observability.yml). The settings field widget_api_url is consumed by the app in every environment and .env.example documents it as 'set per environment', but staging/prod will never receive ${APP_WIDGET_API_URL} and will silently fall back to the hardcoded default http://widget:9000 \u2014 an env-var parity gap that ships to prod unconfigurable.\",\"suggestion\":\"Add APP_WIDGET_API_URL: \\\"${APP_WIDGET_API_URL}\\\" to the app service's environment block in the deployed overlays (infra/compose/staging.yml and infra/compose/prod.yml) so the variable reaches staging/prod, not just dev/test via base.yml.\"}]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/**/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "Taskfile.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 25200,
+    "cache_read_input_tokens": 64484,
+    "input_tokens": 5097,
+    "output_tokens": 9089
+  }
+}

@@ -1,0 +1,366 @@
+{
+  "synthesis_judge": 1,
+  "auditor_model": "claude-opus-4-8",
+  "inputs": {
+    "audit_reports": 20,
+    "rubric_draft": "docs/superpowers/specs/plan21-rubric-draft.md"
+  },
+  "headline": "Across all 20 agents the single dominant root cause is identical: prompts predate the Plan-21 shared rubric and inherit NONE of it (no severity ladder, no codebase-bar, no internal-consistency, no scope clause). Every good-fixture over-flag (compliance fp 1.00, data-integrity 1.00, security 1.00, test-quality 1.00, observability ~0.83-1.00, performance low-noise 1.00, env-parity 0.67) is a codebase-bar and/or internal-consistency failure where the agent flags the template's own sanctioned idiom. The under-finding FAILs (contracts 0.50, data-lineage 0.17) are FIXTURE-grading defects, not prompt weakness. The observability cluster (observability, -db, -fe, -infra) shares one mechanism: flagging the ABSENCE of MANUAL instrumentation the template AUTO-provides. Fix = (1) prepend the shared rubric to every prompt; (2) add agent-specific codebase-bar carve-outs naming the exact template idiom; (3) re-author the handful of invalid fixtures; (4) block only on 'high' everywhere, advisory agents never block.",
+  "cross_agent_severity_reconciliation": [
+    {
+      "class": "Absence of MANUAL observability instrumentation (manual span / per-query metric / per-endpoint SLO / per-endpoint business metric / manual correlation_id) on a path the template AUTO-instruments",
+      "agents_calling_high": [
+        "observability",
+        "observability-db",
+        "observability-fe"
+      ],
+      "agents_calling_low_or_clean": [],
+      "reconciled_bar": "NOT A FINDING (drop entirely). The template auto-instruments at the engine/middleware/global level (SQLAlchemyInstrumentor, FastAPIInstrumentor, ObservabilityMiddleware, add_correlation_id/add_trace_context processors, window 'error'/'unhandledrejection' global handler, fleet-wide-only SLOs). The template's own routes/items.py, repository.create_item/list_items, App.tsx/Items.tsx carry NO manual instrumentation and ship unflagged. Per the codebase-bar principle, flagging a new path for lacking manual instrumentation holds it stricter than the codebase and would flag EVERY function in the repo (the Plan-18 over-flagging mechanism). Re-scope each observability agent to flag only a REAL gap relative to what the template provides: a path that BYPASSES auto-instrumentation (raw driver / second un-registered engine / background path), an ACTIVE suppression of the global signal (a catch that consumes a rejection so it never reaches the global handler / js-errors counter), a new mutation/business path that emits NO structured log event of its own, a new prod surface with no /health or no observability quartet (service+exporter+scrape+alert+dashboard).",
+      "rationale": "Unanimous across the observability cohort once the codebase fact (auto-instrumentation) is applied. observability.json is the load-bearing case (its three explicit flag clauses each contradict the shipped template); -db/-fe/-infra are the same defect specialized."
+    },
+    {
+      "class": "Missing defense-in-depth hardening on a config secret (SecretStr vs str, min_length/entropy floor, rotation docs, .env handling)",
+      "agents_calling_high": [
+        "security (r1 only — severity-unstable, same finding rated medium in r0/r2)"
+      ],
+      "agents_calling_low_or_clean": [
+        "security (intended/post-fix: info at most)"
+      ],
+      "reconciled_bar": "INFO at most, never medium/high, and only if not already redundant with an existing repo mitigation (.env is already in template .gitignore). 'Secret-exposing = high' binds ONLY to an actual committed/leaked secret VALUE on a changed line (hardcoded default, key in code/config, secret in a logged field). The template's own webhook_signing_secret is a plain `str = \"\"` with no SecretStr and no length floor (SecretStr/get_secret_value/min_length: 0 hits in template/), so the good fixture's `api_secret_key: str` is byte-idiomatic and must score [].",
+      "rationale": "security.json: the bad fixture (hardcoded default) is a clean critical 3/3; the good-fixture over-flag is 100% hardening-as-blocking + intra-agent severity instability (SecretStr high in r1, medium in r0/r2). The codebase-bar clause + binding 'secret-exposing' to a real value resolves both."
+    },
+    {
+      "class": "PII in logs / PII echoed in responses / PII captured into telemetry (RUM allowlist)",
+      "agents_calling_high": [
+        "privacy",
+        "compliance"
+      ],
+      "agents_calling_low_or_clean": [],
+      "reconciled_bar": "HIGH, but OWNED BY PRIVACY ONLY. privacy correctly rates these high and is the cleanest agent in the corpus (recall 1.00 / fp 0.00). compliance currently DUPLICATES privacy's PII-in-logs frame (2 of 3 findings per bad repeat, and the same frame drives compliance's good-fixture fp 1.00). Reconciliation: compliance must DEFER raw-PII-in-logs/PII-collection to privacy and stay on its own axis — AUDIT-GAP / RETENTION-PATH / ERASURE-PATH. A sensitive op with NO audit record, or persisted personal data with NO retention/deletion path, is compliance-high; a logger merely receiving an identifier is NOT.",
+      "rationale": "privacy.json + compliance.json. The same PII-in-logs phenomenon is correctly high in privacy and is scope-creep in compliance. Cross-agent boundary: privacy owns the PII SINK; compliance owns the AUDIT/RETENTION GAP."
+    },
+    {
+      "class": "Structured get_logger().info(event, key=value) with an OPAQUE identifier and no per-line retention policy",
+      "agents_calling_high": [
+        "compliance (good-fixture FP — INCORRECT)"
+      ],
+      "agents_calling_low_or_clean": [
+        "privacy (correctly NOT flagged)"
+      ],
+      "reconciled_bar": "NOT A FINDING. This is the template's own sanctioned request-logging idiom (middleware/observability.py:59-65 logs every request this way; webhooks/inbox.py emits structured events the same way). An opaque-id structured log with no in-handler retention policy is clean. compliance's fp 1.00 is entirely this codebase-bar violation + hallucinated 'no log-retention policy declared in a route handler' over-reach.",
+      "rationale": "compliance.json codebase_bar_violations vs privacy.json stricter_than_codebase_note (privacy verified the same middleware logs only method/path/correlation_id and did NOT over-flag). The two agents must agree: opaque-id structured logging is clean."
+    },
+    {
+      "class": "Missing post-commit session.refresh() / 'created_at=None' / absent UNIQUE constraint on a bulk insert",
+      "agents_calling_high": [
+        "data-integrity (good-fixture FP — INCORRECT)"
+      ],
+      "agents_calling_low_or_clean": [],
+      "reconciled_bar": "NOT A FINDING. The session factory sets expire_on_commit=False (ORM attributes survive commit without refresh), created_at uses server_default=func.now() (populated in the DB regardless), and items.name has NO UNIQUE constraint in the template (migration 0001 = NOT NULL only). data-integrity's fp 1.00 is a hallucinated 'created_at=None' high + a stricter-than-codebase UNIQUE demand + an internal-consistency failure (it demands validation on the bad fixture then flags the good fixture HIGH for HAVING that same validation). HIGH stays reserved for the genuine planted defect: the in-loop session.commit() that breaks batch atomicity.",
+      "rationale": "data-integrity.json. The create_item/bulk-insert internal-consistency trap the rubric names by reference."
+    },
+    {
+      "class": "Bounded full-ORM-row over-fetch (hydrate all columns, consume one) when the result set is capped",
+      "agents_calling_high": [],
+      "agents_calling_low_or_clean": [
+        "performance (low) — still a codebase-bar violation"
+      ],
+      "reconciled_bar": "NOT A FINDING. The template's own /items endpoint hydrates created_at and discards it on every request, unflagged, bounded by MAX_PAGE_SIZE. Bounded reads are not performance defects; reserve findings for UNBOUNDED scans, N+1 round-trips, or super-linear work on unbounded input. performance's bad-fixture detection (N+1 + unbounded scan, high 3/3) is excellent; only the good-fixture low-noise needs to drop to [].",
+      "rationale": "performance.json. Same one-standard-per-pattern lesson: the agent suggests projection on the bad fixture then penalizes bounded full-row fetch on the good fixture, while the template ships full-row fetch as the norm."
+    },
+    {
+      "class": "Absence of casing/whitespace normalization (strip/lower) on a stored value",
+      "agents_calling_high": [],
+      "agents_calling_low_or_clean": [
+        "data-lineage (fixture demands a flag — INVALID)"
+      ],
+      "reconciled_bar": "NOT A LINEAGE FINDING. The template's create_item stores name verbatim, unflagged; flagging absence of normalization is both stricter-than-codebase AND out of the lineage domain (no PII destination, no deletion gap, no cross-paradigm write). Reviewers correctly returned []. data-lineage recall 0.17 is caused entirely by this one INVALID bad fixture (untransformed-write); fix is to REPLACE the fixture, not weaken the prompt.",
+      "rationale": "data-lineage.json. The recall FAIL is a fixture defect; the prompt is fundamentally correct."
+    },
+    {
+      "class": "Optional undeclared read (.get(...)) / stale-but-non-breaking pact / additive backwards-compatible change",
+      "agents_calling_high": [
+        "contracts (fixture EXPECTS high — INVALID grading)"
+      ],
+      "agents_calling_low_or_clean": [
+        "contracts (prompt correctly classifies info)",
+        "api-design (additive nullable field correctly clean)"
+      ],
+      "reconciled_bar": "INFO/LOW, never high. An OPTIONAL undeclared read (data.get('location')) or a not-yet-regenerated pact is advisory; a HARD undeclared dependency (int(data['field']) -> KeyError) is high. contracts recall 0.50 is a FIXTURE-grading bug: bad/client-pact-divergence exercises only info-tier behavior but is graded against block_threshold='high'. All 3 reviewers correctly returned info. Fix the fixture (convert to a hard undeclared dependency), not the prompt or threshold.",
+      "rationale": "contracts.json + api-design.json agree: additive/optional = non-blocking; hard/breaking = high. The reviewers were RIGHT; the fixture is mis-filed."
+    },
+    {
+      "class": "A var wired only into base.yml (dev/test overlay) but needed in prod; container-reach of an env var",
+      "agents_calling_high": [
+        "env-parity (r0/r2 — CORRECT)"
+      ],
+      "agents_calling_low_or_clean": [
+        "env-parity (r1 abstained — incorrectly, on a host-env-reaches-app assumption)"
+      ],
+      "reconciled_bar": "HIGH (it is a real parity gap — prod.yml/staging.yml have no env_file passthrough, so a base.yml-only var never reaches the deployed app). The non-determinism is a fixture+prompt seam, not over-flagging: the 'good' fixture parity-preserved is byte-identical in the compose hunk to the bad fixture, distinguished only by a parity-IRRELEVANT .env.example line. Fix = re-author the good fixture to a pure consumed-and-declared env-var change (drop the base.yml hunk) AND add a prompt clause stating the container-reach rule explicitly.",
+      "rationale": "env-parity.json. fp 0.67 is one mis-authored good fixture on an unresolved container-reach seam; recall is a clean 1.00."
+    },
+    {
+      "class": "Latent/speculative-future correctness fragility (works today, breaks under a hypothetical future change)",
+      "agents_calling_high": [],
+      "agents_calling_low_or_clean": [
+        "application-logic (medium, correctly)"
+      ],
+      "reconciled_bar": "MEDIUM, never escalated to high. A correctness defect real TODAY (wrong output, data loss, crash, swallowed error on the changed path) = high; a latent fragility relying on accidental correctness = medium. application-logic's reviewers correctly held the falsy-check finding at medium across 3 repeats — but that was model luck (the prompt has no severity anchor). Inherit the rubric to make it stable.",
+      "rationale": "application-logic.json. Also flag: the bad fixture ships a FACTUALLY WRONG inline comment ('returns 404 for any id=0') that could induce a hallucinated high; fix the comment."
+    },
+    {
+      "class": "Redundant/duplicate test coverage (verbatim duplicate of an existing parametrized case)",
+      "agents_calling_high": [
+        "test-quality (r0 — INCONSISTENT)"
+      ],
+      "agents_calling_low_or_clean": [
+        "test-quality (r1 low, r2 medium — same finding, three severities)"
+      ],
+      "reconciled_bar": "LOW/INFO advisory only, NEVER high or blocking. HIGH for test-quality is reserved strictly for 'a test that cannot fail' (tautology, mock of the symbol-under-test, interface-mismatch mock, unhappy-path-without-failure-assert). test-quality's fp 1.00 is a genuinely-redundant test in the good fixture (visible via the bundle context) + an unanchored prompt that rated the SAME duplicate high/low/medium across repeats. Fix BOTH: replace the duplicate test in the good fixture; anchor redundancy to low.",
+      "rationale": "test-quality.json. Recall is perfect (1.0 high stable); the fp is a coupled fixture+prompt defect."
+    },
+    {
+      "class": "Advisory UX observations on clean frontend code (confirm-dialog ergonomics, success toast, window.confirm caveats, component-not-yet-wired)",
+      "agents_calling_high": [],
+      "agents_calling_low_or_clean": [
+        "usability (info)"
+      ],
+      "reconciled_bar": "INFO (advisory) — agent NEVER blocks. usability fp 0.33 is a CALIBRATION ARTIFACT: thresholds.yaml holds it to fp_max 0.10 like a blocking agent while block_threshold=None and the scorer counts any surfaced info as a positive. Realign to advisory semantics (fp_max 1.00, mirroring dependency/documentation). Allow 'low' for concrete defects (silent mutation failure, no error branch) and keep 'info' for taste. Add a scope exclusion: a new component not yet wired into a parent is NOT a usability defect.",
+      "rationale": "usability.json. Same advisory-calibration class as dependency and documentation."
+    },
+    {
+      "class": "Dependency-manifest convention violation (unpinned dep when every sibling is pinned)",
+      "agents_calling_high": [],
+      "agents_calling_low_or_clean": [
+        "dependency (low/info, advisory by design)"
+      ],
+      "reconciled_bar": "LOW/INFO advisory — agent NEVER blocks (fp_max 1.00 by design). Under the bare rubric an unpinned dep is a 'medium' convention violation, so dependency must EXPLICITLY opt out of the medium tier ('this advisory agent caps at low even for convention violations'). Reserve a single narrow optional 'high' ONLY for a concrete supply-chain compromise (malicious/typosquat/yanked) and keep even that advisory until a fixture proves high-precision detection. Cut fabricated CVE-specific claims and out-of-domain async/event-loop reasoning (performance's territory).",
+      "rationale": "dependency.json. Threshold-PASS but qualitatively noisy: scope-creep into runtime reasoning + fabricated CVEs + a good fixture that is not truly clean (httpx>=0.27 diverges from the template's >=0.28)."
+    }
+  ],
+  "scope_boundary_enforcement": [
+    {
+      "owner": "privacy",
+      "owns": "PII sink: PII logged, echoed in responses, captured into telemetry/RUM, unnecessary collection, retention-beyond-purpose",
+      "defers_to_others": "audit/retention GAP -> compliance; authz -> security; observability coverage -> observability"
+    },
+    {
+      "owner": "compliance",
+      "owns": "AUDIT-GAP / RETENTION-PATH / ERASURE-PATH only",
+      "must_stop_flagging": "raw PII-in-logs (privacy), name_filter discarded / pagination (application-logic / api-design)"
+    },
+    {
+      "owner": "observability",
+      "owns": "structured-log presence on a new mutation/business path; swallowed error branch",
+      "must_stop_flagging": "DB rollback/session state (data-integrity), idempotency/business correctness (application-logic), import-order/exc_info style (none/code-quality)"
+    },
+    {
+      "owner": "observability-db",
+      "owns": "DB access bypassing auto-instrumentation; new client with no /health; data-layer error without correlation_id",
+      "must_stop_flagging": "unbounded query / pagination as such (performance)"
+    },
+    {
+      "owner": "observability-fe",
+      "owns": "active suppression of the global error signal; unbounded label cardinality",
+      "must_stop_flagging": "server-side-allowlist / PII-bearing beacon key (privacy)"
+    },
+    {
+      "owner": "dependency",
+      "owns": "manifest: justification, pin-consistency, health, duplication",
+      "must_stop_flagging": "runtime async/event-loop behavior the manifest diff cannot show (performance / application-logic)"
+    },
+    {
+      "owner": "documentation",
+      "owns": "missing docstring on a documented sibling, missing .env.example var, stale README/spec entry",
+      "must_stop_flagging": "page-size cap correctness, response_model/typing, openapi.json regen, CI contract jobs (api-design / contracts / performance)"
+    },
+    {
+      "owner": "architecture",
+      "owns": "layering violation, circular dep, coupling, heavy inline handler",
+      "must_stop_flagging": "import hygiene / dead code / naming (code-quality)"
+    },
+    {
+      "owner": "security",
+      "owns": "actual committed/leaked secret value, exploitable vuln",
+      "must_stop_flagging": "hardening preferences (SecretStr/min_length/rotation = info), field naming (usability/code-quality)"
+    },
+    {
+      "owner": "performance",
+      "owns": "unbounded scans, N+1, super-linear-on-unbounded, SLO regression",
+      "must_stop_flagging": "bounded micro-optimisation matching the repo idiom"
+    },
+    {
+      "owner": "usability",
+      "owns": "user-observable harm: blank/frozen/silent-failure UI, unrecoverable misclick",
+      "must_stop_flagging": "feature-wiring completeness, implementation taste (reload vs state update)"
+    },
+    {
+      "owner": "application-logic",
+      "owns": "correctness: edge cases, wrong conditionals, missing/swallowed error handling",
+      "must_stop_flagging": "contract/schema/api-design/security/data-integrity concerns"
+    },
+    {
+      "owner": "contracts",
+      "owns": "provider break of a committed pact, uncompensated incompatible change, weakened consumer assertion",
+      "must_stop_flagging": "additive/optional changes (info)"
+    },
+    {
+      "owner": "data-integrity",
+      "owns": "non-atomic writes, constraint/migration data loss, broken store invariants",
+      "must_stop_flagging": "missing refresh (expire_on_commit=False), absent UNIQUE the schema never declared"
+    },
+    {
+      "owner": "data-lineage",
+      "owns": "PII to undocumented store, deletion gap missing a store, stale documented/indexed derived field",
+      "must_stop_flagging": "absence of normalization (application-logic)"
+    },
+    {
+      "owner": "env-parity",
+      "owns": "service/env-var parity across deploy targets, container-reach",
+      "must_stop_flagging": "config VALUE divergence, observability, PII/secret content"
+    }
+  ],
+  "refined_shared_rubric": {
+    "preamble": "Every review-* agent prompt MUST prepend this rubric verbatim. The audit confirmed that EVERY good-fixture over-flag in the corpus traces to an agent NOT inheriting these clauses. This refined version adds: (a) an auto-instrumentation codebase-bar example (the observability cohort's root cause), (b) an explicit advisory-tier opt-out for never-blocking agents, and (c) a grounding clause (cite only facts you READ this run) prompted by env-parity/observability-infra hallucinations.",
+    "severity": {
+      "high": "blocks a builder: a concrete, demonstrable defect that WILL cause incorrect behavior, data loss, a security/privacy breach, or a broken contract in the CHANGED code. A latent fragility that only breaks under a hypothetical future change is NOT high.",
+      "medium": "should fix before merge but does not block: a real issue with a plausible path to harm, or a clear violation of an established project convention.",
+      "low": "advisory: style, minor clarity, redundant test coverage, bounded micro-optimisation, or a non-urgent improvement.",
+      "info": "observation only; never implies an action is required."
+    },
+    "codebase_bar_principle": "Do not hold new code to a stricter standard than the surrounding codebase already meets. Before flagging a pattern, check whether the template/baseline already does the same thing unflagged; if it does, do not flag the new instance. SPECIFIC, BINDING EXAMPLES (verified against the template): (1) data stores are AUTO-instrumented at the engine/middleware/global level (SQLAlchemyInstrumentor, FastAPIInstrumentor, ObservabilityMiddleware, add_correlation_id/add_trace_context, window 'error'/'unhandledrejection' handler) — a plain path that runs through them is ALREADY observed; do NOT flag absence of a manual span/metric/correlation_id. (2) SLOs are fleet-wide only; there is NO per-endpoint SLO convention — do not demand one. (3) the session factory sets expire_on_commit=False and created_at uses server_default — a missing post-commit refresh is NOT a defect. (4) items.name has no UNIQUE constraint — absence of de-dup is not a violated invariant. (5) the template's signing secret is a plain str with no SecretStr/min_length — those are info hardening, never blocking. (6) bounded reads (capped by MAX_PAGE_SIZE) hydrating full ORM rows are the repo norm — not a performance defect. (7) repository.create_item stores values verbatim (no normalization).",
+    "internal_consistency": "Apply one standard to every instance of a pattern you see in the same diff. If you do not flag instance A, do not flag an identical instance B (the create_item/bulk-insert lesson). Do not demand a mitigation on one fixture then flag a sibling fixture for HAVING that same mitigation.",
+    "scope_discipline": "Stay within this agent's domain (stated per-agent, with explicit 'do NOT flag X — agent Y owns it' carve-outs). Do not flag issues another agent owns.",
+    "grounding": "Cite only file/line facts you actually READ in THIS run. Do not enumerate .env.example / settings / file contents from memory, and do not assert what is or isn't declared without a read. Treat files CREATED or MODIFIED in this diff as present — do not flag a surface as missing an alert/dashboard/declaration that the same change adds. Speculative 'IF the middleware does not...' findings against established wiring are disallowed.",
+    "advisory_tier_optout": "Advisory agents (usability, dependency, documentation) NEVER block (block_threshold=None) and are calibrated fp_max=1.00. They cap output at low/info even for a clear convention violation, and must explicitly opt out of the 'medium' tier. They surface observations by design; surfacing an info finding on clean code is NOT a false positive for them.",
+    "output": "Return JSON ONLY — an array of {\"path\",\"line\",\"severity\",\"message\",\"suggestion\"}; output exactly [] if none. No prose, no code fence, no commentary before or after the array."
+  },
+  "block_threshold_consolidation": {
+    "block_on_high_advisory_none": "Every blocking agent blocks ONLY on 'high'; medium/low/info never block. Advisory agents (usability, dependency, documentation) have block_threshold=None and are calibrated fp_max=1.00.",
+    "per_agent": {
+      "accessibility": "high",
+      "api-design": "high",
+      "application-logic": "high",
+      "architecture": "high",
+      "compliance": "high (advisory until post-retune given current fp 1.00)",
+      "contracts": "high",
+      "data-integrity": "high",
+      "data-lineage": "high",
+      "dependency": "none (advisory)",
+      "documentation": "none/high-unreachable (advisory)",
+      "env-parity": "high",
+      "observability": "high",
+      "observability-db": "defer (no valid bad fixture yet)",
+      "observability-fe": "high",
+      "observability-infra": "high",
+      "performance": "high",
+      "privacy": "high",
+      "security": "high",
+      "test-quality": "high",
+      "usability": "none (advisory)"
+    }
+  },
+  "fixture_actions": {
+    "replace_invalid_bad": [
+      {
+        "agent": "data-lineage",
+        "fixture": "bad/untransformed-write",
+        "action": "REPLACE with an in-domain bad (deletion-gap-misses-a-store OR pii-to-undocumented-sink) — the absence-of-normalization defect is stricter-than-codebase AND out of domain; it single-handedly drives recall to 0.17"
+      },
+      {
+        "agent": "observability-db",
+        "fixture": "bad/unindexed-unobserved-query",
+        "action": "REPLACE with raw-connection-bypasses-instrumentation (a second un-registered engine/raw DBAPI call); current fixture is byte-identical body to the good fixture"
+      },
+      {
+        "agent": "observability-db",
+        "fixture": "bad/write-path-no-metric",
+        "action": "REPLACE with new-client-no-health OR db-error-no-correlation-id; current fixture's 'invisible to observability' docstring is factually false (auto-instrumented)"
+      }
+    ],
+    "fix_invalid_good": [
+      {
+        "agent": "env-parity",
+        "fixture": "good/parity-preserved",
+        "action": "Re-author to a pure consumed+declared env-var change; drop the base.yml-only hunk (currently byte-identical compose hunk to the bad fixture, a real parity gap)"
+      },
+      {
+        "agent": "observability-fe",
+        "fixture": "good/capped-label",
+        "action": "Make genuinely clean — device_class is stripped by the fail-closed allowlist (dead-on-arrival). Add device_class to the allowlist in-patch OR use an allowlisted/server-derived dimension"
+      },
+      {
+        "agent": "observability-infra",
+        "fixture": "good/complete-obs-surface",
+        "action": "Repair the dev.yml hunk so the redis: block lands under services:, not volumes: (currently parses as a malformed volume)"
+      },
+      {
+        "agent": "documentation",
+        "fixture": "good/documented-public-function",
+        "action": "Remove the doc-vs-impl mismatch — count_items returns a bounded page (<=DEFAULT_PAGE_SIZE) while docs promise a true total; implement a real aggregate OR reword to honest bounded semantics"
+      },
+      {
+        "agent": "test-quality",
+        "fixture": "good/meaningful-assert",
+        "action": "Replace the verbatim-duplicate test (test_resolved_log_level_prod_is_info duplicates the existing parametrized [prod] case) with a genuinely additive test"
+      },
+      {
+        "agent": "dependency",
+        "fixture": "good/pinned-reputable-dep",
+        "action": "Change httpx>=0.27,<1.0 to httpx>=0.28 (match the template floor, drop the non-template cap) so it is truly clean"
+      }
+    ],
+    "regrade_or_convert_bad": [
+      {
+        "agent": "contracts",
+        "fixture": "bad/client-pact-divergence",
+        "action": "CONVERT the optional read into a HARD undeclared dependency (int(data['field']) -> KeyError with no pact declaration) so the info-tier case becomes a genuine high; also ADD bad/weakened-consumer-assertion for the untested third high rule"
+      },
+      {
+        "agent": "compliance",
+        "fixture": "bad/logs-pii-in-handler",
+        "action": "Re-author to a true compliance defect (sensitive op with NO audit record OR persisted PII with no retention path); move email-in-logs to the privacy corpus"
+      }
+    ],
+    "fix_misleading_content": [
+      {
+        "agent": "application-logic",
+        "fixture": "bad/falsy-none-check",
+        "action": "Correct the factually-wrong comment ('returns 404 for any id=0' is false — item is the ORM object, not item_id); state the real latent-ORM-truthiness defect"
+      },
+      {
+        "agent": "api-design",
+        "fixture": "bad/graphql-rest-divergence",
+        "action": "RENAME to graphql-breaking-field-rename (defect is valid; name mis-advertises a REST-parity responsibility the prompt does not own)"
+      },
+      {
+        "agent": "usability",
+        "fixture": "bad/delete-no-confirm",
+        "action": "Regenerate change.patch as a full git-formatted diff (add diff --git/index header) for stable line anchoring; do NOT change the defect"
+      }
+    ],
+    "add_coverage": [
+      {
+        "agent": "accessibility",
+        "action": "Add good+bad pairs for the untested high categories: non-semantic-interactive (div-onClick) and keyboard-inaccessibility; only img-alt is currently exercised"
+      },
+      {
+        "agent": "architecture",
+        "action": "Add bad/heavy-inline-handler + good/lightweight-inline-handler to cover the prompt's untested second domain and pin the heavy-vs-lightweight boundary"
+      },
+      {
+        "agent": "api-design",
+        "action": "Add good/graphql-additive-field (additive optional GraphQL field returns []) — the real over-flagging boundary; current good fixture is REST-only (scope-obedience, not GraphQL judgment)"
+      },
+      {
+        "agent": "privacy",
+        "action": "Optional: add a 2nd good fixture (pii-redacted-log) to widen fp coverage (only 1 good case today)"
+      }
+    ]
+  },
+  "prompt_actions_summary": "ALL 20 agents: prepend the refined shared rubric. Agent-specific load-bearing clauses: observability/-db/-fe/-infra = auto-instrumentation codebase-bar + re-scope to bypass/active-suppression/missing-quartet (observability.json is the highest-priority rewrite); compliance = narrow to audit/retention/erasure + defer PII to privacy + opaque-id-log carve-out; security = bind 'secret-exposing' to a real committed value + hardening=info; data-integrity = expire_on_commit/server_default/no-UNIQUE carve-out + demonstrability gate replacing the 'at least high' floor; performance = bounded-reads-are-not-defects clause; dependency = scope-discipline (no runtime reasoning) + no-fabricated-CVE + explicit advisory cap; documentation = scope fence + cap at low/info; usability = scope exclusion (wiring completeness) + allow low for concrete defects + JSON-only hardening; data-lineage = add derived-field-desync class pinned high + normalization carve-out; contracts = hard-vs-optional-dependency clarifier (keep existing correct info classifications); application-logic = high/medium correctness-calibration line; env-parity = container-reach rule + grounding clause; accessibility/architecture/api-design/privacy = rubric inheritance + minor scope/severity lines (these are already PASS).",
+  "threshold_notes": "Do NOT widen any fp_max to 'absorb' a current over-flag — every elevated fp in this baseline is a prompt/fixture defect, not real over-flagging; widening would mask future regressions. Re-derive all numeric thresholds in Phase 3 (eval-analyze) from a post-fix --repeat sweep. Advisory agents (usability, dependency, documentation): fp_max=1.00, recall_min~0.90. observability-db: defer threshold entirely until the coupled prompt+fixture redesign produces a true-positive signal.",
+  "confidence": "high",
+  "notes": "Reconciliation is strongly convergent: 18 of 20 agents share one root cause (no rubric inheritance -> codebase-bar/internal-consistency over-flags), and the 2 FAIL-on-recall agents (contracts 0.50, data-lineage 0.17) are unanimous FIXTURE-grading defects where the reviewers behaved correctly. No agent's prompt needs to be made STRICTER; every fix loosens an over-flag or repairs a fixture. The observability cohort is the single highest-leverage cluster (4 agents, one mechanism)."
+}

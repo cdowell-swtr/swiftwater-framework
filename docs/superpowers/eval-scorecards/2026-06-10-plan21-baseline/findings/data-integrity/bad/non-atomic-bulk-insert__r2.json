@@ -1,0 +1,47 @@
+{
+  "agent": "data-integrity",
+  "case": "non-atomic-bulk-insert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "session.commit() is called inside the for-loop, giving every item its own independent transaction. If any iteration raises (DB constraint violation, network error, unexpected exception), all rows committed in prior iterations are already durably persisted and cannot be rolled back. The batch is not atomic: a failure at item N leaves items 1\u2026N-1 permanently written with no compensating rollback path.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Collect all Item objects first, then call session.add_all(items) followed by a single session.commit() after the loop. On exception, call session.rollback() so the session is left clean and the caller can retry the whole batch. Example: items = [Item(name=n) for n in names]; session.add_all(items); session.commit(); [session.refresh(i) for i in items]; return items."
+    },
+    {
+      "acknowledged": null,
+      "line": 37,
+      "message": "No pre-flight validation that any name satisfies the String(255) column constraint before any row is added to the session. A name longer than 255 characters causes the database to raise a DataError on the iteration's commit. Because commits are per-iteration (line 40), all items processed before that iteration are already durably written \u2014 the over-length name is the concrete trigger that turns the atomicity bug into a guaranteed partial write.",
+      "path": "src/demo/db/repository.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Validate the entire names list (non-empty strings, len <= 255) before entering the loop and before touching the session. Raise ValueError eagerly so no rows are written on invalid input."
+    },
+    {
+      "acknowledged": null,
+      "line": 37,
+      "message": "No guard against empty or whitespace-only names. The column is declared nullable=False, which blocks NULL but does not prevent empty strings (''). SQLAlchemy accepts and persists empty-string names silently. bulk_create_items amplifies the risk relative to the single-item create_item: a caller can silently write an entire batch of empty-name rows in one call.",
+      "path": "src/demo/db/repository.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Before the loop, validate that every name is a non-empty, non-whitespace string (e.g. if not name or not name.strip(): raise ValueError(f\"Invalid name: {name!r}\")). Reject the whole batch before writing any rows."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 76729,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 40,\n    \"severity\": \"high\",\n    \"message\": \"session.commit() is called inside the for-loop, giving every item its own independent transaction. If any iteration raises (DB constraint violation, network error, unexpected exception), all rows committed in prior iterations are already durably persisted and cannot be rolled back. The batch is not atomic: a failure at item N leaves items 1\u2026N-1 permanently written with no compensating rollback path.\",\n    \"suggestion\": \"Collect all Item objects first, then call session.add_all(items) followed by a single session.commit() after the loop. On exception, call session.rollback() so the session is left clean and the caller can retry the whole batch. Example: items = [Item(name=n) for n in names]; session.add_all(items); session.commit(); [session.refresh(i) for i in items]; return items.\"\n  },\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 37,\n    \"severity\": \"high\",\n    \"message\": \"No pre-flight validation that any name satisfies the String(255) column constraint before any row is added to the session. A name longer than 255 characters causes the database to raise a DataError on the iteration's commit. Because commits are per-iteration (line 40), all items processed before that iteration are already durably written \u2014 the over-length name is the concrete trigger that turns the atomicity bug into a guaranteed partial write.\",\n    \"suggestion\": \"Validate the entire names list (non-empty strings, len <= 255) before entering the loop and before touching the session. Raise ValueError eagerly so no rows are written on invalid input.\"\n  },\n  {\n    \"path\": \"src/demo/db/repository.py\",\n    \"line\": 37,\n    \"severity\": \"medium\",\n    \"message\": \"No guard against empty or whitespace-only names. The column is declared nullable=False, which blocks NULL but does not prevent empty strings (''). SQLAlchemy accepts and persists empty-string names silently. bulk_create_items amplifies the risk relative to the single-item create_item: a caller can silently write an entire batch of empty-name rows in one call.\",\n    \"suggestion\": \"Before the loop, validate that every name is a non-empty, non-whitespace string (e.g. if not name or not name.strip(): raise ValueError(f\\\"Invalid name: {name!r}\\\")). Reject the whole batch before writing any rows.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": "src/demo/db/repository.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 21106,
+    "input_tokens": 3,
+    "output_tokens": 4570
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "agent": "observability-fe",
+  "case": "capped-label",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 128,
+      "message": "New `device_class` dimension is read from `params`, but the ingest route filters params through the fail-closed allowlist (`frontend_rum_allowed_query_params`, routes/frontend_rum.py:64), which contains only the `utm_*` keys. `device_class` is never in the allowlist, so it is stripped before reaching `record_page_view` and the `app_frontend_device_class_total` series can only ever emit `device_class=\"unknown\"`. The signal is dead-on-arrival: it produces no operable data.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add `device_class` to `frontend_rum_allowed_query_params` in src/demo/config/settings.py (so the backend allowlist passes it through), or source it server-side (e.g. derived from User-Agent) rather than from the allowlisted query params. Add a unit test asserting a non-`unknown` device_class series renders end-to-end through the route."
+    },
+    {
+      "acknowledged": null,
+      "line": 206,
+      "message": "New RUM signal `app_frontend_device_class_total` is exposed on /metrics with no corresponding Grafana dashboard panel (infra/observability/grafana/dashboards/frontend.json has panels only for web vitals, js_errors, page_views, rum_beacons) and no alert rule (infra/observability/prometheus/alerts/frontend_alerts.yml covers only LCP and js_errors). The metric is emitted but unobserved by any operator-facing surface.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a panel to frontend.json (e.g. `sum(rate(app_frontend_device_class_total[5m])) by (device_class)`) and, if device-class breakdown is meant to gate anything, a corresponding alert rule. The repo's obs-completeness guard expects scrape+dashboard parity for declared signals."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 110920,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/frontend_rum/metrics.py\",\n    \"line\": 128,\n    \"severity\": \"medium\",\n    \"message\": \"New `device_class` dimension is read from `params`, but the ingest route filters params through the fail-closed allowlist (`frontend_rum_allowed_query_params`, routes/frontend_rum.py:64), which contains only the `utm_*` keys. `device_class` is never in the allowlist, so it is stripped before reaching `record_page_view` and the `app_frontend_device_class_total` series can only ever emit `device_class=\\\"unknown\\\"`. The signal is dead-on-arrival: it produces no operable data.\",\n    \"suggestion\": \"Add `device_class` to `frontend_rum_allowed_query_params` in src/demo/config/settings.py (so the backend allowlist passes it through), or source it server-side (e.g. derived from User-Agent) rather than from the allowlisted query params. Add a unit test asserting a non-`unknown` device_class series renders end-to-end through the route.\"\n  },\n  {\n    \"path\": \"src/demo/frontend_rum/metrics.py\",\n    \"line\": 206,\n    \"severity\": \"medium\",\n    \"message\": \"New RUM signal `app_frontend_device_class_total` is exposed on /metrics with no corresponding Grafana dashboard panel (infra/observability/grafana/dashboards/frontend.json has panels only for web vitals, js_errors, page_views, rum_beacons) and no alert rule (infra/observability/prometheus/alerts/frontend_alerts.yml covers only LCP and js_errors). The metric is emitted but unobserved by any operator-facing surface.\",\n    \"suggestion\": \"Add a panel to frontend.json (e.g. `sum(rate(app_frontend_device_class_total[5m])) by (device_class)`) and, if device-class breakdown is meant to gate anything, a corresponding alert rule. The repo's obs-completeness guard expects scrape+dashboard parity for declared signals.\"\n  }\n]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/frontend_rum/metrics.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "src/demo/frontend_rum/**"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "output_mode": "files_with_matches",
+        "path": "src",
+        "pattern": "record_page_view|internal/rum|device_class|allowlist|ALLOW"
+      },
+      "tool": "grep",
+      "turn": 2
+    },
+    {
+      "input": {
+        "-C": 3,
+        "-n": true,
+        "output_mode": "content",
+        "path": "src/demo",
+        "pattern": "device_class|allowlist|ALLOWED|_ATTRIBUTION_KEYS|params"
+      },
+      "tool": "grep",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "src/demo/config/settings.py"
+      },
+      "tool": "read_file",
+      "turn": 3
+    },
+    {
+      "input": {
+        "path": "src/demo/routes/frontend_rum.py"
+      },
+      "tool": "read_file",
+      "turn": 3
+    },
+    {
+      "input": {
+        "output_mode": "files_with_matches",
+        "path": ".",
+        "pattern": "app_frontend_device_class|device_class|app_frontend"
+      },
+      "tool": "grep",
+      "turn": 3
+    }
+  ],
+  "turns": 4,
+  "usage": {
+    "cache_creation_input_tokens": 58235,
+    "cache_read_input_tokens": 126989,
+    "input_tokens": 15285,
+    "output_tokens": 7305
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "agent": "observability-fe",
+  "case": "unbounded-label",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 108,
+      "message": "record_raw_path() labels a Prometheus counter by the raw full path (including query string) with no distinct-value cap and no \"other\" overflow bucket. Every unique path+querystring becomes a new label value, so this is unbounded/high-cardinality by construction \u2014 it will explode the series count and can OOM the scrape target.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Do not store the raw full path as a label. Strip the query string, normalize dynamic path segments to a fixed route template (e.g. /items/:id), and gate insertion through a distinct-value cap that folds overflow into path=\"other\" \u2014 exactly as the other RUM counters do."
+    },
+    {
+      "acknowledged": null,
+      "line": 206,
+      "message": "app_frontend_raw_path_total emits one time series per raw full path (path=\"{p}\") with no sanitize and no cap. This is an unbounded metric label: a fixed enum or a capped distinct-value set with an \"other\" bucket is required, but the value here is an attacker-/user-controllable raw URL.",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Render this counter from a bounded, route-templated key set with an enforced cardinality cap + path=\"other\" overflow, or drop the metric entirely. Never expose a per-URL label series."
+    },
+    {
+      "acknowledged": null,
+      "line": 205,
+      "message": "app_frontend_raw_path_total is a brand-new RUM signal added with no corresponding alert rule or dashboard panel, so even if its cardinality were bounded the data would be unobserved (no one is alerted or shown it).",
+      "path": "src/demo/frontend_rum/metrics.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add a dashboard panel and/or an alert rule for the new counter (and wire it into the battery obs-completeness surface), or remove the signal until it has an operational consumer."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 42666,
+  "raw_text": "[{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":108,\"severity\":\"high\",\"message\":\"record_raw_path() labels a Prometheus counter by the raw full path (including query string) with no distinct-value cap and no \\\"other\\\" overflow bucket. Every unique path+querystring becomes a new label value, so this is unbounded/high-cardinality by construction \u2014 it will explode the series count and can OOM the scrape target.\",\"suggestion\":\"Do not store the raw full path as a label. Strip the query string, normalize dynamic path segments to a fixed route template (e.g. /items/:id), and gate insertion through a distinct-value cap that folds overflow into path=\\\"other\\\" \u2014 exactly as the other RUM counters do.\"},\n{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":206,\"severity\":\"high\",\"message\":\"app_frontend_raw_path_total emits one time series per raw full path (path=\\\"{p}\\\") with no sanitize and no cap. This is an unbounded metric label: a fixed enum or a capped distinct-value set with an \\\"other\\\" bucket is required, but the value here is an attacker-/user-controllable raw URL.\",\"suggestion\":\"Render this counter from a bounded, route-templated key set with an enforced cardinality cap + path=\\\"other\\\" overflow, or drop the metric entirely. Never expose a per-URL label series.\"},\n{\"path\":\"src/demo/frontend_rum/metrics.py\",\"line\":205,\"severity\":\"medium\",\"message\":\"app_frontend_raw_path_total is a brand-new RUM signal added with no corresponding alert rule or dashboard panel, so even if its cardinality were bounded the data would be unobserved (no one is alerted or shown it).\",\"suggestion\":\"Add a dashboard panel and/or an alert rule for the new counter (and wire it into the battery obs-completeness surface), or remove the signal until it has an operational consumer.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/frontend_rum/metrics.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/frontend_rum",
+        "pattern": "record_raw_path|allowlist|allowed_params|_render_counter|record_page_view"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "src/demo/frontend_rum/*.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 15906,
+    "cache_read_input_tokens": 36252,
+    "input_tokens": 5095,
+    "output_tokens": 2669
+  }
+}

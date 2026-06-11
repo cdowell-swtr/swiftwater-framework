@@ -1,0 +1,84 @@
+{
+  "agent": "observability-infra",
+  "case": "scrape-without-alert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 23,
+      "message": "New scrape job 'redis' targets 'redis-exporter:9121', but no 'redis-exporter' service is defined in any compose file. observability.yml (the overlay merged into dev/staging/prod) defines a postgres-exporter but no redis-exporter, and grep across infra/ finds 'redis-exporter' only in this scrape config. The scrape target has no corresponding exporter, so this job will permanently fail in every environment \u2014 observability that never resolves.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add a redis-exporter service (e.g. oliver006/redis_exporter) to infra/compose/observability.yml alongside postgres-exporter, wired to the redis battery via REDIS_ADDR, so the target exists in prod by construction. If redis is not actually deployed, drop this scrape job instead."
+    },
+    {
+      "acknowledged": null,
+      "line": 21,
+      "message": "The new 'redis' scrape job introduces a redis metrics surface with no matching alert rule and no dashboard panel. infra/observability/prometheus/alerts/ has alertmanager/otel/postgres/prometheus/slo rule files but no redis_alerts.yml, and infra/observability/grafana/dashboards/ contains no redis dashboard. Scraped redis metrics would be collected but never alerted on or visualized \u2014 an incomplete observability surface.",
+      "path": "infra/observability/prometheus/prometheus.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add infra/observability/prometheus/alerts/redis_alerts.yml (e.g. redis_up / connected_clients / used_memory thresholds, routed to an Alertmanager receiver) and a redis Grafana dashboard so the scraped metrics are both alertable and viewable."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 79280,
+  "raw_text": "[\n  {\n    \"path\": \"infra/observability/prometheus/prometheus.yml\",\n    \"line\": 23,\n    \"severity\": \"high\",\n    \"message\": \"New scrape job 'redis' targets 'redis-exporter:9121', but no 'redis-exporter' service is defined in any compose file. observability.yml (the overlay merged into dev/staging/prod) defines a postgres-exporter but no redis-exporter, and grep across infra/ finds 'redis-exporter' only in this scrape config. The scrape target has no corresponding exporter, so this job will permanently fail in every environment \u2014 observability that never resolves.\",\n    \"suggestion\": \"Add a redis-exporter service (e.g. oliver006/redis_exporter) to infra/compose/observability.yml alongside postgres-exporter, wired to the redis battery via REDIS_ADDR, so the target exists in prod by construction. If redis is not actually deployed, drop this scrape job instead.\"\n  },\n  {\n    \"path\": \"infra/observability/prometheus/prometheus.yml\",\n    \"line\": 21,\n    \"severity\": \"medium\",\n    \"message\": \"The new 'redis' scrape job introduces a redis metrics surface with no matching alert rule and no dashboard panel. infra/observability/prometheus/alerts/ has alertmanager/otel/postgres/prometheus/slo rule files but no redis_alerts.yml, and infra/observability/grafana/dashboards/ contains no redis dashboard. Scraped redis metrics would be collected but never alerted on or visualized \u2014 an incomplete observability surface.\",\n    \"suggestion\": \"Add infra/observability/prometheus/alerts/redis_alerts.yml (e.g. redis_up / connected_clients / used_memory thresholds, routed to an Alertmanager receiver) and a redis Grafana dashboard so the scraped metrics are both alertable and viewable.\"\n  }\n]",
+  "repeat": 0,
+  "seeded_file": "infra/observability/prometheus/prometheus.yml",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "infra/**"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "-i": true,
+        "output_mode": "files_with_matches",
+        "path": "infra",
+        "pattern": "redis"
+      },
+      "tool": "grep",
+      "turn": 2
+    },
+    {
+      "input": {
+        "pattern": "infra/observability/grafana/dashboards/**"
+      },
+      "tool": "glob",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/services.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/observability.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 46930,
+    "cache_read_input_tokens": 146631,
+    "input_tokens": 15556,
+    "output_tokens": 4999
+  }
+}

@@ -1,6 +1,8 @@
+diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
+index 862bafd..6d5cf68 100644
 --- a/src/demo/db/repository.py
 +++ b/src/demo/db/repository.py
-@@ -14,3 +14,15 @@
+@@ -28,3 +28,16 @@ def create_item(session: Session, name: str) -> Item:
      session.commit()
      session.refresh(item)
      return item

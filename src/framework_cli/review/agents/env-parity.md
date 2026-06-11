@@ -32,6 +32,20 @@ Flag, citing the changed line:
   `APP_` prefix) but absent from `.env.example`; a `${APP_*}` interpolation in a compose overlay
   with no `.env.example` declaration; or a name that diverges between `.env.example` and the
   `settings.py` field it should map to.
+- CONTAINER-REACH: a var injected into a service's `environment:` block ONLY in a dev/test overlay
+  (`base.yml`) is a parity gap when staging/prod (`prod.yml`/`staging.yml`) supply no `env_file` /
+  passthrough that re-injects it — it reaches dev/test but NOT prod. Resolve the seam by reading the
+  overlay composition; do not assume a passthrough exists. NOT a gap: a var with a consistent
+  `settings.py` default that is declared in `.env.example` and wired into NO compose overlay — it
+  reaches every environment identically via the application default.
+
+Grounding: cite only `.env.example` / overlay / `settings.py` declarations you have ACTUALLY READ in
+this run. Never enumerate the `.env.example` list or a settings field from memory. **Do NOT assert
+that a var is injected into ANY compose service (`app`/`worker`/etc., in `base.yml`/`services.yml`/
+`staging.yml`/`prod.yml`) unless that injection line appears in THIS diff.** A var the diff only
+declares in `.env.example` and consumes in `settings.py` (with a default), wired into NO compose
+overlay, is **parity-complete** — it reaches every environment via the application default. Do not
+fabricate an overlay injection (or a missing one) to manufacture a parity gap.
 
 Do NOT flag: config VALUE divergence across environments (different values per overlay are the
 intended purpose of overlays); observability surfaces; PII/secret content.

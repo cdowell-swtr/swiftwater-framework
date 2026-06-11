@@ -1,0 +1,38 @@
+{
+  "agent": "performance",
+  "case": "n-plus-one-query",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 44,
+      "message": "Unbounded full-table scan with no LIMIT: `select(Item.id)` fetches every row's id into Python memory. The existing /items endpoint caps reads at MAX_PAGE_SIZE=100; this endpoint has no ceiling, so a table with M rows loads M ids before the N+1 loop even begins.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add the same limit/offset pagination the /items endpoint uses, or at minimum append `.limit(MAX_PAGE_SIZE)` to the scalar select so the result set is bounded server-side."
+    },
+    {
+      "acknowledged": null,
+      "line": 48,
+      "message": "N+1 query: `session.get(Item, iid)` inside the loop issues a separate SELECT for every id returned by the initial scan \u2014 1 + N round-trips total, documented explicitly in the endpoint's own docstring. On an unbounded table this degrades linearly and can exhaust the connection pool under concurrency.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Replace both steps with a single projection query: `list(session.scalars(select(Item.name).order_by(Item.id)))`. If pagination is added, apply limit/offset there instead of fetching all ids first."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 48900,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 44,\n    \"severity\": \"high\",\n    \"message\": \"Unbounded full-table scan with no LIMIT: `select(Item.id)` fetches every row's id into Python memory. The existing /items endpoint caps reads at MAX_PAGE_SIZE=100; this endpoint has no ceiling, so a table with M rows loads M ids before the N+1 loop even begins.\",\n    \"suggestion\": \"Add the same limit/offset pagination the /items endpoint uses, or at minimum append `.limit(MAX_PAGE_SIZE)` to the scalar select so the result set is bounded server-side.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 48,\n    \"severity\": \"high\",\n    \"message\": \"N+1 query: `session.get(Item, iid)` inside the loop issues a separate SELECT for every id returned by the initial scan \u2014 1 + N round-trips total, documented explicitly in the endpoint's own docstring. On an unbounded table this degrades linearly and can exhaust the connection pool under concurrency.\",\n    \"suggestion\": \"Replace both steps with a single projection query: `list(session.scalars(select(Item.name).order_by(Item.id)))`. If pagination is added, apply limit/offset there instead of fetching all ids first.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 21943,
+    "input_tokens": 3,
+    "output_tokens": 2852
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "test-quality",
+  "case": "meaningful-assert",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 56,
+      "message": "test_resolved_log_level_prod_is_info is a strict duplicate of an existing parametrized case. test_resolved_log_level_is_info_outside_dev already parametrizes over [\"staging\", \"prod\", \"ci\"] and executes the identical assertion \u2014 Settings(environment=\"prod\").resolved_log_level == \"INFO\" \u2014 as one of its three invocations. The new test adds zero coverage and creates a maintenance hazard: the two assertions can silently diverge if the parametrized set is later changed.",
+      "path": "tests/unit/test_settings.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Delete test_resolved_log_level_prod_is_info. If the security-rationale comment (\"never DEBUG \u2014 would leak sensitive data\") is worth preserving, add it as an inline comment on the \"prod\" entry inside the existing parametrize decorator instead."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 88206,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"tests/unit/test_settings.py\",\n    \"line\": 56,\n    \"severity\": \"low\",\n    \"message\": \"test_resolved_log_level_prod_is_info is a strict duplicate of an existing parametrized case. test_resolved_log_level_is_info_outside_dev already parametrizes over [\\\"staging\\\", \\\"prod\\\", \\\"ci\\\"] and executes the identical assertion \u2014 Settings(environment=\\\"prod\\\").resolved_log_level == \\\"INFO\\\" \u2014 as one of its three invocations. The new test adds zero coverage and creates a maintenance hazard: the two assertions can silently diverge if the parametrized set is later changed.\",\n    \"suggestion\": \"Delete test_resolved_log_level_prod_is_info. If the security-rationale comment (\\\"never DEBUG \u2014 would leak sensitive data\\\") is worth preserving, add it as an inline comment on the \\\"prod\\\" entry inside the existing parametrize decorator instead.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 42053,
+    "input_tokens": 3,
+    "output_tokens": 5888
+  }
+}

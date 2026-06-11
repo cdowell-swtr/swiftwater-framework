@@ -1,0 +1,116 @@
+{
+  "agent": "accessibility",
+  "auditor_model": "claude-opus-4-8",
+  "verdict": "healthy-with-coverage-gap",
+  "summary": "The accessibility prompt is one of the cleanest in the corpus. Baseline scorecard is perfect on what it tests: bad (img-no-alt) flagged high 3/3 (recall 1.0), good (accessible-img) clean 3/3 (fp 0.0). The template codebase itself sets a HIGH a11y bar (role=\"alert\", aria-label, semantic <main>/<h1>/<ul>/<li>) and ships NO <img>, NO div-onClick, NO unlabeled inputs — so there is no codebase-bar violation and effectively zero surface for the prompt to over-flag template idioms. The real weakness is fixture COVERAGE: the prompt enumerates 3 'high' categories + 1 'info' category but the corpus exercises only ONE (missing accessible name / alt) with a single good+bad pair. Recommended edits are light-touch: rubric-align the severity language, add fixtures for the two untested high categories.",
+  "severity_bar_issues": [
+    {
+      "issue": "Blanket 'high' for all three categories is mostly defensible but slightly stricter than the draft rubric for one sub-case.",
+      "detail": "Rubric defines high = 'blocks a builder ... incorrect behavior ... or a broken contract.' Missing alt, div-onClick-as-button, and no-keyboard-handler all genuinely break behavior for assistive-tech users, so 'high' is correct for those. The borderline case is an icon-only button missing aria-label on a NON-critical control: that is arguably 'medium' (degraded, not broken). Low priority — keep 'high' as the default but allow the agent to step down to medium when the affected control is non-essential.",
+      "severity": "low"
+    },
+    {
+      "issue": "Prompt has no medium/low rungs — it only emits 'high' or 'info'.",
+      "detail": "This bimodal scale (high|info) predates the shared rubric's four-rung ladder (high/medium/low/info). It is not causing false positives today, but it prevents the agent from expressing the 'should fix before merge but does not block' tier the rubric defines.",
+      "severity": "low"
+    }
+  ],
+  "scope_creep": [],
+  "scope_creep_note": "The prompt has a clean, explicit negative scope ('Do NOT flag backend/Python changes, or purely stylistic CSS with no a11y impact'), which correctly fences out the api-design/usability/observability-fe agents' territory. No scope-creep observed in the baseline findings.",
+  "hallucination_overreach": [],
+  "hallucination_note": "No hallucinated or over-reaching findings in the baseline. All 3 bad-case findings cite the actual <img> line (30/31 in the rendered file) with accurate WCAG 1.1.1 grounding. Good case correctly returns [].",
+  "codebase_bar_violations": [],
+  "codebase_bar_note": "No violation. Template frontend (Items.tsx, App.tsx) ALREADY uses role=\"alert\", aria-label=\"items\", and semantic <main>/<h1>/<ul>/<li>/<p>. It ships no <img>, no onClick-div, no unlabeled <input>. The prompt holds new code to a bar the template meets or exceeds — there is no stricter-than-codebase problem, and no template idiom that would false-positive.",
+  "internal_consistency_violations": [],
+  "internal_consistency_note": "Single-pattern fixtures give no opportunity to observe an A-vs-B inconsistency; baseline shows none. The prompt's rules are mutually consistent (each category maps to one severity).",
+  "fixture_verdicts": [
+    {
+      "fixture": "good/accessible-img",
+      "kind": "good",
+      "verdict": "valid-clean",
+      "rationale": "Renders <img ... alt=\"Items catalogue banner\" /> with a descriptive accessible name; differs from the bad fixture ONLY by the presence of alt= (confirmed by diff). Genuinely clean for the defect under test. No latent secondary defect (the surrounding <div>/<p> are non-interactive and need no role)."
+    },
+    {
+      "fixture": "bad/img-no-alt-rendered",
+      "kind": "bad",
+      "verdict": "valid-unambiguous-defect",
+      "rationale": "Renders <img src=\"/static/banner.png\" /> with NO alt attribute — an unambiguous WCAG 2.1 SC 1.1.1 (Non-text Content) failure. Well-formed patch (11 added lines, 0 removed, applies cleanly). expect.json seeds frontend/src/Items.tsx, matching the patched file. Recall 1.0 across 3 repeats."
+    }
+  ],
+  "fixture_coverage_gaps": [
+    {
+      "untested_category": "Non-semantic interactive elements (<div>/<span> with onClick used as button/link, no role + keyboard handler)",
+      "prompt_severity": "high",
+      "note": "Enumerated in the prompt but no fixture exercises it. This is the highest-value gap to fill — it is also the Plan-18 over-flagging risk surface (an agent could flag legitimate non-interactive divs). A good fixture (proper <button>) + bad fixture (onClick <div>) would both validate recall AND guard against fp."
+    },
+    {
+      "untested_category": "Keyboard inaccessibility (custom interactive control with no onKeyDown / not focusable / missing tabIndex)",
+      "prompt_severity": "high",
+      "note": "Enumerated but untested. Needs a good (focusable, keyboard-handled control) + bad (mouse-only custom control) pair."
+    },
+    {
+      "untested_category": "Missing accessible names — icon-only button without aria-label, and form <input> without <label>/aria-label",
+      "prompt_severity": "high",
+      "note": "Only the <img> alt sub-case is covered. The icon-button and unlabeled-input sub-cases are untested."
+    },
+    {
+      "untested_category": "ARIA/contrast smells (misused/invalid aria-*, hardcoded low-contrast colors)",
+      "prompt_severity": "info",
+      "note": "Untested; lowest priority since it is info-only."
+    }
+  ],
+  "proposed_prompt_fixture_edits": [
+    {
+      "type": "prompt",
+      "change": "Inherit the shared rubric severity ladder explicitly and allow a medium rung.",
+      "before": "- Missing accessible names: an <img> without alt, an icon-only button with no aria-label, a form <input> with no associated <label>/aria-label. \"high\".",
+      "after": "- Missing accessible names: an <img> without alt, an icon-only button with no aria-label, a form <input> with no associated <label>/aria-label. \"high\" — but step down to \"medium\" when the affected control is clearly non-essential and an adjacent text label is present.",
+      "rationale": "Aligns with the draft rubric's high/medium distinction without weakening the dominant case. COUPLED with no fixture change (existing fixtures stay high).",
+      "priority": "low"
+    },
+    {
+      "type": "prompt",
+      "change": "Add an explicit codebase-bar / negative-example sentence to prevent future over-flagging of non-interactive divs.",
+      "before": "Do NOT flag backend/Python changes, or purely stylistic CSS with no a11y impact.",
+      "after": "Do NOT flag backend/Python changes, or purely stylistic CSS with no a11y impact. A plain <div>/<span> with NO onClick/keyboard/role is a layout element and is NOT an a11y defect — only flag interactive elements that lack semantics. Do not require alt on elements that are not <img>.",
+      "rationale": "Pre-empts the Plan-18 over-flagging mechanism the moment the onClick-div fixtures land. COUPLED with the new fixtures below.",
+      "priority": "medium"
+    },
+    {
+      "type": "fixture",
+      "change": "Add good+bad pair: non-semantic-interactive (div-onClick).",
+      "bad": "A <div onClick={...}> used as a button with no role/tabIndex/onKeyDown — expect one 'high' finding on the div line.",
+      "good": "A proper <button onClick={...}> (or a <div role=\"button\" tabIndex={0} onClick onKeyDown>) — expect [].",
+      "rationale": "Validates the prompt's first 'high' category AND guards fp on legitimate layout divs (good fixture should also include an inert <div> wrapper that must NOT be flagged).",
+      "priority": "high"
+    },
+    {
+      "type": "fixture",
+      "change": "Add good+bad pair: keyboard inaccessibility.",
+      "bad": "A custom clickable control (e.g. span with onClick) with no onKeyDown and no tabIndex — expect 'high'.",
+      "good": "Same control made focusable + keyboard-operable (tabIndex={0} + onKeyDown) — expect [].",
+      "rationale": "Validates the prompt's third 'high' category.",
+      "priority": "medium"
+    },
+    {
+      "type": "fixture",
+      "change": "Add bad fixture: icon-only button without aria-label and/or form <input> without label.",
+      "bad": "An icon-only <button><Icon/></button> with no aria-label (and/or a bare <input>) — expect 'high'.",
+      "good": "Same with aria-label / associated <label> — expect [].",
+      "rationale": "Covers the missing-accessible-name sub-cases beyond <img> alt.",
+      "priority": "medium"
+    }
+  ],
+  "proposed_block_threshold": {
+    "value": "high",
+    "rationale": "The agent emits only 'high' (true defects) and 'info' (advisory). Blocking on 'high' is correct and matches the baseline: the one bad fixture must block, the one good must pass. With perfect baseline precision (fp 0.0) and recall (1.0) and a template that gives no over-flag surface, there is no signal to raise the bar. Set block_threshold = high; info/medium/low remain non-blocking. Re-confirm after the proposed onClick-div fixtures land (Phase 2/3 re-sweep) — that is the category most likely to surface a false positive."
+  },
+  "baseline_metrics": {
+    "bad_recall": 1.0,
+    "good_false_positive_rate": 0.0,
+    "repeats": 3,
+    "bad_cases": 1,
+    "good_cases": 1,
+    "parse_failures": 0
+  }
+}

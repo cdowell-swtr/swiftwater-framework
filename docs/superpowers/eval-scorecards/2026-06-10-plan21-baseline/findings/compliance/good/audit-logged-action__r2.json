@@ -1,0 +1,65 @@
+{
+  "agent": "compliance",
+  "case": "audit-logged-action",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 51,
+      "message": "user_id is emitted into application logs with no documented retention period or deletion path. Under GDPR Art. 4(1) a user identifier is personal data, and Art. 5(1)(e) (storage limitation) and Art. 17 (right to erasure) require that log records containing it can be purged on request. Structured log sinks (ELK, CloudWatch, Loki, etc.) rarely support per-field row deletion, making erasure requests practically impossible to fulfil.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Either omit user_id from the log entry (log only that a search occurred and how many results were returned) or ensure the log pipeline has a GDPR-compliant short retention window with a documented erasure procedure. If the ID is truly non-linkable, record that linkability assessment in a data-processing register rather than relying on the code comment alone."
+    },
+    {
+      "acknowledged": null,
+      "line": 41,
+      "message": "user_id is accepted as a Query parameter on a POST endpoint. Query strings appear verbatim in HTTP access logs on every reverse proxy, CDN, load balancer, and WAF by default\u2014infrastructure logs outside the application's retention or deletion control. This makes Art. 17 erasure requests impossible to fulfil across all log sinks and violates the storage-limitation principle (Art. 5(1)(e)).",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Move user_id (and name_filter) to the POST request body. Since the endpoint is already POST, there is no reason to encode identifying or potentially PII-bearing values in the URL."
+    },
+    {
+      "acknowledged": null,
+      "line": 51,
+      "message": "name_filter (a free-text search string) is logged verbatim. Users routinely search by full name, email address, or other PII. Capturing that string in logs with no sanitisation, no retention bound, and no erasure path is a GDPR Art. 5(1)(b) purpose-limitation and Art. 5(1)(e) storage-limitation violation. The docstring's 'no PII is logged' claim is factually incorrect for this field.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Do not log the raw filter value. If search analytics are needed, log only derived, non-identifying metadata (e.g. filter_length, result_count). If the value must be retained, apply hashing or pseudonymisation and document the retention period."
+    },
+    {
+      "acknowledged": null,
+      "line": 42,
+      "message": "name_filter is a Query parameter on a POST endpoint. Free-text search strings (which may contain names, email addresses, or other PII) will be written to every HTTP access log in the infrastructure, creating uncontrolled personal-data copies with no retention or deletion path.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Move name_filter to the POST request body so it is not serialised into the request URI and does not appear in access logs."
+    },
+    {
+      "acknowledged": null,
+      "line": 52,
+      "message": "list_items(session) is called without limit or offset, returning an unbounded result set. The sibling get_items endpoint correctly applies MAX_PAGE_SIZE pagination. Returning more personal data than necessary for the request violates the GDPR data-minimisation principle (Art. 5(1)(c)) and amplifies the blast radius of any downstream logging or caching of the response.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Apply the same limit/offset pagination used by get_items, and filter the query on name_filter server-side so only matching records are fetched and returned."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 84969,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 51,\n    \"severity\": \"high\",\n    \"message\": \"user_id is emitted into application logs with no documented retention period or deletion path. Under GDPR Art. 4(1) a user identifier is personal data, and Art. 5(1)(e) (storage limitation) and Art. 17 (right to erasure) require that log records containing it can be purged on request. Structured log sinks (ELK, CloudWatch, Loki, etc.) rarely support per-field row deletion, making erasure requests practically impossible to fulfil.\",\n    \"suggestion\": \"Either omit user_id from the log entry (log only that a search occurred and how many results were returned) or ensure the log pipeline has a GDPR-compliant short retention window with a documented erasure procedure. If the ID is truly non-linkable, record that linkability assessment in a data-processing register rather than relying on the code comment alone.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 41,\n    \"severity\": \"high\",\n    \"message\": \"user_id is accepted as a Query parameter on a POST endpoint. Query strings appear verbatim in HTTP access logs on every reverse proxy, CDN, load balancer, and WAF by default\u2014infrastructure logs outside the application's retention or deletion control. This makes Art. 17 erasure requests impossible to fulfil across all log sinks and violates the storage-limitation principle (Art. 5(1)(e)).\",\n    \"suggestion\": \"Move user_id (and name_filter) to the POST request body. Since the endpoint is already POST, there is no reason to encode identifying or potentially PII-bearing values in the URL.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 51,\n    \"severity\": \"high\",\n    \"message\": \"name_filter (a free-text search string) is logged verbatim. Users routinely search by full name, email address, or other PII. Capturing that string in logs with no sanitisation, no retention bound, and no erasure path is a GDPR Art. 5(1)(b) purpose-limitation and Art. 5(1)(e) storage-limitation violation. The docstring's 'no PII is logged' claim is factually incorrect for this field.\",\n    \"suggestion\": \"Do not log the raw filter value. If search analytics are needed, log only derived, non-identifying metadata (e.g. filter_length, result_count). If the value must be retained, apply hashing or pseudonymisation and document the retention period.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 42,\n    \"severity\": \"medium\",\n    \"message\": \"name_filter is a Query parameter on a POST endpoint. Free-text search strings (which may contain names, email addresses, or other PII) will be written to every HTTP access log in the infrastructure, creating uncontrolled personal-data copies with no retention or deletion path.\",\n    \"suggestion\": \"Move name_filter to the POST request body so it is not serialised into the request URI and does not appear in access logs.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 52,\n    \"severity\": \"medium\",\n    \"message\": \"list_items(session) is called without limit or offset, returning an unbounded result set. The sibling get_items endpoint correctly applies MAX_PAGE_SIZE pagination. Returning more personal data than necessary for the request violates the GDPR data-minimisation principle (Art. 5(1)(c)) and amplifies the blast radius of any downstream logging or caching of the response.\",\n    \"suggestion\": \"Apply the same limit/offset pagination used by get_items, and filter the query on name_filter server-side so only matching records are fetched and returned.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 23097,
+    "input_tokens": 3,
+    "output_tokens": 4849
+  }
+}

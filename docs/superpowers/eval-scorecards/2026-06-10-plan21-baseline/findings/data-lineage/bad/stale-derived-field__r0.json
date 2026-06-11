@@ -1,0 +1,29 @@
+{
+  "agent": "data-lineage",
+  "case": "stale-derived-field",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "The rename_item route writes item.name and commits without recomputing the derived slug, so slug permanently diverges from name. models.py documents slug as always derived from name and instructs callers to update both together via repository helpers; repository.py provides update_item_name() that does exactly this, but the route bypasses it. The result is a stale derived-data store (the unique/indexed slug column) that no longer reflects its source field \u2014 a cross-write consistency gap with no reconciliation strategy.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Call repository.update_item_name(session, item_id, payload.name) instead of mutating item.name inline, so the slug is recomputed via _make_slug() and the documented name/slug invariant is preserved."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 18485,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": \"item.name = payload.name\",\n    \"severity\": \"medium\",\n    \"message\": \"The rename_item route writes item.name and commits without recomputing the derived slug, so slug permanently diverges from name. models.py documents slug as always derived from name and instructs callers to update both together via repository helpers; repository.py provides update_item_name() that does exactly this, but the route bypasses it. The result is a stale derived-data store (the unique/indexed slug column) that no longer reflects its source field \u2014 a cross-write consistency gap with no reconciliation strategy.\",\n    \"suggestion\": \"Call repository.update_item_name(session, item_id, payload.name) instead of mutating item.name inline, so the slug is recomputed via _make_slug() and the documented name/slug invariant is preserved.\"\n  }\n]",
+  "repeat": 0,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 11381,
+    "cache_read_input_tokens": 11907,
+    "input_tokens": 5093,
+    "output_tokens": 1221
+  }
+}

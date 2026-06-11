@@ -1,0 +1,152 @@
+{
+  "agent": "dependency",
+  "status": "audited",
+  "auditor_model": "claude-opus-4-8",
+  "prompt_path": "src/framework_cli/review/agents/dependency.md",
+  "domain": "dependency manifests: justification, maintenance health, supply-chain risk, duplicate-need detection",
+  "advisory": true,
+  "baseline": {
+    "recall": 1.0,
+    "fp": 1.0,
+    "verdict": "PASS",
+    "note": "Advisory agent: thresholds.yaml sets fp_max=1.00 (never blocks; surfaces info/low by design). The threshold PASS is not in question; this audit is qualitative. The reported fp=1.00 means the good fixture draws findings on every repeat, which for an advisory agent is surfacing-by-design rather than a true false-positive that blocks a builder.",
+    "runs_reviewed": ["bad/unpinned-risky-dep r0-r2", "good/pinned-reputable-dep r0-r2"]
+  },
+  "summary": "review-dependency is intentionally advisory (prompt forces low/info; fp_max=1.00 so it never blocks). It is threshold-PASS but qualitatively noisy. Three substantive issues: (1) recurring scope creep into runtime/async event-loop reasoning across all 3 bad runs (the diff is manifest-only with no call site, so the agent invents the call context); (2) fabricated CVE-specific claims (CVE-2024-35195) described two different and mutually inconsistent ways across repeats; (3) the good fixture is NOT truly clean — its httpx>=0.27 floor genuinely diverges from the existing dev/template >=0.28 floor and adds a <1.0 cap the template never uses, so it is correctly flagged every run and cannot serve as a clean consistency oracle. Codebase-bar and internal-consistency are otherwise sound: the template pins every prod dep with a bare >= floor and uses httpx not requests, so the agent's missing-pin and prefer-httpx findings are consistent with the codebase, not stricter. No block_threshold applies (advisory agent).",
+  "severity_bar_issues": [
+    {
+      "issue": "Prompt mandates advisory-only severities ('use low/info') and all 6 runs comply. A dependency-manifest concern is rarely a builder-blocking defect by the rubric's 'high' definition, so the cap is reasonable. No severity inflation in the labels.",
+      "severity_observed": "low/info only",
+      "verdict": "compliant"
+    },
+    {
+      "issue": "The hard low/info cap conflicts with the draft shared rubric, which defines 'medium' as 'a clear violation of an established project convention.' An unpinned prod dep when every sibling is pinned IS a convention violation and would, under the bare rubric, merit medium. The prompt should EXPLICITLY opt out of the medium tier ('this advisory agent caps at low even for convention violations') so the constraint is intentional rather than an accidental contradiction of the inherited rubric. Optionally reserve a single narrow 'high' for a concrete supply-chain compromise (malicious/typosquatted/yanked package).",
+      "severity_observed": "low",
+      "verdict": "needs explicit opt-out clause"
+    },
+    {
+      "issue": "Several bad-run MESSAGES escalate beyond what a 'low' advisory should assert (a specific CVE id stated as fact; predicted production throughput collapse). The label is fine; the content reads higher-severity than the assigned 'low'.",
+      "severity_observed": "low",
+      "verdict": "soften message tone to match advisory severity"
+    }
+  ],
+  "scope_creep": [
+    {
+      "finding_excerpt": "'requests' is a synchronous/blocking HTTP client; called inside an async def FastAPI route it blocks the event loop, degrading throughput.",
+      "runs": ["bad r0 #3", "bad r1 #2", "bad r2 #2"],
+      "owning_agent": "performance/concurrency or application-logic reviewer, NOT dependency",
+      "assessment": "Recurs in all 3 bad runs. Event-loop blocking is a runtime-behavior concern outside the dependency-manifest domain. The diff shows no call site, so the agent invents the async usage to make the argument. Borderline-defensible only as an 'is this the right dep for an async stack' fit judgment, but the reasoning leans on call-site behavior the diff never contains. The prompt has no scope-discipline clause to suppress it."
+    },
+    {
+      "finding_excerpt": "Suggestions to 'use httpx.AsyncClient' / 'wrap requests in asyncio.to_thread'.",
+      "runs": ["bad r0 #3", "bad r1 #2", "bad r2 #2"],
+      "owning_agent": "performance / application-logic",
+      "assessment": "Prescribing async call-site refactors is out of scope for a manifest reviewer. The in-domain remedy is 'pin it' or 'this duplicates the existing httpx dep'; how to use the library at runtime belongs to other agents."
+    },
+    {
+      "finding_excerpt": "version-floor mismatch (prod httpx>=0.27 vs dev httpx>=0.28) undermines parity / a slim Docker image could resolve 0.27.x.",
+      "runs": ["good r0 #2", "good r1 #1", "good r2 #2"],
+      "owning_agent": "arguably env-parity, but reasonably within dependency (pin hygiene)",
+      "assessment": "In-domain enough (a pinning/justification concern), so NOT counted as scope creep. But note it is a REAL finding against the supposedly-clean fixture (see fixture-validity)."
+    }
+  ],
+  "hallucination_overreach": [
+    {
+      "finding_excerpt": "CVE-2024-35195 described inconsistently across runs: r1 'credential-leaking redirect', r2 'cert verification bypass under certain redirect scenarios'.",
+      "runs": ["bad r1 #1", "bad r2 #1"],
+      "assessment": "OVERREACH plus likely partial hallucination. The model invents a specific CVE id and gives two mutually inconsistent one-line descriptions across runs. Even if a real CVE exists, citing a specific id and impact the agent cannot verify from a manifest-only diff is fabricated specificity. The unpinned-floor finding is valid WITHOUT the CVE name; the CVE claim should be cut.",
+      "verdict": "cut CVE-specific claims; keep generic 'an unpinned floor admits old/known-vulnerable releases — verify with pip-audit'"
+    },
+    {
+      "finding_excerpt": "'OpenTelemetry packages may already pull in requests as a transitive dependency, making the declaration redundant' / 'run uv tree | grep requests'.",
+      "runs": ["bad r2 #4"],
+      "assessment": "Speculative overreach — asserts a transitive-dependency relationship the agent cannot see in a manifest-only diff. Phrased as a hypothesis ('may'), so soft, and the uv-tree suggestion is reasonable advice, but stating the OTel-pulls-in-requests guess as likely is unverified."
+    },
+    {
+      "finding_excerpt": "'httpx imports may live only under tests/ ... the production pin is unnecessary bloat' (good fixture).",
+      "runs": ["good r0 #1", "good r1 #2", "good r2 #1"],
+      "assessment": "Inference about source the diff does not contain, stated strongly enough to recommend removing the production entry. Plausible domain reasoning (httpx is dev-only in the batteries=[] baseline) but it is a guess about unseen code. Info severity contains the blast radius; it is the over-reach pattern."
+    }
+  ],
+  "stricter_than_codebase": [
+    {
+      "check": "Does the template pin every production dep? YES — every entry in src/framework_cli/template/pyproject.toml.jinja [project].dependencies carries a bare >= floor (fastapi>=0.115 ... pybreaker>=1.2; httpx>=0.28 under the consumers battery). So flagging unpinned 'requests' is CONSISTENT with the codebase-bar, not stricter.",
+      "verdict": "consistent"
+    },
+    {
+      "check": "Does the template use httpx (not requests)? httpx>=0.28 is in the dev group always and in [project].dependencies under {% if 'consumers' in batteries %}. requests appears NOWHERE. So 'prefer httpx / why requests' is consistent with the codebase idiom.",
+      "verdict": "consistent"
+    },
+    {
+      "check": "Does the template use UPPER bounds? NO — every template dep is a bare lower-bound floor with no cap. The good fixture's '<1.0' cap and the advice to ADD/tighten bounds (raise floor to >=0.28, keep the cap) push new code PAST the template's own convention. Flagging the floor asymmetry as info is fine, but advising upper-bound/floor-tightening is mildly stricter-than-codebase and should be downgraded to pure observation.",
+      "verdict": "stricter-than-codebase (mild) — downgrade bound-tightening advice to observation"
+    },
+    {
+      "check": "Internal-consistency of the pinning standard within a single review: in the GOOD fixture the agent flags the httpx '>=0.27 vs dev >=0.28' mismatch. In the template, prod and dev httpx floors MATCH at >=0.28, so the fixture genuinely diverges from the convention. The agent applies the same pin-parity standard consistently; there is no second unpinned dep flagged differently. No same-diff A-vs-B inconsistency.",
+      "verdict": "internally consistent"
+    }
+  ],
+  "internal_consistency_violations": [
+    {
+      "issue": "Cross-repeat CVE-description drift (r1 vs r2) for the same advisory.",
+      "detail": "Not a same-diff double-standard (the create_item/bulk-insert lesson); it is a reliability smell — the same CVE id is given contradictory descriptions across repeats, a tell that the detail is recalled rather than verified.",
+      "severity": "info"
+    }
+  ],
+  "fixture_validity": {
+    "bad/unpinned-risky-dep": {
+      "patch": "adds bare \"requests\" (no version, no upper bound) to [project].dependencies",
+      "expect": {"file": "pyproject.toml"},
+      "verdict": "VALID-but-conflated",
+      "reasoning": "The intended defect (an unpinned dependency while every sibling carries a >= floor) is an unambiguous, in-domain deviation from the template convention and is reliably caught (recall 1.00, well-formed 1-line patch, expect.json seeds pyproject.toml). HOWEVER the case name 'unpinned-RISKY-dep' and the choice of 'requests' bundle THREE separable concerns: (a) no version pin [the real defect], (b) duplicate-of-existing-httpx [in-domain], (c) sync-vs-async fit [out-of-domain, the bait that drives the event-loop scope creep + the CVE hallucination]. 'requests' is itself reputable, so the 'risky' framing is misleading.",
+      "recommended_change": "Re-anchor the fixture intent on the verifiable facts ('unpinned + duplicates the existing httpx capability'), drop the 'risky package' framing, and rely on the prompt scope clause to suppress the async-fit findings. Optionally add a SEPARATE bad fixture that introduces a genuinely sketchy dep (typosquat/yanked/archived) to actually exercise the supply-chain dimension."
+    },
+    "good/pinned-reputable-dep": {
+      "patch": "adds \"httpx>=0.27,<1.0\" to [project].dependencies",
+      "verdict": "NOT-UNAMBIGUOUSLY-CLEAN",
+      "reasoning": "This good fixture is meant to be the silence oracle but is flagged by ALL 3 runs with TWO genuinely-flaggable hooks: (1) the prod floor >=0.27 is LOWER than the existing dev floor httpx>=0.28, a real prod/dev pin-parity asymmetry the template itself avoids by keeping both at >=0.28; (2) the '<1.0' cap is a real maintenance smell AND is stricter than the template's bare-floor idiom. Because both are legitimate, the agent is RIGHT to comment and the fixture cannot distinguish over-flagging from correct-flagging. (For an advisory agent fp is allowed, so it does not fail the eval, but it is a poor oracle.)",
+      "recommended_change": "Change the added pin to \"httpx>=0.28\" (match the dev-group + template floor exactly, drop the <1.0 cap). That removes both legitimate hooks and leaves only the unfalsifiable 'confirm runtime usage' info note. Minimum viable fix is the floor bump to >=0.28; dropping the cap removes the stricter-than-codebase hook as well."
+    }
+  },
+  "fixture_coverage_gaps": [
+    {
+      "untested_category": "Genuine supply-chain risk (typosquat, yanked release, archived/unmaintained package, known-malicious)",
+      "prompt_severity": "low",
+      "note": "The prompt lists 'supply-chain risk' and 'maintenance health' as first-class concerns but NO fixture exercises them; the only bad case is unpinned-but-reputable. This is where a narrow 'high' rung (if adopted) would earn its keep."
+    },
+    {
+      "untested_category": "Redundant/duplicate dependency where one ALREADY covers the need (the prompt's explicit clause)",
+      "prompt_severity": "low",
+      "note": "Currently only surfaces as a side-comment on the httpx/requests overlap. A dedicated good+bad pair (add 'requests' when 'httpx' is already in PROD deps) would isolate duplication from unpinning."
+    }
+  ],
+  "proposed_coupled_edits": {
+    "prompt": {
+      "file": "src/framework_cli/review/agents/dependency.md",
+      "changes": [
+        "Add a scope-discipline clause: 'Stay in the dependency-manifest domain. You see ONLY the manifest diff, not call sites. Do NOT reason about runtime behavior the diff does not show (async/sync event-loop blocking, throughput, how the library is used) — that is another agent's domain. Judge the dependency itself: is it justified, pinned consistently with its siblings, healthy, and non-duplicative?'",
+        "Add a no-fabrication clause: 'Do not cite specific CVE identifiers or version-specific vulnerability claims you cannot verify from the diff. Phrase pin-floor concerns generically (an unpinned floor admits old/known-vulnerable releases) and recommend running pip-audit.'",
+        "Add a codebase-bar clause: 'The project convention is a bare lower-bound floor (>=X.Y) with no upper cap. Flag a MISSING floor (it deviates from every sibling), but do NOT demand upper bounds or floor-tightening the rest of the manifest does not already use.'",
+        "State the advisory severity cap explicitly: 'Even a clear convention violation (e.g. an unpinned dep) is advisory here — cap at low. Reserve high ONLY for a concrete supply-chain compromise (a known-malicious, typosquatted, or yanked package); never medium for pinning/duplication/style.'",
+        "Keep the JSON-only output contract (already present)."
+      ]
+    },
+    "fixtures": [
+      {
+        "file": "tests/eval/fixtures/dependency/good/pinned-reputable-dep/change.patch",
+        "change": "Change the added line from \"httpx>=0.27,<1.0\" to \"httpx>=0.28\" to match the dev-group + template floor exactly and drop the non-template upper cap, eliminating both legitimate findings so the good fixture is truly clean.",
+        "coupled_to": "prompt codebase-bar clause"
+      },
+      {
+        "file": "tests/eval/fixtures/dependency/bad/unpinned-risky-dep/change.patch",
+        "change": "Keep the unpinned 'requests' add but re-anchor the fixture intent on 'unpinned + duplicates existing httpx' (drop the 'risky package' framing). The prompt scope-discipline + no-fabrication clauses are the primary fix for the off-domain async/CVE findings. Optionally add a second bad fixture with a genuinely sketchy dep to exercise supply-chain detection.",
+        "coupled_to": "prompt scope-discipline + no-fabrication clauses"
+      }
+    ]
+  },
+  "proposed_block_threshold": {
+    "block_threshold": "none",
+    "is_advisory": true,
+    "rationale": "review-dependency is advisory by design and the prompt forbids blocking severities, so no block_threshold applies. Keep eval thresholds as recall_min 0.90 (observed 1.00) and fp_max 1.00 (advisory; info/low surfaced by design). After the coupled edits the good fixture should drop to ~0 findings and the bad fixture should retain the pin finding, so recall stays 1.00 while incidental fp volume falls — do NOT tighten fp_max below 1.00 for this advisory agent. If the narrow 'high' supply-chain escape hatch is adopted, keep even that advisory (warn, do not block) until a fixture demonstrates reliable high-precision supply-chain detection."
+  }
+}

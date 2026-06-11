@@ -1,0 +1,65 @@
+{
+  "agent": "observability",
+  "case": "instrumented-route",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 47,
+      "message": "404 error path logs 'archive_item_not_found' without a correlation_id or trace_id. The module-level _log carries no request-scoped context. If the ObservabilityMiddleware does not call structlog.contextvars.bind_contextvars(correlation_id=...) before this point, this warning event is unlinked from its OTel request span and cannot be correlated during incident investigation.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Either (a) ensure the observability middleware calls structlog.contextvars.bind_contextvars with the trace/correlation id so it propagates automatically, or (b) inject the Request object and log explicitly: _log.warning('archive_item_not_found', item_id=item_id, trace_id=request.headers.get('X-B3-TraceId') or request.state.correlation_id)."
+    },
+    {
+      "acknowledged": null,
+      "line": 55,
+      "message": "Success path logs 'archive_item_completed' without correlation_id or trace_id for the same reason as line 47. Both structured log events emitted by this endpoint are unlinked from the OTel request span if structlog contextvars are not wired by the middleware.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Apply the same fix as line 47. Consider a request-scoped log binding pattern: bind correlation_id at middleware ingress via structlog.contextvars.bind_contextvars so all downstream log calls on the module-level _log automatically carry it without per-callsite changes."
+    },
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "New POST /items/{item_id}/archive endpoint has no SLO threshold defined. slo.py defines only fleet-wide request_latency_p99_ms and error_rate_pct. A commit-bearing mutation endpoint has a materially different latency profile than the read-only GET /items and should either have its own threshold or be explicitly documented as sharing the fleet-wide SLO.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add an archive-specific SLO key (e.g. 'archive_latency_p99_ms') in slo.py with a corresponding PromQL entry in provisioning.py SLO_PROMQL, or add a code comment on the route acknowledging the conscious decision to share the fleet-wide threshold."
+    },
+    {
+      "acknowledged": null,
+      "line": 52,
+      "message": "session.commit() is unguarded. A DB error at commit time raises an exception that propagates to the global exception handler without this function logging item_id at the point of failure. The handler records the exception but loses the business context (which item was being archived), making root-cause analysis harder.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Wrap the commit in a try/except and log before re-raising: try: session.commit() / except Exception: _log.error('archive_item_commit_failed', item_id=item_id, exc_info=True) / raise. This preserves item_id in the error log linked to the same request context."
+    },
+    {
+      "acknowledged": null,
+      "line": 14,
+      "message": "_log = get_logger() is bound at module import time with no name argument. If this module is imported before configure_logging() runs (e.g. in unit test fixtures that import the router directly), the logger will not have the expected structlog processors attached, including any contextvar-propagation processor.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Use get_logger(__name__) to scope the logger by module and verify that the test harness calls configure_logging() (or a test-mode equivalent) before importing routes, to guarantee processor chains \u2014 including merge_contextvars \u2014 are active."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 103448,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 47,\n    \"severity\": \"high\",\n    \"message\": \"404 error path logs 'archive_item_not_found' without a correlation_id or trace_id. The module-level _log carries no request-scoped context. If the ObservabilityMiddleware does not call structlog.contextvars.bind_contextvars(correlation_id=...) before this point, this warning event is unlinked from its OTel request span and cannot be correlated during incident investigation.\",\n    \"suggestion\": \"Either (a) ensure the observability middleware calls structlog.contextvars.bind_contextvars with the trace/correlation id so it propagates automatically, or (b) inject the Request object and log explicitly: _log.warning('archive_item_not_found', item_id=item_id, trace_id=request.headers.get('X-B3-TraceId') or request.state.correlation_id).\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 55,\n    \"severity\": \"high\",\n    \"message\": \"Success path logs 'archive_item_completed' without correlation_id or trace_id for the same reason as line 47. Both structured log events emitted by this endpoint are unlinked from the OTel request span if structlog contextvars are not wired by the middleware.\",\n    \"suggestion\": \"Apply the same fix as line 47. Consider a request-scoped log binding pattern: bind correlation_id at middleware ingress via structlog.contextvars.bind_contextvars so all downstream log calls on the module-level _log automatically carry it without per-callsite changes.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 40,\n    \"severity\": \"medium\",\n    \"message\": \"New POST /items/{item_id}/archive endpoint has no SLO threshold defined. slo.py defines only fleet-wide request_latency_p99_ms and error_rate_pct. A commit-bearing mutation endpoint has a materially different latency profile than the read-only GET /items and should either have its own threshold or be explicitly documented as sharing the fleet-wide SLO.\",\n    \"suggestion\": \"Add an archive-specific SLO key (e.g. 'archive_latency_p99_ms') in slo.py with a corresponding PromQL entry in provisioning.py SLO_PROMQL, or add a code comment on the route acknowledging the conscious decision to share the fleet-wide threshold.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 52,\n    \"severity\": \"medium\",\n    \"message\": \"session.commit() is unguarded. A DB error at commit time raises an exception that propagates to the global exception handler without this function logging item_id at the point of failure. The handler records the exception but loses the business context (which item was being archived), making root-cause analysis harder.\",\n    \"suggestion\": \"Wrap the commit in a try/except and log before re-raising: try: session.commit() / except Exception: _log.error('archive_item_commit_failed', item_id=item_id, exc_info=True) / raise. This preserves item_id in the error log linked to the same request context.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 14,\n    \"severity\": \"low\",\n    \"message\": \"_log = get_logger() is bound at module import time with no name argument. If this module is imported before configure_logging() runs (e.g. in unit test fixtures that import the router directly), the logger will not have the expected structlog processors attached, including any contextvar-propagation processor.\",\n    \"suggestion\": \"Use get_logger(__name__) to scope the logger by module and verify that the test harness calls configure_logging() (or a test-mode equivalent) before importing routes, to guarantee processor chains \u2014 including merge_contextvars \u2014 are active.\"\n  }\n]\n```",
+  "repeat": 1,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 26265,
+    "input_tokens": 3,
+    "output_tokens": 5929
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "agent": "observability-infra",
+  "audited_at": "2026-06-10",
+  "verdict": "fixture-defect-and-prompt-gap",
+  "summary": "Recall on the two bad fixtures is solid (1.00, severities correct), but the single GOOD fixture (complete-obs-surface) is over-flagged in all 3 replicates. Root cause splits two ways: (1) the good fixture is NOT genuinely clean — its dev.yml hunk places the new `redis:` block under `volumes:` (2-space indent right after `pgdata: {}`), not under `services:`, so Compose parses it as a malformed volume named `redis`. r0 and r2 correctly flag this real YAML defect (medium). (2) r1 over-reaches/hallucinates: it reports 'no redis alert rule' (HIGH) and 'no redis dashboard' (medium) even though the good fixture's own patch ADDS `redis_alerts.yml` and `redis.json` as new files. r1's tool_calls only globbed two dirs and never read the added files; it reviewed against the rendered baseline (batteries:[] → no redis surface) and ignored files present in the diff. Both must be fixed as a COUPLED edit: repair the fixture's dev.yml placement AND harden the prompt to count added files in the diff as present and to only flag a missing alert/dashboard when it is genuinely absent from BOTH the diff and the tree.",
+  "severity_bar_issues": [
+    {
+      "issue": "Good-case false HIGH from r1: 'new prod surface redis has no alert rule' rated high, but redis_alerts.yml is added in the same patch. A high here would block a clean change.",
+      "evidence": "findings/observability-infra/good/complete-obs-surface__r1.json finding[0] severity=high; fixture good/complete-obs-surface/change.patch adds infra/observability/prometheus/alerts/redis_alerts.yml (RedisDown on up{job=\"redis\"}==0) and grafana/dashboards/redis.json.",
+      "fix": "Prompt must instruct: treat files created/modified in the diff as present; only flag a missing alert/dashboard when the surface is absent from BOTH the diff and the existing tree."
+    }
+  ],
+  "scope_creep": [
+    {
+      "issue": "Minor: r1 phrased a finding around 'silently breaks Celery/cache that depend on it' — adjacent to application/runtime concerns, but the core claim stays within obs-parity scope, so this is borderline, not actionable on its own.",
+      "verdict": "acceptable"
+    }
+  ],
+  "hallucination_overreach": [
+    {
+      "case": "good/complete-obs-surface (r1)",
+      "claim": "infra/observability/prometheus/alerts/ contains only postgres.yml, otel-collector.yml, app.yml; there is no redis alert. Dashboards contain only postgres.json/otel/app; no redis.json.",
+      "reality": "HALLUCINATION on two axes: (a) the patch itself adds redis_alerts.yml and redis.json; (b) the named existing inventory is also wrong — the template ships postgres_alerts.yml, otel_collector_alerts.yml, prometheus_alerts.yml, slo_alerts.yml, alertmanager_alerts.yml (no app.yml), and dashboards postgres/otel-collector/prometheus/slo (no app.json). r1 invented a baseline it never read (only 2 globs, 0 reads of the added files).",
+      "severity": "real over-reach — produces a false HIGH on the clean change"
+    }
+  ],
+  "stricter_than_codebase": [
+    {
+      "issue": "The agent enforces strict per-surface alert+dashboard parity. This MATCHES the codebase bar: the template ships, for the redis/workers battery, a full surface (redis service in services.yml, redis-exporter in observability.yml, redis scrape job in prometheus.yml, redis_alerts.yml, redis.json). So requiring the quartet is codebase-consistent, NOT stricter. No change needed to the parity rule itself.",
+      "verdict": "consistent-with-codebase"
+    },
+    {
+      "issue": "'routed to a valid Alertmanager receiver' language in several suggestions risks flagging alerts that don't name a receiver. The template alertmanager.yml uses a catch-all route.receiver:\"default\" and no per-alert routing, and postgres_alerts.yml names no receiver. Demanding an explicit receiver per alert would be stricter than the codebase.",
+      "fix": "Drop/soften the 'routed to a receiver' clause; the default catch-all route makes any alert routable by construction."
+    }
+  ],
+  "internal_consistency": [
+    {
+      "issue": "Across replicates the same surface (missing-alert / missing-dashboard) is rated high in some runs and medium in others (exporter-without-scrape r2 rates the missing-alert HIGH; r0/r1 rate it medium). The prompt gives no fixed severity for the satellite parity gaps vs the primary 'metrics never collected' gap.",
+      "fix": "Prompt should pin severities: primary wiring break (exporter with no scrape / scrape with no exporter / dev-only obs that never reaches prod) = high; secondary parity gaps (alert-without-dashboard, surface-without-alert, surface-without-dashboard) = medium. This stabilizes block decisions across runs."
+    }
+  ],
+  "fixture_validity": {
+    "bad/exporter-without-scrape": {
+      "verdict": "valid",
+      "reasoning": "Adds redis-exporter to the prod observability overlay with no matching scrape job in prometheus.yml (rendered baseline at batteries:[] has no redis scrape). Unambiguous defect: exporter metrics never collected. Recall 1.00, primary finding correctly high."
+    },
+    "bad/scrape-without-alert": {
+      "verdict": "valid-but-misnamed",
+      "reasoning": "The patch adds a `redis` scrape job targeting redis-exporter:9121, but at batteries:[] NO redis-exporter exists, so the dominant (and correct) finding is 'scrape target has no exporter' (high), not 'scrape without alert'. The defect is real and unambiguous; the directory name undersells it. Optional: rename to scrape-without-exporter for clarity, or add the exporter so the case truly isolates the missing-alert gap."
+    },
+    "good/complete-obs-surface": {
+      "verdict": "NOT-CLEAN — genuine defect",
+      "reasoning": "The dev.yml hunk appends the `redis:` service block at 2-space indent directly under `volumes:` (after `pgdata: {}`), because the rendered dev.yml at batteries:[] ends with the `volumes:` mapping. As written redis parses as a VOLUME with bogus image/profiles/healthcheck keys — a real Compose structure bug (r0 and r2 flag it medium, correctly). This fixture cannot serve as the clean/consistency oracle until the dev.yml block is moved under `services:`. r1's separate alert/dashboard findings are independent hallucinations (see above)."
+    }
+  },
+  "proposed_coupled_edits": {
+    "fixture_edits": [
+      {
+        "path": "tests/eval/fixtures/observability-infra/good/complete-obs-surface/change.patch",
+        "edit": "Repair the dev.yml hunk so the `redis:` block lands under the top-level `services:` key, not under `volumes:`. Concretely: place the redis service addition under services (sibling to app/postgres) and keep `volumes:` as `pgdata: {}` (plus redisdata if needed). Re-run validate_patch_hunks / --recount after editing.",
+        "why": "Makes the good fixture genuinely clean so it can act as the consistency oracle; removes the legitimate r0/r2 medium false-positive that is actually a fixture bug."
+      }
+    ],
+    "prompt_edits": [
+      {
+        "edit": "Add an explicit diff-awareness clause: 'Files created or modified in THIS diff count as present. Before flagging a surface as missing an alert rule or dashboard, confirm it is absent from BOTH the diff and the existing tree (read the added alert/dashboard files in the diff). Do not flag a missing alert/dashboard that the same change adds.'",
+        "why": "Eliminates r1's false-HIGH where the patch already ships redis_alerts.yml and redis.json."
+      },
+      {
+        "edit": "Pin severities: primary wiring breaks (exporter with no scrape job; scrape target with no exporter; observability defined only for dev that never reaches prod; new prod runtime surface with no observability) = high. Secondary parity gaps (surface scraped/exported but no alert, or no dashboard; alert with no dashboard) = medium.",
+        "why": "Stabilizes the high/medium split across replicates and keeps the block decision deterministic."
+      },
+      {
+        "edit": "Soften the 'routed to a valid Alertmanager receiver' guidance to reflect the template's catch-all route.receiver:\"default\" (any alert is routable by default; do not require a per-alert receiver). Only flag an UNROUTABLE receiver when alertmanager.yml has named routes with no matching receiver.",
+        "why": "Avoids holding alerts to a stricter receiver-naming bar than postgres_alerts.yml / the default route meet."
+      },
+      {
+        "edit": "Reinforce the codebase-bar reference set: the canonical complete surface is service + exporter + scrape job + alert file + dashboard json (cf. postgres / redis quartet in the template). Use this exact quartet as the parity yardstick.",
+        "why": "Anchors parity checks to the real template idiom and curbs invented baselines."
+      }
+    ]
+  },
+  "proposed_block_threshold": "high",
+  "block_threshold_rationale": "After fixing the fixture and prompt, the only findings that should block are the primary wiring breaks (exporter-with-no-scrape, scrape-with-no-exporter, dev-only-obs, prod-surface-with-no-obs), all correctly rated high in the bad fixtures. The medium parity satellites (missing alert/dashboard) are real but should not block a merge, matching the rubric's high=blocks / medium=should-fix split. With block_threshold=high, the two bad fixtures block (correct) and the repaired good fixture clears (no high findings remain once r1's hallucinated high is removed by the diff-awareness clause).",
+  "metrics_observed": {
+    "recall_bad": 1.0,
+    "good_false_positive_rate": "3/3 replicates flagged (1 genuine fixture defect via r0/r2 + 1 hallucinated high via r1)",
+    "current_thresholds": {"recall_min": 0.90, "fp_max": 0.43}
+  }
+}

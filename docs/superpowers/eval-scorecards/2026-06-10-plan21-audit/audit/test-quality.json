@@ -1,0 +1,89 @@
+{
+  "agent": "test-quality",
+  "prompt_path": "src/framework_cli/review/agents/test-quality.md",
+  "context_policy": "bundle (tests/**/*.py + src/*/**/*.py) — reviewer sees the FULL test file, not just the diff",
+  "baseline": {
+    "recall_min": 0.90,
+    "fp_max": 0.10,
+    "observed_recall_bad": 1.0,
+    "observed_fp_good": 1.0,
+    "verdict": "bad-fixture recall is perfect (2/2 seeded defects caught high in all 3 repeats); GOOD fixture false-positives in 3/3 repeats (the dominant Plan-18 over-flagging symptom for this agent)."
+  },
+  "root_cause": "The over-flag is NOT a hallucination — it is a genuinely flaggable test in the 'good' fixture combined with an under-specified prompt. The good fixture (meaningful-assert) adds `test_resolved_log_level_prod_is_info`, which asserts `Settings(environment=\"prod\").resolved_log_level == \"INFO\"` — a VERBATIM duplicate of the existing `test_resolved_log_level_is_info_outside_dev` parametrized over [\"staging\",\"prod\",\"ci\"] in the same file (template tests/unit/test_settings.py.jinja lines 18-20). Because test-quality uses a 'bundle' context (tests/**/*.py glob), the reviewer correctly SEES that existing parametrized test and correctly reports the new one as zero-additive-coverage redundancy. The fixture author intended this test to be 'meaningful', but it is objectively redundant. So fp=1.00 is a fixture-validity defect, not a prompt defect.",
+  "severity_bar_issues": [
+    {
+      "issue": "Unanchored severity for 'redundant/duplicate coverage'. The same duplicate test was rated high (r0), low (r1), and medium (r2) across three repeats. The prompt gives no severity anchor for redundant coverage, so the model improvises inconsistently.",
+      "evidence": "findings/test-quality/good/meaningful-assert__r{0,1,2}.json — line-56 finding severity = high / low / medium respectively.",
+      "fix": "Prompt must (a) state whether redundant-coverage is in scope, and (b) if in scope, anchor it explicitly to LOW/INFO (it never blocks a builder; it is an advisory cleanup), reserving HIGH strictly for 'a test that cannot fail'."
+    }
+  ],
+  "scope_creep": [
+    {
+      "issue": "The prompt's stated targets are: tautologies/no-meaningful-assert, mocks that don't match the real interface, unhappy paths that don't assert failure, and 'NFR heuristics left unaddressed'. 'Redundant coverage / duplicate of an existing parametrized case' is NOT among the stated targets — yet it is the ONLY thing the reviewer flags on the good fixture, and it even calls it 'high'. The reviewer is improvising a category the prompt never authorized.",
+      "owner_note": "Redundant-coverage is a legitimate test-quality concern, but flagging it at high/medium contradicts the rubric (it does not block a builder and is not a demonstrable defect). Either bring it explicitly into scope as advisory-only, or exclude it.",
+      "evidence": "Prompt lines 1-5 list four target categories; none is 'redundancy/duplication'. All three good-fixture findings are duplication-based."
+    },
+    {
+      "issue": "'NFR heuristics left unaddressed' is vague and invites scope drift into NFR territory owned by performance/observability/security agents.",
+      "fix": "Drop or tightly scope this clause; replace with concrete test-quality smells."
+    }
+  ],
+  "hallucination_overreach": [
+    {
+      "issue": "No factual hallucination found in baseline findings. The duplicate-coverage claim is verifiably TRUE against the template file. The bad-fixture findings (assert s is s; mpatch of property-under-test) are accurate.",
+      "note": "The over-reach is severity inflation (rating an advisory cleanup as high/medium), not fabrication."
+    }
+  ],
+  "stricter_than_codebase": [
+    {
+      "issue": "Codebase-bar check: the template's own test suite already contains overlapping/adjacent coverage idioms (e.g. test_defaults asserts slo_request_latency_p99_ms == 200.0 while a separate env-override test exists; test_get_settings_is_cached is a single-line identity smoke). The reviewer flags the new `test_slo_request_latency_p99_env_override` as low-value 'same mechanism already covered', but the surrounding suite ALREADY ships one-field-per-test env-override tests (test_env_vars_override, test_database_url_env_override) — so a dedicated per-field env-override test matches the codebase idiom and should NOT be flagged.",
+      "evidence": "template tests/unit/test_settings.py.jinja lines 27-47 show per-field env-override tests are the established pattern; r0/r2 flag the new one anyway (low severity, but still a fp against the codebase bar).",
+      "fix": "Add an explicit codebase-bar clause: do not flag a test merely for exercising a mechanism a sibling test also exercises, when per-case tests are the file's established idiom."
+    }
+  ],
+  "internal_consistency": [
+    {
+      "issue": "Cross-repeat inconsistency on the SAME diff: the duplicate finding swings high/low/medium and the slo-field finding appears in r0+r2 but not r1. An under-specified prompt produces non-deterministic severity. The rubric's 'one standard per pattern' is violated across runs because the prompt offers no anchor.",
+      "fix": "Anchoring redundant-coverage to a fixed low/info severity removes the variance."
+    }
+  ],
+  "fixture_validity": {
+    "bad/tautological-assert": {
+      "verdict": "VALID",
+      "reason": "Two unambiguous seeded defects: (1) `assert s is s` is a true tautology that can never fail; (2) `mpatch.object(Settings,'resolved_log_level', property -> 'MOCKED')` patches the exact property under test then asserts the mock. Both are textbook 'test that cannot fail' / over-mock. Caught high in all 3 repeats. Keep as-is.",
+      "action": "none"
+    },
+    "good/meaningful-assert": {
+      "verdict": "INVALID — not genuinely clean",
+      "reason": "`test_resolved_log_level_prod_is_info` is a verbatim duplicate of the existing parametrized `test_resolved_log_level_is_info_outside_dev[prod]` visible in the bundle context. A correct test-quality reviewer SHOULD note it. Holding the prompt to fp=0 on this fixture is unfair: the fixture itself contains a flaggable test. The second added test (slo p99 env-override) is fine and idiomatic.",
+      "action": "REPLACE the duplicate test with a genuinely additive, non-redundant meaningful test so the good fixture is truly clean (see coupled edits)."
+    }
+  },
+  "proposed_coupled_edits": {
+    "fixture_edit": {
+      "path": "tests/eval/fixtures/test-quality/good/meaningful-assert/change.patch",
+      "change": "Drop `test_resolved_log_level_prod_is_info` (it duplicates the existing parametrized [prod] case). Replace with a meaningful test that covers a behavior NOT already covered by the bundled file — e.g. `test_explicit_log_level_overrides_env_resolution` is already present, so instead add a NEW distinct field/behavior, e.g. asserting database_url is built from component env vars, or that an out-of-range slo value is rejected. Keep `test_slo_request_latency_p99_env_override` (matches the file's per-field env-override idiom and is non-duplicative). Net result: a 'good' fixture whose added tests are each verifiably additive vs the full file.",
+      "rationale": "Makes the good fixture a true consistency oracle: a clean test the reviewer should leave alone. Until this is fixed, the test-quality fp number conflates a real fixture defect with prompt behavior."
+    },
+    "prompt_edits": [
+      {
+        "type": "scope-clarify",
+        "edit": "Explicitly state the in-scope smells and that REDUNDANT/DUPLICATE coverage, when flagged, is advisory only (low/info), never high or blocking. A finding is 'high' ONLY when a test cannot fail under any conforming implementation (tautology, or a mock of the symbol-under-test). Mocks-not-matching-interface and unhappy-paths-without-failure-assertion are high. Redundancy is low."
+      },
+      {
+        "type": "codebase-bar",
+        "edit": "Add: 'Do not flag a test merely for exercising a mechanism a sibling test also exercises, if per-case/per-field tests are the established idiom of the file under review.'"
+      },
+      {
+        "type": "rubric-inherit",
+        "edit": "Inherit the shared severity ladder verbatim from plan21-rubric-draft.md and drop the vague 'NFR heuristics left unaddressed' clause (replace with concrete smells) to stop drift into other agents' NFR domains."
+      }
+    ]
+  },
+  "proposed_block_threshold": {
+    "value": "high",
+    "rationale": "test-quality should block only on tests that cannot fail (tautology / mock-of-subject-under-test / interface-mismatch mock / unhappy-path-without-assert). Those are the genuine builder-blockers and the bad fixture confirms the agent catches them at high with 100% recall. Redundant-coverage (the good-fixture noise) is re-anchored to low and therefore will NOT block. So a block_threshold of 'high' yields: bad fixture blocks (correct), good fixture does not block once the duplicate is either removed (fixture fix) or downgraded to low (prompt fix).",
+    "post_fix_expectation": "After the coupled edits, expect recall(bad)=1.0 at high and fp(good)=0.0 (no high/medium findings on a genuinely-clean good fixture). Recommend re-running --repeat 3 in Phase 2 to confirm before re-deriving recall_min/fp_max."
+  },
+  "summary": "test-quality recall is excellent (1.0, high, stable). The fp=1.00 on the good fixture is driven by TWO coupled defects: (1) the good fixture contains a genuinely redundant test (verbatim duplicate of an existing parametrized prod case visible via the bundle context), and (2) the prompt never scopes or severity-anchors 'redundant coverage', so the model improvises it at high/medium inconsistently across repeats. Fix BOTH: replace the duplicate test in the good fixture with an additive one, and amend the prompt to (a) anchor redundancy to advisory low/info, (b) reserve high for 'a test that cannot fail', (c) add a codebase-bar clause for per-field test idioms, (d) inherit the shared rubric and drop the vague NFR clause. Proposed block_threshold = high."
+}

@@ -1,0 +1,86 @@
+{
+  "agent": "env-parity",
+  "case": "parity-preserved",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 11,
+      "message": "APP_WIDGET_API_URL is consumed by the app in ALL environments (settings.py field `widget_api_url`, no env-gating), but its container wiring `APP_WIDGET_API_URL: \"${APP_WIDGET_API_URL}\"` was added only to base.yml. base.yml is a DEV/TEST-only overlay \u2014 the deploy composition is `<env>.yml + services.yml + observability.yml`, and the self-contained staging.yml / prod.yml app definitions enumerate their own `environment:` block (TZ, APP_ENVIRONMENT, APP_DATABASE_URL) without APP_WIDGET_API_URL. Compose only injects vars listed in a service's `environment:`/`env_file:`, so in staging/prod the app never receives APP_WIDGET_API_URL and silently falls back to the settings.py default `http://widget:9000`, making the widget endpoint unconfigurable in the deployed environments. This is the same dev-only-overlay parity gap the service rule guards against, applied to an env-var wiring.",
+      "path": "infra/compose/base.yml",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `APP_WIDGET_API_URL: \"${APP_WIDGET_API_URL}\"` to the app `environment:` block in both infra/compose/staging.yml and infra/compose/prod.yml (the overlays the deploy actually composes), so the configured widget URL reaches staging/prod rather than being pinned to the in-code default."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 88118,
+  "raw_text": "[{\"path\":\"infra/compose/base.yml\",\"line\":11,\"severity\":\"high\",\"message\":\"APP_WIDGET_API_URL is consumed by the app in ALL environments (settings.py field `widget_api_url`, no env-gating), but its container wiring `APP_WIDGET_API_URL: \\\"${APP_WIDGET_API_URL}\\\"` was added only to base.yml. base.yml is a DEV/TEST-only overlay \u2014 the deploy composition is `<env>.yml + services.yml + observability.yml`, and the self-contained staging.yml / prod.yml app definitions enumerate their own `environment:` block (TZ, APP_ENVIRONMENT, APP_DATABASE_URL) without APP_WIDGET_API_URL. Compose only injects vars listed in a service's `environment:`/`env_file:`, so in staging/prod the app never receives APP_WIDGET_API_URL and silently falls back to the settings.py default `http://widget:9000`, making the widget endpoint unconfigurable in the deployed environments. This is the same dev-only-overlay parity gap the service rule guards against, applied to an env-var wiring.\",\"suggestion\":\"Add `APP_WIDGET_API_URL: \\\"${APP_WIDGET_API_URL}\\\"` to the app `environment:` block in both infra/compose/staging.yml and infra/compose/prod.yml (the overlays the deploy actually composes), so the configured widget URL reaches staging/prod rather than being pinned to the in-code default.\"}]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "infra/compose/base.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/compose/services.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/compose/staging.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/compose/prod.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/compose/dev.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": ".env.example"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/config/settings.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "Taskfile.yml"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 28851,
+    "cache_read_input_tokens": 25776,
+    "input_tokens": 10186,
+    "output_tokens": 6795
+  }
+}

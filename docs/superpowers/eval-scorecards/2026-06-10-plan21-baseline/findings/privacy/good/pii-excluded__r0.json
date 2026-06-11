@@ -1,0 +1,42 @@
+{
+  "agent": "privacy",
+  "case": "pii-excluded",
+  "findings": [],
+  "kind": "good",
+  "latency_ms": 28870,
+  "raw_text": "[]",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/middleware/observability.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/middleware/*.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "glob": "**/*.py",
+        "pattern": "owner_email"
+      },
+      "tool": "grep",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 21891,
+    "cache_read_input_tokens": 25345,
+    "input_tokens": 10186,
+    "output_tokens": 1370
+  }
+}

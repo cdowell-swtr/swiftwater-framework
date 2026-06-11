@@ -1,0 +1,56 @@
+{
+  "agent": "observability",
+  "case": "uninstrumented-route",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 40,
+      "message": "archive_item has no structured logging on any code path. No log record is emitted on success or on the 404 error path, so there is no correlation-id-tagged entry to join against traces or surface in log-based alerting. The ObservabilityMiddleware and FastAPIInstrumentor provide HTTP-level coverage, but application-level events (who archived what, when, and whether the item was found) are invisible.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `log = get_logger()` at function entry (importing get_logger from demo.logging_config as main.py does). Emit `log.info('item_archived', item_id=item_id)` on the success path and `log.warning('item_not_found', item_id=item_id)` before raising the 404."
+    },
+    {
+      "acknowledged": null,
+      "line": 44,
+      "message": "404 error path raises HTTPException with no structured log. The correlation id is never recorded for 'item not found' events, making it impossible to correlate a 404 spike with a specific request, caller, or trace in the log stream. This violates the project pattern of logging error paths with the correlation id.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Log before raising: `log.warning('item_not_found', item_id=item_id)` \u2014 and if a correlation-id context var or request-state field is available, include it as a kwarg so the record is joinable across the observability stack."
+    },
+    {
+      "acknowledged": null,
+      "line": 44,
+      "message": "`from fastapi import HTTPException` is a deferred import inside the function body. FastAPI is already imported at module level (`from fastapi import APIRouter, Depends, Query`). Deferring the import delays any ImportError until the first 404 hit, making startup-time import failures silent, and is inconsistent with the module-level import style used throughout the file.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Move HTTPException to the existing top-level FastAPI import line: `from fastapi import APIRouter, Depends, HTTPException, Query`."
+    },
+    {
+      "acknowledged": null,
+      "line": 39,
+      "message": "No SLO threshold is defined for this mutation endpoint's error surface. HTTP 404 responses increment `app_requests_total` (via ObservabilityMiddleware) but do NOT increment `app_request_errors_total`, which tracks only 5xx responses. A spike in 'item not found' rates from a bad client or data inconsistency is therefore invisible to the `error_rate_pct` SLO defined in slo.py and will trigger no alert.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add an application-level counter for archive 404s (e.g., `items_archive_not_found_total`) exposed via the /metrics route and backed by a Prometheus alert rule, or extend the error_rate_pct SLO/PromQL to cover client errors on mutation endpoints."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 117555,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 40,\n    \"severity\": \"high\",\n    \"message\": \"archive_item has no structured logging on any code path. No log record is emitted on success or on the 404 error path, so there is no correlation-id-tagged entry to join against traces or surface in log-based alerting. The ObservabilityMiddleware and FastAPIInstrumentor provide HTTP-level coverage, but application-level events (who archived what, when, and whether the item was found) are invisible.\",\n    \"suggestion\": \"Add `log = get_logger()` at function entry (importing get_logger from demo.logging_config as main.py does). Emit `log.info('item_archived', item_id=item_id)` on the success path and `log.warning('item_not_found', item_id=item_id)` before raising the 404.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 44,\n    \"severity\": \"high\",\n    \"message\": \"404 error path raises HTTPException with no structured log. The correlation id is never recorded for 'item not found' events, making it impossible to correlate a 404 spike with a specific request, caller, or trace in the log stream. This violates the project pattern of logging error paths with the correlation id.\",\n    \"suggestion\": \"Log before raising: `log.warning('item_not_found', item_id=item_id)` \u2014 and if a correlation-id context var or request-state field is available, include it as a kwarg so the record is joinable across the observability stack.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 44,\n    \"severity\": \"medium\",\n    \"message\": \"`from fastapi import HTTPException` is a deferred import inside the function body. FastAPI is already imported at module level (`from fastapi import APIRouter, Depends, Query`). Deferring the import delays any ImportError until the first 404 hit, making startup-time import failures silent, and is inconsistent with the module-level import style used throughout the file.\",\n    \"suggestion\": \"Move HTTPException to the existing top-level FastAPI import line: `from fastapi import APIRouter, Depends, HTTPException, Query`.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 39,\n    \"severity\": \"medium\",\n    \"message\": \"No SLO threshold is defined for this mutation endpoint's error surface. HTTP 404 responses increment `app_requests_total` (via ObservabilityMiddleware) but do NOT increment `app_request_errors_total`, which tracks only 5xx responses. A spike in 'item not found' rates from a bad client or data inconsistency is therefore invisible to the `error_rate_pct` SLO defined in slo.py and will trigger no alert.\",\n    \"suggestion\": \"Add an application-level counter for archive 404s (e.g., `items_archive_not_found_total`) exposed via the /metrics route and backed by a Prometheus alert rule, or extend the error_rate_pct SLO/PromQL to cover client errors on mutation endpoints.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 25917,
+    "input_tokens": 3,
+    "output_tokens": 6236
+  }
+}

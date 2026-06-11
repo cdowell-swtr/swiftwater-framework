@@ -1,0 +1,95 @@
+{
+  "agent": "application-logic",
+  "audited_at": "2026-06-10",
+  "baseline_scorecard": {
+    "recall": 1.00,
+    "fp": 0.00,
+    "verdict": "PASS",
+    "notes": "3/3 caught on the single bad fixture, 0 other-findings, 3/3 clean on the single good fixture. This is a well-behaved agent; the work is hardening, not rescue."
+  },
+  "prompt_path": "src/framework_cli/review/agents/application-logic.md",
+  "domain": "correctness bugs: unhandled edge cases (empty/null/boundary/concurrent), incorrect conditionals, missing error handling, swallowed exceptions, non-recovering recovery paths",
+
+  "severity_bar_issues": [
+    {
+      "issue": "Prompt does not define or inherit the shared severity rubric",
+      "detail": "The prompt instructs reviewers to emit a `severity` field but never defines high/medium/low/info. There is no anchor for when a correctness concern is 'high' (demonstrable defect causing incorrect behavior now) versus 'medium' (latent / plausible-path-to-harm). In the baseline, all three repeats independently landed on `medium` for the falsy-check finding and self-justified it ('accidental correctness', 'works today'), which is the correct call — but that consistency is luck of the model, not the prompt. Without the rubric the agent can drift between high and medium across re-tunes.",
+      "severity": "medium",
+      "rubric_clause": "Severity (consistent across all agents)"
+    }
+  ],
+
+  "scope_creep_issues": [
+    {
+      "issue": "No explicit scope-boundary / 'do not flag other agents' issues' clause",
+      "detail": "The prompt scopes by listing bug categories but never states the negative boundary. Correctness review heavily overlaps with contracts, data-integrity, api-design, and security agents (e.g. a missing null check can read as a contract or data-integrity issue). The prompt should adopt the shared Scope-discipline clause so the agent stays on correctness and does not double-report cross-domain. Baseline shows 0 other-findings, so this is preventive hardening, not an observed leak."
+    }
+  ],
+
+  "hallucination_overreach_issues": [
+    {
+      "issue": "Speculative-future-failure reasoning is currently the *only* thing carrying the seeded finding",
+      "detail": "All three baseline repeats justified the medium finding primarily on a HYPOTHETICAL ('if the model ever gains __bool__ via a mixin/dataclass, a found item returns 404'). That is a 'plausible path to harm' under the medium bar, so it is acceptable — but the prompt gives no guard against escalating such speculation to high, or against manufacturing speculative-future findings on genuinely clean code. Adding the codebase-bar + 'cite the changed line / report only concrete bugs you can point to' (already present) interplay needs reinforcing so 'theoretically could break' stays medium-or-lower, never high.",
+      "severity": "low"
+    }
+  ],
+
+  "stricter_than_codebase_issues": [
+    {
+      "issue": "is None vs falsy is not an established template convention for this case",
+      "detail": "grep over src/framework_cli/template/ shows the codebase uses BOTH idioms: `if not X` for empty-collection/falsy guards (metrics.py `if not latencies`, `if not series`, webhooks signature checks) AND `if X is None:` for explicit None sentinels (check_migrations.py downgrade/upgrade, tasks.py `_redis is None`, liveness `raw is None`). There is NO `session.get(...)` precedent in the template to anchor a hard rule. So flagging `if not item:` as wrong rests on the SQLAlchemy-ORM-sentinel argument, not on a violated project convention. This is borderline-acceptable at `medium` but the prompt MUST inherit the codebase-bar clause so the agent does not start flagging the codebase's own legitimate `if not collection:` guards as bugs (a known Plan-18 over-flagging mechanism).",
+      "severity": "medium",
+      "rubric_clause": "Codebase-bar principle"
+    }
+  ],
+
+  "internal_consistency_issues": [
+    {
+      "issue": "No internal-consistency clause; single-finding fixtures can't exercise it",
+      "detail": "The prompt lacks the 'apply one standard to every instance' clause. The current fixtures are single-defect so the consistency hazard is untested for this agent — but the create_item/bulk-insert lesson applies directly to correctness review (e.g. two identical missing-null-checks in one diff). Inherit the clause defensively."
+    }
+  ],
+
+  "fixture_validity": {
+    "good": [
+      {
+        "case": "good/correct-none-check",
+        "verdict": "GENUINELY CLEAN",
+        "evidence": "Diff adds get_item() using `if item is None:` against session.get(Item, item_id) — the semantically correct not-found sentinel. 3/3 repeats returned []. No false positives. Representative of the template idiom.",
+        "action": "keep"
+      }
+    ],
+    "bad": [
+      {
+        "case": "bad/falsy-none-check",
+        "verdict": "WEAK / BORDERLINE — defect is latent fragility, not a demonstrable bug, AND the inline comment is factually WRONG",
+        "evidence": "The seeded code is `item = session.get(Item, item_id); if not item: raise 404`. The patch's inline comment claims 'Bug: falsy check returns 404 for any item_id that is 0.' This is FALSE: `item` is the returned ORM object, not item_id. session.get(Item, 0) returns the Item instance (truthy by Python's default object protocol), so `not item` is False and NO spurious 404 occurs. The PK-0 scenario does not trigger the bug. All three reviewers correctly identified this and explicitly called it 'accidental correctness' / 'works today' — i.e. they flagged a LATENT fragility (breaks only if Item ever gains __bool__/__len__), which is a medium-bar 'plausible path to harm', not a present-tense high-severity defect. The fixture therefore tests the agent on a latent-risk finding while shipping a misleading comment that, if a model trusted it, would produce a hallucinated high-severity 'returns 404 for id=0' claim. The good news: baseline reviewers did NOT take the bait and reasoned correctly. Still, the comment should be corrected so the fixture is honest about what the defect actually is.",
+        "is_unambiguous_defect": false,
+        "action": "fix comment + (optionally) strengthen to an unambiguous defect"
+      }
+    ]
+  },
+
+  "coupled_edits": [
+    {
+      "target": "src/framework_cli/review/agents/application-logic.md",
+      "type": "prompt",
+      "change": "Prepend the shared Plan-21 rubric (severity definitions high/medium/low/info, codebase-bar principle, internal-consistency clause, scope-discipline clause). Add an explicit domain-scope line: 'Your domain is CORRECTNESS only — unhandled edge cases, wrong conditionals, missing/swallowed error handling, non-recovering recovery. Do NOT flag contract, schema, api-design, security, or data-integrity concerns; another agent owns those.' Keep the existing 'cite the changed line; concrete bugs only, not style' instruction. Add a calibration line: 'A correctness defect that is real TODAY (wrong output, data loss, crash, swallowed error on the changed path) = high. A latent fragility that only breaks under a future/hypothetical change, or relies on accidental correctness, = medium. Do not escalate speculative-future failures to high.'",
+      "rationale": "Carries the consistent severity bar and prevents both over-escalation of speculative findings and codebase-bar over-flagging of legitimate `if not collection:` guards."
+    },
+    {
+      "target": "tests/eval/fixtures/application-logic/bad/falsy-none-check/change.patch",
+      "type": "fixture",
+      "change": "Replace the factually-wrong comment line '# Bug: falsy check returns 404 for any item_id that is 0.' with an honest one, e.g. '# Latent bug: `if not item:` relies on ORM truthiness instead of the `None` sentinel from session.get(); breaks if Item ever defines __bool__/__len__.' This makes the seeded defect match the (correct) reviewer reasoning and removes the trap that could induce a hallucinated high-severity id=0 claim. OPTIONAL (stronger): convert the fixture into an UNAMBIGUOUS present-tense correctness defect so the bad fixture tests a clear high/medium hit rather than a latent one — e.g. seed a swallowed exception or an off-by-one boundary in get_items pagination. If converted, update expect.json/fixture accordingly and pair the comment to the real defect.",
+      "coupled_with_prompt": true,
+      "rationale": "An honest comment + a calibrated severity line in the prompt keep the medium classification stable across re-tunes; the optional conversion gives the agent a clean unambiguous-defect fixture, which the current corpus lacks."
+    }
+  ],
+
+  "proposed_block_threshold": {
+    "block_threshold": "high",
+    "rationale": "Correctness is high-stakes, but the SINGLE bad fixture in the corpus is a latent/medium-severity defect that the model (correctly) does not rate high. Setting block at 'high' means the current fixture would NOT block on its own — which is appropriate: it is not a present-tense defect. Blocking on this agent should fire only for demonstrable-today correctness bugs (wrong output, data loss, crash, swallowed exception on the changed path). Recommend pairing this with the optional fixture conversion so there is at least one true-high bad fixture to anchor the block_threshold; until then, treat medium findings as advisory/non-blocking to preserve the cost-safe, low-false-block posture and avoid re-introducing Plan-18 over-flagging via speculative-future mediums."
+  },
+
+  "summary": "application-logic PASSES baseline (recall 1.00 / fp 0.00) and is structurally sound. Two real defects to fix, both hardening rather than rescue: (1) the prompt inherits NONE of the shared rubric (no severity defs, no codebase-bar, no scope/consistency clauses) — its current good behavior is model luck, not prompt design; (2) the only bad fixture ships a FACTUALLY WRONG inline comment ('returns 404 for any id=0') describing a bug that does not occur, while the actual seeded defect is a latent ORM-truthiness fragility correctly rated medium by all three repeats. Good fixture is genuinely clean. Proposed: prepend the shared rubric + a high/medium correctness-calibration line; correct the bad fixture's comment (optionally upgrade it to an unambiguous present-tense defect); set block_threshold=high with medium treated as advisory until a true-high bad fixture exists."
+}

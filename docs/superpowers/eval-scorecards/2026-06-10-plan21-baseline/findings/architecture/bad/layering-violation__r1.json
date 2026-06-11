@@ -1,0 +1,51 @@
+{
+  "agent": "architecture",
+  "case": "layering-violation",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 7,
+      "message": "Layering violation: the route now imports the `SessionLocal` session factory directly from `..db.engine` and opens its own session inside the handler (`with SessionLocal() as session:`), bypassing the repository layer. Every other route here goes through the `get_session` FastAPI dependency and a `repository` function (e.g. `get_items` -> `list_items`). A `create_item(session, name)` function already exists in `..db.repository` and is the correct seam for this write; the handler instead constructs the `Item`, adds it, and persists it inline \u2014 reaching across the route->repository boundary into the data layer and duplicating persistence logic the repository owns.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Inject the session via the existing `SessionDep`/`get_session` dependency and delegate the write to the repository: `def create_item(payload: ItemCreate, session: SessionDep) -> Item: return repository.create_item(session, payload.name)`. Drop the `SessionLocal` import from the route. This keeps the route -> repository -> DB layering intact (and as a side benefit picks up the repository's `session.commit()`, which the inline version omits)."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 28897,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 7,\n    \"severity\": \"high\",\n    \"message\": \"Layering violation: the route now imports the `SessionLocal` session factory directly from `..db.engine` and opens its own session inside the handler (`with SessionLocal() as session:`), bypassing the repository layer. Every other route here goes through the `get_session` FastAPI dependency and a `repository` function (e.g. `get_items` -> `list_items`). A `create_item(session, name)` function already exists in `..db.repository` and is the correct seam for this write; the handler instead constructs the `Item`, adds it, and persists it inline \u2014 reaching across the route->repository boundary into the data layer and duplicating persistence logic the repository owns.\",\n    \"suggestion\": \"Inject the session via the existing `SessionDep`/`get_session` dependency and delegate the write to the repository: `def create_item(payload: ItemCreate, session: SessionDep) -> Item: return repository.create_item(session, payload.name)`. Drop the `SessionLocal` import from the route. This keeps the route -> repository -> DB layering intact (and as a side benefit picks up the repository's `session.commit()`, which the inline version omits).\"\n  }\n]",
+  "repeat": 1,
+  "seeded_file": "src/demo/routes/items.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "path": "src/demo/db/repository.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/db/engine.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "src/demo/routes/items.py"
+      },
+      "tool": "read_file",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 10182,
+    "cache_read_input_tokens": 46783,
+    "input_tokens": 4,
+    "output_tokens": 1679
+  }
+}

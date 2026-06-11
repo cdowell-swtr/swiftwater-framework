@@ -1,0 +1,88 @@
+{
+  "agent": "documentation",
+  "status": "audited",
+  "summary": "Advisory agent. Baseline PASSED (recall 1.00, fp_max 1.00 = never blocks; surfaces low/info by design). The prompt is a bare one-liner with no shared rubric: no severity definitions, no scope-discipline clause, no codebase-bar, no internal-consistency clause. It works for now only because fp is allowed, but it leaks heavily into other agents' domains and the 'good' fixture is not actually clean. Two coupled fixes: (1) re-author the good fixture so the count is genuinely total (eliminate the doc-vs-impl mismatch the reviewers correctly flag), (2) inherit the shared rubric and add an explicit scope boundary so documentation stops emitting api-design/contracts/performance findings.",
+
+  "severity_bar_issues": [
+    {
+      "issue": "Prompt has no severity rubric at all. It tells the agent to 'use low/info' inline, but defines none of high/medium/low/info, so there is no anchor for what a documentation defect actually is. Findings cluster at low/info by luck of the instruction, not by a principled bar.",
+      "evidence": "documentation.md is 4 lines; no severity definitions. Draft rubric defines high/medium/low/info but the prompt does not inherit it.",
+      "fix": "Inherit the shared rubric. For an advisory doc agent, cap output at low/info explicitly and state that documentation NEVER emits high/medium (a missing docstring does not block a builder)."
+    }
+  ],
+
+  "scope_creep": [
+    {
+      "issue": "The agent repeatedly flags the `list_items(session)` page-size cap ('count is silently bounded by DEFAULT_PAGE_SIZE'). That is a contracts/api-design/performance correctness concern, not documentation.",
+      "evidence": "bad r0 line 41, bad r1 line 41, bad r2 line 39; good r0 line 51, good r1 line 47, good r2 line 47 — all six runs raise the cap as a finding.",
+      "owner": "contracts / api-design / performance"
+    },
+    {
+      "issue": "Flags missing `response_model`/`summary`/`tags` on the route decorator.",
+      "evidence": "bad r2 line 37 (info).",
+      "owner": "api-design / contracts"
+    },
+    {
+      "issue": "Flags stale/uncommitted `openapi.json` and the contract-diff CI job.",
+      "evidence": "bad r0/r1/r2 README/openapi.json findings; good r1 line 45, good r2 line 45.",
+      "owner": "contracts (OpenAPI spec sync) — note: the README claim IS real (README.md.jinja:27), so this is not a hallucination, just out-of-scope for documentation."
+    }
+  ],
+
+  "hallucination_or_overreach": [
+    {
+      "claim": "README 'task openapi:export ... CI fails on a stale or breaking spec'.",
+      "verdict": "NOT a hallucination. Verified at src/framework_cli/template/README.md.jinja:27. The agent is accurate; it is merely reaching outside its domain.",
+      "note": "No genuine hallucinations found. Line numbers wobble across runs (README:0 vs README:115 vs README:78) but that is the file-level/format noise the schema permits, not invented content."
+    }
+  ],
+
+  "stricter_than_codebase": [
+    {
+      "issue": "Flagging the absent route docstring as a defect (`count_items` has no docstring) is in-scope and defensible, BUT the agent escalates beyond doc-completeness into demanding a `SELECT COUNT(*)` rewrite and field-level `Field(description=...)`. The surrounding template route (`get_items`) documents behaviour in a plain docstring and does not use `Field(description=...)` on `ItemRead`; holding the new code to a higher self-describing-OpenAPI bar than the template baseline is a codebase-bar violation.",
+      "evidence": "good r0 line 27 demands `Field(description=...)` on ItemCount.count; template `ItemRead` (routes/items.py:16-22) has no field descriptions and is unflagged in the baseline.",
+      "fix": "Add codebase-bar clause; do not require field-level OpenAPI descriptions the template itself omits."
+    }
+  ],
+
+  "internal_consistency": [
+    {
+      "issue": "Severity is inconsistent across runs for the SAME instance: the openapi.json / README-stale findings are tagged low in some runs and info in others (bad r0: README low + openapi info; bad r1: both info; bad r2: both low). No stable bar. The shared internal-consistency clause is absent from the prompt.",
+      "evidence": "bad r0 vs r1 vs r2 severities differ for identical findings.",
+      "fix": "Inherit internal-consistency clause; pin the doc-completeness finding at a single severity (low)."
+    }
+  ],
+
+  "fixture_validity": {
+    "good/documented-public-function": {
+      "verdict": "NOT CLEAN — re-author required",
+      "reason": "The fixture's `count_items` calls `list_items(session)` with no limit, which returns at most DEFAULT_PAGE_SIZE=50 rows (verified: template db/repository.py:11-20 clamps to [0, MAX_PAGE_SIZE]). The added docstring and README both claim 'total number of items in the catalogue', so the code returns a bounded page count while the docs promise a true total. All three good runs correctly flag this doc-vs-implementation mismatch (good r0 line 51, r1 line 47, r2 line 47). This is a genuine documentation defect, so the fixture is mislabelled 'good'. It only 'passes' the eval because fp_max=1.00 (advisory). The fixture must be re-authored so the documented behaviour matches the implementation."
+    },
+    "bad/undocumented-public-function": {
+      "verdict": "VALID but IMPURE",
+      "reason": "The seeded defect (public endpoint with no docstring) is a genuine, unambiguous documentation defect and is reliably caught (caught in all 3 runs; seeded_file matches). However the SAME fixture also embeds the doc-vs-impl cap mismatch (returns <=50, no docstring saying so) plus a missing README endpoint entry plus stale openapi.json — these pull the agent into contracts/api-design scope. The fixture is valid for documentation recall, but its 'other findings' are mostly out-of-domain, which is what trains/permits the scope creep. Recommend trimming so the ONLY clear defect in the documentation lane is the missing docstring + missing README endpoint entry; move the cap-semantics defect to the contracts/api-design fixtures."
+    }
+  },
+
+  "coupled_edits": [
+    {
+      "target": "src/framework_cli/review/agents/documentation.md",
+      "change": "Rewrite to inherit the shared rubric and add an explicit scope fence. Proposed body: 'You are review-documentation (advisory). Review ONLY the unified diff. Your domain is ONLY: (a) new/changed public interfaces lacking a docstring when sibling code in the same file documents them; (b) new config vars missing from .env.example; (c) a documented API/spec entry (README endpoint list, etc.) that the diff makes stale; (d) genuinely complex new logic with no explanatory comment. Do NOT flag implementation correctness, response_model/typing, query efficiency, openapi.json regeneration, or CI contract jobs — those belong to api-design/contracts/performance. Apply the shared severity rubric; documentation findings are advisory and NEVER block — emit only low or info, never high/medium. Apply the codebase-bar and internal-consistency clauses: do not demand documentation richer than the surrounding template already provides (e.g. field-level Field(description=...) when the baseline omits it), and tag identical instances identically. Cite the changed line.' Keep the JSON-only output contract from the shared rubric."
+    },
+    {
+      "target": "tests/eval/fixtures/documentation/good/documented-public-function/change.patch",
+      "change": "Make the good fixture genuinely clean by removing the doc-vs-impl mismatch the reviewers correctly catch. Either (preferred) implement count_items with a true aggregate so the docstring 'total number of items' is accurate (e.g. session.scalar(select(func.count()).select_from(Item))), OR keep list_items but reword the docstring + README to the honest bounded semantics ('count of items on the default page, bounded by DEFAULT_PAGE_SIZE'). The point: after the edit there must be NO residual documentation defect, so a correct documentation reviewer returns [] for this fixture."
+    },
+    {
+      "target": "tests/eval/fixtures/documentation/bad/undocumented-public-function/change.patch",
+      "change": "Keep the missing-docstring defect (the real documentation lane). Optionally also keep the README-endpoint-omission as a second in-domain doc defect (it is squarely documentation). Remove the openapi.json/contract framing from being the dominant signal by not advertising the openapi:export workflow in this fixture's diff context, so the agent is not nudged into the contracts lane. The cap-semantics issue should live in the contracts/api-design fixtures, not here."
+    }
+  ],
+
+  "proposed_block_threshold": {
+    "value": "high",
+    "rationale": "Documentation is advisory by design (thresholds.yaml fp_max=1.00, 'never blocks; surfaces info/low by design'). The prompt should be capped so it emits only low/info and never high/medium. With the block gate firing only on high, documentation can surface findings freely without ever blocking a merge. Keep recall_min at 0.90 (observed 1.00) and fp_max at 1.00 (advisory). No change to the numeric pass thresholds is needed; the block_threshold should remain 'high' (effectively unreachable for this agent once the prompt caps severity at low/info)."
+  },
+
+  "notes": "Documentation passed baseline and is the least-broken agent in the set. The work here is hygiene + scope, not a recall/fp rescue: (1) re-author the mislabelled 'good' fixture so it is truly clean, (2) fence the prompt into its domain and inherit the shared rubric so it stops generating api-design/contracts/performance findings, (3) cap severity at low/info. The README openapi:export claim was verified real, so no hallucination remediation is needed."
+}

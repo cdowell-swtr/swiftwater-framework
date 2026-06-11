@@ -1,0 +1,41 @@
+diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
+index 862bafd..12efa31 100644
+--- a/src/demo/db/repository.py
++++ b/src/demo/db/repository.py
+@@ -1,8 +1,12 @@
++import logging
++
+ from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
+ from .models import Item
+ 
++_audit_log = logging.getLogger("demo.db")
++
+ # Hard cap on a single page so a caller can never request an unbounded read.
+ MAX_PAGE_SIZE = 100
+ DEFAULT_PAGE_SIZE = 50
+@@ -28,3 +32,23 @@ def create_item(session: Session, name: str) -> Item:
+     session.commit()
+     session.refresh(item)
+     return item
++
++
++def delete_item_quietly(session: Session, item_id: int) -> bool:
++    """Delete an item, tolerating a failure.
++
++    BUG: a DB error is caught and logged through the stdlib ``logging`` module, NOT the
++    app's structlog ``get_logger()``. The stdlib path does not run the correlation_id /
++    trace processors, so the error record carries NO correlation_id and cannot be tied
++    back to the originating request — the failure is unobservable in the correlated logs.
++    """
++    try:
++        item = session.get(Item, item_id)
++        if item is None:
++            return False
++        session.delete(item)
++        session.commit()
++        return True
++    except Exception:
++        _audit_log.error("item delete failed for id=%s", item_id)  # no correlation_id
++        return False

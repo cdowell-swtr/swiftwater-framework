@@ -1,0 +1,86 @@
+{
+  "agent": "observability-infra",
+  "case": "complete-obs-surface",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "The new dev `redis` block is indented under the `volumes:` mapping (right after `pgdata: {}`), not under `services:`. As written, Compose treats `redis` as a volume definition with bogus keys (`image`, `profiles`, `healthcheck`) rather than a runnable service, so dev gets no redis container. observability.yml (merged into dev) still runs `redis-exporter` pointed at `redis://redis:6379` and prometheus.yml scrapes job `redis` \u2192 in dev the scrape target has no backing service, producing a permanent metrics gap and a false-firing `RedisDown` alert. Prod is unaffected (services.yml defines redis correctly under `services:`).",
+      "path": "infra/compose/dev.yml",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Move the redis block out of the `volumes:` section and under the top-level `services:` key in dev.yml (sibling to `app`/`postgres`), keeping only `redisdata`/`pgdata` under `volumes:`."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 97941,
+  "raw_text": "[\n  {\n    \"path\": \"infra/compose/dev.yml\",\n    \"line\": \"+  redis:\\n+    image: redis:7\\n+    profiles: [\\\"dev\\\", \\\"lite\\\"]\",\n    \"severity\": \"medium\",\n    \"message\": \"The new dev `redis` block is indented under the `volumes:` mapping (right after `pgdata: {}`), not under `services:`. As written, Compose treats `redis` as a volume definition with bogus keys (`image`, `profiles`, `healthcheck`) rather than a runnable service, so dev gets no redis container. observability.yml (merged into dev) still runs `redis-exporter` pointed at `redis://redis:6379` and prometheus.yml scrapes job `redis` \u2192 in dev the scrape target has no backing service, producing a permanent metrics gap and a false-firing `RedisDown` alert. Prod is unaffected (services.yml defines redis correctly under `services:`).\",\n    \"suggestion\": \"Move the redis block out of the `volumes:` section and under the top-level `services:` key in dev.yml (sibling to `app`/`postgres`), keeping only `redisdata`/`pgdata` under `volumes:`.\"\n  }\n]",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "infra/observability/**/*"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "infra/compose/*.yml"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "path": "infra/observability/prometheus/prometheus.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/observability/prometheus/alerts/redis_alerts.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/observability/alertmanager/alertmanager.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/dev.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/services.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    },
+    {
+      "input": {
+        "path": "infra/compose/observability.yml"
+      },
+      "tool": "read_file",
+      "turn": 2
+    }
+  ],
+  "turns": 3,
+  "usage": {
+    "cache_creation_input_tokens": 14509,
+    "cache_read_input_tokens": 65409,
+    "input_tokens": 10188,
+    "output_tokens": 7023
+  }
+}

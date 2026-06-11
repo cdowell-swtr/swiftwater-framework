@@ -1,0 +1,52 @@
+{
+  "agent": "contracts",
+  "case": "client-pact-divergence",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 12,
+      "message": "get_stock() now sends a new query parameter (?include_location=true) on the contracted GET /inventory/{id} interaction, but the consumer pact in tests/functional/test_consumer_inventory.py declares the request as `.with_request(\"GET\", \"/inventory/1\")` with no query parameter. The committed/published pact therefore won't reflect the consumer's actual request, so provider verification will replay the old query-less request and never confirm the provider honors `include_location`. (Pact V4 query matching may also reject the unexpected param, failing the consumer test.) The reading of `location` itself is additive/optional (`.get(\"location\")`) and not a concern.",
+      "path": "src/demo/clients/inventory.py",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Update the consumer pact interaction to declare the query parameter (e.g. add `.with_query_parameter(\"include_location\", \"true\")` to the `with_request(...)` builder), then regenerate and republish pacts/demo-inventory.json so the provider is verified against the new request shape."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 69356,
+  "raw_text": "[\n  {\n    \"path\": \"src/demo/clients/inventory.py\",\n    \"line\": 12,\n    \"severity\": \"info\",\n    \"message\": \"get_stock() now sends a new query parameter (?include_location=true) on the contracted GET /inventory/{id} interaction, but the consumer pact in tests/functional/test_consumer_inventory.py declares the request as `.with_request(\\\"GET\\\", \\\"/inventory/1\\\")` with no query parameter. The committed/published pact therefore won't reflect the consumer's actual request, so provider verification will replay the old query-less request and never confirm the provider honors `include_location`. (Pact V4 query matching may also reject the unexpected param, failing the consumer test.) The reading of `location` itself is additive/optional (`.get(\\\"location\\\")`) and not a concern.\",\n    \"suggestion\": \"Update the consumer pact interaction to declare the query parameter (e.g. add `.with_query_parameter(\\\"include_location\\\", \\\"true\\\")` to the `with_request(...)` builder), then regenerate and republish pacts/demo-inventory.json so the provider is verified against the new request shape.\"\n  }\n]",
+  "repeat": 1,
+  "seeded_file": "src/demo/clients/inventory.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [
+    {
+      "input": {
+        "pattern": "**/*.py"
+      },
+      "tool": "glob",
+      "turn": 1
+    },
+    {
+      "input": {
+        "glob": "**/*",
+        "pattern": "inventory|in_stock|include_location|get_stock"
+      },
+      "tool": "grep",
+      "turn": 1
+    },
+    {
+      "input": {
+        "pattern": "**/*pact*"
+      },
+      "tool": "glob",
+      "turn": 1
+    }
+  ],
+  "turns": 2,
+  "usage": {
+    "cache_creation_input_tokens": 17962,
+    "cache_read_input_tokens": 86816,
+    "input_tokens": 10459,
+    "output_tokens": 4453
+  }
+}

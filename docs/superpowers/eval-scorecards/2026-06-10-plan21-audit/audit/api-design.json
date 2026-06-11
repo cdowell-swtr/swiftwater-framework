@@ -1,0 +1,133 @@
+{
+  "agent": "api-design",
+  "audited_at": "2026-06-10",
+  "verdict": "PASS_WITH_FIXES",
+  "baseline_summary": {
+    "bad_recall": 1.0,
+    "good_fp": 0.0,
+    "note": "Baseline was clean (6/6 bad findings correct + on-line, 3/3 good returned []). No over-flagging observed in this corpus, but the corpus is thin (2 bad / 1 good) and the single good fixture is degenerate (see fixture-validity), so the clean baseline under-tests the over-flagging risk the prompt actually carries."
+  },
+  "severity_bar_issues": [
+    {
+      "id": "sev-1",
+      "severity_of_issue": "medium",
+      "location": "prompt lines 10-13 (Nullability mistakes; Mutation/error design)",
+      "issue": "Two of the five flag categories are typed 'info' (nullability mistakes / over-nullability; mutations swallowing errors, returning bare scalars, lacking input validation). Under the draft rubric 'info' = 'observation only; never implies an action is required.' These are listed as things to FLAG, which conflates 'flag' with 'info'. An agent told to flag-as-info has no actionable severity to emit, and the rubric says info findings should never imply action. Either drop these categories or re-map them to 'low' (advisory) so they fit the rubric's ladder.",
+      "rubric_clause": "Severity: info = observation only / low = advisory"
+    },
+    {
+      "id": "sev-2",
+      "severity_of_issue": "low",
+      "location": "prompt line 19 (closing reinforcement)",
+      "issue": "The trailing sentence re-asserts only the three 'high' categories (N+1, breaking change, unbounded list). This is fine and actually helps anchor the agent on the blocking set, but it leaves the two 'info' categories without any severity discipline. If sev-1 is resolved by mapping them to 'low', this line should be left as-is (it correctly fences the high bar)."
+    }
+  ],
+  "scope_creep": [
+    {
+      "id": "scope-1",
+      "severity_of_issue": "medium",
+      "location": "prompt lines 1-2, 15-16 vs fixture naming",
+      "issue": "The prompt is correctly scoped to GraphQL (Strawberry, code-first) and explicitly defers REST/OpenAPI to other agents (line 16). But the bad fixture is named 'graphql-rest-divergence' and the good fixture 'graphql-rest-aligned', implying the agent's domain is GraphQL-vs-REST schema parity (a 'contracts'/cross-surface concern). The prompt does NOT define a REST-parity flag category, and the reviewers (correctly) ignored the REST angle entirely and scored the bad fixture on the in-scope breaking-rename axis instead. The fixtures advertise a responsibility the prompt does not grant. This is a naming/intent mismatch, not a live over-reach, but it will mislead future authors and panel judges. Rename fixtures to describe the actual in-scope defect (breaking rename) — see coupled edits."
+    }
+  ],
+  "hallucination_overreach": [
+    {
+      "id": "hall-1",
+      "severity_of_issue": "none_observed",
+      "location": "all 6 bad findings",
+      "issue": "No hallucination in the baseline. Both bad findings are grounded in the changed lines: 'description: str' is genuinely a required (non-null) Strawberry arg added to an existing mutation (true breaking change); 'name'->'title' is a genuine field rename with no deprecated alias (true breaking change). Several reviewers added an accurate bonus observation that the new 'description' arg is dropped on the floor (resolver never forwards it) — correct and in-scope. Clean."
+    }
+  ],
+  "stricter_than_codebase": [
+    {
+      "id": "strict-1",
+      "severity_of_issue": "high",
+      "location": "prompt lines 10-13 vs template schema.py",
+      "issue": "LATENT over-flagging vector. The template's own GraphQL surface ships exactly the patterns the 'info' categories tell the agent to flag: (a) create_item returns a BARE 'Item' (not a typed payload with an errors union) and has NO input validation; (b) Item.name is a non-null 'str' (nullability is hard-coded, no nuance). By the rubric's codebase-bar principle, an agent must NOT hold new code stricter than the template baseline. As written, a new mutation that returns a bare scalar/type or a new non-null field could be flagged even though build_schema/create_item in the template do the identical thing unflagged. It did not fire in this thin corpus (no fixture exercises a NEW bare-payload mutation), but the prompt currently licenses it. Add an explicit codebase-bar carve-out: bare-type mutation returns and non-null scalar fields match the template idiom and are NOT to be flagged on their own.",
+      "rubric_clause": "Codebase-bar principle"
+    }
+  ],
+  "internal_consistency": [
+    {
+      "id": "consist-1",
+      "severity_of_issue": "low",
+      "location": "baseline behavior",
+      "issue": "No internal-inconsistency violation observed: the agent applied the breaking-change standard uniformly across both bads. The only consistency risk is theoretical and identical to strict-1 (it must treat a new non-null field the same way the template's existing non-null name field is treated — i.e., not flag it merely for being non-null)."
+    }
+  ],
+  "fixture_validity": {
+    "bad": [
+      {
+        "case": "graphql-mutation-input-mismatch",
+        "verdict": "VALID_UNAMBIGUOUS",
+        "rationale": "Adding required (non-null) arg 'description: str' to an existing Strawberry mutation is an unambiguous breaking schema change (existing createItem(name:) calls fail validation). Bonus: the resolver never forwards the new arg, so it is also dead input. expect.json file-anchor (src/demo/graphql/schema.py) is correct. Keep.",
+        "fix_needed": false
+      },
+      {
+        "case": "graphql-rest-divergence",
+        "verdict": "VALID_DEFECT_MISNAMED",
+        "rationale": "The patch is a genuine, unambiguous defect (in-place rename of the queryable field name->title with no deprecated alias = breaking schema change, correctly flagged 3/3). BUT the case name 'graphql-rest-divergence' frames it as a cross-surface REST-parity issue the prompt does not own. The DEFECT is real and in-scope (breaking rename); only the NAME mis-advertises the agent's responsibility. Rename to 'graphql-breaking-field-rename'. Do not change the patch.",
+        "fix_needed": true
+      }
+    ],
+    "good": [
+      {
+        "case": "graphql-rest-aligned",
+        "verdict": "WEAK_BUT_CLEAN",
+        "rationale": "The patch is genuinely clean — an additive, backwards-compatible 'created_at: datetime' field on the REST Pydantic ItemRead model. Correctly returns [] (3/3). HOWEVER it is a DEGENERATE good fixture for THIS agent: it touches a pure-REST file (routes/items.py), which the prompt explicitly tells the agent to ignore (line 16). So 'returns []' here proves only that the agent obeys 'ignore REST', not that it refrains from over-flagging a borderline GraphQL change. It does not exercise the real over-flagging risk: an additive nullable GraphQL field, a new query, or a non-null scalar that matches the template idiom. Replace/augment with a GraphQL good fixture (see coupled edits).",
+        "fix_needed": true
+      }
+    ]
+  },
+  "coupled_edits": {
+    "prompt_edits": [
+      {
+        "id": "pe-1",
+        "target": "src/framework_cli/review/agents/api-design.md lines 10-13",
+        "change": "Re-map the two flag-as-info categories from 'info' to 'low' (advisory), to fit the draft rubric's severity ladder where info implies no action. Keep them as advisory-only, never blocking.",
+        "couples_with": "sev-1"
+      },
+      {
+        "id": "pe-2",
+        "target": "src/framework_cli/review/agents/api-design.md (add a codebase-bar clause near lines 15-16)",
+        "change": "Add: 'Codebase-bar: the template ships create_item as a bare-type mutation (no typed payload / no input validation) and non-null scalar fields (e.g. Item.name: str). Do NOT flag a new mutation merely for returning a type instead of a payload, or a new field merely for being non-null — that matches the established idiom. Flag only a field that can GENUINELY be absent yet is typed non-null.'",
+        "couples_with": "strict-1, consist-1"
+      },
+      {
+        "id": "pe-3",
+        "target": "src/framework_cli/review/agents/api-design.md line 15",
+        "change": "Reinforce the additive-safe carve-out already present: explicitly call out 'a new nullable GraphQL field, a new query, or a new optional mutation argument (str | None = None) are backwards-compatible — do not flag.' This directly inoculates against the most likely over-flagging case once a real GraphQL good fixture is added.",
+        "couples_with": "fixture good-1"
+      }
+    ],
+    "fixture_edits": [
+      {
+        "id": "fe-1",
+        "target": "tests/eval/fixtures/api-design/bad/graphql-rest-divergence",
+        "change": "Rename directory to 'graphql-breaking-field-rename'. Patch and expect.json unchanged (defect is valid). Update any thresholds/manifest references.",
+        "couples_with": "scope-1, graphql-rest-divergence verdict"
+      },
+      {
+        "id": "fe-2",
+        "target": "tests/eval/fixtures/api-design/good/ (add a GraphQL good fixture)",
+        "change": "Add 'graphql-additive-field' good fixture: an ADDITIVE backwards-compatible GraphQL change in src/demo/graphql/schema.py — e.g. add an OPTIONAL field 'description: str | None = None' to the Item type (with _to_item mapping it) OR add an optional mutation arg 'description: str | None = None'. Must return []. This is the fixture that actually tests the over-flagging boundary the prompt+rubric care about (additive-safe vs breaking). Keeps consistency with the bad mutation-input fixture (same field, opposite verdict).",
+        "couples_with": "good-1, pe-3"
+      },
+      {
+        "id": "fe-3",
+        "target": "tests/eval/fixtures/api-design/good/graphql-rest-aligned",
+        "change": "Optional: keep as a secondary 'agent ignores REST' guard, OR retire it once fe-2 lands (it is REST-only and tests scope-obedience, not GraphQL judgement). Recommendation: keep it but DOWNWEIGHT — the primary good fixture should be the GraphQL additive one (fe-2).",
+        "couples_with": "graphql-rest-aligned verdict"
+      }
+    ]
+  },
+  "proposed_block_threshold": {
+    "block_at_severity": "high",
+    "rationale": "Only the three 'high' categories (N+1 resolver, uncompensated breaking schema change, unbounded list field) are concrete defects that block a builder per the rubric. After pe-1, the nullability/mutation-design categories become 'low' (advisory) and must NOT block. So the agent should BLOCK only on high. This matches the baseline where every TP was a high and the good fixture produced no findings.",
+    "thresholds_yaml": {
+      "current": {"recall_min": 0.73, "fp_max": 0.10, "observed": "recall 0.83 (stale), this baseline recall 1.00 / fp 0.00"},
+      "proposed_after_fixes": {"recall_min": 0.80, "fp_max": 0.10, "note": "With the corpus rebalanced (2 bad + 1-2 genuine GraphQL good), re-derive in Phase 3; recall observed 1.00 supports a 0.80+ floor with the standard -0.10 margin. Do not finalize the number until the rebalanced re-sweep (Phase 3 eval-analyze)."}
+    }
+  },
+  "overall_notes": "Strongest prompt in spirit (tight scope, explicit REST deferral, additive-safe carve-out already present). Two real fixes: (1) the info-typed flag categories violate the rubric severity ladder and double as a latent stricter-than-codebase vector against the template's own bare-payload/non-null idiom (strict-1 is the highest-priority item); (2) the fixture corpus mis-advertises a REST-parity responsibility (rename bad) and lacks a genuine GraphQL good fixture that tests the additive-vs-breaking boundary. No live hallucination or over-flagging in this thin baseline — the risks are latent and would surface on a richer corpus."
+}

@@ -1,0 +1,47 @@
+{
+  "agent": "observability",
+  "case": "correlation-id-logging",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 58,
+      "message": "`except Exception` re-raises without calling `session.rollback()`. After a failed `session.commit()`, SQLAlchemy marks the session invalid; without an explicit rollback the connection is returned to the pool in a 'needs rollback' state, corrupting subsequent requests that receive the same connection \u2014 broken context propagation that can cascade into unrelated 500s with no clear log trail.",
+      "path": "src/demo/routes/items.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Add `session.rollback()` before `raise`: `except Exception: session.rollback(); _log.error(\"delete_item_failed\", item_id=item_id, exc_info=True); raise`"
+    },
+    {
+      "acknowledged": null,
+      "line": 59,
+      "message": "`_log.error(\"delete_item_failed\", item_id=item_id)` omits `exc_info=True`. The exception type, message, and full stack trace are silently discarded \u2014 the only observability signal for a commit failure is the bare event name, making root-cause analysis of production errors impossible even when the correlation ID is present.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Add `exc_info=True`: `_log.error(\"delete_item_failed\", item_id=item_id, exc_info=True)`"
+    },
+    {
+      "acknowledged": null,
+      "line": 42,
+      "message": "The new `DELETE /items/{item_id}` endpoint has no per-endpoint SLO threshold in `slo.py` / `provisioning.py`. DELETE is a destructive, potentially lock-contending operation whose latency and error-rate signals are diluted into the global `request_latency_p99_ms` and `error_rate_pct` SLOs shared with `GET /items`. A spike in delete failures or latency may not breach the global threshold until it visibly degrades the entire fleet.",
+      "path": "src/demo/routes/items.py",
+      "severity": "medium",
+      "stale": null,
+      "suggestion": "Define delete-specific SLO keys (e.g. `delete_item_error_rate_pct`, `delete_item_latency_p99_ms`) in `slo.py` and add matching PromQL in `provisioning.py`; or explicitly document that fleet-wide SLOs are the intended sole signal for this endpoint."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 108468,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 58,\n    \"severity\": \"high\",\n    \"message\": \"`except Exception` re-raises without calling `session.rollback()`. After a failed `session.commit()`, SQLAlchemy marks the session invalid; without an explicit rollback the connection is returned to the pool in a 'needs rollback' state, corrupting subsequent requests that receive the same connection \u2014 broken context propagation that can cascade into unrelated 500s with no clear log trail.\",\n    \"suggestion\": \"Add `session.rollback()` before `raise`: `except Exception: session.rollback(); _log.error(\\\"delete_item_failed\\\", item_id=item_id, exc_info=True); raise`\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 59,\n    \"severity\": \"medium\",\n    \"message\": \"`_log.error(\\\"delete_item_failed\\\", item_id=item_id)` omits `exc_info=True`. The exception type, message, and full stack trace are silently discarded \u2014 the only observability signal for a commit failure is the bare event name, making root-cause analysis of production errors impossible even when the correlation ID is present.\",\n    \"suggestion\": \"Add `exc_info=True`: `_log.error(\\\"delete_item_failed\\\", item_id=item_id, exc_info=True)`\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 42,\n    \"severity\": \"medium\",\n    \"message\": \"The new `DELETE /items/{item_id}` endpoint has no per-endpoint SLO threshold in `slo.py` / `provisioning.py`. DELETE is a destructive, potentially lock-contending operation whose latency and error-rate signals are diluted into the global `request_latency_p99_ms` and `error_rate_pct` SLOs shared with `GET /items`. A spike in delete failures or latency may not breach the global threshold until it visibly degrades the entire fleet.\",\n    \"suggestion\": \"Define delete-specific SLO keys (e.g. `delete_item_error_rate_pct`, `delete_item_latency_p99_ms`) in `slo.py` and add matching PromQL in `provisioning.py`; or explicitly document that fleet-wide SLOs are the intended sole signal for this endpoint.\"\n  }\n]\n```",
+  "repeat": 2,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 26304,
+    "input_tokens": 3,
+    "output_tokens": 6843
+  }
+}

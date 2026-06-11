@@ -34,7 +34,7 @@ index fa242f4..19f245e 100644
 +def count_items(session: SessionDep) -> ItemCount:
 +    """Return the total number of items in the catalogue.
 +
-+    Returns ItemCount so the OpenAPI schema documents the count field
-+    explicitly (consumers get a typed contract, not a bare dict).
++    Uses a COUNT aggregate (session.query(Item).count()) so the result is a
++    true total, independent of the list endpoint's page-size cap.
 +    """
-+    return ItemCount(count=len(list_items(session)))
++    return ItemCount(count=session.query(Item).count())

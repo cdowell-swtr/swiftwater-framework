@@ -1,0 +1,29 @@
+{
+  "agent": "api-design",
+  "case": "graphql-rest-divergence",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 18,
+      "message": "The GraphQL field `name` on the `Item` type was renamed to `title`. In code-first Strawberry this directly renames the exposed schema field, removing `name` from the schema. Any client still querying `Item.name` will break with a validation error, and there is no compatible path (the old field is gone, not deprecated/aliased).",
+      "path": "src/demo/graphql/schema.py",
+      "severity": "high",
+      "stale": null,
+      "suggestion": "Keep `name` as a (deprecated) field alongside `title` during a migration window, e.g. retain `name: str` and add `title` as a resolver returning the same value with `@strawberry.field(deprecation_reason=\"use `title`\")`, then remove `name` only after clients have migrated."
+    }
+  ],
+  "kind": "bad",
+  "latency_ms": 13167,
+  "raw_text": "[{\"path\":\"src/demo/graphql/schema.py\",\"line\":18,\"severity\":\"high\",\"message\":\"The GraphQL field `name` on the `Item` type was renamed to `title`. In code-first Strawberry this directly renames the exposed schema field, removing `name` from the schema. Any client still querying `Item.name` will break with a validation error, and there is no compatible path (the old field is gone, not deprecated/aliased).\",\"suggestion\":\"Keep `name` as a (deprecated) field alongside `title` during a migration window, e.g. retain `name: str` and add `title` as a resolver returning the same value with `@strawberry.field(deprecation_reason=\\\"use `title`\\\")`, then remove `name` only after clients have migrated.\"}]",
+  "repeat": 1,
+  "seeded_file": "src/demo/graphql/schema.py",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 5091,
+    "cache_read_input_tokens": 22533,
+    "input_tokens": 2,
+    "output_tokens": 792
+  }
+}

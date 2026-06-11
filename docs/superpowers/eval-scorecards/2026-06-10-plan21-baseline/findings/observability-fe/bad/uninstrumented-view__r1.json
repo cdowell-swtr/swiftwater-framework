@@ -1,0 +1,19 @@
+{
+  "agent": "observability-fe",
+  "case": "uninstrumented-view",
+  "findings": [],
+  "kind": "bad",
+  "latency_ms": 12851,
+  "raw_text": "[]",
+  "repeat": 1,
+  "seeded_file": "frontend/src/Dashboard.tsx",
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 22358,
+    "input_tokens": 5137,
+    "output_tokens": 615
+  }
+}

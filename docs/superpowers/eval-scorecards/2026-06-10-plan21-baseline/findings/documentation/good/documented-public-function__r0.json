@@ -1,0 +1,47 @@
+{
+  "agent": "documentation",
+  "case": "documented-public-function",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 51,
+      "message": "Docstring claims 'total number of items in the catalogue' but `list_items(session)` is called with no explicit `limit`, so it falls back to `DEFAULT_PAGE_SIZE=50`. The count returned is silently capped at 50 \u2014 the docstring is materially misleading for catalogues with more than 50 items.",
+      "path": "src/demo/routes/items.py",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Use a dedicated scalar COUNT query (e.g. `session.scalar(select(func.count()).select_from(Item))`) to return the true total, or update the docstring and README to document the actual bounded behaviour."
+    },
+    {
+      "acknowledged": null,
+      "line": 78,
+      "message": "README documents `GET /items/count` as returning 'total items in the catalogue', but the implementation delegates to `list_items` whose default `limit` is `DEFAULT_PAGE_SIZE` (50), not a full COUNT. The documented API contract does not match the implementation.",
+      "path": "README.md",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Align the README description with the true behaviour, or fix the implementation to issue a real COUNT query before shipping the documented contract to consumers."
+    },
+    {
+      "acknowledged": null,
+      "line": 27,
+      "message": "`ItemCount` has no field-level docstring or `Field(description=\u2026)` annotation for the `count` field. OpenAPI will emit the field with no description, which weakens the 'typed contract' motivation cited in the endpoint docstring.",
+      "path": "src/demo/routes/items.py",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Add `count: int = Field(description='Total number of items in the catalogue.')` so the OpenAPI spec carries the description consumers need."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 44764,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 51,\n    \"severity\": \"low\",\n    \"message\": \"Docstring claims 'total number of items in the catalogue' but `list_items(session)` is called with no explicit `limit`, so it falls back to `DEFAULT_PAGE_SIZE=50`. The count returned is silently capped at 50 \u2014 the docstring is materially misleading for catalogues with more than 50 items.\",\n    \"suggestion\": \"Use a dedicated scalar COUNT query (e.g. `session.scalar(select(func.count()).select_from(Item))`) to return the true total, or update the docstring and README to document the actual bounded behaviour.\"\n  },\n  {\n    \"path\": \"README.md\",\n    \"line\": 78,\n    \"severity\": \"low\",\n    \"message\": \"README documents `GET /items/count` as returning 'total items in the catalogue', but the implementation delegates to `list_items` whose default `limit` is `DEFAULT_PAGE_SIZE` (50), not a full COUNT. The documented API contract does not match the implementation.\",\n    \"suggestion\": \"Align the README description with the true behaviour, or fix the implementation to issue a real COUNT query before shipping the documented contract to consumers.\"\n  },\n  {\n    \"path\": \"src/demo/routes/items.py\",\n    \"line\": 27,\n    \"severity\": \"info\",\n    \"message\": \"`ItemCount` has no field-level docstring or `Field(description=\u2026)` annotation for the `count` field. OpenAPI will emit the field with no description, which weakens the 'typed contract' motivation cited in the endpoint docstring.\",\n    \"suggestion\": \"Add `count: int = Field(description='Total number of items in the catalogue.')` so the OpenAPI spec carries the description consumers need.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 23683,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 2332
+  }
+}

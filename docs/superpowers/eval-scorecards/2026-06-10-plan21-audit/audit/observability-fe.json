@@ -1,0 +1,96 @@
+{
+  "agent": "observability-fe",
+  "audited_at": "2026-06-10",
+  "auditor_model": "claude-opus-4-8",
+  "summary": "The prompt's three rules are sound in spirit but two of them are written STRICTER THAN THE TEMPLATE CODEBASE actually instruments, and the fixture corpus has two validity bugs that distort the baseline. (1) The real React template instruments errors GLOBALLY and AUTOMATICALLY (frontend/src/observability/rum.ts::initRum registers window.addEventListener('error') + 'unhandledrejection' once at startup); there is NO per-view/per-component RUM idiom. Components (App.tsx, Items.tsx) carry zero local instrumentation and ship unflagged. So the prompt's rule 'a new view ... with no RUM instrumentation reachable from it' would, taken literally, flag every view including the template's own — a stricter-than-codebase trap. (2) Items.tsx's own .catch(() => setError(true)) sets local error state but emits NO RUM signal and does NOT rethrow, yet ships unflagged — so the prompt's 'error handler that swallows an error without it reaching the js-errors counter' rule is also stricter than the codebase baseline as literally worded. The fixtures: swallowed-error and unbounded-label are genuine unambiguous defects (correctly caught 3/3). uninstrumented-view is NOT a genuine defect (the global handler observes its unhandled rejection exactly like App.tsx) — the 0/3 'miss' is arguably correct behavior, not a recall failure. The good fixture capped-label is NOT genuinely clean: it adds a device_class label read from params, but the ingest route re-applies the fail-closed allowlist (routes/frontend_rum.py:46,64) which defaults to UTM-only (config/settings.py.jinja:78), so device_class is stripped server-side and the series can only ever emit device_class='unknown' — a dead-on-arrival signal. The 2/3 reviewers that flagged it were CORRECT; this is a broken good fixture, not over-flagging.",
+  "severity_bar_issues": [
+    {
+      "issue": "Prompt assigns 'high' to 'a new unobserved user-facing code path'. Under the real (global-handler) instrumentation model, almost no view is genuinely 'unobserved' — its unhandled rejections reach the window handler. Calling an uninstrumented view 'high' invites false-positive blocking on ordinary new components.",
+      "rubric_clause": "high = concrete demonstrable defect causing incorrect behavior; an uninstrumented view whose errors are auto-captured globally is not that",
+      "proposed": "Reserve 'high' for the swallowed-error pattern (a catch/boundary that actively prevents the error from reaching the global handler / js-errors counter) and for unbounded label cardinality. A new view that merely lacks LOCAL instrumentation but is covered by the global handler is at most 'low' (advisory: consider a view-level error boundary) — usually nothing."
+    }
+  ],
+  "scope_creep": [
+    {
+      "issue": "Bullet 4 (beacon field captured without the fail-closed query-param allowlist / allowlist applied only client-side) overlaps heavily with review-privacy's domain (the settings.py comment literally says 'Adding a PII-bearing key here is flagged by review-privacy'). The prompt also explicitly disclaims PII review. The allowlist-bypass concern is legitimately observability's (cardinality/operability) ONLY insofar as it causes unbounded labels; the 'never trust the browser / re-apply server-side' framing is a security/privacy concern.",
+      "proposed": "Narrow bullet 4 to its observability core: flag a beacon-derived label only when it is UNBOUNDED/high-cardinality (which bullet 3 already covers). Drop the standalone 'allowlist re-applied server-side' rule or demote it to a cross-reference ('a high-cardinality beacon field is also a privacy concern — review-privacy owns the PII angle')."
+    }
+  ],
+  "hallucination_overreach": [
+    {
+      "issue": "In the baseline, reviewers reliably cited line/file evidence and grounded claims in the real allowlist/route — no fabricated APIs observed. The over-reach risk is structural, not hallucinatory: the prompt's 'no instrumentation reachable from it' wording pushes the model toward flagging views that the global handler already covers (it did NOT do so here — 0/3 on uninstrumented-view — but only because the fixture's seeded comment over-asserts; a real new view would be at higher risk)."
+    }
+  ],
+  "stricter_than_codebase_violations": [
+    {
+      "pattern": "Per-view RUM instrumentation",
+      "codebase_evidence": "frontend/src/observability/rum.ts::initRum() instruments errors globally via window.addEventListener; App.tsx and Items.tsx carry NO local RUM calls and are unflagged.",
+      "prompt_text": "'a new frontend view ... that ships with no RUM/error instrumentation reachable from it'",
+      "violation": "Literally read, this flags every view in the template, including the template's own. New views are no worse than the existing baseline."
+    },
+    {
+      "pattern": "Local catch without RUM emission",
+      "codebase_evidence": "Items.tsx ships .catch(() => setError(true)) — sets local state, no RUM signal, no rethrow — unflagged in the template.",
+      "prompt_text": "'an error handler ... that swallows an error without it reaching the window error handler or the js-errors counter'",
+      "violation": "Items.tsx's own catch does not reach the js-errors counter, yet is acceptable. The distinguishing factor must be whether the catch PREVENTS the global handler from firing (true swallow) vs merely adds local UX handling on top of a fetch whose rejection the framework otherwise surfaces. The prompt must encode that distinction or it over-flags ordinary .catch(setError) UX code."
+    }
+  ],
+  "internal_consistency_violations": [
+    {
+      "issue": "If uninstrumented-view (a new view relying solely on the global handler) is treated as a defect, then App.tsx/Items.tsx (existing views relying solely on the global handler) are identical instances and would also be defects — the create_item/bulk-insert anti-pattern. The prompt currently provides no rule to resolve this, so the model's behavior is luck-of-the-draw."
+    }
+  ],
+  "fixture_verdicts": {
+    "good/capped-label": {
+      "verdict": "INVALID-GOOD",
+      "is_clean": false,
+      "reason": "Adds device_class read from params, but the ingest route's fail-closed allowlist (frontend_rum_allowed_query_params, default UTM-only) strips device_class before record_page_view sees it. The app_frontend_device_class_total series is dead-on-arrival (always device_class='unknown'). 2/3 reviewers correctly flagged this (1 high, 1 medium); the 3rd parse-errored. This is a genuine defect masquerading as a clean fixture and is the source of the apparent over-flagging in the baseline scorecard.",
+      "baseline": "r0=high+medium flagged, r1=parse_error (empty), r2=medium+medium flagged"
+    },
+    "bad/swallowed-error": {
+      "verdict": "VALID-BAD",
+      "is_unambiguous_defect": true,
+      "reason": "loadItemsQuietly's catch{} returns [] with no rethrow and no telemetry, AND removes the prior .catch(setError) path. The rejection is actively consumed so it never reaches the global window 'unhandledrejection' handler / js-errors counter — a true swallow. Caught 3/3.",
+      "baseline": "3/3 flagged high"
+    },
+    "bad/unbounded-label": {
+      "verdict": "VALID-BAD",
+      "is_unambiguous_defect": true,
+      "reason": "record_raw_path labels app_frontend_raw_path_total by the raw full path incl. query string, no _san, no _bump_capped cap, no 'other' overflow — directly violates the module's stated bounded-cardinality invariant. Caught 3/3.",
+      "baseline": "3/3 flagged high (+ medium no-alert finding)"
+    },
+    "bad/uninstrumented-view": {
+      "verdict": "INVALID-BAD",
+      "is_unambiguous_defect": false,
+      "reason": "Dashboard.tsx's fetch().then().then() with no catch produces an UNHANDLED rejection on failure, which the global window 'unhandledrejection' listener (initRum) captures into the js-errors counter — exactly the same coverage App.tsx/Items.tsx rely on. There is no per-view instrumentation idiom in the template, so 'no instrumentation reachable from it' is false: the global handler IS reachable. The 0/3 'miss' is defensible correct behavior, not a recall failure. The seeded comment ('silently unobserved') asserts a property the codebase contradicts.",
+      "baseline": "0/3 flagged (counts as recall miss under current expect.json, but the fixture itself is the problem)"
+    }
+  },
+  "coupled_edits": [
+    {
+      "target": "bad/uninstrumented-view",
+      "fixture_change": "Re-author into a GENUINE defect that the global handler does NOT cover. Option A (preferred): have Dashboard.tsx swallow its own fetch failure with a .catch(() => {}) / .catch(() => setData({})) so the rejection never reaches the global handler — i.e. make it a swallowed-error variant scoped to a new view. Option B: add a React error boundary around the new view whose componentDidCatch returns null without re-reporting (boundaries DO stop propagation to window). Update the seeded comment to describe the active-swallow mechanism, not 'no instrumentation'.",
+      "prompt_change": "Rewrite bullet 1+2 to key on ACTIVE SUPPRESSION rather than absence of local instrumentation: 'Flag an error handler (try/catch, .catch, error boundary) that CONSUMES a rejection/error so it can no longer reach the global window error/unhandledrejection listeners (frontend/src/observability/rum.ts) — the js-errors counter never sees it. A bare .catch(setErrorState) that re-renders an error UI is fine PROVIDED it does not also suppress the global signal; do NOT flag a view merely for lacking its own instrumentation, since the template instruments errors globally at startup, not per-view.'",
+      "rationale": "Aligns prompt + fixture with the codebase-bar (global instrumentation) and the internal-consistency clause (don't flag a new view for a pattern App.tsx/Items.tsx share)."
+    },
+    {
+      "target": "good/capped-label",
+      "fixture_change": "Make it genuinely clean. Either (a) add 'device_class' to frontend_rum_allowed_query_params in the seeded settings within the patch so the value can actually flow through, OR (b) change the new dimension to one already in the allowlist / sourced server-side, OR (c) pick a NEW capped dimension that does not depend on the query-param allowlist at all (e.g. a server-derived bucket). The fixture must demonstrate the GOOD pattern (cap + 'other' overflow via _bump_capped) WITHOUT introducing the orthogonal dead-on-arrival defect.",
+      "prompt_change": "No change strictly required for this fixture, but add a clause clarifying the agent should NOT flag a correctly-capped new label as a cardinality problem (the cap + 'other' bucket is the accepted idiom). Optionally note that 'a new label sourced from a query param NOT in frontend_rum_allowed_query_params will be inert' is an operability finding the agent MAY raise at 'medium' — but keep that out of the GOOD fixture so it reads as clean.",
+      "rationale": "The current good fixture conflates two concerns (capping = good; allowlist-sourcing = broken). Splitting them lets the good fixture be unambiguously clean and removes the false over-flagging signal from the scorecard."
+    },
+    {
+      "target": "prompt (bullet 4 / allowlist)",
+      "fixture_change": "none",
+      "prompt_change": "Demote/cross-reference the server-side-allowlist rule per scope_creep above so observability-fe stops co-owning privacy's territory; retain only the cardinality consequence.",
+      "rationale": "Scope discipline + the settings.py comment explicitly assigns PII-key review to review-privacy."
+    }
+  ],
+  "proposed_block_threshold": {
+    "block_threshold": "high",
+    "recall_min": 0.90,
+    "fp_max": 0.10,
+    "rationale": "After the two fixture fixes, the corpus becomes: 2 genuine high-severity bads (swallowed-error, unbounded-label) + 1 re-authored genuine bad (uninstrumented-view -> active-swallow variant) + 1 genuinely-clean good (capped-label). With the prompt re-keyed to active suppression and the device_class fixture cleaned, expect recall ~1.00 and fp ~0.00 on the good fixture. Keep recall_min/fp_max at the strict 0.90/0.10 bars (margin for subagent variance), consistent with the current thresholds.yaml entry (recall_min 0.90 / fp_max 0.10). Block only on 'high' findings — the medium 'no alert/dashboard for a new signal' findings (seen on both unbounded-label and capped-label) are accurate but advisory and should NOT gate a builder; they reflect a real obs-completeness expectation but are mediums by the rubric."
+  },
+  "notes": "Caveats from baseline: good/capped-label r1 was a parse_error (empty raw_text after 96s) — a reliability artifact, not a true negative; re-running should clarify. The medium 'missing alert/dashboard' findings are genuinely valid (the template's obs-completeness guard does expect scrape+dashboard parity) but are correctly mediums, not blockers. No prompt hallucinations observed; the issues are stricter-than-codebase wording + two fixture-validity bugs."
+}

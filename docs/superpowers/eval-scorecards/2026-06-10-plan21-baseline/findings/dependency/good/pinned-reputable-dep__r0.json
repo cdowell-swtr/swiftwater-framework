@@ -1,0 +1,38 @@
+{
+  "agent": "dependency",
+  "case": "pinned-reputable-dep",
+  "findings": [
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "httpx is already declared as a dev dependency (`httpx>=0.28` in [dependency-groups] dev), where it typically serves FastAPI's TestClient. Promoting it to [project] dependencies implies new runtime HTTP-client usage, but this diff contains no source changes to confirm that. If all httpx imports live under tests/, the production pin is unnecessary bloat.",
+      "path": "pyproject.toml",
+      "severity": "info",
+      "stale": null,
+      "suggestion": "Verify that src/ code actually imports httpx at runtime before keeping this entry. If usage is test-only, remove it from [project] dependencies and rely on the existing dev-group entry."
+    },
+    {
+      "acknowledged": null,
+      "line": 0,
+      "message": "Minor lower-bound inconsistency: the production pin allows >=0.27 while the dev group requires >=0.28. In a combined install the stricter dev constraint wins, but a production-only install (e.g. a slim Docker image built without dev extras) could resolve 0.27.x, which diverges from the version exercised in CI.",
+      "path": "pyproject.toml",
+      "severity": "low",
+      "stale": null,
+      "suggestion": "Raise the production lower bound to >=0.28 to match the dev group and guarantee the same httpx version across all install profiles."
+    }
+  ],
+  "kind": "good",
+  "latency_ms": 30453,
+  "raw_text": "```json\n[\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": \"\\\"httpx>=0.27,<1.0\\\",\",\n    \"severity\": \"info\",\n    \"message\": \"httpx is already declared as a dev dependency (`httpx>=0.28` in [dependency-groups] dev), where it typically serves FastAPI's TestClient. Promoting it to [project] dependencies implies new runtime HTTP-client usage, but this diff contains no source changes to confirm that. If all httpx imports live under tests/, the production pin is unnecessary bloat.\",\n    \"suggestion\": \"Verify that src/ code actually imports httpx at runtime before keeping this entry. If usage is test-only, remove it from [project] dependencies and rely on the existing dev-group entry.\"\n  },\n  {\n    \"path\": \"pyproject.toml\",\n    \"line\": \"\\\"httpx>=0.27,<1.0\\\",\",\n    \"severity\": \"low\",\n    \"message\": \"Minor lower-bound inconsistency: the production pin allows >=0.27 while the dev group requires >=0.28. In a combined install the stricter dev constraint wins, but a production-only install (e.g. a slim Docker image built without dev extras) could resolve 0.27.x, which diverges from the version exercised in CI.\",\n    \"suggestion\": \"Raise the production lower bound to >=0.28 to match the dev group and guarantee the same httpx version across all install profiles.\"\n  }\n]\n```",
+  "repeat": 0,
+  "seeded_file": null,
+  "stop_reason": "end_turn",
+  "tool_calls": [],
+  "turns": 1,
+  "usage": {
+    "cache_creation_input_tokens": 11774,
+    "cache_read_input_tokens": 8480,
+    "input_tokens": 3,
+    "output_tokens": 1454
+  }
+}
