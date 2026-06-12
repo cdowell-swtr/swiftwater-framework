@@ -198,6 +198,81 @@ def test_review_dependency_skips_when_no_dep_files(monkeypatch):
     assert "not triggered" in result.output
 
 
+def test_bare_upskill_is_blocked_with_a_battery_message(tmp_path):
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+
+    (tmp_path / ".copier-answers.yml").write_text("batteries: []\n")
+    result = CliRunner().invoke(app, ["upskill", str(tmp_path)])
+    assert result.exit_code != 0
+    assert "at least one `--with`" in result.output
+    assert "framework upgrade" in result.output
+
+
+def test_upgrade_success_prints_commit_after_instruction_last(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    from framework_cli.upgrade import UpgradeOutcome
+
+    monkeypatch.setattr(
+        cli,
+        "upgrade_project",
+        lambda project, to=None: UpgradeOutcome("green", "v0.3.0"),
+    )
+    (tmp_path / "x").mkdir()
+    result = CliRunner().invoke(cli.app, ["upgrade", str(tmp_path / "x")])
+    assert result.exit_code == 0
+    # The commit/push instruction is the final thing the user sees.
+    tail = result.output.strip().splitlines()[-1]
+    assert "git" in tail and "commit" in tail and "push" in tail
+
+
+def test_upgrade_already_current_is_a_noop(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    from framework_cli.upgrade import UpgradeOutcome
+
+    monkeypatch.setattr(
+        cli,
+        "upgrade_project",
+        lambda project, to=None: UpgradeOutcome("already-current", "v0.3.0"),
+    )
+    (tmp_path / "x").mkdir()
+    result = CliRunner().invoke(cli.app, ["upgrade", str(tmp_path / "x")])
+    assert result.exit_code == 0
+    assert "up to date" in result.output
+
+
+def test_upgrade_red_exits_nonzero(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    from framework_cli.upgrade import UpgradeOutcome
+
+    monkeypatch.setattr(
+        cli, "upgrade_project", lambda project, to=None: UpgradeOutcome("red", "v0.3.0")
+    )
+    (tmp_path / "x").mkdir()
+    result = CliRunner().invoke(cli.app, ["upgrade", str(tmp_path / "x")])
+    assert result.exit_code != 0
+    assert "task test" in result.output or "failed" in result.output
+
+
+def test_check_points_at_upgrade(monkeypatch):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+
+    monkeypatch.setattr(cli, "installed_framework_version", lambda: "0.2.0")
+    monkeypatch.setattr(cli, "latest_release", lambda: "v0.3.0")
+    result = CliRunner().invoke(cli.app, ["check"])
+    assert "framework upgrade" in result.output
+    assert "framework upskill" not in result.output
+
+
 def test_review_dependency_runs_when_dep_file_changed(monkeypatch):
     import framework_cli.cli as cli_mod
     from framework_cli.review.findings import Finding

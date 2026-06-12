@@ -14,7 +14,7 @@ The framework is a [Copier](https://copier.readthedocs.io/) template rendered by
 
 This is deliberately opinionated. The framework makes structural decisions so the builder doesn't have to: test layout, coverage strategy, observability stack, environment model, secrets handling. The builder's job is to configure their project's specifics and then write application logic. The principles behind these decisions are laid out in [Design principles](../working/design-principles.md).
 
-The framework is not a library to import. It generates a project that owns its own code. The builder can read every file, understand every decision, and modify anything. If a framework update ships an improved convention, `framework upskill` merges it non-destructively — or the builder can diverge intentionally and record the drift.
+The framework is not a library to import. It generates a project that owns its own code. The builder can read every file, understand every decision, and modify anything. If a framework update ships an improved convention, `framework upgrade` merges it non-destructively — or the builder can diverge intentionally and record the drift.
 
 ## Antipatterns it prevents
 

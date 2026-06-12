@@ -107,3 +107,81 @@ def test_record_alert_channels_empty_writes_default(tmp_path: Path):
     assert (
         "alert_channels:\n- webhook\n" in (project / ".copier-answers.yml").read_text()
     )
+
+
+def test_read_identity_returns_the_four_answers(tmp_path):
+    from framework_cli.source import read_identity
+
+    proj = tmp_path / "p"
+    proj.mkdir()
+    (proj / ".copier-answers.yml").write_text(
+        "_commit: v0.1.0\n"
+        "project_name: My App\n"
+        "project_slug: my-app\n"
+        "package_name: my_app\n"
+        'python_version: "3.12"\n'
+        "batteries: []\n"
+    )
+    assert read_identity(proj) == {
+        "project_name": "My App",
+        "project_slug": "my-app",
+        "package_name": "my_app",
+        "python_version": "3.12",
+    }
+
+
+def test_read_identity_omits_missing_keys(tmp_path):
+    from framework_cli.source import read_identity
+
+    proj = tmp_path / "p"
+    proj.mkdir()
+    (proj / ".copier-answers.yml").write_text("project_name: Only Name\n")
+    assert read_identity(proj) == {"project_name": "Only Name"}
+
+
+def test_record_identity_round_trips_through_read(tmp_path):
+    from framework_cli.source import read_identity, record_identity
+
+    proj = tmp_path / "p"
+    proj.mkdir()
+    (proj / ".copier-answers.yml").write_text("_commit: v0.1.0\nbatteries: []\n")
+    identity = {
+        "project_name": "My App",
+        "project_slug": "my-app",
+        "package_name": "my_app",
+        "python_version": "3.12",
+    }
+    record_identity(proj, identity)
+    text = (proj / ".copier-answers.yml").read_text()
+    assert "_commit: v0.1.0" in text  # untouched
+    assert read_identity(proj) == identity
+
+
+def test_record_identity_replaces_existing_values(tmp_path):
+    from framework_cli.source import read_identity, record_identity
+
+    proj = tmp_path / "p"
+    proj.mkdir()
+    (proj / ".copier-answers.yml").write_text(
+        'package_name: old_name\npython_version: "3.11"\n'
+    )
+    record_identity(proj, {"package_name": "new_name", "python_version": "3.12"})
+    assert read_identity(proj) == {"package_name": "new_name", "python_version": "3.12"}
+
+
+def test_read_commit_returns_recorded_tag(tmp_path):
+    from framework_cli.source import read_commit
+
+    proj = tmp_path / "p"
+    proj.mkdir()
+    (proj / ".copier-answers.yml").write_text("_commit: v0.2.2\nbatteries: []\n")
+    assert read_commit(proj) == "v0.2.2"
+
+
+def test_read_commit_none_when_absent(tmp_path):
+    from framework_cli.source import read_commit
+
+    proj = tmp_path / "p"
+    proj.mkdir()
+    (proj / ".copier-answers.yml").write_text("batteries: []\n")
+    assert read_commit(proj) is None

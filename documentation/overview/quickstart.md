@@ -154,4 +154,4 @@ This merges the battery's files into the existing project non-destructively. Con
 framework check
 ```
 
-If a newer version is available, this prints the exact `uv tool install` command to upgrade the CLI, then run `framework upskill <project>` to apply the updated template.
+If a newer version is available, this prints the exact `uv tool install` command to upgrade the CLI, then run `framework upgrade <project>` to apply the updated template.

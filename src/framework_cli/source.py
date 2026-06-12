@@ -6,6 +6,7 @@ git source + version tag so `copier update` / `framework upskill` work from any 
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -122,6 +123,55 @@ def record_alert_channels(project: Path, channels: list[str]) -> None:
     out.append("alert_channels:")
     out.extend(f"- {c}" for c in effective)
     answers.write_text("\n".join(out) + "\n")
+
+
+IDENTITY_KEYS = ("project_name", "project_slug", "package_name", "python_version")
+
+
+def read_identity(project: Path) -> dict[str, str]:
+    """The identity answers present in .copier-answers.yml ({} if none/absent).
+
+    Only keys actually present are returned, so callers can detect a missing/stripped set.
+    """
+    import yaml
+
+    answers = project / _ANSWERS_REL
+    if not answers.is_file():
+        return {}
+    data = yaml.safe_load(answers.read_text()) or {}
+    return {k: str(data[k]) for k in IDENTITY_KEYS if k in data and data[k] is not None}
+
+
+def record_identity(project: Path, identity: dict[str, str]) -> None:
+    """Write the identity answers into .copier-answers.yml (framework-owned, like batteries).
+
+    Copier does not reliably re-emit these subdir-declared answers through the portable
+    `_subdirectory` source on update, so the framework re-records them: drop any existing
+    line for each key and re-append it. Values are JSON-quoted, which is valid YAML and
+    preserves strings such as python_version ("3.12") and names with spaces.
+    """
+    answers = project / _ANSWERS_REL
+    out = [
+        line
+        for line in answers.read_text().splitlines()
+        if not any(line.startswith(f"{k}:") for k in IDENTITY_KEYS)
+    ]
+    for key in IDENTITY_KEYS:
+        if key in identity:
+            out.append(f"{key}: {json.dumps(identity[key])}")
+    answers.write_text("\n".join(out) + "\n")
+
+
+def read_commit(project: Path) -> str | None:
+    """The framework version tag recorded in .copier-answers.yml `_commit` (None if absent)."""
+    import yaml
+
+    answers = project / _ANSWERS_REL
+    if not answers.is_file():
+        return None
+    data = yaml.safe_load(answers.read_text()) or {}
+    value = data.get("_commit")
+    return str(value) if value is not None else None
 
 
 def record_portable_source(project: Path, version: str) -> None:
