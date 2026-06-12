@@ -451,6 +451,14 @@ def test_render_includes_seed(tmp_path: Path):
     assert "from demo.db.seed import seed" in cli
 
 
+def test_seed_script_reads_as_an_owned_example(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    cli = (dest / "scripts" / "seed.py").read_text()
+    assert "compose your domain seeding here" in cli
+    assert "db.seed" in cli  # still points at the reusable helper
+
+
 def test_render_includes_alembic(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

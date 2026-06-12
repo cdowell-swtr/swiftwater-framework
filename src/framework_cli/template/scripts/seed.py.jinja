@@ -4,6 +4,8 @@ from {{ package_name }}.db.engine import SessionLocal
 from {{ package_name }}.db.seed import seed
 
 
+# This entrypoint is yours — compose your domain seeding here. The reusable, idempotent seed()
+# helper (insert-if-empty, safe to run on every start) lives in {{ package_name }}/db/seed.py.
 def main() -> None:
     # Run from the project root: the seeds path is cwd-relative (the container
     # entrypoint runs this from /app, and `task db:seed` runs from the repo root).
