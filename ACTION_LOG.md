@@ -19,3 +19,9 @@ Froze the dated meta-plan (`docs/superpowers/plans/2026-05-20-meta-plan.md`) in
 place with a tombstone header and repointed CLAUDE.md's "Source of truth" at
 `PLAN.md`. `_archive/ARCHIVED_PLAN.md` points to the frozen file rather than
 copying it (relocation, not duplication).
+
+#### #0003 · amended · 2026-06-12
+Re-targeted the commit-gate PreToolUse hook in `.claude/settings.json` from
+"CLAUDE.md staged" to the lenient "PLAN.md or ACTION_LOG.md staged", and reworded
+CLAUDE.md's "Keeping state current" section to match. Note: settings.json hook
+edits do not reload mid-session, so the new gate governs future sessions.

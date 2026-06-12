@@ -21,7 +21,7 @@ Full history: git + the frozen meta-plan + `_archive/`.
 
 ## Keeping state current (required before every commit)
 
-Before every commit, update the **Current State** pointer above — including **Last updated** as a datetime with timezone (e.g. `2026-05-21 09:19 PDT`, since we commit several times a day) — and the meta-plan's status table when a plan's status changes, then `git add CLAUDE.md`. This keeps the repo's state accurate as we move across machines and environments. A `PreToolUse` hook in `.claude/settings.json` enforces this — it blocks `git commit` until `CLAUDE.md` is staged. Run `/hooks` to review or disable it.
+Before every commit, update `PLAN.md` (tick the task; move finished items to `Done`) and append an `ACTION_LOG.md` entry for every completion and every deviation, per `../../patterns/pi-convention.md`. A `PreToolUse` hook in `.claude/settings.json` enforces this — it blocks `git commit` until `PLAN.md` or `ACTION_LOG.md` is staged. Run `/hooks` to review or disable it.
 
 ## How we build here
 - Work proceeds plan-by-plan per the meta-plan, using the superpowers subagent-driven flow: a feature branch → an implementer per task (TDD) → controller verification → a final review → merge to `master`.
