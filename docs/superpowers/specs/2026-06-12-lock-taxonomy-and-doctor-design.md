@@ -152,6 +152,17 @@ Now that they are unlocked, make them read as deliberate examples:
   docs) to reflect the two unlocks and the new `INTENTIONALLY_UNLOCKED` category.
 - The `classes.py` header comment update from §1.
 
+### 5. Folded-in: Traefik Docker-API fix (added during execution)
+
+`infra/compose/dev.yml` pins `traefik:v3.1`. Docker Engine 27+ (incl. 29) raised the minimum
+Docker API to 1.44 and rejects Traefik ≤v3.5's hardcoded API 1.24 — `"client version 1.24 is too
+old"` — which breaks `task dev`'s Traefik HTTPS proxy (surfaced by Meridian). **Verified empirically
+on Docker 29:** `DOCKER_API_VERSION` env has no effect; v3.2/v3.3/v3.5 bumps still send 1.24; only
+**v3.6** (Docker API auto-negotiation) connects cleanly. Fix: bump to `traefik:v3.6` + a render guard
+asserting the pin is ≥ v3.6 + an explanatory comment. It was never caught because the acceptance tier
+uses the `lite` profile (no Traefik), so Traefik's docker-provider discovery is unexercised — tracked
+as a follow-up (see Non-goals). Thematically env-parity, hence folded into this slice.
+
 ## Testing (TDD throughout)
 
 - **Narrow re-lock guard**: a test in `tests/integrity/test_classes.py` asserting `scripts/seed.py`
