@@ -120,7 +120,10 @@ preservation and the fail-closed guard are inherited by every caller:
   — version moves; batteries/channels unchanged.
 - `upskill --with` → `_apply_update(vcs_ref=recorded_version, batteries=recorded+new,
   channels=...)` — version pinned; batteries change. (Guards decision A: `_commit` unchanged.)
-- `downskill` → same helper with the reduced battery set at the recorded version.
+- `downskill` → **unchanged; not a caller.** `remove_battery` removes a battery by surgical
+  two-render file-splicing and only touches `.copier-answers.yml` via `record_batteries` — it
+  never runs `copier update`, so it neither strips identity nor needs the shared core. Left
+  exactly as-is. The two update (re-render) paths are `upgrade` and `upskill --with`.
 
 ### Data flow — `framework upgrade`
 
@@ -138,8 +141,8 @@ check git-tracked + clean tree
 ```
 
 The key property: **identity preservation and the fail-closed guard live in `_apply_update`
-alone**, so `upgrade`, `upskill --with`, and `downskill` all inherit them, and the two-hop
-invariant test targets that single helper.
+alone**, so both re-render paths (`upgrade` and `upskill --with`) inherit them, and the
+two-hop invariant test targets that single helper.
 
 ## Error handling, safety & edge cases
 
@@ -216,10 +219,10 @@ The multi-hop test spins up **two throwaway git repos per test, both torn down**
 2. **The rendered project repo** — rendered from that source, `git init` + committed (so it
    satisfies the git-tracked + clean-tree preconditions), then upgraded twice.
 
-Both live under a pytest `tmp_path`/`tmp_path_factory` dir with an **explicit finalizer that
-`shutil.rmtree`s** them — not relying solely on pytest's tmp-retention (which keeps the last
-few runs and is exactly what accumulates as stale `/tmp/pytest-of-chris/*`). Render-heavy
-cases route to `TMPDIR=/var/tmp` (the 16 GB `/tmp` tmpfs fills under full renders).
+Both live under a pytest **`tmp_path`** dir (a fresh dir per test, auto-removed by pytest —
+the convention the existing `test_upskill.py` git-repo tests already follow, so no hand-rolled
+finalizer). Render-heavy cases route to `TMPDIR=/var/tmp` (the 16 GB `/tmp` tmpfs fills under
+full renders, and `/var/tmp` also sidesteps stale `/tmp/pytest-of-chris/*` accumulation).
 
 **No network remotes — ever.** Tests create only **local** git repos; nothing is created on
 GitHub or any network remote (no auth dependency, no orphaned-repo leak):
