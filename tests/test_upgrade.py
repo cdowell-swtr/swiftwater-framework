@@ -153,3 +153,16 @@ def test_upgrade_requires_git_tracked(tmp_path: Path):
     )
     with pytest.raises(UpgradeError, match="git"):
         upgrade_project(proj, to="v1")
+
+
+def test_upgrade_defaults_to_latest_release(tmp_path: Path, monkeypatch):
+    import framework_cli.upgrade as up
+
+    source = _source_repo(tmp_path)
+    proj = _project(tmp_path, source)
+    _bump(source, "v2")
+    monkeypatch.setattr(up, "latest_release", lambda: "v2")
+    outcome = upgrade_project(proj)  # no `to=` → default latest
+    assert outcome.status == "green"
+    assert outcome.target == "v2"
+    assert "_commit: v2" in (proj / ".copier-answers.yml").read_text()

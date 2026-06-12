@@ -34,6 +34,7 @@ from framework_cli.source import (
 )
 from framework_cli.downskill import DownskillError, downskill_project
 from framework_cli.upskill import UpskillError, upskill_project
+from framework_cli.upgrade import UpgradeError, upgrade_project
 
 app = typer.Typer(
     help="Framework CLI — scaffold solid, observable, testable Python projects.",
@@ -282,6 +283,14 @@ def upskill(
         typer.echo(f"Error: {name} is not a directory", err=True)
         raise typer.Exit(1)
 
+    if not with_ and alerts is None:
+        typer.echo(
+            "framework upskill adds batteries — pass at least one `--with` <battery>. "
+            "To move the framework version, use `framework upgrade <project>`.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
     with_batteries = None
     if with_:
         try:
@@ -346,6 +355,43 @@ def downskill(
 
 
 @app.command()
+def upgrade(
+    name: str = typer.Argument(..., help="Path to the project to upgrade."),
+    to: str = typer.Option(
+        None, "--to", help="Target release tag (default: the latest release)."
+    ),
+) -> None:
+    """Move a project onto a newer framework release, then run its tests."""
+    project = Path(name)
+    if not project.is_dir():
+        typer.echo(f"Error: {name} is not a directory", err=True)
+        raise typer.Exit(1)
+    try:
+        outcome = upgrade_project(project, to=to)
+    except UpgradeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if outcome.status == "already-current":
+        typer.echo(f"Already up to date ({outcome.target}).")
+        return
+    if outcome.status == "red":
+        typer.echo(
+            f"Upgraded to {outcome.target}, but `task test` failed — resolve any Copier "
+            "conflict markers and fix failures, then re-run `task test` before committing.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    # green: the commit-after instruction is deliberately the LAST thing printed.
+    typer.echo(
+        f"Upgraded to {outcome.target}; tests pass. Review the diff, then snapshot it:"
+    )
+    typer.echo(
+        f'  git add -A && git commit -m "chore: upgrade framework to {outcome.target}" && git push'
+    )
+
+
+@app.command()
 def check() -> None:
     """Report whether a newer framework release is available."""
     current_tag = version_tag(installed_framework_version())
@@ -359,7 +405,7 @@ def check() -> None:
         typer.echo(
             f"framework check: installed {current_tag}, latest {latest}. "
             f"Upgrade the CLI with `uv tool install git+{REPO_URL}@{latest}`, "
-            f"then run `framework upskill <project>`."
+            f"then run `framework upgrade <project>`."
         )
 
 
