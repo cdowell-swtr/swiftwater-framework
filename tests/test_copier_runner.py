@@ -3317,3 +3317,23 @@ def test_traefik_image_supports_modern_docker_api(tmp_path: Path):
     # v3.6+ added Docker API auto-negotiation; Docker Engine 27+ (min API 1.44) rejects
     # Traefik <=v3.5's hardcoded API 1.24. See 2026-06-12 lock-taxonomy-and-doctor design.
     assert int(m.group(1)) >= 6, f"traefik must be >= v3.6 (found v3.{m.group(1)})"
+
+
+def test_doctor_task_present_and_not_in_ci(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "\n  doctor:" in taskfile
+    assert "bash scripts/doctor.sh" in taskfile
+    # doctor is advisory — it must NOT be wired into `task ci` (CI has no mkcert).
+    ci_block = taskfile.split("\n  ci:")[1].split("\n  push:")[0]
+    assert "doctor" not in ci_block
+
+
+def test_host_tool_guards_point_at_doctor(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    taskfile = (dest / "Taskfile.yml").read_text()
+    # The lazy precondition messages cross-reference the canonical preflight (certs + the
+    # three docker guards: dev / dev:lite / dev:reset).
+    assert taskfile.count("Run `task doctor`") >= 4
