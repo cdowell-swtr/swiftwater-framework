@@ -3275,3 +3275,33 @@ def test_render_without_docs_battery_has_no_publish_workflow(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     assert not (dest / ".github" / "workflows" / "docs.yml").exists()
+
+
+def test_doctor_script_checks_expected_host_tools(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # baseline: no react battery
+    doctor = (dest / "scripts" / "doctor.sh").read_text()
+    for probe in (
+        "command -v docker",
+        "docker compose version",
+        "docker buildx version",
+        "command -v mkcert",
+        "command -v uv",
+        "command -v git",
+    ):
+        assert probe in doctor, f"doctor.sh missing probe: {probe}"
+    assert "command -v node" not in doctor  # node only with the react battery
+
+
+def test_doctor_script_checks_node_only_with_react(tmp_path: Path):
+    dest = tmp_path / "demo_react"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    doctor = (dest / "scripts" / "doctor.sh").read_text()
+    assert "command -v node" in doctor
+    assert "command -v npm" in doctor
+
+
+def test_doctor_script_is_locked():
+    from framework_cli.integrity.classes import LOCKED_TRACKED
+
+    assert "scripts/doctor.sh" in LOCKED_TRACKED

@@ -61,6 +61,7 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "infra/observability/grafana/provisioning/datasources/tempo.yml",
     "scripts/check_migrations.py",
     "scripts/coverage.sh",
+    "scripts/doctor.sh",
     "scripts/entrypoint.sh",
     "scripts/export-openapi.sh",
     "scripts/gen_observability.py",
