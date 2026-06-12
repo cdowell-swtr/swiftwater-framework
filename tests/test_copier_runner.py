@@ -3337,3 +3337,11 @@ def test_host_tool_guards_point_at_doctor(tmp_path: Path):
     # The lazy precondition messages cross-reference the canonical preflight (certs + the
     # three docker guards: dev / dev:lite / dev:reset).
     assert taskfile.count("Run `task doctor`") >= 4
+
+
+def test_readme_points_at_doctor_for_prerequisites(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    readme = (dest / "README.md").read_text()
+    assert "task doctor" in readme
+    assert "Prerequisites" in readme
