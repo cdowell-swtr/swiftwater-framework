@@ -50,18 +50,15 @@ def _apply_update(
     from framework_cli.source import IDENTITY_KEYS, read_identity, record_identity
 
     identity = read_identity(project)
-    # Fail-closed guard: if the project has ANY identity key recorded (it was initialised
-    # from the real framework template), ALL four must be present. A partial set means the
-    # answers were stripped by a prior update — refuse rather than render an empty package.
-    # Projects built from simpler templates (no identity questions) have none of the keys
-    # and are allowed through unchanged.
-    if identity:
-        missing = [k for k in IDENTITY_KEYS if not identity.get(k)]
-        if missing:
-            raise UpskillError(
-                f".copier-answers.yml is missing identity answers ({', '.join(missing)}); "
-                "refusing to update rather than render an empty project. Restore them and retry."
-            )
+    # Fail-closed guard: ALL four identity keys must be present.  Real framework projects
+    # always have them; a missing set (partial OR all-absent) means the answers were stripped
+    # by a prior update — refuse rather than silently render an empty package name.
+    missing = [k for k in IDENTITY_KEYS if not identity.get(k)]
+    if missing:
+        raise UpskillError(
+            f".copier-answers.yml is missing identity answers ({', '.join(missing)}); "
+            "refusing to update rather than render an empty project. Restore them and retry."
+        )
 
     run_update(
         str(project),

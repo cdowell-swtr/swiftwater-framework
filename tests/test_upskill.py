@@ -17,7 +17,12 @@ def _source_repo(tmp_path: Path) -> Path:
     sub.mkdir(parents=True)
     (repo / "copier.yml").write_text('_subdirectory: tmpl\n_exclude: ["copier.yml"]\n')
     (sub / "copier.yml").write_text(
-        "_templates_suffix: .jinja\nname:\n  type: str\n  default: world\n"
+        "_templates_suffix: .jinja\n"
+        "name:\n  type: str\n  default: world\n"
+        "project_name:\n  type: str\n"
+        'project_slug:\n  type: str\n  default: "{{ project_name|lower }}"\n'
+        'package_name:\n  type: str\n  default: "{{ project_slug }}"\n'
+        'python_version:\n  type: str\n  default: "3.12"\n'
     )
     (sub / "framework_line.txt").write_text("framework v1\n")
     (sub / "app.txt.jinja").write_text("app for {{ name }}\n")
@@ -39,11 +44,19 @@ def _source_repo(tmp_path: Path) -> Path:
 def _project_at_v1(tmp_path: Path, source: Path) -> Path:
     from copier import run_copy
 
+    from framework_cli.source import record_identity
+
     proj = tmp_path / "proj"
     run_copy(
         str(source),
         str(proj),
-        data={"name": "demo"},
+        data={
+            "name": "demo",
+            "project_name": "demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+        },
         defaults=True,
         overwrite=True,
         quiet=True,
@@ -57,6 +70,15 @@ def _project_at_v1(tmp_path: Path, source: Path) -> Path:
     ]
     kept += [f"_src_path: {source}", "_commit: v1"]
     ans.write_text("\n".join(kept) + "\n")
+    record_identity(
+        proj,
+        {
+            "project_name": "demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+        },
+    )
     _git(proj, "init", "-q")
     _git(proj, "config", "user.email", "b@x")
     _git(proj, "config", "user.name", "b")
@@ -127,6 +149,10 @@ def _battery_source_repo(tmp_path: Path) -> Path:
     (sub / "copier.yml").write_text(
         "_templates_suffix: .jinja\n"
         "name:\n  type: str\n  default: world\n"
+        "project_name:\n  type: str\n"
+        'project_slug:\n  type: str\n  default: "{{ project_name|lower }}"\n'
+        'package_name:\n  type: str\n  default: "{{ project_slug }}"\n'
+        'python_version:\n  type: str\n  default: "3.12"\n'
         "batteries:\n  type: yaml\n  default: []\n"
     )
     (sub / "app.txt.jinja").write_text("app for {{ name }}\n")
@@ -151,13 +177,20 @@ def _battery_source_repo(tmp_path: Path) -> Path:
 def _battery_project(tmp_path: Path, source: Path, batteries: list[str]) -> Path:
     from copier import run_copy
 
-    from framework_cli.source import record_batteries
+    from framework_cli.source import record_batteries, record_identity
 
     proj = tmp_path / "bproj"
     run_copy(
         str(source),
         str(proj),
-        data={"name": "demo", "batteries": batteries},
+        data={
+            "name": "demo",
+            "project_name": "demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+            "batteries": batteries,
+        },
         defaults=True,
         overwrite=True,
         quiet=True,
@@ -175,6 +208,15 @@ def _battery_project(tmp_path: Path, source: Path, batteries: list[str]) -> Path
     # record_batteries writes the initial battery set (mirrors what the real framework new does
     # via the local template, which does include batteries in _copier_answers).
     record_batteries(proj, batteries)
+    record_identity(
+        proj,
+        {
+            "project_name": "demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+        },
+    )
     _git(proj, "init", "-q")
     _git(proj, "config", "user.email", "b@x")
     _git(proj, "config", "user.name", "b")
@@ -252,7 +294,9 @@ def test_upskill_records_alert_channels(monkeypatch, tmp_path: Path):
     project = tmp_path / "demo"
     project.mkdir()
     (project / ".copier-answers.yml").write_text(
-        "_src_path: gh:x\n_commit: v0.1.0\nbatteries: []\nalert_channels:\n- webhook\n"
+        "_src_path: gh:x\n_commit: v0.1.0\n"
+        'project_name: Demo\nproject_slug: demo\npackage_name: demo\npython_version: "3.12"\n'
+        "batteries: []\nalert_channels:\n- webhook\n"
     )
     calls = {}
 
@@ -399,6 +443,28 @@ def test_apply_update_refuses_when_identity_missing(tmp_path: Path):
             ln
             for ln in ans.read_text().splitlines()
             if not ln.startswith(("package_name:", "python_version:"))
+        )
+        + "\n"
+    )
+    with pytest.raises(UpskillError, match="identity"):
+        _apply_update(proj, vcs_ref="v1", batteries=[], channels=["webhook"])
+
+
+def test_apply_update_refuses_when_all_identity_keys_absent(tmp_path: Path):
+    """Guard fires even when ALL four identity keys are absent (not just a partial strip)."""
+    from framework_cli.upskill import UpskillError, _apply_update
+
+    source = _identity_source_repo(tmp_path)
+    proj = _identity_project(tmp_path, source)
+    # Strip ALL four identity keys — simulates a fully-stripped project.
+    ans = proj / ".copier-answers.yml"
+    ans.write_text(
+        "\n".join(
+            ln
+            for ln in ans.read_text().splitlines()
+            if not ln.startswith(
+                ("project_name:", "project_slug:", "package_name:", "python_version:")
+            )
         )
         + "\n"
     )
