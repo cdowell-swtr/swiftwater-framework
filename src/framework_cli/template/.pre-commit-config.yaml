@@ -1,4 +1,7 @@
-# Deterministic, fast quality gate. Runs on every commit.
+# FRAMEWORK:BEGIN — managed by swiftwater-framework; do not edit inside this region.
+# Deterministic, fast quality gate that runs on every commit. `framework restore`
+# overwrites everything between the markers from the installed template version. Add
+# your OWN hooks below the closing marker (see the note there).
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -61,3 +64,10 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-commit]
+# FRAMEWORK:END
+# Your project's own pre-commit hooks go below, each as another `- repo:` entry at this
+# indent — they continue the `repos:` list above and survive `framework restore`. Example:
+#   - repo: https://github.com/astral-sh/uv-pre-commit
+#     rev: 0.5.0
+#     hooks:
+#       - id: uv-lock

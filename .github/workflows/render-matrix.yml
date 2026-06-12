@@ -45,10 +45,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
-      - uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      # `task` (go-task) installed directly (not arduino/setup-task, which has no
+      # Node-24 release) — see docs/maintenance/github-actions-node-runtime.md.
+      - name: Install Task (go-task)
+        run: |
+          sh -c "$(curl -sSL https://taskfile.dev/install.sh)" -- -b "$HOME/.local/bin" v3.51.1
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Node (react combos only)
         if: contains(matrix.combo.batteries, 'react')
         uses: actions/setup-node@v6
@@ -73,3 +75,18 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+
+  # Stable, requireable umbrella over the dynamic render matrix: the per-combo
+  # `render (...)` job names vary by seed/strategy, so branch protection requires
+  # this single context instead. Fails unless the whole matrix succeeded.
+  render-complete:
+    needs: [generate-matrix, render]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate on the full render matrix
+        run: |
+          echo "generate-matrix: ${{ needs.generate-matrix.result }}"
+          echo "render:          ${{ needs.render.result }}"
+          [ "${{ needs.generate-matrix.result }}" = "success" ] \
+            && [ "${{ needs.render.result }}" = "success" ]

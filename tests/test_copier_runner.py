@@ -858,7 +858,7 @@ def test_hybrid_files_render_with_markers(tmp_path: Path):
             "python_version": "3.12",
         },
     )
-    for rel in ("CLAUDE.md", ".env.example", "Taskfile.yml"):
+    for rel in ("CLAUDE.md", ".env.example", "Taskfile.yml", ".pre-commit-config.yaml"):
         text = (dest / rel).read_text()
         assert section_content(text) is not None, f"{rel} has no FRAMEWORK section"
 

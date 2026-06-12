@@ -24,7 +24,6 @@ LOCKED_TRACKED: tuple[str, ...] = (
     ".github/workflows/deploy-staging.yml",
     ".github/workflows/deploy-prod.yml",
     ".github/dependabot.yml",
-    ".pre-commit-config.yaml",
     ".gitattributes",
     ".dockerignore",
     "alembic.ini",
@@ -79,8 +78,14 @@ GITIGNORED_EXISTENCE: tuple[str, ...] = (".env",)
 # Hybrid + tracked: files the builder extends, carrying a framework-owned region delimited
 # by FRAMEWORK:BEGIN/END. The section between the markers is checksummed; content outside is
 # the builder's. (pyproject.toml is intentionally excluded — its dependency arrays must stay
-# builder-editable, and its breakage is loud, not silent.)
-HYBRID_TRACKED: tuple[str, ...] = ("CLAUDE.md", ".env.example", "Taskfile.yml")
+# builder-editable, and its breakage is loud, not silent.) `.pre-commit-config.yaml` is hybrid
+# (not locked) so a project can add its own hooks below FRAMEWORK:END as more `repos:` entries.
+HYBRID_TRACKED: tuple[str, ...] = (
+    "CLAUDE.md",
+    ".env.example",
+    "Taskfile.yml",
+    ".pre-commit-config.yaml",
+)
 
 
 def rules() -> list[Rule]:
