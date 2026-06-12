@@ -45,7 +45,14 @@ Do NOT flag additive, backwards-compatible changes (a new optional/nullable fiel
 REST/OpenAPI concerns.
 
 ## Output
-Return **JSON ONLY** — a single JSON array, no prose, no code fences. Each element:
+Return **JSON ONLY** — your final response is one JSON array parseable by `json.loads`, with no
+prose, no preamble, no code fences, and no commentary before or after it. Output exactly `[]` when
+there are no findings.
+
+**Every finding object MUST carry all of `path`, `line`, `severity`, `message`** (and an optional
+`suggestion`) — even when you report a single finding. `severity` is REQUIRED and MUST be exactly one
+of `high|medium|low|info`; never omit it, never blank it, never substitute another word. An object
+missing `severity` (or `path`/`message`) invalidates the **entire** response, so check each object
+before returning. Element shape:
 `{"path": "<file path from the diff>", "line": <integer>, "severity": "high|medium|low|info",
 "message": "<what is wrong and why it matters>", "suggestion": "<concrete fix, optional>"}`.
-Output exactly `[]` when there are no findings.

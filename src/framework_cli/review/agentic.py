@@ -6,7 +6,7 @@ from time import perf_counter
 from typing import Any
 
 from framework_cli.review.decisions import Decision
-from framework_cli.review.findings import Finding, parse_findings
+from framework_cli.review.findings import Finding, FindingsParseError, parse_findings
 from framework_cli.review.request import TOOL_SCHEMAS, build_agentic_request
 
 
@@ -132,6 +132,18 @@ def _run_tool(name: str, args: dict, root: Path) -> str:
 
 _FINALIZE_INSTRUCTION = "Stop exploring. Return your findings now as a JSON array only. Do not request tools."
 
+# When a turn ends with NO tool call and text that does not parse as a findings array, the
+# model failed the protocol (gave up, echoed instructions, truncated a tool-call object) —
+# NOT a genuine empty result (which is `[]`, and parses). Nudge it back on track instead of
+# returning garbage. Bounded so a persistently broken response can't loop forever.
+_RECOVERY_INSTRUCTION = (
+    "Your previous reply was not a JSON findings array and requested no tools. You DO have "
+    "read-only tools (read_file, grep, glob) — either call them (respond with the tool-call "
+    "form) to read the files you need, or, if you are done, reply with ONLY the JSON findings "
+    "array — `[]` if there are none. No prose, no narration, no claim that tools are unavailable."
+)
+_MAX_RECOVERIES = 2
+
 
 def _text_of(resp: Any) -> str:
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
@@ -162,6 +174,7 @@ def run_agent_agentic(
     usage: dict[str, int] = {}
     tool_calls: list[dict[str, Any]] = []
     turns = 0
+    recoveries = 0
     last_resp: Any = None
     for _turn in range(max_turns):
         turns += 1
@@ -177,6 +190,17 @@ def run_agent_agentic(
         tool_uses = [b for b in resp.content if getattr(b, "type", None) == "tool_use"]
         if not tool_uses:
             text = _text_of(resp)
+            try:
+                findings = parse_findings(text)
+            except FindingsParseError:
+                # Protocol failure, not a genuine empty result — nudge and retry while
+                # budget remains; only surface the parse error once recovery is exhausted.
+                if recoveries < _MAX_RECOVERIES:
+                    recoveries += 1
+                    messages.append({"role": "assistant", "content": resp.content})
+                    messages.append({"role": "user", "content": _RECOVERY_INSTRUCTION})
+                    continue
+                raise
             if report is not None:
                 report["usage"] = usage
                 report["latency_ms"] = int((perf_counter() - t0) * 1000)
@@ -184,7 +208,7 @@ def run_agent_agentic(
                 report["raw_text"] = text
                 report["turns"] = turns
                 report["tool_calls"] = tool_calls
-            return parse_findings(text)
+            return findings
         for tu in tool_uses:
             tool_calls.append({"turn": turns, "tool": tu.name, "input": dict(tu.input)})
         messages.append({"role": "assistant", "content": resp.content})

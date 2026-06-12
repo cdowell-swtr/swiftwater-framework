@@ -1,12 +1,11 @@
 diff --git a/infra/compose/dev.yml b/infra/compose/dev.yml
-index 950f2a2..e799b01 100644
+index 950f2a2..4fe06b3 100644
 --- a/infra/compose/dev.yml
 +++ b/infra/compose/dev.yml
-@@ -65,3 +65,12 @@ services:
+@@ -63,5 +63,14 @@ services:
+       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+       GF_AUTH_DISABLE_LOGIN_FORM: "true"
  
- volumes:
-   pgdata: {}
-+
 +  redis:
 +    image: redis:7
 +    profiles: ["dev", "lite"]
@@ -15,6 +14,9 @@ index 950f2a2..e799b01 100644
 +      interval: 5s
 +      timeout: 3s
 +      retries: 10
++
+ volumes:
+   pgdata: {}
 diff --git a/infra/compose/observability.yml b/infra/compose/observability.yml
 index 0edac1e..07f4ab1 100644
 --- a/infra/compose/observability.yml

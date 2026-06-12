@@ -18,9 +18,17 @@ change (good fixtures threshold-neutral; every agent still clears its gate). Det
 - observability-fe (optional): author a flaggable 3rd bad fixture for active-suppression-on-a-regressed-path if more recall coverage is wanted (current 2 bad fixtures cover both domains; uninstrumented-view removed as non-discriminating).
 - observability-db: block_threshold is None (advisory) for now — after --repeat 3 confirms the bypass fixtures reliably flag, re-derive recall_min/fp_max and decide whether to restore a blocking threshold.
 
-## REQUIRES REWORK (refuted in Phase 1, never retuned — do NOT mask via thresholds)
-- compliance: re-sweep fp 1.00 (over-flags). Needs a fresh vetted fix or explicit known-degraded exclusion.
-- observability-infra: re-sweep recall 0.50 / fp 1.00. Needs a fresh vetted fix or explicit known-degraded exclusion.
+## REQUIRES REWORK (refuted in Phase 1) — ✅ RESOLVED 2026-06-11 (scorecard `…/2026-06-11-plan21-reviewer-rework/`)
+- compliance: ✅ fp 1.00 → **0.00**, recall **1.00**. Root cause was mis-authored fixtures (good fixture
+  baited with privacy/performance defects; the only bad fixture was itself a privacy case). Good fixture
+  redesigned (audit-logged delete, opaque id), bad fixture replaced (`logs-pii-in-handler` →
+  `delete-without-audit-log`), prompt narrowed to audit/retention/erasure with explicit scope deferrals.
+- observability-infra: ✅ recall 0.50 → **1.00** (x2), fp 1.00 → **0.00–0.33** (PASS at `fp_max 0.43`).
+  Good fixture's misplaced-`redis`-under-`volumes:` YAML bug repaired; prompt pins broken-prod-path = high
+  + diff-awareness. The recall cap was a **subagent-backend tool-protocol flake** (~1/3 of invocations
+  returned garbage instead of calling tools) — fixed generally in `review/agentic.py` with a bounded
+  nudge-and-retry recovery loop (+ `_TOOL_PROTOCOL` hardening). Residual: a good-fixture diff-awareness fp
+  wobble (≤0.33), tracked for Plan 23.
 
 ## Branch-end review follow-ups (non-blocking, 2026-06-11)
 - env-parity.md: normalize to carry the shared rubric's explicit severity-ladder + codebase-bar sections (currently inlines grounding/scope/JSON only; scores 1.00/0.00 so non-blocking — single-severity domain).

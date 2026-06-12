@@ -38,8 +38,8 @@ architecture:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 compliance:
-  recall_min: 0.90  # REQUIRES REWORK (refuted Phase 1); re-sweep observed recall 1.00
-  fp_max: 0.10  # REQUIRES REWORK; re-sweep observed fp 1.00 — kept strict, NOT masked
+  recall_min: 0.90  # observed 1.00 (rework 2026-06-11: bad fixture re-authored to a true audit-gap)
+  fp_max: 0.10  # observed 0.00 (rework: good fixture de-baited + scope-deferral prompt; was fp 1.00)
 contracts:
   recall_min: 0.73  # observed 0.83
   fp_max: 0.10  # observed 0.00
@@ -68,8 +68,8 @@ observability-fe:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00
 observability-infra:
-  recall_min: 0.90  # REQUIRES REWORK (refuted Phase 1); re-sweep observed recall 0.50
-  fp_max: 0.43  # REQUIRES REWORK; re-sweep observed fp 1.00 — kept strict, NOT masked
+  recall_min: 0.90  # observed 1.00 x2 (rework 2026-06-11: good-fixture YAML repaired + backend tool-protocol recovery loop; was recall 0.50)
+  fp_max: 0.43  # observed 0.00–0.33 (was fp 1.00; fixed, NOT masked). Kept at 0.43: fp still reaches 0.33 on a good-fixture diff-awareness wobble (scorecard residual)
 performance:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00

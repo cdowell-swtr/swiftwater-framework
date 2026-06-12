@@ -50,6 +50,18 @@ fabricate an overlay injection (or a missing one) to manufacture a parity gap.
 Do NOT flag: config VALUE divergence across environments (different values per overlay are the
 intended purpose of overlays); observability surfaces; PII/secret content.
 
-Return JSON ONLY — a single array, no prose, no code fences. Each element:
-{"path","line","severity","message","suggestion"}. [] if none. A service that won't reach prod
-or a consumed-but-undeclared variable is "high".
+Tool & answer discipline: you have read-only tools to inspect overlays/`settings.py`/`.env.example`.
+Read the few files you need, then STOP and answer. Your FINAL response is the findings array itself —
+never emit a `{"tool_calls": …}` object, a narration ("Let me explore…"), or a claim that tools are
+unavailable as your final answer. If a file you wanted is genuinely unreadable, judge the parity gap
+from the diff alone rather than speculating — never invent an overlay declaration you have not read,
+and never manufacture a finding out of a tool problem.
+
+Return JSON ONLY — your final response is one JSON array parseable by `json.loads`, with no prose,
+no preamble, no reasoning, no code fences, and no commentary before or after it; put any rationale
+inside a finding's `message`. Output exactly `[]` when there are no findings. Every element MUST carry
+all of `path`, `line`, `severity`, `message` (optional `suggestion`); `severity` is REQUIRED and MUST
+be exactly one of `high|medium|low|info` — an object missing it invalidates the entire response.
+Element shape: {"path","line","severity","message","suggestion"}. A service that won't reach prod or a
+consumed-but-undeclared variable (including a `${APP_*}` compose interpolation with no matching
+`.env.example` declaration) is "high".
