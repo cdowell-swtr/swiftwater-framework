@@ -75,3 +75,13 @@ def test_new_deploy_files_are_locked():
 
     assert "infra/compose/app-host.yml" in LOCKED_TRACKED
     assert "infra/deploy/targets/compose-ssh.sh" in LOCKED_TRACKED
+
+
+def test_seam_files_are_intentionally_unlocked():
+    from framework_cli.integrity.classes import INTENTIONALLY_UNLOCKED
+
+    for rel in ("scripts/seed.py", "infra/deploy/notify.sh"):
+        assert rel not in LOCKED_TRACKED, f"{rel} should be unlocked (composition seam)"
+        assert rel in INTENTIONALLY_UNLOCKED, (
+            f"{rel} should be recorded as intentionally unlocked"
+        )
