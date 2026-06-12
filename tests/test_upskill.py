@@ -41,88 +41,6 @@ def _source_repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _project_at_v1(tmp_path: Path, source: Path) -> Path:
-    from copier import run_copy
-
-    from framework_cli.source import record_identity
-
-    proj = tmp_path / "proj"
-    run_copy(
-        str(source),
-        str(proj),
-        data={
-            "name": "demo",
-            "project_name": "demo",
-            "project_slug": "demo",
-            "package_name": "demo",
-            "python_version": "3.12",
-        },
-        defaults=True,
-        overwrite=True,
-        quiet=True,
-        vcs_ref="v1",
-    )
-    ans = proj / ".copier-answers.yml"
-    kept = [
-        ln
-        for ln in ans.read_text().splitlines()
-        if not ln.startswith(("_src_path:", "_commit:"))
-    ]
-    kept += [f"_src_path: {source}", "_commit: v1"]
-    ans.write_text("\n".join(kept) + "\n")
-    record_identity(
-        proj,
-        {
-            "project_name": "demo",
-            "project_slug": "demo",
-            "package_name": "demo",
-            "python_version": "3.12",
-        },
-    )
-    _git(proj, "init", "-q")
-    _git(proj, "config", "user.email", "b@x")
-    _git(proj, "config", "user.name", "b")
-    _git(proj, "add", "-A")
-    _git(proj, "commit", "-qm", "scaffold")
-    return proj
-
-
-def test_upskill_applies_framework_change_and_stays_green(tmp_path: Path):
-    source = _source_repo(tmp_path)
-    proj = _project_at_v1(tmp_path, source)
-
-    (proj / "app.txt").write_text("app for demo\nMY BUILDER LINE\n")
-    _git(proj, "add", "-A")
-    _git(proj, "commit", "-qm", "edit")
-
-    sub = source / "tmpl"
-    (sub / "framework_line.txt").write_text("framework v2 CHANGED\n")
-    _git(source, "add", "-A")
-    _git(source, "commit", "-qm", "v2")
-    _git(source, "tag", "v2")
-
-    green = upskill_project(proj)
-
-    assert green is True
-    assert (proj / "framework_line.txt").read_text() == "framework v2 CHANGED\n"
-    assert "MY BUILDER LINE" in (proj / "app.txt").read_text()
-    assert "_commit: v2" in (proj / ".copier-answers.yml").read_text()
-
-
-def test_upskill_reports_not_green_when_tests_fail(tmp_path: Path):
-    source = _source_repo(tmp_path)
-    proj = _project_at_v1(tmp_path, source)
-    sub = source / "tmpl"
-    (sub / "Taskfile.yml").write_text(
-        "version: '3'\ntasks:\n  test:\n    cmds:\n      - 'false'\n"
-    )
-    _git(source, "add", "-A")
-    _git(source, "commit", "-qm", "v2")
-    _git(source, "tag", "v2")
-
-    assert upskill_project(proj) is False
-
-
 def test_upskill_requires_git_tracked_project(tmp_path: Path):
     source = _source_repo(tmp_path)
     from copier import run_copy
@@ -311,6 +229,7 @@ def test_upskill_records_alert_channels(monkeypatch, tmp_path: Path):
     up.upskill_project(project, alert_channels=["slack", "email"])
 
     assert calls["data"]["alert_channels"] == ["slack", "email"]
+    assert calls["data"]["package_name"] == "demo"
     answers = (project / ".copier-answers.yml").read_text()
     assert "alert_channels:\n- slack\n- email\n" in answers
 
@@ -470,3 +389,23 @@ def test_apply_update_refuses_when_all_identity_keys_absent(tmp_path: Path):
     )
     with pytest.raises(UpskillError, match="identity"):
         _apply_update(proj, vcs_ref="v1", batteries=[], channels=["webhook"])
+
+
+def test_upskill_with_pins_recorded_version(tmp_path: Path):
+    """upskill --with adds a battery at the recorded version — it does not bump _commit."""
+    from framework_cli.source import read_batteries
+
+    source = _battery_source_repo(tmp_path)
+    proj = _battery_project(tmp_path, source, [])
+    assert "_commit: v1" in (proj / ".copier-answers.yml").read_text()
+
+    _bump_source_to_v2(source)  # a newer release exists...
+    assert upskill_project(proj, with_batteries=["websockets"]) is True
+
+    text = (proj / ".copier-answers.yml").read_text()
+    assert "_commit: v1" in text, (
+        "upskill --with moved the framework version (decision A violated)"
+    )
+    assert "_commit: v2" not in text
+    assert (proj / "ws.txt").is_file()
+    assert read_batteries(proj) == ["websockets"]

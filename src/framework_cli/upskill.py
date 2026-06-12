@@ -100,8 +100,8 @@ def upskill_project(
     with_batteries: list[str] | None = None,
     alert_channels: list[str] | None = None,
 ) -> bool:
-    """Add batteries / reconfigure channels for `project`, then run `task test`."""
-    from framework_cli.source import read_alert_channels, read_batteries
+    """Add batteries / reconfigure channels for `project` at its recorded version, then test."""
+    from framework_cli.source import read_alert_channels, read_batteries, read_commit
 
     if not _is_git_tracked(project):
         raise UpskillError(
@@ -113,6 +113,7 @@ def upskill_project(
     channels = (
         alert_channels if alert_channels is not None else read_alert_channels(project)
     )
+    pinned = vcs_ref if vcs_ref is not None else read_commit(project)
     return _apply_update(
-        project, vcs_ref=vcs_ref, batteries=effective, channels=channels
+        project, vcs_ref=pinned, batteries=effective, channels=channels
     )
