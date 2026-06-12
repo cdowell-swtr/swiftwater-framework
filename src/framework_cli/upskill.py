@@ -57,7 +57,7 @@ def _apply_update(
     if missing:
         raise UpskillError(
             f".copier-answers.yml is missing identity answers ({', '.join(missing)}); "
-            "refusing to update rather than render an empty project. Restore them and retry."
+            "refusing to proceed rather than render an empty project. Restore them and retry."
         )
 
     run_update(
