@@ -38,6 +38,8 @@ or `E2E_TARGET=… uv run pytest tests/e2e`).
 
 ## Local stack (HTTPS)
 
+> **Prerequisites:** run `task doctor` to check the host tools this needs — Docker, mkcert, uv, git{% if "react" in batteries %}, Node{% endif %}.
+
 ```bash
 task certs     # one-time: install mkcert CA + issue localhost certs
 task dev       # full stack at https://{{ project_slug }}.localhost (app + Traefik)

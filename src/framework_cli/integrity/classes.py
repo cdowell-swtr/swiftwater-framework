@@ -13,9 +13,10 @@ class Rule:
 # Coverage is one-directional: tests assert every registered path exists in a render
 # (no stale entries), but NOT that every framework-infra file is registered. A newly
 # added framework file therefore escapes integrity coverage until it is listed here.
-# The reverse check ("every infra/scripts file must be classified") is deferred to a
-# later pass — it needs an explicit allowlist of intentionally-unlocked files
-# (app source, .gitkeep, .env.example, the 6a-2 hybrid files) to avoid false positives.
+# INTENTIONALLY_UNLOCKED (below) now records deliberate exclusions so a future reverse
+# scan can distinguish "deliberately unlocked" from "escaped classification". The full
+# reverse check remains a separate slice — an all-batteries render has ~23 unclassified
+# infra files needing a per-file audit before the scan can run without false positives.
 
 # Locked + tracked: pure framework infrastructure a builder must never edit (spec §17).
 # These are full-file checksummed and must be git-tracked.
@@ -39,7 +40,6 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "infra/deploy/targets/compose-ssh.sh",
     "infra/deploy/alert_smoke.sh",
     "infra/deploy/check_alert_secrets.sh",
-    "infra/deploy/notify.sh",
     "infra/deploy/README.md",
     "infra/docker/Dockerfile",
     "infra/traefik/traefik.yml",
@@ -61,11 +61,21 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "infra/observability/grafana/provisioning/datasources/tempo.yml",
     "scripts/check_migrations.py",
     "scripts/coverage.sh",
+    "scripts/doctor.sh",
     "scripts/entrypoint.sh",
     "scripts/export-openapi.sh",
     "scripts/gen_observability.py",
     "scripts/load.sh",
-    "scripts/seed.py",
+)
+
+# Framework-shipped files deliberately left unmanaged: composition seams the scaffold invites the
+# project to replace. Not checksummed. Recorded here so the unlock is intentional and visible, and
+# so a future reverse-coverage check can distinguish "deliberately unlocked" from "a framework file
+# that escaped classification". (That full reverse scan is a separate slice — an all-batteries
+# render has ~23 unclassified infra files needing a per-file audit; see the design doc.)
+INTENTIONALLY_UNLOCKED: tuple[str, ...] = (
+    "scripts/seed.py",  # thin entrypoint; the idempotent seed() helper in db/seed.py is the mechanism
+    "infra/deploy/notify.sh",  # deploy-notification seam — "wire your channel here"
 )
 
 # Gitignored + existence-only: a framework-managed file legitimately absent from a fresh

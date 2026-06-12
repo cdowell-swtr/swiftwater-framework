@@ -1,6 +1,7 @@
 import http.server
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -449,6 +450,14 @@ def test_render_includes_seed(tmp_path: Path):
     assert isinstance(data, list) and data and "name" in data[0]
     cli = (dest / "scripts" / "seed.py").read_text()
     assert "from demo.db.seed import seed" in cli
+
+
+def test_seed_script_reads_as_an_owned_example(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    cli = (dest / "scripts" / "seed.py").read_text()
+    assert "compose your domain seeding here" in cli
+    assert "db.seed" in cli  # still points at the reusable helper
 
 
 def test_render_includes_alembic(tmp_path: Path):
@@ -3267,3 +3276,72 @@ def test_render_without_docs_battery_has_no_publish_workflow(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     assert not (dest / ".github" / "workflows" / "docs.yml").exists()
+
+
+def test_doctor_script_checks_expected_host_tools(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # baseline: no react battery
+    doctor = (dest / "scripts" / "doctor.sh").read_text()
+    for probe in (
+        "command -v docker",
+        "docker compose version",
+        "docker buildx version",
+        "command -v mkcert",
+        "command -v uv",
+        "command -v git",
+    ):
+        assert probe in doctor, f"doctor.sh missing probe: {probe}"
+    assert "command -v node" not in doctor  # node only with the react battery
+
+
+def test_doctor_script_checks_node_only_with_react(tmp_path: Path):
+    dest = tmp_path / "demo_react"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    doctor = (dest / "scripts" / "doctor.sh").read_text()
+    assert "command -v node" in doctor
+    assert "command -v npm" in doctor
+
+
+def test_doctor_script_is_locked():
+    from framework_cli.integrity.classes import LOCKED_TRACKED
+
+    assert "scripts/doctor.sh" in LOCKED_TRACKED
+
+
+def test_traefik_image_supports_modern_docker_api(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    m = re.search(r"image:\s*traefik:v3\.(\d+)", dev)
+    assert m, "traefik image pin not found in dev.yml"
+    # v3.6+ added Docker API auto-negotiation; Docker Engine 27+ (min API 1.44) rejects
+    # Traefik <=v3.5's hardcoded API 1.24. See 2026-06-12 lock-taxonomy-and-doctor design.
+    assert int(m.group(1)) >= 6, f"traefik must be >= v3.6 (found v3.{m.group(1)})"
+
+
+def test_doctor_task_present_and_not_in_ci(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "\n  doctor:" in taskfile
+    assert "bash scripts/doctor.sh" in taskfile
+    # doctor is advisory — it must NOT be wired into `task ci` (CI has no mkcert).
+    ci_block = taskfile.split("\n  ci:")[1].split("\n  push:")[0]
+    assert "doctor" not in ci_block
+
+
+def test_host_tool_guards_point_at_doctor(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    taskfile = (dest / "Taskfile.yml").read_text()
+    # The lazy precondition messages cross-reference the canonical preflight (certs + the
+    # three docker guards: dev / dev:lite / dev:reset).
+    assert taskfile.count("Run `task doctor`") >= 4
+
+
+def test_readme_points_at_doctor_for_prerequisites(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    readme = (dest / "README.md").read_text()
+    assert "task doctor" in readme
+    assert "Prerequisites" in readme

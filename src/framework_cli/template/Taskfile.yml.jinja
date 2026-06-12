@@ -12,7 +12,7 @@ tasks:
     desc: Full local stack over HTTPS (app + Traefik). Requires Docker + mkcert.
     preconditions:
       - sh: command -v docker
-        msg: "Docker is required for `task dev`. Install Docker, then retry."
+        msg: "Docker is required for `task dev`. Install Docker, then retry. Run `task doctor` to check all host tools."
       - sh: test -f infra/traefik/certs/localhost.pem
         msg: "No local certs. Run `task certs` first (installs mkcert CA + issues localhost certs)."
       - sh: test -f uv.lock
@@ -31,7 +31,7 @@ tasks:
     desc: App only over plain HTTP at localhost:8000 (no Traefik) — resource-light.
     preconditions:
       - sh: command -v docker
-        msg: "Docker is required for `task dev:lite`."
+        msg: "Docker is required for `task dev:lite`. Run `task doctor` to check all host tools."
       - sh: test -f uv.lock
         msg: "Run `uv sync` first to create uv.lock (the image build uses --frozen)."
     env:
@@ -46,7 +46,7 @@ tasks:
     desc: Tear the local stack down (including volumes) and rebuild.
     preconditions:
       - sh: command -v docker
-        msg: "Docker is required for `task dev:reset`."
+        msg: "Docker is required for `task dev:reset`. Run `task doctor` to check all host tools."
     cmds:
       - docker compose -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev down -v
       - task: dev
@@ -106,10 +106,15 @@ tasks:
     desc: Install the mkcert local CA and issue localhost certificates for Traefik.
     preconditions:
       - sh: command -v mkcert
-        msg: "mkcert is required. Install it (https://github.com/FiloSottile/mkcert#installation), then retry."
+        msg: "mkcert is required. Install it (https://github.com/FiloSottile/mkcert#installation), then retry. Run `task doctor` to check all host tools."
     cmds:
       - mkcert -install
       - mkcert -cert-file infra/traefik/certs/localhost.pem -key-file infra/traefik/certs/localhost-key.pem localhost "*.localhost" 127.0.0.1 ::1
+
+  doctor:
+    desc: Preflight host tools the dev workflow needs (docker, mkcert, uv, git[, node]). Advisory — not part of `task ci`.
+    cmds:
+      - bash scripts/doctor.sh
 
   hooks:
     desc: Install git pre-commit hooks

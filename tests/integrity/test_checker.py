@@ -119,3 +119,27 @@ def test_hybrid_damaged_markers_are_fatal(tmp_path: Path):
     assert any(
         f.path == "CLAUDE.md" and f.fatal and "markers" in f.problem for f in findings
     )
+
+
+def test_unlocked_seam_files_are_not_flagged_when_modified(tmp_path: Path):
+    proj = _project(tmp_path)
+    # The two composition seams the scaffold ships but no longer tracks.
+    (proj / "scripts").mkdir(parents=True, exist_ok=True)
+    (proj / "scripts" / "seed.py").write_text("# scaffold seeding\n")
+    (proj / "infra" / "deploy").mkdir(parents=True, exist_ok=True)
+    (proj / "infra" / "deploy" / "notify.sh").write_text(
+        "#!/usr/bin/env bash\n# notify\n"
+    )
+    write_manifest(proj, "0.1.0")
+    # Builder edits the seams AND a genuinely-locked file — all AFTER the manifest is written.
+    (proj / "scripts" / "seed.py").write_text("# builder's own domain seeding\n")
+    (proj / "infra" / "deploy" / "notify.sh").write_text(
+        "#!/usr/bin/env bash\nslack_notify\n"
+    )
+    (proj / "alembic.ini").write_text("hacked\n")
+    flagged = {f.path for f in check(proj)}
+    # Control: check() DOES flag a post-manifest edit to a locked file — proves the test can fail.
+    assert "alembic.ini" in flagged
+    # The seams are untracked, so editing them is never flagged.
+    assert "scripts/seed.py" not in flagged
+    assert "infra/deploy/notify.sh" not in flagged
