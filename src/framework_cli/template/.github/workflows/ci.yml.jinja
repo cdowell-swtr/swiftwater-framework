@@ -48,6 +48,9 @@ jobs:
   security:
     needs: integrity
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read  # gitleaks-action@v2 lists the PR's commits via the API on PRs
     steps:
       - uses: actions/checkout@v5
         with:

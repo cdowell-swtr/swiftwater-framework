@@ -3345,3 +3345,15 @@ def test_readme_points_at_doctor_for_prerequisites(tmp_path: Path):
     readme = (dest / "README.md").read_text()
     assert "task doctor" in readme
     assert "Prerequisites" in readme
+
+
+def test_ci_security_job_can_read_pull_requests(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    ci = yaml.safe_load((dest / ".github" / "workflows" / "ci.yml").read_text())
+    # gitleaks-action@v2 lists the PR's commits via the GitHub API on PRs → needs
+    # pull-requests: read. Job-level permissions REPLACE the top-level (contents: read),
+    # so both must be declared on the job.
+    perms = ci["jobs"]["security"]["permissions"]
+    assert perms.get("contents") == "read"
+    assert perms.get("pull-requests") == "read"
