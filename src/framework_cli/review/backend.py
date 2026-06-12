@@ -166,10 +166,12 @@ def _join_system(system: list[dict[str, Any]]) -> str:
 
 
 _TOOL_PROTOCOL = (
-    "\n\nYou have read-only tools available. To call tools, respond with ONLY a JSON "
-    'object: {"tool_calls":[{"name":"<tool>","input":{...}}, ...]} and nothing else. '
-    "When done exploring and ready to report, respond with ONLY the findings JSON array "
-    "(no object, no prose). Available tools: "
+    "\n\nYou DO have working read-only tools in this environment (do not claim otherwise). "
+    "To call them, respond with ONLY a complete, valid JSON object — "
+    '{"tool_calls":[{"name":"<tool>","input":{...}}, ...]} — and nothing else (no prose '
+    "before or after, and close every brace). When done exploring and ready to report, "
+    "respond with ONLY the findings JSON array (no object, no prose) — `[]` if there are "
+    "none. Available tools: "
 )
 
 

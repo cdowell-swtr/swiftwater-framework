@@ -1,13 +1,15 @@
 diff --git a/src/demo/config/settings.py b/src/demo/config/settings.py
-index e6fb558..fe6f33c 100644
+index e6fb558..13691e6 100644
 --- a/src/demo/config/settings.py
 +++ b/src/demo/config/settings.py
-@@ -19,6 +19,9 @@ class Settings(BaseSettings):
+@@ -19,6 +19,11 @@ class Settings(BaseSettings):
      slo_request_latency_p99_ms: float = 200.0
      slo_error_rate_pct: float = 1.0
  
-+    # Widget service call timeout (seconds).
-+    widget_timeout_s: float = 5.0
++    # External widget service base URL. REQUIRED (no default) and differs per
++    # environment, so every environment must supply APP_WIDGET_API_URL — yet it is
++    # absent from .env.example, so the app fails to start wherever it is undeclared.
++    widget_api_url: str
 +
      # OpenTelemetry tracing (off unless enabled; the dev Compose app turns it on).
      otel_enabled: bool = False

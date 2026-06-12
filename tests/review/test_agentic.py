@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from framework_cli.review.agentic import _run_tool, run_agent_agentic
 from framework_cli.review.decisions import Decision
 from framework_cli.review.findings import Finding
@@ -308,3 +310,77 @@ def test_cli_dispatches_agentic_strategy(monkeypatch, tmp_path):
     assert (
         called["max_turns"] == 12
     )  # DEFAULT_MAX_TURNS (architecture sets no override)
+
+
+# --- recovery from a protocol-failure "final" turn ---------------------------------
+# On the subagent backend the model sometimes ends a turn with NO tool call and a
+# response that is neither a tool-call object nor a valid findings array — it gives
+# up ("I don't have tools"), echoes the system prompt, or truncates a tool-call JSON.
+# A non-parseable "final" is a protocol failure, not a genuine empty result (genuine
+# empty is `[]`, which parses). The loop must nudge-and-retry instead of returning
+# garbage. (Verified the file-heavy reviewers' real --repeat-3 misses trace to this.)
+
+
+def test_agentic_recovers_from_unparseable_final(tmp_path):
+    (tmp_path / "x.py").write_text("BAD = 1\n")
+    client = _ScriptedClient(
+        [
+            # turn 1: gave up, no tool call, un-parseable as findings
+            _Resp([_TextBlock("I don't have access to read_file/grep/glob here.")]),
+            # turn 2 (after the recovery nudge): a proper findings array
+            _Resp(
+                [
+                    _TextBlock(
+                        '[{"path": "x.py", "line": 1, "severity": "high", "message": "bad"}]'
+                    )
+                ]
+            ),
+        ]
+    )
+    findings = run_agent_agentic(
+        "--- a/x.py\n+++ b/x.py\n",
+        tmp_path,
+        get_agent("architecture"),
+        client,
+        max_turns=12,
+    )
+    assert findings == [Finding("x.py", 1, "high", "bad")]
+    assert len(client.calls) == 2  # nudged once, recovered
+    # the retry turn carried a corrective user instruction
+    last_msgs = client.calls[1]["messages"]
+    assert any(
+        m["role"] == "user" and "tools" in str(m["content"]).lower() for m in last_msgs
+    )
+
+
+def test_agentic_preserves_genuine_empty_findings(tmp_path):
+    (tmp_path / "x.py").write_text("OK = 1\n")
+    client = _ScriptedClient([_Resp([_TextBlock("[]")])])
+    findings = run_agent_agentic(
+        "--- a/x.py\n+++ b/x.py\n",
+        tmp_path,
+        get_agent("architecture"),
+        client,
+        max_turns=12,
+    )
+    assert findings == []
+    assert len(client.calls) == 1  # `[]` parses → no wasted recovery turn
+
+
+def test_agentic_recovery_is_bounded(tmp_path):
+    from framework_cli.review.findings import FindingsParseError
+
+    (tmp_path / "x.py").write_text("BAD = 1\n")
+    # Always emits un-parseable text and never a tool call: recovery must give up,
+    # not loop forever, and surface the parse error (eval scores it as no findings).
+    client = _ScriptedClient([_Resp([_TextBlock("nope, still no JSON")]) for _ in range(12)])
+    with pytest.raises(FindingsParseError):
+        run_agent_agentic(
+            "--- a/x.py\n+++ b/x.py\n",
+            tmp_path,
+            get_agent("architecture"),
+            client,
+            max_turns=12,
+        )
+    # bounded: a couple of recovery nudges, not all 12 turns burned on retries
+    assert len(client.calls) <= 4
