@@ -43,7 +43,7 @@ nav:
       - Install: using/install.md
       - New project & batteries: using/new-and-batteries.md
       - Add/remove batteries: using/batteries-add-remove.md
-      - Upgrading (planned): using/upgrading.md
+      - Upgrading: using/upgrading.md
       - The CLI: using/the-cli.md
   - Working in your project:
       - Project structure: working/structure.md
