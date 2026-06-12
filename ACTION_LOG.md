@@ -25,3 +25,11 @@ Re-targeted the commit-gate PreToolUse hook in `.claude/settings.json` from
 "CLAUDE.md staged" to the lenient "PLAN.md or ACTION_LOG.md staged", and reworded
 CLAUDE.md's "Keeping state current" section to match. Note: settings.json hook
 edits do not reload mid-session, so the new gate governs future sessions.
+(Correction observed during execution: the hook re-reads settings.json per
+invocation, so the new gate went live immediately; it checks the session cwd's
+repo, so cross-repo commits need this repo's PLAN.md/ACTION_LOG.md staged.)
+
+#### #0004 · note · 2026-06-12
+Self-registered swiftwater-framework as a PI adopter: appended the adopter row to
+the patterns repo's `_docs/planning-instrument/implementers.md` and ticked its T4.
+Cross-repo commit made from this session.
