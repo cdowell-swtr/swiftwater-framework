@@ -34,39 +34,18 @@ def _is_git_tracked(project: Path) -> bool:
     return result.returncode == 0 and result.stdout.strip() == "true"
 
 
-def upskill_project(
+def _apply_update(
     project: Path,
-    vcs_ref: str | None = None,
-    with_batteries: list[str] | None = None,
-    alert_channels: list[str] | None = None,
+    *,
+    vcs_ref: str | None,
+    batteries: list[str],
+    channels: list[str],
 ) -> bool:
-    """Update `project` to `vcs_ref` (default: latest tag) and run `task test`.
+    """Re-render `project` at `vcs_ref` via Copier, preserving identity, then run `task test`.
 
-    The effective battery set (`with_batteries` if given, else the project's recorded set) is
-    passed to the update AND re-recorded afterward — the framework owns the battery record,
-    since Copier does not preserve the subdir-declared `batteries` answer through the portable
-    source on update.
-
-    `alert_channels` replaces the channel set when given; if omitted the project's recorded
-    channels are preserved (same set-replacement semantics as batteries).
+    The single low-level update path shared by `framework upgrade` and `upskill --with`.
+    Assumes preconditions (git-tracked, and for upgrade a clean tree) are already checked.
     """
-    from framework_cli.source import (
-        read_alert_channels,
-        read_batteries,
-        record_alert_channels,
-        record_batteries,
-    )
-
-    if not _is_git_tracked(project):
-        raise UpskillError(
-            "upskill requires a git-tracked project (run `git init` and commit first)"
-        )
-    effective = (
-        with_batteries if with_batteries is not None else read_batteries(project)
-    )
-    channels = (
-        alert_channels if alert_channels is not None else read_alert_channels(project)
-    )
     from framework_cli.migrations import migration_context
 
     run_update(
@@ -76,12 +55,14 @@ def upskill_project(
         quiet=True,
         vcs_ref=vcs_ref,
         data={
-            "batteries": effective,
+            "batteries": batteries,
             "alert_channels": channels,
-            **migration_context(effective),
+            **migration_context(batteries),
         },
     )
-    record_batteries(project, effective)
+    from framework_cli.source import record_alert_channels, record_batteries
+
+    record_batteries(project, batteries)
     record_alert_channels(project, channels)
     # The update may have changed managed sections / locked files (incl. battery-conditional
     # lines like the webhooks secret in .env.example). Re-record the integrity manifest so
@@ -97,3 +78,27 @@ def upskill_project(
             "`task` (go-task) not found on PATH — install it to run the project's tests"
         ) from exc
     return test.returncode == 0
+
+
+def upskill_project(
+    project: Path,
+    vcs_ref: str | None = None,
+    with_batteries: list[str] | None = None,
+    alert_channels: list[str] | None = None,
+) -> bool:
+    """Add batteries / reconfigure channels for `project`, then run `task test`."""
+    from framework_cli.source import read_alert_channels, read_batteries
+
+    if not _is_git_tracked(project):
+        raise UpskillError(
+            "upskill requires a git-tracked project (run `git init` and commit first)"
+        )
+    effective = (
+        with_batteries if with_batteries is not None else read_batteries(project)
+    )
+    channels = (
+        alert_channels if alert_channels is not None else read_alert_channels(project)
+    )
+    return _apply_update(
+        project, vcs_ref=vcs_ref, batteries=effective, channels=channels
+    )
