@@ -33,3 +33,9 @@ repo, so cross-repo commits need this repo's PLAN.md/ACTION_LOG.md staged.)
 Self-registered swiftwater-framework as a PI adopter: appended the adopter row to
 the patterns repo's `_docs/planning-instrument/implementers.md` and ticked its T4.
 Cross-repo commit made from this session.
+
+#### #0005 · completed · T1 · 2026-06-12
+Plan 25 complete: PI convention adopted — four artifacts scaffolded, CLAUDE.md
+slimmed, meta-plan frozen, commit-gate hook re-targeted, framework registered as
+a PI adopter. Quality gate green (ruff/format/mypy); PI invariants confirmed.
+Plan 26 (Committed Memory) is next.
