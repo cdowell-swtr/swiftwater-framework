@@ -1,6 +1,7 @@
 import http.server
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -3305,3 +3306,14 @@ def test_doctor_script_is_locked():
     from framework_cli.integrity.classes import LOCKED_TRACKED
 
     assert "scripts/doctor.sh" in LOCKED_TRACKED
+
+
+def test_traefik_image_supports_modern_docker_api(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    m = re.search(r"image:\s*traefik:v3\.(\d+)", dev)
+    assert m, "traefik image pin not found in dev.yml"
+    # v3.6+ added Docker API auto-negotiation; Docker Engine 27+ (min API 1.44) rejects
+    # Traefik <=v3.5's hardcoded API 1.24. See 2026-06-12 lock-taxonomy-and-doctor design.
+    assert int(m.group(1)) >= 6, f"traefik must be >= v3.6 (found v3.{m.group(1)})"
