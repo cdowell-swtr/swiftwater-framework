@@ -373,7 +373,9 @@ def test_agentic_recovery_is_bounded(tmp_path):
     (tmp_path / "x.py").write_text("BAD = 1\n")
     # Always emits un-parseable text and never a tool call: recovery must give up,
     # not loop forever, and surface the parse error (eval scores it as no findings).
-    client = _ScriptedClient([_Resp([_TextBlock("nope, still no JSON")]) for _ in range(12)])
+    client = _ScriptedClient(
+        [_Resp([_TextBlock("nope, still no JSON")]) for _ in range(12)]
+    )
     with pytest.raises(FindingsParseError):
         run_agent_agentic(
             "--- a/x.py\n+++ b/x.py\n",

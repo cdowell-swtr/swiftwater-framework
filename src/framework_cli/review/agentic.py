@@ -198,9 +198,7 @@ def run_agent_agentic(
                 if recoveries < _MAX_RECOVERIES:
                     recoveries += 1
                     messages.append({"role": "assistant", "content": resp.content})
-                    messages.append(
-                        {"role": "user", "content": _RECOVERY_INSTRUCTION}
-                    )
+                    messages.append({"role": "user", "content": _RECOVERY_INSTRUCTION})
                     continue
                 raise
             if report is not None:
