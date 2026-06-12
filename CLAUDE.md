@@ -3,8 +3,9 @@
 This repo is an opinionated Python scaffold framework: a `framework` CLI that renders a bundled Copier template into new projects which ship with TDD, quality gates, observability, and environment parity built in.
 
 **Source of truth:**
+- Current state / what's next: `PLAN.md` (+ `ACTION_LOG.md` for history) — read first.
 - Design spec: `docs/superpowers/specs/2026-05-20-framework-design.md`
-- Build roadmap / status: `docs/superpowers/plans/2026-05-20-meta-plan.md` — read this to see what's done and what's next.
+- Build roadmap (FROZEN historical record through v0.2.4): `docs/superpowers/plans/2026-05-20-meta-plan.md`
 
 <!-- PI-convention: v1 -->
 ## Planning Instrument
@@ -44,4 +45,4 @@ uv run mypy src               # type-check (framework source only)
 - **Workflow actions are pinned to Node-24-capable versions** (GHA forces Node 24 on 2026-06-16). `tests/test_workflow_node24.py::APPROVED_ACTIONS` is the source of truth across the framework's own + the template's workflows; see `docs/maintenance/github-actions-node-runtime.md`.
 
 ## Known follow-ups
-- Resolved follow-ups and items promoted to plans are no longer mirrored here — their record of record is the **meta-plan status table** (`docs/superpowers/plans/2026-05-20-meta-plan.md`) plus the FF SHAs in git. Open work is tracked as meta-plan rows (Plans 16–19) and named priority rows; there are no standalone open follow-ups at present. *(History: this section previously accumulated ~10 resolved/promoted entries kept verbatim "for reference" — pruned 2026-06-04 once they were all recorded in the meta-plan + git.)*
+- Resolved follow-ups and items promoted to plans are no longer mirrored here — their record of record is `PLAN.md` (open work) plus the FROZEN meta-plan status table and the FF SHAs in git. Open work is tracked as `PLAN.md` `Next` items (T1–T9); there are no standalone open follow-ups at present. *(History: this section previously accumulated ~10 resolved/promoted entries kept verbatim "for reference" — pruned 2026-06-04 once they were all recorded in the meta-plan + git.)*

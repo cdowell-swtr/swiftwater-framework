@@ -13,3 +13,9 @@ state only) and slimmed CLAUDE.md to the Working Agreement + a PI pointer.
 Archive-wholesale + fresh log — no back-dated reconstruction; pre-adoption
 history stays in git + the frozen meta-plan. Open work re-keyed to fresh
 monotonic T-IDs (T1–T9), with the legacy "Plan N" preserved in each title.
+
+#### #0002 · note · 2026-06-12
+Froze the dated meta-plan (`docs/superpowers/plans/2026-05-20-meta-plan.md`) in
+place with a tombstone header and repointed CLAUDE.md's "Source of truth" at
+`PLAN.md`. `_archive/ARCHIVED_PLAN.md` points to the frozen file rather than
+copying it (relocation, not duplication).
