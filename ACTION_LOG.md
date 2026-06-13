@@ -3,7 +3,7 @@
 > Append-only event narrative, task grain. Never edit or truncate existing
 > entries. Closed taxonomy: completed · inserted · reordered · dep-found ·
 > amended · superseded · discarded · milestone · note.
-> Maintained per `../../patterns/pi-convention.md` (PI-convention: v1).
+> Maintained per `pi-convention.md` (PI-convention: v2).
 
 #### #0001 · note · 2026-06-12
 Adopted the Planning Instrument convention (PI-convention: v1). Scaffolded
@@ -102,3 +102,17 @@ First organic additions to the committed memory store (now 45): two gotchas
 learned this session — `gitleaks-staged-vs-history-and-fixture-allowlist` and
 `cross-repo-commit-needs-local-plan-staged`. Both public-safe project facts.
 gitleaks clean; invariants hold (45 ↔ 45).
+
+#### #0016 · note · 2026-06-13
+Migrated task IDs T→FWK (PI v1→v2). Remap: T1=FWK1, T2=FWK2, T3=FWK3, T4=FWK4,
+T5=FWK5, T6=FWK6, T7=FWK7, T8=FWK8, T9=FWK9, T10=FWK10. Historical log entries
+above keep their T-form (append-only — never rewritten); the join holds via this
+remap. New entries use FWK. (FWK10 = this migration; see
+`docs/superpowers/plans/2026-06-13-pi-v2-migration.md`.)
+
+#### #0017 · completed · FWK10 · 2026-06-13
+PI v2 migration complete: vendored pi-convention.md (patterns main HEAD, @2c88543)
++ memory-convention.md (memory/v1) and re-pointed all references; adopted the FWK
+prefix (T→FWK, numbers kept; remap #0016); relocated the PI pointer to AGENTS.md
+with @AGENTS.md autoloaded by CLAUDE.md; registered v2/FWK by PR to
+cdowell-swtr/patterns (PR #3). Runbook compliance self-check all-OK; gate green.
