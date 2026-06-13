@@ -139,3 +139,22 @@ adapter" (step 7 only exists if an adapter is assumed). Plan written GO-primary
 BLOCKED pending `ANTHROPIC_EVAL_API_KEY`; S2 (custom-provider routing) is runnable
 in-process. Executing via subagent-driven-development on branch
 `plan-27-litellm-backend-foundation`.
+
+#### #0020 · completed · FWK5 · 2026-06-13
+Task 1 (interface spike) — **GO** on `anthropic_messages`. litellm 1.88.1 confirmed:
+all assumed symbols exist (`anthropic_messages`, `CustomLLM`, `custom_provider_map`,
+`RateLimitError`, `modify_params`). **S2 (the architecture gate) PASSED in-process,
+no key:** `anthropic_messages(model="claude-cli/<m>")` dispatches to a
+`custom_provider_map` handler via `acompletion` (async-native → seam drives it with
+`asyncio.run`); litellm auto-strips the `claude-cli/` prefix; `cache_control`
+survives into the handler input (system list folded into a `role:system` message);
+boundary response is a `dict`. `CustomLLM.completion/acompletion` are handed a
+`model_response` to populate and receive OpenAI-shaped `messages`. **Refinement of
+the committed plan's "both S1+S2 needed for GO":** S2 alone is the gate (routing/
+shape); **S1 (real-API caching) is a cost-lever confirmation, NOT a fallback
+trigger** — caching failure would mean investigate `cache_control` placement, not
+switch to `completion`. So the architecture is locked: anthropic_messages, near-zero
+adapter, **roadmap row 5 (adapter removal) is dropped.** S1 + the Task 7 live smoke
+remain BLOCKED on `ANTHROPIC_EVAL_API_KEY` (unset); proceeding with Tasks 2–6 (unit-
+tested, no key) on the strong S2 signal. S2 kept as a permanent routing-regression
+guard (`tests/review/test_litellm_spike.py`).
