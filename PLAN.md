@@ -5,7 +5,6 @@
 > Maintained per `pi-convention.md` (PI-convention: v2).
 
 ## Next
-- [ ] FWK10 — PI v2 migration + gh-only convention re-pointing (FWK prefix; vendor pi/memory conventions; AGENTS.md pointer + @import; register by PR)  → docs/superpowers/plans/2026-06-13-pi-v2-migration.md
 - [ ] FWK3 — Plan 22c: per-agent reviewer reference docs (the 19 reviewers; retire the two promissory notes in working/review-system.md)
 - [ ] FWK4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
 - [ ] FWK5 — Plan 27: refactor the review/eval engine onto LiteLLM (re-target SubagentBackend as an in-process claude -p CustomLLM provider)
@@ -15,6 +14,7 @@
 - [ ] FWK9 — Propagate the PI + MEMORY conventions into generated projects (template payload)  deps: FWK1, FWK2
 
 ## Done
+- [x] FWK10 — PI v2 migration + gh-only convention re-pointing  → log:#0017
 - [x] FWK2 — Plan 26: adopt the Committed Memory convention  → log:#0013
 - [x] FWK1 — Plan 25: adopt the PI convention  → log:#0005
 - (recent pre-adoption milestones — no PI task IDs; full record in the frozen meta-plan)

@@ -109,3 +109,10 @@ T5=FWK5, T6=FWK6, T7=FWK7, T8=FWK8, T9=FWK9, T10=FWK10. Historical log entries
 above keep their T-form (append-only — never rewritten); the join holds via this
 remap. New entries use FWK. (FWK10 = this migration; see
 `docs/superpowers/plans/2026-06-13-pi-v2-migration.md`.)
+
+#### #0017 · completed · FWK10 · 2026-06-13
+PI v2 migration complete: vendored pi-convention.md (patterns main HEAD, @2c88543)
++ memory-convention.md (memory/v1) and re-pointed all references; adopted the FWK
+prefix (T→FWK, numbers kept; remap #0016); relocated the PI pointer to AGENTS.md
+with @AGENTS.md autoloaded by CLAUDE.md; registered v2/FWK by PR to
+cdowell-swtr/patterns (PR #3). Runbook compliance self-check all-OK; gate green.
