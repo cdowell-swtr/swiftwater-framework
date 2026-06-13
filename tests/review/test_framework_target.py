@@ -94,9 +94,11 @@ def test_review_run_force_agentic_uses_the_loop(monkeypatch, tmp_path):
         return []
 
     monkeypatch.setattr("framework_cli.review.agentic.run_agent_agentic", fake_agentic)
-    monkeypatch.setattr(cli_mod, "default_client", lambda env: object())
     out = cli_mod._review_run(
-        "--- a/x\n+++ b/x\n", get_agent("security"), force_agentic=True
+        "--- a/x\n+++ b/x\n",
+        get_agent("security"),
+        force_agentic=True,
+        backend=object(),
     )
     assert out == []
     assert called["agent"] == "review-security"

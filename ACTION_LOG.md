@@ -184,3 +184,23 @@ blocks + usage (verified boundary shape: `content=[{"type":"text","text":…}]`,
 `stop_reason`) while keeping the object-shaped path for existing tests
 (`_block_get`/`_resp_get` dict-or-object getters). 16 tests; gate clean. Backend
 classes untouched (Tasks 4/5).
+
+#### #0023 · completed · FWK5 · 2026-06-13
+Tasks 4+5 (combined — both rewrite the two backend classes + re-point the same test
+files) — both backends now route through `_anthropic_messages`. `ApiBackend(api_key,
+num_retries)` → `anthropic/` prefix, maps `litellm.RateLimitError` → `BackendExhausted`.
+`SubagentBackend(runner=None)` registers a `ClaudeCliLLM` (runner-injectable) in
+`custom_provider_map` → `claude-cli/` prefix. **Exhaustion key fact (probed):** litellm
+WRAPS the handler's `ClaudeExhausted` as `APIConnectionError` with the original on
+`__cause__`; `_SubagentMessages.create` recovers it via the cause chain (preserving
+`reset_hint`). Deleted the relocated `claude -p` mechanics from `backend.py` (now in
+`litellm_provider.py`); trimmed dead imports (`anthropic`/`subprocess`/`tempfile`/…).
+Updated `cli._make_backend` + `_review_run`/`_eval_run` fallbacks; dropped stale
+`default_client` monkeypatches in test_agentic/test_framework_target/test_cli.
+Re-pointed parity tests to mock `_litellm_anthropic_messages` (engine+normalization
+now SHARED, so parity asserts both classes feed the engine identically + use the right
+provider prefix; real transport divergence is covered by test_litellm_provider + the
+Task-7 live smoke). 446 passed / 1 skipped; ruff+format+mypy clean. Branch-end
+cleanup candidates: `default_client` is now dead prod code (kept only by its own
+test); the `anthropic` dep may be droppable; `_SubagentMessages.__init__` mutates
+global `custom_provider_map` per construction.

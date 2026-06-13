@@ -1018,7 +1018,7 @@ def test_eval_unknown_agent_errors(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_make_backend_factory(monkeypatch):
+def test_make_backend_factory():
     import framework_cli.cli as climod
     from framework_cli.review.backend import ApiBackend, SubagentBackend
 
@@ -1026,8 +1026,7 @@ def test_make_backend_factory(monkeypatch):
     assert isinstance(
         climod._make_backend("subagent", "ANTHROPIC_RUNTIME_API_KEY"), SubagentBackend
     )
-    # api: constructs ApiBackend; stub default_client so no real SDK/key is needed
-    monkeypatch.setattr(climod, "default_client", lambda env: object())
+    # api: constructs ApiBackend directly (no SDK instantiation, just stores key)
     assert isinstance(
         climod._make_backend("api", "ANTHROPIC_RUNTIME_API_KEY"), ApiBackend
     )
