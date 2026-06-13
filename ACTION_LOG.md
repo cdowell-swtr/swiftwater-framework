@@ -68,3 +68,7 @@ Repaired 11 migrated memories whose `[[links]]` pointed at non-committed
 (excluded/nonexistent) slugs — reworded those references to prose per the
 convention's cross-store rule. All 25 distinct committed `[[slug]]` targets now
 resolve within `_memory/`. Native links untouched (copy approach).
+
+#### #0011 · completed · T2 · 2026-06-13
+Built `MEMORY.md` (43 entries, reusing the native index's curated titles/hooks,
+paths rewritten to `_memory/`). Index ↔ files bidirectionally complete (43 ↔ 43).
