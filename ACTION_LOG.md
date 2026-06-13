@@ -72,3 +72,9 @@ resolve within `_memory/`. Native links untouched (copy approach).
 #### #0011 · completed · T2 · 2026-06-13
 Built `MEMORY.md` (43 entries, reusing the native index's curated titles/hooks,
 paths rewritten to `_memory/`). Index ↔ files bidirectionally complete (43 ↔ 43).
+
+#### #0012 · note · 2026-06-13
+Self-registered swiftwater-framework as a Committed Memory adopter in the patterns
+registry (`_docs/committed-memory/implementers.md`); ticked its T8 (patterns log
+`#0010`). Cross-repo commit; the framework session gate is satisfied by staging
+this entry.
