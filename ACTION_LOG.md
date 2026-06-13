@@ -235,3 +235,18 @@ openai.APIError)` + added `test_eval_aborts_loudly_on_litellm_api_error`. (Nit)
 the original system rendering. Deferred (reviewer-agreed) to a follow-up/row-2:
 remove dead `runner.default_client` + its tests and assess dropping the `anthropic`
 dep. 447 passed / 3 skipped; ruff+format+mypy clean.
+
+#### #0026 · completed · FWK5 · 2026-06-13
+**FWK5 / Plan 27 foundation DONE.** S1 (the last blocked check) ran with the eval key
+(`~/.swiftwater-framework-keys.env`) and PASSED: `cache_read_input_tokens > 0` on the
+repeat `anthropic/` call — Anthropic prompt caching survives the `anthropic_messages`
+seam, so the cost lever holds. Full verification matrix green: S1 caching, S2 routing,
+the live subagent `claude -p` MAX_ARG_STRLEN smoke, 447 offline tests, Opus
+APPROVE-WITH-NITS (both findings fixed). Architecture as designed: near-zero adapter,
+engine untouched, both backends behind one litellm seam; **roadmap row 5 (adapter
+removal) dropped** — there is no adapter to remove. Opened downstream Next items:
+FWK11 (externalize the claude-cli plugin + deferred cleanup), FWK12 (`--with Agents`
+battery), FWK13 (`--with HotSwapAgents` battery). New follow-up folded into FWK11: a
+benign litellm `coroutine … was never awaited` RuntimeWarning under `asyncio.run`
+(cosmetic; silence later). Branch `plan-27-litellm-backend-foundation`, 8 commits;
+ready for PR (master protected).
