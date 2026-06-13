@@ -96,3 +96,9 @@ staged diffs only; CI's full-history `detect` is the authoritative scan. Added
 `.gitleaks.toml` allowlisting `tests/eval/fixtures/security/`; full-history scan
 now clean — which also re-confirms the 43 migrated memories are clean under the
 authoritative scan (it flagged only the fixtures, nothing in `_memory/`).
+
+#### #0015 · note · 2026-06-13
+First organic additions to the committed memory store (now 45): two gotchas
+learned this session — `gitleaks-staged-vs-history-and-fixture-allowlist` and
+`cross-repo-commit-needs-local-plan-staged`. Both public-safe project facts.
+gitleaks clean; invariants hold (45 ↔ 45).
