@@ -7,12 +7,7 @@ This repo is an opinionated Python scaffold framework: a `framework` CLI that re
 - Design spec: `docs/superpowers/specs/2026-05-20-framework-design.md`
 - Build roadmap (FROZEN historical record through v0.2.4): `docs/superpowers/plans/2026-05-20-meta-plan.md`
 
-<!-- PI-convention: v1 -->
-## Planning Instrument
-Read `PLAN.md` first — it holds current state (Next + recent Done). As you work,
-maintain `PLAN.md` + `ACTION_LOG.md` at task grain (tick tasks; append a log
-entry on every completion and every deviation), per `../../patterns/pi-convention.md`.
-Full history: git + the frozen meta-plan + `_archive/`.
+@AGENTS.md
 
 ## Operating environment
 - **Env parity (this box, Ubuntu/WSL2):** native Linux Node 22 + docker buildx + shellcheck (`~/.local/bin`); dind works under `--privileged` + `--storage-driver=vfs`. `/tmp` is RAM tmpfs (16 GB), `/` ext4 936 GB. Docker acceptance tier is host-UID clean. Second machine (laptop) for reviewer eval/audit: `docs/maintenance/laptop-dev-parity.md`.
@@ -45,7 +40,7 @@ uv run mypy src               # type-check (framework source only)
 - **Workflow actions are pinned to Node-24-capable versions** (GHA forces Node 24 on 2026-06-16). `tests/test_workflow_node24.py::APPROVED_ACTIONS` is the source of truth across the framework's own + the template's workflows; see `docs/maintenance/github-actions-node-runtime.md`.
 
 ## Known follow-ups
-- Resolved follow-ups and items promoted to plans are no longer mirrored here — their record of record is `PLAN.md` (open work) plus the FROZEN meta-plan status table and the FF SHAs in git. Open work is tracked as `PLAN.md` `Next` items (T1–T9); there are no standalone open follow-ups at present. *(History: this section previously accumulated ~10 resolved/promoted entries kept verbatim "for reference" — pruned 2026-06-04 once they were all recorded in the meta-plan + git.)*
+- Resolved follow-ups and items promoted to plans are no longer mirrored here — their record of record is `PLAN.md` (open work) plus the FROZEN meta-plan status table and the FF SHAs in git. Open work is tracked as `PLAN.md` `Next` items (the repo's `FWK`-prefixed task IDs); there are no standalone open follow-ups at present. *(History: this section previously accumulated ~10 resolved/promoted entries kept verbatim "for reference" — pruned 2026-06-04 once they were all recorded in the meta-plan + git.)*
 
 <!-- MEMORY-convention: v1 -->
 ## Committed project memory
