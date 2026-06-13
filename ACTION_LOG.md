@@ -158,3 +158,18 @@ adapter, **roadmap row 5 (adapter removal) is dropped.** S1 + the Task 7 live sm
 remain BLOCKED on `ANTHROPIC_EVAL_API_KEY` (unset); proceeding with Tasks 2–6 (unit-
 tested, no key) on the strong S2 signal. S2 kept as a permanent routing-regression
 guard (`tests/review/test_litellm_spike.py`).
+
+#### #0021 · completed · FWK5 · 2026-06-13
+Task 2 — self-contained `claude-cli` CustomLLM plugin
+(`src/framework_cli/review/litellm_provider.py`), ZERO `framework_cli` imports
+(extraction-ready for roadmap row 2). Ports the `claude -p` mechanics verbatim
+(0o600 system temp file + `--system-prompt-file`, stdin prompt, `_DISABLED_TOOLS`,
+JSON parse, `_EXHAUSTION_MARKERS` → module-local `ClaudeExhausted(reset_hint=…)`).
+`completion`/`acompletion` use `(*args, **kwargs)` to serve both litellm dispatch
+(which hands a `model_response` to populate + OpenAI-shaped messages) and direct
+unit calls; `_render_messages_to_prompt` flattens the OpenAI shape (system folded
+in, `tool_calls`, `role:tool`) to the claude-text protocol. 17 unit tests incl. the
+MAX_ARG_STRLEN guard; gate clean. Also fixed a Task-1 slip: `test_litellm_spike.py`
+was committed format-dirty (hand-written, no `ruff format`) — reformatted here.
+Controller-review nit deferred to branch-end: `_flatten_content` joins multi-block
+content with a space vs the original `\n\n` (cosmetic; findings-parity unaffected).

@@ -55,7 +55,9 @@ def test_s2_anthropic_messages_routes_to_custom_provider() -> None:
             return asyncio.run(self.acompletion(*args, **kwargs))
 
     saved = litellm.custom_provider_map
-    litellm.custom_provider_map = [{"provider": "claude-cli", "custom_handler": _Probe()}]
+    litellm.custom_provider_map = [
+        {"provider": "claude-cli", "custom_handler": _Probe()}
+    ]
     try:
         _run(
             litellm.anthropic_messages(
