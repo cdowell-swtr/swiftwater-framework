@@ -129,7 +129,10 @@ def _flatten_content(content: Any) -> str:
                 btype = getattr(block, "type", None)
                 if btype == "text":
                     parts.append(getattr(block, "text", "") or "")
-        return " ".join(parts)
+        # Join with blank lines to match the original backend's system rendering
+        # (and _render_messages_to_prompt's own system_parts join) — the engine
+        # supplies multiple self-labeled cache_control blocks (diff, context, prompt).
+        return "\n\n".join(parts)
     return str(content) if content else ""
 
 

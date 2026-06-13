@@ -1025,6 +1025,7 @@ def eval_agents(
     import tempfile
 
     import anthropic
+    import openai
 
     from framework_cli.review.backend import BackendExhausted
     from framework_cli.review.findings import FindingsParseError
@@ -1084,7 +1085,14 @@ def eval_agents(
                         err=True,
                     )
                     raise typer.Exit(4) from exc
-                except anthropic.APIError as exc:
+                except (anthropic.APIError, openai.APIError) as exc:
+                    # The API path now routes through litellm, whose error types all
+                    # derive from openai.APIError (the real common ancestor —
+                    # litellm.exceptions.APIError is only a sibling). Catch that so a
+                    # non-rate-limit API failure (auth, 5xx, connection, bad request)
+                    # aborts cleanly instead of crashing uncaught. litellm
+                    # RateLimitError already arrives as BackendExhausted (handled
+                    # above); anthropic.APIError is kept as belt-and-suspenders.
                     typer.echo(
                         f"\neval: ABORTED at {spec.name} — API error "
                         f"({type(exc).__name__}): {exc}",

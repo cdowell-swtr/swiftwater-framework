@@ -220,3 +220,18 @@ clean. **Still BLOCKED for final close:** S1 (API-path caching cost-lever, NOT a
 architecture gate) needs `ANTHROPIC_EVAL_API_KEY` — `test_live_api_caching` is
 written + skipped, one command from confirming once a key is present. FWK5 left
 open pending that + the branch-end Opus review.
+
+#### #0025 · completed · FWK5 · 2026-06-13
+Branch-end Opus whole-branch review: **APPROVE-WITH-NITS** (gate re-verified green).
+Fixed its two actionable findings: (Important) the eval loop's `except
+anthropic.APIError` Exit(3) abort was partly dead post-migration — litellm errors
+don't subclass `anthropic.APIError`. Probed the hierarchy: litellm's error types
+(`AuthenticationError`/`RateLimitError`/`APIConnectionError`/`BadRequestError`/…) all
+derive from **`openai.APIError`** (litellm builds on the openai SDK tree;
+`litellm.exceptions.APIError` is only a sibling, NOT the ancestor — a first attempt
+catching it failed the new test). Broadened the catch to `(anthropic.APIError,
+openai.APIError)` + added `test_eval_aborts_loudly_on_litellm_api_error`. (Nit)
+`_flatten_content` now joins multi-block content with `\n\n` (was a space) to match
+the original system rendering. Deferred (reviewer-agreed) to a follow-up/row-2:
+remove dead `runner.default_client` + its tests and assess dropping the `anthropic`
+dep. 447 passed / 3 skipped; ruff+format+mypy clean.
