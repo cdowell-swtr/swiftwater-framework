@@ -56,3 +56,9 @@ scan). Full-repo scan clean before any memory was committed.
 #### #0008 · note · 2026-06-13
 Scaffolded the committed memory store: empty `MEMORY.md` index + `_memory/`, and
 added the MEMORY-convention block + `@MEMORY.md` autoload import to CLAUDE.md.
+
+#### #0009 · completed · T2 · 2026-06-13
+Copied the 43 public-safe project memories into `_memory/` (+ `scope: project`);
+native store untouched (copy, not move). 13 excluded (3 name Meridian, the rest
+machine/personal/preference). Boundary spot-check clean (no Meridian / no
+private paths in the copies).
