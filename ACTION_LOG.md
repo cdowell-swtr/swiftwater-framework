@@ -39,3 +39,60 @@ Plan 25 complete: PI convention adopted — four artifacts scaffolded, CLAUDE.md
 slimmed, meta-plan frozen, commit-gate hook re-targeted, framework registered as
 a PI adopter. Quality gate green (ruff/format/mypy); PI invariants confirmed.
 Plan 26 (Committed Memory) is next.
+
+#### #0006 · note · 2026-06-13
+T2 (Plan 26, Committed Memory) brainstormed; spec written
+(`docs/superpowers/specs/2026-06-13-committed-memory-adoption-design.md`).
+Decisions: conservative curation (clearly-safe framework memories only, no
+rewording) + copy-not-move (native store untouched). Branch
+`plan-26-committed-memory` off master (Plan 25 merged, `db5cdb9`).
+
+#### #0007 · completed · T2 · 2026-06-13
+Wired gitleaks in the framework's own repo (it previously shipped a backstop to
+consumers but ran none itself): root `.pre-commit-config.yaml` (gitleaks v8.21.2)
++ `pre-commit install` + a `security` job in `ci.yml` (pinned binary, full-repo
+scan). Full-repo scan clean before any memory was committed.
+
+#### #0008 · note · 2026-06-13
+Scaffolded the committed memory store: empty `MEMORY.md` index + `_memory/`, and
+added the MEMORY-convention block + `@MEMORY.md` autoload import to CLAUDE.md.
+
+#### #0009 · completed · T2 · 2026-06-13
+Copied the 43 public-safe project memories into `_memory/` (+ `scope: project`);
+native store untouched (copy, not move). 13 excluded (3 name Meridian, the rest
+machine/personal/preference). Boundary spot-check clean (no Meridian / no
+private paths in the copies).
+
+#### #0010 · completed · T2 · 2026-06-13
+Repaired 11 migrated memories whose `[[links]]` pointed at non-committed
+(excluded/nonexistent) slugs — reworded those references to prose per the
+convention's cross-store rule. All 25 distinct committed `[[slug]]` targets now
+resolve within `_memory/`. Native links untouched (copy approach).
+
+#### #0011 · completed · T2 · 2026-06-13
+Built `MEMORY.md` (43 entries, reusing the native index's curated titles/hooks,
+paths rewritten to `_memory/`). Index ↔ files bidirectionally complete (43 ↔ 43).
+
+#### #0012 · note · 2026-06-13
+Self-registered swiftwater-framework as a Committed Memory adopter in the patterns
+registry (`_docs/committed-memory/implementers.md`); ticked its T8 (patterns log
+`#0010`). Cross-repo commit; the framework session gate is satisfied by staging
+this entry.
+
+#### #0013 · completed · T2 · 2026-06-13
+Plan 26 complete: Committed Memory convention adopted — gitleaks wired in the
+framework's own repo, store scaffolded, 43 public-safe memories migrated (copy,
+not move), 11 cross-store links reworded to prose, 43-entry index built, framework
+registered as an adopter. gitleaks clean (with memories present); boundary
+self-audit clean (only self-referential public `cdowell-swtr` repo coordinates,
+which are safe to publish); convention invariants hold; gate green.
+
+#### #0014 · amended · T2 · 2026-06-13
+The CI `security` job (full-history `gitleaks detect`) surfaced 2 findings the
+local hook missed — both are the intentional fake AWS key in
+`tests/eval/fixtures/security/bad/hardcoded-secret.diff` (the payload the security
+reviewer is meant to flag), not real secrets. The pre-commit gitleaks hook scans
+staged diffs only; CI's full-history `detect` is the authoritative scan. Added
+`.gitleaks.toml` allowlisting `tests/eval/fixtures/security/`; full-history scan
+now clean — which also re-confirms the 43 migrated memories are clean under the
+authoritative scan (it flagged only the fixtures, nothing in `_memory/`).

@@ -46,3 +46,13 @@ uv run mypy src               # type-check (framework source only)
 
 ## Known follow-ups
 - Resolved follow-ups and items promoted to plans are no longer mirrored here — their record of record is `PLAN.md` (open work) plus the FROZEN meta-plan status table and the FF SHAs in git. Open work is tracked as `PLAN.md` `Next` items (T1–T9); there are no standalone open follow-ups at present. *(History: this section previously accumulated ~10 resolved/promoted entries kept verbatim "for reference" — pruned 2026-06-04 once they were all recorded in the meta-plan + git.)*
+
+<!-- MEMORY-convention: v1 -->
+## Committed project memory
+Project memory is autoloaded from `MEMORY.md` (imported below). Resolve `[[slug]]`
+to `_memory/<slug>.md`. Commit a memory only when it is BOTH useful to anyone
+working this repo AND safe to publish; otherwise keep it in the native store.
+When in doubt, native. Full rule + never-commit list in
+`../../patterns/memory-convention.md`.
+
+@MEMORY.md

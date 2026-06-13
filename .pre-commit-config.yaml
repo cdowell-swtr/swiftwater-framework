@@ -1,0 +1,9 @@
+# Framework's own secret-scanning backstop (gitleaks). Minimal by design — the
+# framework otherwise gates via the PreToolUse hooks in .claude/settings.json and
+# CI, not pre-commit. Add more hooks here only if you adopt pre-commit broadly.
+default_install_hook_types: [pre-commit, pre-push]
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks

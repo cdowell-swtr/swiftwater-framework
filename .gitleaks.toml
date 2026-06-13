@@ -1,0 +1,18 @@
+# gitleaks config for the framework's own repo (used by the local pre-commit hook
+# and the CI `security` job, which scans full git history).
+title = "swiftwater-framework gitleaks config"
+
+[extend]
+# Start from gitleaks' built-in ruleset, then add the allowlist below.
+useDefault = true
+
+[allowlist]
+description = """
+Security-reviewer eval fixtures deliberately contain fake, secret-shaped payloads
+(e.g. a hardcoded AWS key) — they are the test inputs the `security` review agent
+is meant to flag, NOT real credentials. Exclude them from secret scanning so the
+full-history scan doesn't false-positive on intentional test data.
+"""
+paths = [
+  '''tests/eval/fixtures/security/.*''',
+]
