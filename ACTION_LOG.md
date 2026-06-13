@@ -173,3 +173,14 @@ MAX_ARG_STRLEN guard; gate clean. Also fixed a Task-1 slip: `test_litellm_spike.
 was committed format-dirty (hand-written, no `ruff format`) — reformatted here.
 Controller-review nit deferred to branch-end: `_flatten_content` joins multi-block
 content with a space vs the original `\n\n` (cosmetic; findings-parity unaffected).
+
+#### #0022 · completed · FWK5 · 2026-06-13
+Task 3 — `_anthropic_messages` seam helper in `backend.py`: the ONE call site for
+litellm (`_litellm_anthropic_messages` = `asyncio.run(litellm.anthropic_messages(…))`,
+lazy-imported, conditional `tools`/`api_key`/`num_retries` kwargs). Extended
+`_normalize_content`/`_normalize_usage` to read litellm's **dict-shaped** content
+blocks + usage (verified boundary shape: `content=[{"type":"text","text":…}]`,
+`usage={input_tokens,output_tokens,cache_read_input_tokens,…}`, top-level
+`stop_reason`) while keeping the object-shaped path for existing tests
+(`_block_get`/`_resp_get` dict-or-object getters). 16 tests; gate clean. Backend
+classes untouched (Tasks 4/5).

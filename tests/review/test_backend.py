@@ -10,7 +10,9 @@ from framework_cli.review.backend import (
     TextBlock,
     ToolUseBlock,
     Usage,
+    _anthropic_messages,
     _join_system,
+    _normalize_content,
 )
 
 
@@ -412,3 +414,78 @@ def test_subagent_large_system_goes_via_file_not_argv():
     assert "--model" in argv
     assert "claude-haiku-4-5-20251001" in argv
     assert "--disallowed-tools" in argv
+
+
+# ---- LiteLLM helper tests ----
+
+
+def test_anthropic_messages_normalizes_and_prefixes(monkeypatch):
+    """_anthropic_messages prefixes the model, calls _litellm_anthropic_messages,
+    and normalizes the dict-shaped response into a Message."""
+    import framework_cli.review.backend as backend_mod
+
+    captured: dict = {}
+
+    def fake_litellm(
+        *, model, max_tokens, system, messages, tools, api_key, num_retries
+    ):
+        captured["model"] = model
+        captured["api_key"] = api_key
+        captured["num_retries"] = num_retries
+        return {
+            "id": "msg_01",
+            "type": "message",
+            "role": "assistant",
+            "model": model,
+            "stop_sequence": None,
+            "usage": {
+                "input_tokens": 2,
+                "output_tokens": 7,
+                "cache_read_input_tokens": 9,
+                "total_tokens": 18,
+            },
+            "content": [{"type": "text", "text": "[]"}],
+            "stop_reason": "end_turn",
+        }
+
+    monkeypatch.setattr(backend_mod, "_litellm_anthropic_messages", fake_litellm)
+
+    msg = _anthropic_messages(
+        model_prefix="anthropic/",
+        model="claude-sonnet-4-6",
+        max_tokens=10,
+        system=[{"type": "text", "text": "S"}],
+        messages=[{"role": "user", "content": "go"}],
+        tools=None,
+        api_key="k",
+        num_retries=8,
+    )
+
+    assert captured["model"] == "anthropic/claude-sonnet-4-6"
+    assert captured["api_key"] == "k"
+    assert captured["num_retries"] == 8
+    assert len(msg.content) == 1
+    assert msg.content[0].type == "text"
+    assert msg.content[0].text == "[]"
+    assert msg.usage.cache_read_input_tokens == 9
+    assert msg.stop_reason == "end_turn"
+
+
+def test_normalize_content_handles_dict_tool_use():
+    """_normalize_content accepts dict-shaped tool_use blocks (LiteLLM response shape)."""
+    blocks = _normalize_content(
+        [
+            {
+                "type": "tool_use",
+                "id": "t1",
+                "name": "read_file",
+                "input": {"path": "a.py"},
+            }
+        ]
+    )
+    assert len(blocks) == 1
+    b = blocks[0]
+    assert isinstance(b, ToolUseBlock)
+    assert b.id == "t1"
+    assert b.name == "read_file"
+    assert b.input == {"path": "a.py"}

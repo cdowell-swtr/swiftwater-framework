@@ -57,29 +57,108 @@ class BackendExhausted(Exception):
         self.reset_hint = reset_hint
 
 
+def _block_get(b: Any, key: str, default: Any = None) -> Any:
+    """Read a field from a block that may be a dict or an object."""
+    return b.get(key, default) if isinstance(b, dict) else getattr(b, key, default)
+
+
 def _normalize_content(raw: Any) -> list[TextBlock | ToolUseBlock]:
     out: list[TextBlock | ToolUseBlock] = []
     for b in raw or []:
-        btype = getattr(b, "type", None)
+        btype = _block_get(b, "type")
         if btype == "text":
-            out.append(TextBlock(text=getattr(b, "text", "") or ""))
+            out.append(TextBlock(text=_block_get(b, "text", "") or ""))
         elif btype == "tool_use":
             out.append(
                 ToolUseBlock(
-                    id=getattr(b, "id", ""),
-                    name=getattr(b, "name", ""),
-                    input=dict(getattr(b, "input", {}) or {}),
+                    id=_block_get(b, "id", "") or "",
+                    name=_block_get(b, "name", "") or "",
+                    input=dict(_block_get(b, "input", {}) or {}),
                 )
             )
     return out
 
 
 def _normalize_usage(raw: Any) -> Usage:
+    if isinstance(raw, dict):
+        return Usage(
+            input_tokens=raw.get("input_tokens", 0) or 0,
+            output_tokens=raw.get("output_tokens", 0) or 0,
+            cache_read_input_tokens=raw.get("cache_read_input_tokens", 0) or 0,
+            cache_creation_input_tokens=raw.get("cache_creation_input_tokens", 0) or 0,
+        )
     return Usage(
         input_tokens=getattr(raw, "input_tokens", 0) or 0,
         output_tokens=getattr(raw, "output_tokens", 0) or 0,
         cache_read_input_tokens=getattr(raw, "cache_read_input_tokens", 0) or 0,
         cache_creation_input_tokens=getattr(raw, "cache_creation_input_tokens", 0) or 0,
+    )
+
+
+def _resp_get(resp: Any, key: str, default: Any = None) -> Any:
+    """Read a field from a response that may be a dict or an object."""
+    return (
+        resp.get(key, default)
+        if isinstance(resp, dict)
+        else getattr(resp, key, default)
+    )
+
+
+def _litellm_anthropic_messages(
+    *,
+    model: str,
+    max_tokens: int,
+    system: list[dict[str, Any]],
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None,
+    api_key: str | None,
+    num_retries: int | None,
+) -> Any:
+    """Single call-site for litellm.anthropic_messages; async-driven via asyncio.run."""
+    import asyncio
+
+    import litellm
+
+    kwargs: dict[str, Any] = dict(
+        model=model,
+        max_tokens=max_tokens,
+        system=system,
+        messages=messages,
+    )
+    if tools is not None:
+        kwargs["tools"] = tools
+    if api_key is not None:
+        kwargs["api_key"] = api_key
+    if num_retries is not None:
+        kwargs["num_retries"] = num_retries
+    return asyncio.run(litellm.anthropic_messages(**kwargs))
+
+
+def _anthropic_messages(
+    *,
+    model_prefix: str,
+    model: str,
+    max_tokens: int,
+    system: list[dict[str, Any]],
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None,
+    api_key: str | None = None,
+    num_retries: int | None = None,
+) -> Message:
+    """Call LiteLLM's anthropic_messages endpoint and normalize the response to Message."""
+    raw = _litellm_anthropic_messages(
+        model=model_prefix + model,
+        max_tokens=max_tokens,
+        system=system,
+        messages=messages,
+        tools=tools,
+        api_key=api_key,
+        num_retries=num_retries,
+    )
+    return Message(
+        content=_normalize_content(_resp_get(raw, "content", []) or []),
+        usage=_normalize_usage(_resp_get(raw, "usage", None)),
+        stop_reason=_resp_get(raw, "stop_reason", None),
     )
 
 
