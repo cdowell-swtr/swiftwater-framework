@@ -5,7 +5,7 @@
 > Maintained per `../../patterns/pi-convention.md` (PI-convention: v1).
 
 ## Next
-- [ ] T10 — PI v2 migration + gh-only convention re-pointing (FWK prefix; vendor pi/memory conventions; AGENTS.md pointer + @import; register by PR)  → docs/superpowers/specs/2026-06-13-pi-v2-migration-design.md
+- [ ] T10 — PI v2 migration + gh-only convention re-pointing (FWK prefix; vendor pi/memory conventions; AGENTS.md pointer + @import; register by PR)  → docs/superpowers/plans/2026-06-13-pi-v2-migration.md
 - [ ] T3 — Plan 22c: per-agent reviewer reference docs (the 19 reviewers; retire the two promissory notes in working/review-system.md)
 - [ ] T4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
 - [ ] T5 — Plan 27: refactor the review/eval engine onto LiteLLM (re-target SubagentBackend as an in-process claude -p CustomLLM provider)
