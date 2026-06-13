@@ -78,3 +78,11 @@ Self-registered swiftwater-framework as a Committed Memory adopter in the patter
 registry (`_docs/committed-memory/implementers.md`); ticked its T8 (patterns log
 `#0010`). Cross-repo commit; the framework session gate is satisfied by staging
 this entry.
+
+#### #0013 · completed · T2 · 2026-06-13
+Plan 26 complete: Committed Memory convention adopted — gitleaks wired in the
+framework's own repo, store scaffolded, 43 public-safe memories migrated (copy,
+not move), 11 cross-store links reworded to prose, 43-entry index built, framework
+registered as an adopter. gitleaks clean (with memories present); boundary
+self-audit clean (only self-referential public `cdowell-swtr` repo coordinates,
+which are safe to publish); convention invariants hold; gate green.
