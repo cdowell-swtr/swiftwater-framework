@@ -22,6 +22,16 @@ This is a content + config migration, not feature code.
 ## Scope
 
 **In scope:**
+- **Wire gitleaks in the framework's *own* repo FIRST** (before any memory is
+  committed): a root `.pre-commit-config.yaml` pinning the gitleaks hook +
+  `pre-commit install`, AND a `security` job in the framework's own `ci.yml`
+  running a full-repo scan. *(Corrected 2026-06-13: the framework's own repo has
+  NO secret scanning — verified no root `.pre-commit-config.yaml` and no
+  gitleaks in `.github/workflows/`. The v0.2.4 gitleaks fix was in the **template
+  payload** (`src/framework_cli/template/.pre-commit-config.yaml` + the template's
+  locked `ci.yml`), shipped to consumers — the framework ships a secret backstop
+  it does not run on itself. The convention requires gitleaks before committing
+  any memory, so this is in-scope work.)*
 - Scaffold `MEMORY.md` (index) + `_memory/` at the repo root.
 - Add the convention's `<!-- MEMORY-convention: v1 -->` block + `@MEMORY.md`
   import to CLAUDE.md.
@@ -36,9 +46,6 @@ This is a content + config migration, not feature code.
   machine/personal, Meridian-naming, and session-only memories stay native.
 - **No edits to the native store** — no deletes, no pruning of the native index.
   The user prunes native duplicates manually later.
-- **gitleaks is not built here** — it is already wired (pre-commit + the
-  `ci.yml` `security` job) and scans the whole repo including `_memory/`. Plan 26
-  verifies it; it does not build it.
 
 ## Decisions (from the approved brainstorm)
 
@@ -50,6 +57,11 @@ This is a content + config migration, not feature code.
    store is left entirely untouched (no deletes, no index pruning). Accepts
    transitional duplication (a migrated fact loads from both stores when working
    in this repo on this machine); the user prunes native later.
+3. **gitleaks — wire it properly (option A): local pre-commit + framework CI
+   job.** Closes the "ships a secret backstop it doesn't run on itself" gap. The
+   framework's first root pre-commit config (gitleaks only, to stay minimal +
+   non-disruptive — the framework otherwise gates via PreToolUse hooks + CI, not
+   pre-commit) plus a `security` job in the framework's own `ci.yml`.
 
 ## Design
 
@@ -123,9 +135,10 @@ Build `MEMORY.md` from the migrated set. Verify bidirectional completeness: ever
 
 ## Verification
 
-1. **gitleaks** — already wired; run a full-repo scan to confirm clean before the
-   first memory commit, and confirm the pre-commit hook is active. Backstop, not a
-   substitute for the boundary rule.
+1. **gitleaks** — wired in this plan (local pre-commit + CI), gitleaks pinned
+   `v8.21.2` (matching the template). Run a full-repo scan to confirm clean
+   *before* the first memory commit; confirm `pre-commit install` wired the local
+   hook. Backstop, not a substitute for the boundary rule.
 2. **Autoload** — confirm `@MEMORY.md` resolves (CLAUDE.md imports the index).
 3. **Convention invariants (manual)** — index ↔ files bidirectionally complete;
    every committed `[[slug]]` resolves to a real `_memory/` file (no dangling

@@ -5,7 +5,7 @@
 > Maintained per `../../patterns/pi-convention.md` (PI-convention: v1).
 
 ## Next
-- [ ] T2 — Plan 26: adopt the Committed Memory convention — migrate the public-safe project subset of the native store  deps: T1
+- [ ] T2 — Plan 26: adopt the Committed Memory convention — migrate the public-safe project subset of the native store  deps: T1  → docs/superpowers/plans/2026-06-13-committed-memory-adoption.md
 - [ ] T3 — Plan 22c: per-agent reviewer reference docs (the 19 reviewers; retire the two promissory notes in working/review-system.md)
 - [ ] T4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
 - [ ] T5 — Plan 27: refactor the review/eval engine onto LiteLLM (re-target SubagentBackend as an in-process claude -p CustomLLM provider)
