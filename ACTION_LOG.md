@@ -86,3 +86,13 @@ not move), 11 cross-store links reworded to prose, 43-entry index built, framewo
 registered as an adopter. gitleaks clean (with memories present); boundary
 self-audit clean (only self-referential public `cdowell-swtr` repo coordinates,
 which are safe to publish); convention invariants hold; gate green.
+
+#### #0014 · amended · T2 · 2026-06-13
+The CI `security` job (full-history `gitleaks detect`) surfaced 2 findings the
+local hook missed — both are the intentional fake AWS key in
+`tests/eval/fixtures/security/bad/hardcoded-secret.diff` (the payload the security
+reviewer is meant to flag), not real secrets. The pre-commit gitleaks hook scans
+staged diffs only; CI's full-history `detect` is the authoritative scan. Added
+`.gitleaks.toml` allowlisting `tests/eval/fixtures/security/`; full-history scan
+now clean — which also re-confirms the 43 migrated memories are clean under the
+authoritative scan (it flagged only the fixtures, nothing in `_memory/`).
