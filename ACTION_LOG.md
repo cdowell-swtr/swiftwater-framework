@@ -116,3 +116,9 @@ PI v2 migration complete: vendored pi-convention.md (patterns main HEAD, @2c8854
 prefix (T→FWK, numbers kept; remap #0016); relocated the PI pointer to AGENTS.md
 with @AGENTS.md autoloaded by CLAUDE.md; registered v2/FWK by PR to
 cdowell-swtr/patterns (PR #3). Runbook compliance self-check all-OK; gate green.
+
+#### #0018 · note · 2026-06-13
+Promoted the gh-only vendoring/registration learning into the committed store
+(`framework-consumes-patterns-via-github-vendoring`, now 46) — public-safe +
+project-useful, so the committed store is its proper home (travels to every
+machine). gitleaks clean; invariants 46↔46. (Native duplicates pruned separately.)
