@@ -52,3 +52,7 @@ Wired gitleaks in the framework's own repo (it previously shipped a backstop to
 consumers but ran none itself): root `.pre-commit-config.yaml` (gitleaks v8.21.2)
 + `pre-commit install` + a `security` job in `ci.yml` (pinned binary, full-repo
 scan). Full-repo scan clean before any memory was committed.
+
+#### #0008 · note · 2026-06-13
+Scaffolded the committed memory store: empty `MEMORY.md` index + `_memory/`, and
+added the MEMORY-convention block + `@MEMORY.md` autoload import to CLAUDE.md.
