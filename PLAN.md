@@ -7,7 +7,7 @@
 ## Next
 - [ ] FWK3 — Plan 22c: per-agent reviewer reference docs (the 19 reviewers; retire the two promissory notes in working/review-system.md)
 - [ ] FWK4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
-- [ ] FWK5 — Plan 27: refactor the review/eval engine onto LiteLLM (re-target SubagentBackend as an in-process claude -p CustomLLM provider)
+- [ ] FWK5 — Plan 27: refactor the review/eval engine onto LiteLLM (re-target SubagentBackend as an in-process claude -p CustomLLM provider)  → spec+plan: `docs/superpowers/specs/2026-06-13-litellm-backend-foundation-design.md`, `docs/superpowers/plans/2026-06-13-litellm-backend-foundation.md` (in progress)
 - [ ] FWK6 — Plan 29: data-store runtime parity (services.yml/dev.yml; unblock the hardcoded co-located-container assumption)
 - [ ] FWK7 — Plan 30: full reverse integrity-coverage check + 23-file battery-infra classification  deps: consumes INTENTIONALLY_UNLOCKED (shipped v0.2.4)
 - [ ] FWK8 — Traefik docker-provider acceptance coverage (the gap that hid the v3.1 → Docker 27 `task dev` break)

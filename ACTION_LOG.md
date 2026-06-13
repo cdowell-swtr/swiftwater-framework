@@ -122,3 +122,20 @@ Promoted the gh-only vendoring/registration learning into the committed store
 (`framework-consumes-patterns-via-github-vendoring`, now 46) — public-safe +
 project-useful, so the committed store is its proper home (travels to every
 machine). gitleaks clean; invariants 46↔46. (Native duplicates pruned separately.)
+
+#### #0019 · note · FWK5 · 2026-06-13
+Brainstormed + wrote the Plan 27 (FWK5) LiteLLM-backend-foundation design spec and
+implementation plan. Key decisions: (1) decomposed the "agentic-backend swap" into
+a 5-row roadmap — this plan is row 1 (foundation, ships nothing external); rows 2–4
+externalize the claude-cli plugin + add `--with Agents`/`--with HotSwapAgents`
+batteries for Meridian; row 5 (adapter removal) is CONDITIONAL. (2) Keep the
+`messages.create`/`Message` seam; swap only the backends' innards onto LiteLLM.
+(3) The LiteLLM input-surface choice (`anthropic_messages` vs `completion`) is
+GATED on a live go/no-go spike (Task 1), NOT assumed — explicitly avoiding the
+circular justification "use the Anthropic surface because step 7 removes the
+adapter" (step 7 only exists if an adapter is assumed). Plan written GO-primary
+(anthropic_messages → ~zero adapter, row 5 evaporates) with a documented
+`completion`+translator fallback. Spike S1 (real-API caching passthrough) is
+BLOCKED pending `ANTHROPIC_EVAL_API_KEY`; S2 (custom-provider routing) is runnable
+in-process. Executing via subagent-driven-development on branch
+`plan-27-litellm-backend-foundation`.
