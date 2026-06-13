@@ -2,7 +2,7 @@
 
 > Current state only (Next + recent Done). Full history: git + the frozen
 > meta-plan (`docs/superpowers/plans/2026-05-20-meta-plan.md`) + `_archive/`.
-> Maintained per `../../patterns/pi-convention.md` (PI-convention: v1).
+> Maintained per `pi-convention.md` (PI-convention: v2).
 
 ## Next
 - [ ] T10 — PI v2 migration + gh-only convention re-pointing (FWK prefix; vendor pi/memory conventions; AGENTS.md pointer + @import; register by PR)  → docs/superpowers/plans/2026-06-13-pi-v2-migration.md

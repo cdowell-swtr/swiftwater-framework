@@ -3,7 +3,7 @@
 > Append-only event narrative, task grain. Never edit or truncate existing
 > entries. Closed taxonomy: completed · inserted · reordered · dep-found ·
 > amended · superseded · discarded · milestone · note.
-> Maintained per `../../patterns/pi-convention.md` (PI-convention: v1).
+> Maintained per `pi-convention.md` (PI-convention: v2).
 
 #### #0001 · note · 2026-06-12
 Adopted the Planning Instrument convention (PI-convention: v1). Scaffolded

@@ -21,7 +21,7 @@ Full history: git + the frozen meta-plan + `_archive/`.
 
 ## Keeping state current (required before every commit)
 
-Before every commit, update `PLAN.md` (tick the task; move finished items to `Done`) and append an `ACTION_LOG.md` entry for every completion and every deviation, per `../../patterns/pi-convention.md`. A `PreToolUse` hook in `.claude/settings.json` enforces this — it blocks `git commit` until `PLAN.md` or `ACTION_LOG.md` is staged. Run `/hooks` to review or disable it.
+Before every commit, update `PLAN.md` (tick the task; move finished items to `Done`) and append an `ACTION_LOG.md` entry for every completion and every deviation, per `pi-convention.md`. A `PreToolUse` hook in `.claude/settings.json` enforces this — it blocks `git commit` until `PLAN.md` or `ACTION_LOG.md` is staged. Run `/hooks` to review or disable it.
 
 ## How we build here
 - Work proceeds plan-by-plan per the meta-plan, using the superpowers subagent-driven flow: a feature branch → an implementer per task (TDD) → controller verification → a final review → merge to `master`.
@@ -53,6 +53,6 @@ Project memory is autoloaded from `MEMORY.md` (imported below). Resolve `[[slug]
 to `_memory/<slug>.md`. Commit a memory only when it is BOTH useful to anyone
 working this repo AND safe to publish; otherwise keep it in the native store.
 When in doubt, native. Full rule + never-commit list in
-`../../patterns/memory-convention.md`.
+`memory-convention.md`.
 
 @MEMORY.md
