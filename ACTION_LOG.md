@@ -46,3 +46,9 @@ T2 (Plan 26, Committed Memory) brainstormed; spec written
 Decisions: conservative curation (clearly-safe framework memories only, no
 rewording) + copy-not-move (native store untouched). Branch
 `plan-26-committed-memory` off master (Plan 25 merged, `db5cdb9`).
+
+#### #0007 · completed · T2 · 2026-06-13
+Wired gitleaks in the framework's own repo (it previously shipped a backstop to
+consumers but ran none itself): root `.pre-commit-config.yaml` (gitleaks v8.21.2)
++ `pre-commit install` + a `security` job in `ci.yml` (pinned binary, full-repo
+scan). Full-repo scan clean before any memory was committed.
