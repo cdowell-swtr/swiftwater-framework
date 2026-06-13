@@ -39,3 +39,10 @@ Plan 25 complete: PI convention adopted — four artifacts scaffolded, CLAUDE.md
 slimmed, meta-plan frozen, commit-gate hook re-targeted, framework registered as
 a PI adopter. Quality gate green (ruff/format/mypy); PI invariants confirmed.
 Plan 26 (Committed Memory) is next.
+
+#### #0006 · note · 2026-06-13
+T2 (Plan 26, Committed Memory) brainstormed; spec written
+(`docs/superpowers/specs/2026-06-13-committed-memory-adoption-design.md`).
+Decisions: conservative curation (clearly-safe framework memories only, no
+rewording) + copy-not-move (native store untouched). Branch
+`plan-26-committed-memory` off master (Plan 25 merged, `db5cdb9`).
