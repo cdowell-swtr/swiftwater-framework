@@ -204,3 +204,19 @@ Task-7 live smoke). 446 passed / 1 skipped; ruff+format+mypy clean. Branch-end
 cleanup candidates: `default_client` is now dead prod code (kept only by its own
 test); the `anthropic` dep may be droppable; `_SubagentMessages.__init__` mutates
 global `custom_provider_map` per construction.
+
+#### #0024 · completed · FWK5 · 2026-06-13
+Task 7 (live smoke) + Task 8 partial. **Critical live verification PASSED:**
+`test_live_subagent_large_input` drove the FULL real path
+(`anthropic_messages(model="claude-cli/…")` → `asyncio.run` → litellm dispatch →
+`ClaudeCliLLM.acompletion` → `claude -p` subprocess) with a >128 KB diff over the
+subscription and returned parseable findings — the `MAX_ARG_STRLEN`/large-input
+class that mocks can't catch, confirming the architecture end-to-end. Task 6 is
+satisfied (retry tests pass; rate-limit→BackendExhausted mapping added in #0023).
+Pinned `litellm>=1.88.1` (lock = 1.88.1); mypy-override step moot (targeted ignores
+in the plugin suffice — `mypy src` clean with no global override). Offline gate
+green: review+eval 326 passed/1 skipped, backend suites 446 passed, ruff+format+mypy
+clean. **Still BLOCKED for final close:** S1 (API-path caching cost-lever, NOT an
+architecture gate) needs `ANTHROPIC_EVAL_API_KEY` — `test_live_api_caching` is
+written + skipped, one command from confirming once a key is present. FWK5 left
+open pending that + the branch-end Opus review.

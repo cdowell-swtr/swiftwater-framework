@@ -5,7 +5,7 @@ description = "CLI scaffold framework for solid, observable, testable Python pro
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=0.40",
-    "litellm>=1.0",
+    "litellm>=1.88.1",
     "typer>=0.15",
     "copier>=9.4",
     "pathspec>=0.12",
