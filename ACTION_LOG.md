@@ -62,3 +62,9 @@ Copied the 43 public-safe project memories into `_memory/` (+ `scope: project`);
 native store untouched (copy, not move). 13 excluded (3 name Meridian, the rest
 machine/personal/preference). Boundary spot-check clean (no Meridian / no
 private paths in the copies).
+
+#### #0010 · completed · T2 · 2026-06-13
+Repaired 11 migrated memories whose `[[links]]` pointed at non-committed
+(excluded/nonexistent) slugs — reworded those references to prose per the
+convention's cross-store rule. All 25 distinct committed `[[slug]]` targets now
+resolve within `_memory/`. Native links untouched (copy approach).

@@ -8,7 +8,7 @@ metadata:
   originSessionId: 49f13a1d-7e1e-4c24-8e52-b50a128128c4
 ---
 
-Template-payload tests (anything under `src/framework_cli/template/.../tests/`) run **in a generated project**, not the framework venv — the framework venv lacks celery/opentelemetry/pymongo/etc. So the fast in-session TDD loop (avoid the Docker acceptance tier — see `[[reviewers-tune-pytest-tmp-accumulation]]`) is:
+Template-payload tests (anything under `src/framework_cli/template/.../tests/`) run **in a generated project**, not the framework venv — the framework venv lacks celery/opentelemetry/pymongo/etc. So the fast in-session TDD loop (avoid the Docker acceptance tier; if a run looks broken, clean stale `/tmp/pytest-of-*` dirs before assuming a real regression) is:
 
 1. **One-time:** `rm -rf /tmp/work && uv run framework template-render --out /tmp/work >/dev/null && (cd /tmp/work && uv sync --quiet)`. Render with NO `--batteries` flag = ALL batteries (so every gated file is present). `uv sync` is the slow part; do it once.
 2. **Edit the TEMPLATE SOURCE** under `src/framework_cli/template/` (not the rendered copy).

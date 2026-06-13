@@ -14,4 +14,4 @@ When a flow needs cwd = a rendered/generated project (so `framework audit-prepar
 
 **Where it bit:** the first real `/reviewers:template-audit` probe (2026-05-31). Steps 3 + 6 of `.claude/commands/reviewers/template-audit.md` (the two `audit-prepare` calls that run from inside `/tmp/template-audit-render`). Steps 8–9 (`audit-finalize`/`template-map`) run from `$FW_ROOT`, so they correctly use bare `uv run framework`.
 
-**Why:** caught by actually running the slash command rather than only writing it — reinforces [[verify-parity-not-blocker]] (probe end-to-end before trusting a recipe). Related: the template-audit mechanism overall and the [[reviewers-tune-quota-throttling]] watch for the full 18-agent run.
+**Why:** caught by actually running the slash command rather than only writing it — reinforces probing end-to-end before trusting a recipe. Related: the template-audit mechanism overall, and watch for quota throttling / silent agent drops on the full 18-agent run.

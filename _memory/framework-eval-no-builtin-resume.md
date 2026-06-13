@@ -29,4 +29,4 @@ Backend exhaustion is now graceful (FF `5bb1add`): the `claude -p` "session limi
 `BackendExhausted` and `framework eval` exits 4 with findings preserved (see
 [[subagent-backend-large-input-via-stdin-not-argv]]). Also a `tee` pipe masks the inner exit
 code — read the inner command's status, not the pipeline's. Related:
-[[unattended-runs-across-quota-need-cron-not-schedulewakeup]], [[reviewers-tune-quota-throttling]].
+crossing a full quota outage needs a standing cron (not ScheduleWakeup), and watch for silent subagent drops under quota throttling.

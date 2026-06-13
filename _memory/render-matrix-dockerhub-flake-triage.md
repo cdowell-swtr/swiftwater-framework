@@ -31,5 +31,5 @@ actually fails", but a registry timeout still surfaces as a job failure.)
 then look for positive proof your change actually exercised — e.g. for the docs battery,
 grep the rerun log for `task: [docs:build] ... mkdocs build --strict` + `Documentation
 built in …s`, since on the flaked run `docs:build` never ran (it's after `test:cov:ci` in
-the `ci` task order). Related: [[dogfood-e2e-harness-and-task-ci-coverage-gap]],
-[[full-suite-exhausts-tmp-tmpfs-use-var-tmp]].
+the `ci` task order). Related: [[dogfood-e2e-harness-and-task-ci-coverage-gap]], and the local full-suite
+`/tmp` tmpfs exhaustion fix (set `TMPDIR=/var/tmp`).

@@ -45,4 +45,4 @@ genuine agent over-strictness/inconsistency in the PROMPTS
 ([[reviewer-tuning-is-prompts-not-thresholds]]), and the root enabler is that the two paths
 are separate code ([[reviewer-dev-prod-parity-gap]]). The free path's only role is cheap
 dev iteration; prompts/fixtures/thresholds must hold on the PAID path because that's what
-ships. Related: [[reviewer-subagent-dispatch-model]].
+ships. Related: the reviewer subagent-dispatch model.
