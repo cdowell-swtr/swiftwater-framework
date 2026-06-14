@@ -14,7 +14,7 @@
 
 ## Execution notes
 
-- Same review-model policy, gate cadence, template-payload TDD loop, and commit-gate discipline as the FWK12 plan ([[subagent-review-model-pattern]], [[gate-cadence-framework-slices]], [[template-payload-tdd-loop]], [[commit-gate-hook-timing]]). Render helper is identical (`framework new /tmp/agentwork … --with agents`).
+- Same review-model policy, gate cadence, template-payload TDD loop, and commit-gate discipline as the FWK12 plan ([[subagent-review-model-pattern]], [[gate-cadence-framework-slices]], [[template-payload-tdd-loop]], [[commit-gate-hook-timing]]). Render helper is identical to FWK12's (`render_project(Path('/tmp/agentwork'), {…, 'batteries':['agents']})`).
 - **Loop unit tests are hermetic** (custom registry of pure-function tools, mocked LiteLLM, no DB). **Tool-data tests are functional** (real `Item` tools over a testcontainer Postgres, mocked LiteLLM). This split keeps loop logic provable without a database.
 - No DB migration: the `Item` tools read the existing `items` table.
 

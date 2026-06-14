@@ -382,3 +382,10 @@ restate the review-model policy (Opus code-quality/branch-end), the framework-sl
 gate cadence (skip-marker commits + one branch-end review), and the template-payload
 TDD loop. No DB migration needed (completion is stateless; FWK14 tools read the
 existing `items` table).
+
+#### #0037 · amended · FWK12 · 2026-06-14
+Pinned the plans' render-for-TDD helper to a direct `render_project(dest, {...,
+package_name:'demo', batteries:['agents']})` call (the entrypoint the test suite uses)
+instead of `framework new` — the CLI derives the package name from NAME and can't pin
+`demo`, which the plans' `src/demo/…` paths + `from demo.…` imports require. Resolves
+the one helper placeholder flagged at plan handoff.

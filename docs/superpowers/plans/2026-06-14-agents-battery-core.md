@@ -21,17 +21,22 @@
 
 ### Helper: render a fresh project for the TDD loop
 
-Used by several tasks. Run from the repo root:
+Used by several tasks. This calls `render_project` directly (the same entrypoint the
+framework test suite uses), which pins `package_name="demo"` so the rendered tree is
+`src/demo/…` and imports are `from demo.…`. Run from the repo root:
 
 ```bash
 export TMPDIR=/var/tmp
 rm -rf /tmp/agentwork
-uv run framework new /tmp/agentwork --name demo --package demo --with agents --no-input 2>/dev/null \
-  || uv run framework new /tmp/agentwork demo --with agents   # use the real CLI signature (see `uv run framework new --help`)
+uv run python -c "from pathlib import Path; from framework_cli.copier_runner import render_project; render_project(Path('/tmp/agentwork'), {'project_name':'Demo','project_slug':'demo','package_name':'demo','python_version':'3.12','batteries':['agents']})"
 cd /tmp/agentwork && uv sync --extra dev && cd -
 ```
 
-> Confirm the exact `framework new` invocation from `uv run framework new --help` before first use; the rest of the loop (mirror file → `pytest` in the render) is unchanged regardless of the new-command signature.
+For a **baseline (no-agents)** render to `/tmp/agentbase` (used by the guard-correctness
+steps), use the same command with `dest='/tmp/agentbase'` and `'batteries':[]`.
+
+> The CLI (`framework new NAME --with agents`) renders to `cwd/<slug>` and *derives* the
+> package name from NAME, so it can't pin `demo` — use `render_project` for the TDD loop.
 
 ---
 
