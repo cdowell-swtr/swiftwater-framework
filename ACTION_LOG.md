@@ -443,3 +443,17 @@ everything else→502. TDD functional test (mocked litellm, no DB): text/usage r
 503 exhaustion, 502 provider error, /metrics carries the agent series — 4 green.
 ruff+mypy clean. Controller-level quality check (simple plumbing; deep service logic
 already Opus-reviewed); branch-end Opus review will cover the whole branch.
+
+#### #0044 · completed · FWK12 · 2026-06-14
+Task 8 — verification + acceptance coverage. Framework gate green (ruff check + format,
+mypy src = 45 files clean) and the full non-acceptance suite = 889 passed / 3 skipped
+(no regression). Found a gap: the acceptance suite had per-battery tests for
+websockets/webhooks/workers/etc. but NONE for agents — added two: (1)
+`test_rendered_project_with_agents_battery_passes` (renders agents, asserts the battery
+files, runs the 70% unit+functional gate, and proves test_agents.py actually ran via
+100% coverage of routes/agents.py) — green in 58s; (2)
+`test_rendered_project_precommit_clean_with_agents_battery` (a fresh agents render makes
+a clean first pre-commit pass — exercises the generated project's mypy accepting
+`import litellm` via the override, ruff, gitleaks) — green in 44s. Eval-fixture coupling
+check: none (thresholds.yaml hits were the words "review agents", not change.patch
+anchors).
