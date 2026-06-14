@@ -305,3 +305,18 @@ only — no `pyproject` entry point, no auto-registration test. The framework al
 registers explicitly in its seam; FWK13 will add a one-line `register()` call to
 generated projects. Task 5 takes its NO-GO path (README documents `register()`);
 everything else in the plan is unaffected.
+
+#### #0031 · completed · FWK11 · 2026-06-14
+Phase A Tasks 2–6 — stood up the `litellm-claude-cli` package repo (public,
+`cdowell-swtr/litellm-claude-cli`). Scaffolded pyproject (hatchling, `litellm>=1.88.1`,
+NO entry point per the spike) + `.gitignore`/`.python-version`/README (documents
+explicit `register()`). Moved the provider module verbatim → `src/litellm_claude_cli/
+__init__.py` (only change: the module docstring reworded to drop two `framework_cli`
+mentions — verified by diff to be docstring-only, zero functional change; `grep -c
+framework_cli` = 0) and its 17 unit tests → `tests/test_provider.py` (one import line
+re-pointed). Added the critical **litellm-dispatch integration test**
+(`test_litellm_dispatch.py` — `anthropic_messages(model="claude-cli/…")` round-trips
+through the real provider, offline) and the gated live smoke. Package gate: 18 passed
+/ 1 skipped, ruff+format+mypy clean. Note: the package's own `uv sync` resolved
+litellm **1.89.0** (floor `>=1.88.1`) and the integration test passes on it — watch
+for a 1.88.1→1.89.0 bump when the framework re-locks in Phase B.
