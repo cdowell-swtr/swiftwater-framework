@@ -25,7 +25,7 @@ from framework_cli.review.diff import (
     staged_diff,
 )
 from framework_cli.review.registry import active_agents, agent_names, get_agent
-from framework_cli.review.runner import EVAL_KEY_ENV, RUNTIME_KEY_ENV, default_client
+from framework_cli.review.runner import EVAL_KEY_ENV, RUNTIME_KEY_ENV
 from framework_cli.source import (
     REPO_URL,
     latest_release,
@@ -428,7 +428,9 @@ def _make_backend(name: str, key_env: str) -> object:
 
     if name == "subagent":
         return SubagentBackend()
-    return ApiBackend(default_client(key_env))
+    from framework_cli.review.runner import _max_retries
+
+    return ApiBackend(api_key=os.environ.get(key_env), num_retries=_max_retries())
 
 
 def _resolve_review_backend(*, flag: str | None, key_env: str) -> object:
@@ -817,9 +819,16 @@ def _review_run(
 ) -> list:
     from framework_cli.review.context import assemble
     from framework_cli.review.decisions import relevant_decisions
-    from framework_cli.review.runner import run_agent
+    from framework_cli.review.runner import _max_retries, run_agent
 
-    client = backend if backend is not None else default_client(RUNTIME_KEY_ENV)
+    if backend is not None:
+        client = backend
+    else:
+        from framework_cli.review.backend import ApiBackend
+
+        client = ApiBackend(
+            api_key=os.environ.get(RUNTIME_KEY_ENV), num_retries=_max_retries()
+        )
     short = spec.name.removeprefix("review-")  # type: ignore[attr-defined]
     if force_agentic or spec.context.strategy == "agentic":  # type: ignore[attr-defined]
         from framework_cli.review.agentic import DEFAULT_MAX_TURNS, run_agent_agentic
@@ -846,9 +855,16 @@ def _eval_run(
     backend: object = None,
 ) -> list:
     from framework_cli.review.context import assemble
-    from framework_cli.review.runner import run_agent
+    from framework_cli.review.runner import _max_retries, run_agent
 
-    client = backend if backend is not None else default_client(EVAL_KEY_ENV)
+    if backend is not None:
+        client = backend
+    else:
+        from framework_cli.review.backend import ApiBackend
+
+        client = ApiBackend(
+            api_key=os.environ.get(EVAL_KEY_ENV), num_retries=_max_retries()
+        )
     base = root if isinstance(root, Path) else Path.cwd()
     if spec.context.strategy == "agentic":  # type: ignore[attr-defined]
         from framework_cli.review.agentic import DEFAULT_MAX_TURNS, run_agent_agentic
@@ -979,7 +995,8 @@ def eval_agents(
 
     A malformed agent response (FindingsParseError) is scored as no findings for
     that single repeat and reported via a WARNING (and a ``parse_error`` marker in
-    ``--findings-out``); only ``anthropic.APIError`` aborts the whole run.
+    ``--findings-out``); only an ``openai.APIError`` (litellm's error base) aborts
+    the whole run.
     """
     from framework_cli.review.evals import (
         DEFAULT_THRESHOLDS,
@@ -1008,7 +1025,7 @@ def eval_agents(
 
     import tempfile
 
-    import anthropic
+    import openai
 
     from framework_cli.review.backend import BackendExhausted
     from framework_cli.review.findings import FindingsParseError
@@ -1068,7 +1085,13 @@ def eval_agents(
                         err=True,
                     )
                     raise typer.Exit(4) from exc
-                except anthropic.APIError as exc:
+                except openai.APIError as exc:
+                    # The API path routes through litellm, whose error types all derive
+                    # from openai.APIError (the real common ancestor — litellm.exceptions
+                    # .APIError is only a sibling). Catch that so a non-rate-limit API
+                    # failure (auth, 5xx, connection, bad request) aborts cleanly instead
+                    # of crashing uncaught. litellm RateLimitError already arrives as
+                    # BackendExhausted (handled above).
                     typer.echo(
                         f"\neval: ABORTED at {spec.name} — API error "
                         f"({type(exc).__name__}): {exc}",

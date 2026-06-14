@@ -136,3 +136,148 @@ unchanged at `/graphql`). Verified by re-render: `create_app` builds, 108/108
 generated-project tests pass across graphql+react. Updated the copier assertion
 (`path="/graphql"` not `prefix="/graphql"`). gate green. Lands before FWK5 so its
 render-complete goes green on rebase.
+
+#### #0020 · note · FWK5 · 2026-06-13
+Brainstormed + wrote the Plan 27 (FWK5) LiteLLM-backend-foundation design spec and
+implementation plan. Key decisions: (1) decomposed the "agentic-backend swap" into
+a 5-row roadmap — this plan is row 1 (foundation, ships nothing external); rows 2–4
+externalize the claude-cli plugin + add `--with Agents`/`--with HotSwapAgents`
+batteries for Meridian; row 5 (adapter removal) is CONDITIONAL. (2) Keep the
+`messages.create`/`Message` seam; swap only the backends' innards onto LiteLLM.
+(3) The LiteLLM input-surface choice (`anthropic_messages` vs `completion`) is
+GATED on a live go/no-go spike (Task 1), NOT assumed — explicitly avoiding the
+circular justification "use the Anthropic surface because step 7 removes the
+adapter" (step 7 only exists if an adapter is assumed). Plan written GO-primary
+(anthropic_messages → ~zero adapter, row 5 evaporates) with a documented
+`completion`+translator fallback. Spike S1 (real-API caching passthrough) is
+BLOCKED pending `ANTHROPIC_EVAL_API_KEY`; S2 (custom-provider routing) is runnable
+in-process. Executing via subagent-driven-development on branch
+`plan-27-litellm-backend-foundation`.
+
+#### #0021 · completed · FWK5 · 2026-06-13
+Task 1 (interface spike) — **GO** on `anthropic_messages`. litellm 1.88.1 confirmed:
+all assumed symbols exist (`anthropic_messages`, `CustomLLM`, `custom_provider_map`,
+`RateLimitError`, `modify_params`). **S2 (the architecture gate) PASSED in-process,
+no key:** `anthropic_messages(model="claude-cli/<m>")` dispatches to a
+`custom_provider_map` handler via `acompletion` (async-native → seam drives it with
+`asyncio.run`); litellm auto-strips the `claude-cli/` prefix; `cache_control`
+survives into the handler input (system list folded into a `role:system` message);
+boundary response is a `dict`. `CustomLLM.completion/acompletion` are handed a
+`model_response` to populate and receive OpenAI-shaped `messages`. **Refinement of
+the committed plan's "both S1+S2 needed for GO":** S2 alone is the gate (routing/
+shape); **S1 (real-API caching) is a cost-lever confirmation, NOT a fallback
+trigger** — caching failure would mean investigate `cache_control` placement, not
+switch to `completion`. So the architecture is locked: anthropic_messages, near-zero
+adapter, **roadmap row 5 (adapter removal) is dropped.** S1 + the Task 7 live smoke
+remain BLOCKED on `ANTHROPIC_EVAL_API_KEY` (unset); proceeding with Tasks 2–6 (unit-
+tested, no key) on the strong S2 signal. S2 kept as a permanent routing-regression
+guard (`tests/review/test_litellm_spike.py`).
+
+#### #0022 · completed · FWK5 · 2026-06-13
+Task 2 — self-contained `claude-cli` CustomLLM plugin
+(`src/framework_cli/review/litellm_provider.py`), ZERO `framework_cli` imports
+(extraction-ready for roadmap row 2). Ports the `claude -p` mechanics verbatim
+(0o600 system temp file + `--system-prompt-file`, stdin prompt, `_DISABLED_TOOLS`,
+JSON parse, `_EXHAUSTION_MARKERS` → module-local `ClaudeExhausted(reset_hint=…)`).
+`completion`/`acompletion` use `(*args, **kwargs)` to serve both litellm dispatch
+(which hands a `model_response` to populate + OpenAI-shaped messages) and direct
+unit calls; `_render_messages_to_prompt` flattens the OpenAI shape (system folded
+in, `tool_calls`, `role:tool`) to the claude-text protocol. 17 unit tests incl. the
+MAX_ARG_STRLEN guard; gate clean. Also fixed a Task-1 slip: `test_litellm_spike.py`
+was committed format-dirty (hand-written, no `ruff format`) — reformatted here.
+Controller-review nit deferred to branch-end: `_flatten_content` joins multi-block
+content with a space vs the original `\n\n` (cosmetic; findings-parity unaffected).
+
+#### #0023 · completed · FWK5 · 2026-06-13
+Task 3 — `_anthropic_messages` seam helper in `backend.py`: the ONE call site for
+litellm (`_litellm_anthropic_messages` = `asyncio.run(litellm.anthropic_messages(…))`,
+lazy-imported, conditional `tools`/`api_key`/`num_retries` kwargs). Extended
+`_normalize_content`/`_normalize_usage` to read litellm's **dict-shaped** content
+blocks + usage (verified boundary shape: `content=[{"type":"text","text":…}]`,
+`usage={input_tokens,output_tokens,cache_read_input_tokens,…}`, top-level
+`stop_reason`) while keeping the object-shaped path for existing tests
+(`_block_get`/`_resp_get` dict-or-object getters). 16 tests; gate clean. Backend
+classes untouched (Tasks 4/5).
+
+#### #0024 · completed · FWK5 · 2026-06-13
+Tasks 4+5 (combined — both rewrite the two backend classes + re-point the same test
+files) — both backends now route through `_anthropic_messages`. `ApiBackend(api_key,
+num_retries)` → `anthropic/` prefix, maps `litellm.RateLimitError` → `BackendExhausted`.
+`SubagentBackend(runner=None)` registers a `ClaudeCliLLM` (runner-injectable) in
+`custom_provider_map` → `claude-cli/` prefix. **Exhaustion key fact (probed):** litellm
+WRAPS the handler's `ClaudeExhausted` as `APIConnectionError` with the original on
+`__cause__`; `_SubagentMessages.create` recovers it via the cause chain (preserving
+`reset_hint`). Deleted the relocated `claude -p` mechanics from `backend.py` (now in
+`litellm_provider.py`); trimmed dead imports (`anthropic`/`subprocess`/`tempfile`/…).
+Updated `cli._make_backend` + `_review_run`/`_eval_run` fallbacks; dropped stale
+`default_client` monkeypatches in test_agentic/test_framework_target/test_cli.
+Re-pointed parity tests to mock `_litellm_anthropic_messages` (engine+normalization
+now SHARED, so parity asserts both classes feed the engine identically + use the right
+provider prefix; real transport divergence is covered by test_litellm_provider + the
+Task-7 live smoke). 446 passed / 1 skipped; ruff+format+mypy clean. Branch-end
+cleanup candidates: `default_client` is now dead prod code (kept only by its own
+test); the `anthropic` dep may be droppable; `_SubagentMessages.__init__` mutates
+global `custom_provider_map` per construction.
+
+#### #0025 · completed · FWK5 · 2026-06-13
+Task 7 (live smoke) + Task 8 partial. **Critical live verification PASSED:**
+`test_live_subagent_large_input` drove the FULL real path
+(`anthropic_messages(model="claude-cli/…")` → `asyncio.run` → litellm dispatch →
+`ClaudeCliLLM.acompletion` → `claude -p` subprocess) with a >128 KB diff over the
+subscription and returned parseable findings — the `MAX_ARG_STRLEN`/large-input
+class that mocks can't catch, confirming the architecture end-to-end. Task 6 is
+satisfied (retry tests pass; rate-limit→BackendExhausted mapping added in #0024).
+Pinned `litellm>=1.88.1` (lock = 1.88.1); mypy-override step moot (targeted ignores
+in the plugin suffice — `mypy src` clean with no global override). Offline gate
+green: review+eval 326 passed/1 skipped, backend suites 446 passed, ruff+format+mypy
+clean. **Still BLOCKED for final close:** S1 (API-path caching cost-lever, NOT an
+architecture gate) needs `ANTHROPIC_EVAL_API_KEY` — `test_live_api_caching` is
+written + skipped, one command from confirming once a key is present. FWK5 left
+open pending that + the branch-end Opus review.
+
+#### #0026 · completed · FWK5 · 2026-06-13
+Branch-end Opus whole-branch review: **APPROVE-WITH-NITS** (gate re-verified green).
+Fixed its two actionable findings: (Important) the eval loop's `except
+anthropic.APIError` Exit(3) abort was partly dead post-migration — litellm errors
+don't subclass `anthropic.APIError`. Probed the hierarchy: litellm's error types
+(`AuthenticationError`/`RateLimitError`/`APIConnectionError`/`BadRequestError`/…) all
+derive from **`openai.APIError`** (litellm builds on the openai SDK tree;
+`litellm.exceptions.APIError` is only a sibling, NOT the ancestor — a first attempt
+catching it failed the new test). Broadened the catch to `(anthropic.APIError,
+openai.APIError)` + added `test_eval_aborts_loudly_on_litellm_api_error`. (Nit)
+`_flatten_content` now joins multi-block content with `\n\n` (was a space) to match
+the original system rendering. Deferred (reviewer-agreed) to a follow-up/row-2:
+remove dead `runner.default_client` + its tests and assess dropping the `anthropic`
+dep. 447 passed / 3 skipped; ruff+format+mypy clean.
+
+#### #0027 · completed · FWK5 · 2026-06-13
+**FWK5 / Plan 27 foundation DONE.** S1 (the last blocked check) ran with the eval key
+(`~/.swiftwater-framework-keys.env`) and PASSED: `cache_read_input_tokens > 0` on the
+repeat `anthropic/` call — Anthropic prompt caching survives the `anthropic_messages`
+seam, so the cost lever holds. Full verification matrix green: S1 caching, S2 routing,
+the live subagent `claude -p` MAX_ARG_STRLEN smoke, 447 offline tests, Opus
+APPROVE-WITH-NITS (both findings fixed). Architecture as designed: near-zero adapter,
+engine untouched, both backends behind one litellm seam; **roadmap row 5 (adapter
+removal) dropped** — there is no adapter to remove. Opened downstream Next items:
+FWK11 (externalize the claude-cli plugin + deferred cleanup), FWK12 (`--with Agents`
+battery), FWK13 (`--with HotSwapAgents` battery). New follow-up folded into FWK11: a
+benign litellm `coroutine … was never awaited` RuntimeWarning under `asyncio.run`
+(cosmetic; silence later). Branch `plan-27-litellm-backend-foundation`, 8 commits;
+ready for PR (master protected).
+
+#### #0028 · completed · FWK5 · 2026-06-14
+Folded the FWK11 cleanup into this PR (user request). (1) Removed dead
+`runner.default_client` (no `src/` caller post-migration) and retargeted its 5 tests
+to exercise `_max_retries()` directly (retry-budget coverage preserved). (2) **Dropped
+the `anthropic` dependency** — assessment was clean: its only live uses were
+`default_client` + the now-unreachable `except anthropic.APIError` belt-and-suspenders
+(the API path is 100% litellm, whose errors derive from `openai.APIError`). Narrowed
+the eval abort to `except openai.APIError`, removed the superseded
+`test_eval_aborts_loudly_on_api_error`, and declared `openai>=2.0` as a direct dep
+(it was already imported directly + is litellm's base). `anthropic` is now fully
+absent from the lock (litellm doesn't require it). (3) Silenced the litellm
+`async_success_handler` "coroutine never awaited" RuntimeWarning via a persistent,
+narrowly-scoped module filter in `backend.py` (a call-scoped filter can't catch it —
+it fires at GC time after `asyncio.run` closes the loop); verified gone on a live
+subagent smoke run. Gate: 446 passed / 3 skipped, ruff+format+mypy clean. FWK11 is now
+just the externalization.

@@ -107,11 +107,3 @@ def _max_retries() -> int:
         )
         return MAX_RETRIES_CAP
     return n
-
-
-def default_client(api_key_env: str) -> Any:
-    import anthropic
-
-    return anthropic.Anthropic(
-        api_key=os.environ.get(api_key_env), max_retries=_max_retries()
-    )

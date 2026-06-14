@@ -2,20 +2,29 @@
 
 `run_agent` / `run_agent_agentic` call `backend.messages.create(...)` and read
 `.content` / `.usage` / `.stop_reason` — the same surface the Anthropic SDK
-returns. `ApiBackend` is the SDK; `SubagentBackend` shells out to headless
-`claude -p` and adapts its JSON into these dataclasses, so the review loops are
-byte-identical across paid and free.
+returns. Both `ApiBackend` and `SubagentBackend` route through LiteLLM via
+`_anthropic_messages`, so the review loops are byte-identical across paid and
+free — normalisation is shared, not duplicated.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import re
-import subprocess  # noqa: S404 — invoking the local `claude` CLI by fixed argv
-import tempfile
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Literal
+
+# litellm schedules a fire-and-forget async success-logging coroutine; under the
+# `asyncio.run` we drive `anthropic_messages` with, the loop closes before that
+# coroutine is awaited, so the GC later emits a benign "coroutine
+# '...async_success_handler' was never awaited" RuntimeWarning. We consume no litellm
+# callbacks, so the dropped telemetry is harmless — suppress just that one warning.
+# A persistent filter (not a context manager) is required because the warning fires
+# at GC time, after any call-scoped `catch_warnings` block has exited.
+warnings.filterwarnings(
+    "ignore",
+    message=r"coroutine '.*async_success_handler' was never awaited",
+    category=RuntimeWarning,
+)
 
 
 @dataclass(frozen=True)
@@ -57,24 +66,36 @@ class BackendExhausted(Exception):
         self.reset_hint = reset_hint
 
 
+def _block_get(b: Any, key: str, default: Any = None) -> Any:
+    """Read a field from a block that may be a dict or an object."""
+    return b.get(key, default) if isinstance(b, dict) else getattr(b, key, default)
+
+
 def _normalize_content(raw: Any) -> list[TextBlock | ToolUseBlock]:
     out: list[TextBlock | ToolUseBlock] = []
     for b in raw or []:
-        btype = getattr(b, "type", None)
+        btype = _block_get(b, "type")
         if btype == "text":
-            out.append(TextBlock(text=getattr(b, "text", "") or ""))
+            out.append(TextBlock(text=_block_get(b, "text", "") or ""))
         elif btype == "tool_use":
             out.append(
                 ToolUseBlock(
-                    id=getattr(b, "id", ""),
-                    name=getattr(b, "name", ""),
-                    input=dict(getattr(b, "input", {}) or {}),
+                    id=_block_get(b, "id", "") or "",
+                    name=_block_get(b, "name", "") or "",
+                    input=dict(_block_get(b, "input", {}) or {}),
                 )
             )
     return out
 
 
 def _normalize_usage(raw: Any) -> Usage:
+    if isinstance(raw, dict):
+        return Usage(
+            input_tokens=raw.get("input_tokens", 0) or 0,
+            output_tokens=raw.get("output_tokens", 0) or 0,
+            cache_read_input_tokens=raw.get("cache_read_input_tokens", 0) or 0,
+            cache_creation_input_tokens=raw.get("cache_creation_input_tokens", 0) or 0,
+        )
     return Usage(
         input_tokens=getattr(raw, "input_tokens", 0) or 0,
         output_tokens=getattr(raw, "output_tokens", 0) or 0,
@@ -83,211 +104,77 @@ def _normalize_usage(raw: Any) -> Usage:
     )
 
 
-class _ApiMessages:
-    def __init__(self, sdk: Any) -> None:
-        self._sdk = sdk
-
-    def create(self, **kwargs: Any) -> Message:
-        resp = self._sdk.messages.create(**kwargs)
-        return Message(
-            content=_normalize_content(getattr(resp, "content", [])),
-            usage=_normalize_usage(getattr(resp, "usage", None)),
-            stop_reason=getattr(resp, "stop_reason", None),
-        )
-
-
-class ApiBackend:
-    """The paid backend: the Anthropic SDK client, normalized to `Message`."""
-
-    def __init__(self, sdk_client: Any) -> None:
-        self.messages = _ApiMessages(sdk_client)
-
-
-# Tools disabled on every subagent turn so `claude -p` returns exactly ONE model turn
-# (no internal agentic loop). Python owns the loop. Explicit list so a new CC tool can't
-# silently re-enable looping.
-_DISABLED_TOOLS = (
-    "Bash",
-    "Read",
-    "Edit",
-    "Write",
-    "Grep",
-    "Glob",
-    "WebFetch",
-    "WebSearch",
-    "Task",
-    "NotebookEdit",
-)
-
-# Substrings marking a usage-limit / subscription-exhaustion error in `claude -p` output
-# (case-insensitive). Matched loosely because phrasing varies by CLI version; the engine
-# (20b) treats this as a hard stop, not a retry. "session limit" is the real 5-hour
-# subscription-window 429 phrasing that crashed the Plan 21 baseline sweep.
-_EXHAUSTION_MARKERS = (
-    "usage limit",
-    "rate limit reached",
-    "quota",
-    "limit reached",
-    "session limit",
-)
-_EXHAUSTION_MESSAGE = "claude subscription usage limit reached"
-
-
-def _exhaustion_error(text: str) -> "BackendExhausted | None":
-    """If `text` (claude -p stdout/stderr or a result string) signals subscription
-    exhaustion, return a BackendExhausted carrying any "resets …" hint; else None."""
-    if not any(m in text.lower() for m in _EXHAUSTION_MARKERS):
-        return None
-    m = re.search(r"resets[^\"}\n]*", text, re.IGNORECASE)
-    hint = m.group(0).strip().rstrip(".") if m else None
-    msg = _EXHAUSTION_MESSAGE + (f" — {hint}" if hint else "")
-    return BackendExhausted(msg, reset_hint=hint)
-
-
-def _default_subprocess_runner(argv: list[str], *, input_text: str | None) -> str:
-    proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
-        argv,
-        input=input_text,
-        capture_output=True,
-        text=True,
-        timeout=600,
+def _resp_get(resp: Any, key: str, default: Any = None) -> Any:
+    """Read a field from a response that may be a dict or an object."""
+    return (
+        resp.get(key, default)
+        if isinstance(resp, dict)
+        else getattr(resp, key, default)
     )
-    if proc.returncode != 0:
-        combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
-        exhausted = _exhaustion_error(combined)
-        if exhausted is not None:
-            raise exhausted
-        raise RuntimeError(f"claude -p failed ({proc.returncode}): {combined.strip()}")
-    return proc.stdout
 
 
-def _join_system(system: list[dict[str, Any]]) -> str:
-    return "\n\n".join(b.get("text", "") for b in system if b.get("text"))
+def _litellm_anthropic_messages(
+    *,
+    model: str,
+    max_tokens: int,
+    system: list[dict[str, Any]],
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None,
+    api_key: str | None,
+    num_retries: int | None,
+) -> Any:
+    """Single call-site for litellm.anthropic_messages; async-driven via asyncio.run."""
+    import asyncio
 
+    import litellm
 
-_TOOL_PROTOCOL = (
-    "\n\nYou DO have working read-only tools in this environment (do not claim otherwise). "
-    "To call them, respond with ONLY a complete, valid JSON object — "
-    '{"tool_calls":[{"name":"<tool>","input":{...}}, ...]} — and nothing else (no prose '
-    "before or after, and close every brace). When done exploring and ready to report, "
-    "respond with ONLY the findings JSON array (no object, no prose) — `[]` if there are "
-    "none. Available tools: "
-)
-
-
-def _render_transcript(messages: list[dict[str, Any]]) -> str:
-    parts: list[str] = []
-    for m in messages:
-        role = m["role"]
-        content = m["content"]
-        if isinstance(content, str):
-            parts.append(f"[{role}] {content}")
-            continue
-        for block in content:
-            btype = (
-                block.get("type")
-                if isinstance(block, dict)
-                else getattr(block, "type", None)
-            )
-            if btype == "tool_use":
-                name = block.get("name", "") if isinstance(block, dict) else block.name
-                inp = block.get("input", {}) if isinstance(block, dict) else block.input
-                parts.append(f"[assistant tool_call] {name} {json.dumps(inp)}")
-            elif btype == "tool_result":
-                body = (
-                    block.get("content") if isinstance(block, dict) else block.content
-                )
-                parts.append(f"[tool_result]\n{body}")
-            elif btype == "text":
-                parts.append(
-                    f"[{role}] {block.get('text') if isinstance(block, dict) else block.text}"
-                )
-    return "\n\n".join(parts)
-
-
-def _render_prompt(
-    messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
-) -> str:
-    if tools is None:
-        # Bundle tier: a single user turn — return its text.
-        if len(messages) == 1:
-            last = messages[-1]["content"]
-            return last if isinstance(last, str) else json.dumps(last)
-        # Agentic turn-cap finalize (tools omitted this turn, but a full multi-turn
-        # transcript exists): render the whole conversation so the subagent finalizes
-        # with everything it explored — matching what the API path's messages array carries.
-        return _render_transcript(messages)
-    names = ", ".join(t.get("name", "") for t in tools)
-    return _render_transcript(messages) + _TOOL_PROTOCOL + names
-
-
-def _decode_tool_turn(text: str) -> list[TextBlock | ToolUseBlock] | None:
-    """A `{"tool_calls":[...]}` object → ToolUseBlocks. A findings array (or anything
-    else) → None → treated as the final answer. Tolerant of leading/trailing prose and
-    a ``` fence (mirrors findings._extract_array's raw_decode scan for the array case)."""
-    body = text
-    if body.startswith("```"):
-        body = body.strip("`")
-    decoder = json.JSONDecoder()
-    idx = body.find("{")
-    while idx != -1:
-        try:
-            obj, _ = decoder.raw_decode(body, idx)
-        except json.JSONDecodeError:
-            idx = body.find("{", idx + 1)
-            continue
-        if isinstance(obj, dict) and "tool_calls" in obj:
-            blocks: list[TextBlock | ToolUseBlock] = []
-            for i, call in enumerate(obj.get("tool_calls") or []):
-                if isinstance(call, dict) and "name" in call:
-                    blocks.append(
-                        ToolUseBlock(
-                            id=f"sub-{i}",
-                            name=str(call["name"]),
-                            input=dict(call.get("input") or {}),
-                        )
-                    )
-            return blocks or None
-        idx = body.find("{", idx + 1)
-    return None
-
-
-def _parse_claude_json(raw: str, tools: list[dict[str, Any]] | None) -> Message:
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"claude -p returned non-JSON output: {raw[:120]!r}"
-        ) from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError(
-            f"claude -p returned unexpected JSON type: {type(payload).__name__}"
-        )
-    if payload.get("is_error"):
-        result = payload.get("result") or ""
-        exhausted = _exhaustion_error(result)
-        if exhausted is not None:
-            raise exhausted
-        raise RuntimeError(f"claude -p error: {payload.get('result')}")
-    text = (payload.get("result", "") or "").strip()
-    u = payload.get("usage", {}) or {}
-    usage = Usage(
-        input_tokens=u.get("input_tokens", 0) or 0,
-        output_tokens=u.get("output_tokens", 0) or 0,
-        cache_read_input_tokens=u.get("cache_read_input_tokens", 0) or 0,
-        cache_creation_input_tokens=u.get("cache_creation_input_tokens", 0) or 0,
+    kwargs: dict[str, Any] = dict(
+        model=model,
+        max_tokens=max_tokens,
+        system=system,
+        messages=messages,
     )
-    stop = payload.get("stop_reason")
     if tools is not None:
-        decoded = _decode_tool_turn(text)
-        if decoded is not None:
-            return Message(content=decoded, usage=usage, stop_reason=stop)
-    return Message(content=[TextBlock(text=text)], usage=usage, stop_reason=stop)
+        kwargs["tools"] = tools
+    if api_key is not None:
+        kwargs["api_key"] = api_key
+    if num_retries is not None:
+        kwargs["num_retries"] = num_retries
+    return asyncio.run(litellm.anthropic_messages(**kwargs))
 
 
-class _SubagentMessages:
-    def __init__(self, runner: Any) -> None:
-        self._runner = runner
+def _anthropic_messages(
+    *,
+    model_prefix: str,
+    model: str,
+    max_tokens: int,
+    system: list[dict[str, Any]],
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None,
+    api_key: str | None = None,
+    num_retries: int | None = None,
+) -> Message:
+    """Call LiteLLM's anthropic_messages endpoint and normalize the response to Message."""
+    raw = _litellm_anthropic_messages(
+        model=model_prefix + model,
+        max_tokens=max_tokens,
+        system=system,
+        messages=messages,
+        tools=tools,
+        api_key=api_key,
+        num_retries=num_retries,
+    )
+    return Message(
+        content=_normalize_content(_resp_get(raw, "content", []) or []),
+        usage=_normalize_usage(_resp_get(raw, "usage", None)),
+        stop_reason=_resp_get(raw, "stop_reason", None),
+    )
+
+
+class _ApiMessages:
+    def __init__(self, api_key: str | None, num_retries: int | None) -> None:
+        self._api_key = api_key
+        self._num_retries = num_retries
 
     def create(
         self,
@@ -298,44 +185,81 @@ class _SubagentMessages:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> Message:
-        prompt = _render_prompt(messages, tools)
-        sys_content = _join_system(system)
-        # Write system content to a temp file (mode 0o600) so it never appears as an
-        # argv element — Linux's MAX_ARG_STRLEN (~128 KB) rejects large per-argument
-        # strings, and bundle-agent system blocks regularly exceed that on real targets.
-        # The user prompt is passed via stdin for the same reason.
-        fd, sys_path = tempfile.mkstemp(suffix=".txt")
+        import litellm
+
         try:
-            with os.fdopen(fd, "w") as fh:
-                fh.write(sys_content)
-            os.chmod(sys_path, 0o600)  # noqa: S103 — temp file; owner-read-only is correct
-            argv = [
-                "claude",
-                "-p",
-                "--system-prompt-file",
-                sys_path,
-                "--exclude-dynamic-system-prompt-sections",
-                "--output-format",
-                "json",
-                "--model",
-                model,
-            ]
-            for t in _DISABLED_TOOLS:
-                argv += ["--disallowed-tools", t]
-            raw = self._runner(argv, input_text=prompt)
-        finally:
-            try:
-                os.unlink(sys_path)
-            except OSError:
-                pass
-        return _parse_claude_json(raw, tools)
+            return _anthropic_messages(
+                model_prefix="anthropic/",
+                model=model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=messages,
+                tools=tools,
+                api_key=self._api_key,
+                num_retries=self._num_retries,
+            )
+        except litellm.RateLimitError as exc:
+            raise BackendExhausted(str(exc)) from exc
+
+
+class ApiBackend:
+    """The paid backend: routes through LiteLLM's anthropic/ provider, normalized to Message."""
+
+    def __init__(self, api_key: str | None, num_retries: int | None = None) -> None:
+        self.messages = _ApiMessages(api_key, num_retries)
+
+
+class _SubagentMessages:
+    def __init__(self, runner: Any | None = None) -> None:
+        import litellm
+
+        from framework_cli.review.litellm_provider import ClaudeCliLLM
+
+        handler = ClaudeCliLLM() if runner is None else ClaudeCliLLM(runner=runner)
+        existing = [
+            p
+            for p in (litellm.custom_provider_map or [])
+            if p.get("provider") != "claude-cli"
+        ]
+        litellm.custom_provider_map = [
+            {"provider": "claude-cli", "custom_handler": handler},
+            *existing,
+        ]
+
+    def create(
+        self,
+        *,
+        model: str,
+        max_tokens: int,
+        system: list[dict[str, Any]],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Message:
+        from framework_cli.review.litellm_provider import ClaudeExhausted
+
+        try:
+            return _anthropic_messages(
+                model_prefix="claude-cli/",
+                model=model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=messages,
+                tools=tools,
+            )
+        except BackendExhausted:
+            raise
+        except Exception as exc:  # litellm wraps the handler's ClaudeExhausted
+            cause = exc.__cause__ or exc.__context__
+            if isinstance(cause, ClaudeExhausted):
+                raise BackendExhausted(str(cause), reset_hint=cause.reset_hint) from exc
+            raise
 
 
 class SubagentBackend:
-    """The free backend: headless `claude -p` on the subscription, adapted to `Message`.
+    """The free backend: routes through LiteLLM's claude-cli/ provider, normalized to Message.
 
     Tools are always disabled so each call is a single model turn; the agentic loop in
-    `run_agent_agentic` drives tool use via a text protocol (Task 1.4)."""
+    `run_agent_agentic` drives tool use via a text protocol."""
 
-    def __init__(self, runner: Any = _default_subprocess_runner) -> None:
+    def __init__(self, runner: Any | None = None) -> None:
         self.messages = _SubagentMessages(runner)
