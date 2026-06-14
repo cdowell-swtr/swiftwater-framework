@@ -123,7 +123,21 @@ Promoted the gh-only vendoring/registration learning into the committed store
 project-useful, so the committed store is its proper home (travels to every
 machine). gitleaks clean; invariants 46↔46. (Native duplicates pruned separately.)
 
-#### #0019 · note · FWK5 · 2026-06-13
+#### #0019 · note · 2026-06-14
+Hotfix (standalone, off master): the render matrix went red on every **graphql**
+combo — `fastapi==0.137.0` now raises `FastAPIError: Prefix and path cannot be both
+empty` for Strawberry's GraphiQL GET route (empty path), which surfaces at
+`app.include_router` during `create_app`. Upstream drift (latest strawberry 0.316.0
++ fastapi 0.137 are incompatible), NOT caused by any in-flight work — master is
+equally affected; the FWK5 PR was just the first render run after the bump. Fix:
+mount the GraphQL endpoint via the `GraphQLRouter`'s own `path="/graphql"` instead of
+an `include_router(prefix="/graphql")` over an empty child path (endpoint URL
+unchanged at `/graphql`). Verified by re-render: `create_app` builds, 108/108
+generated-project tests pass across graphql+react. Updated the copier assertion
+(`path="/graphql"` not `prefix="/graphql"`). gate green. Lands before FWK5 so its
+render-complete goes green on rebase.
+
+#### #0020 · note · FWK5 · 2026-06-13
 Brainstormed + wrote the Plan 27 (FWK5) LiteLLM-backend-foundation design spec and
 implementation plan. Key decisions: (1) decomposed the "agentic-backend swap" into
 a 5-row roadmap — this plan is row 1 (foundation, ships nothing external); rows 2–4
@@ -140,7 +154,7 @@ BLOCKED pending `ANTHROPIC_EVAL_API_KEY`; S2 (custom-provider routing) is runnab
 in-process. Executing via subagent-driven-development on branch
 `plan-27-litellm-backend-foundation`.
 
-#### #0020 · completed · FWK5 · 2026-06-13
+#### #0021 · completed · FWK5 · 2026-06-13
 Task 1 (interface spike) — **GO** on `anthropic_messages`. litellm 1.88.1 confirmed:
 all assumed symbols exist (`anthropic_messages`, `CustomLLM`, `custom_provider_map`,
 `RateLimitError`, `modify_params`). **S2 (the architecture gate) PASSED in-process,
@@ -159,7 +173,7 @@ remain BLOCKED on `ANTHROPIC_EVAL_API_KEY` (unset); proceeding with Tasks 2–6 
 tested, no key) on the strong S2 signal. S2 kept as a permanent routing-regression
 guard (`tests/review/test_litellm_spike.py`).
 
-#### #0021 · completed · FWK5 · 2026-06-13
+#### #0022 · completed · FWK5 · 2026-06-13
 Task 2 — self-contained `claude-cli` CustomLLM plugin
 (`src/framework_cli/review/litellm_provider.py`), ZERO `framework_cli` imports
 (extraction-ready for roadmap row 2). Ports the `claude -p` mechanics verbatim
@@ -174,7 +188,7 @@ was committed format-dirty (hand-written, no `ruff format`) — reformatted here
 Controller-review nit deferred to branch-end: `_flatten_content` joins multi-block
 content with a space vs the original `\n\n` (cosmetic; findings-parity unaffected).
 
-#### #0022 · completed · FWK5 · 2026-06-13
+#### #0023 · completed · FWK5 · 2026-06-13
 Task 3 — `_anthropic_messages` seam helper in `backend.py`: the ONE call site for
 litellm (`_litellm_anthropic_messages` = `asyncio.run(litellm.anthropic_messages(…))`,
 lazy-imported, conditional `tools`/`api_key`/`num_retries` kwargs). Extended
@@ -185,7 +199,7 @@ blocks + usage (verified boundary shape: `content=[{"type":"text","text":…}]`,
 (`_block_get`/`_resp_get` dict-or-object getters). 16 tests; gate clean. Backend
 classes untouched (Tasks 4/5).
 
-#### #0023 · completed · FWK5 · 2026-06-13
+#### #0024 · completed · FWK5 · 2026-06-13
 Tasks 4+5 (combined — both rewrite the two backend classes + re-point the same test
 files) — both backends now route through `_anthropic_messages`. `ApiBackend(api_key,
 num_retries)` → `anthropic/` prefix, maps `litellm.RateLimitError` → `BackendExhausted`.
@@ -205,14 +219,14 @@ cleanup candidates: `default_client` is now dead prod code (kept only by its own
 test); the `anthropic` dep may be droppable; `_SubagentMessages.__init__` mutates
 global `custom_provider_map` per construction.
 
-#### #0024 · completed · FWK5 · 2026-06-13
+#### #0025 · completed · FWK5 · 2026-06-13
 Task 7 (live smoke) + Task 8 partial. **Critical live verification PASSED:**
 `test_live_subagent_large_input` drove the FULL real path
 (`anthropic_messages(model="claude-cli/…")` → `asyncio.run` → litellm dispatch →
 `ClaudeCliLLM.acompletion` → `claude -p` subprocess) with a >128 KB diff over the
 subscription and returned parseable findings — the `MAX_ARG_STRLEN`/large-input
 class that mocks can't catch, confirming the architecture end-to-end. Task 6 is
-satisfied (retry tests pass; rate-limit→BackendExhausted mapping added in #0023).
+satisfied (retry tests pass; rate-limit→BackendExhausted mapping added in #0024).
 Pinned `litellm>=1.88.1` (lock = 1.88.1); mypy-override step moot (targeted ignores
 in the plugin suffice — `mypy src` clean with no global override). Offline gate
 green: review+eval 326 passed/1 skipped, backend suites 446 passed, ruff+format+mypy
@@ -221,7 +235,7 @@ architecture gate) needs `ANTHROPIC_EVAL_API_KEY` — `test_live_api_caching` is
 written + skipped, one command from confirming once a key is present. FWK5 left
 open pending that + the branch-end Opus review.
 
-#### #0025 · completed · FWK5 · 2026-06-13
+#### #0026 · completed · FWK5 · 2026-06-13
 Branch-end Opus whole-branch review: **APPROVE-WITH-NITS** (gate re-verified green).
 Fixed its two actionable findings: (Important) the eval loop's `except
 anthropic.APIError` Exit(3) abort was partly dead post-migration — litellm errors
@@ -236,7 +250,7 @@ the original system rendering. Deferred (reviewer-agreed) to a follow-up/row-2:
 remove dead `runner.default_client` + its tests and assess dropping the `anthropic`
 dep. 447 passed / 3 skipped; ruff+format+mypy clean.
 
-#### #0026 · completed · FWK5 · 2026-06-13
+#### #0027 · completed · FWK5 · 2026-06-13
 **FWK5 / Plan 27 foundation DONE.** S1 (the last blocked check) ran with the eval key
 (`~/.swiftwater-framework-keys.env`) and PASSED: `cache_read_input_tokens > 0` on the
 repeat `anthropic/` call — Anthropic prompt caching survives the `anthropic_messages`
@@ -251,7 +265,7 @@ benign litellm `coroutine … was never awaited` RuntimeWarning under `asyncio.r
 (cosmetic; silence later). Branch `plan-27-litellm-backend-foundation`, 8 commits;
 ready for PR (master protected).
 
-#### #0027 · completed · FWK5 · 2026-06-14
+#### #0028 · completed · FWK5 · 2026-06-14
 Folded the FWK11 cleanup into this PR (user request). (1) Removed dead
 `runner.default_client` (no `src/` caller post-migration) and retargeted its 5 tests
 to exercise `_max_retries()` directly (retry-budget coverage preserved). (2) **Dropped

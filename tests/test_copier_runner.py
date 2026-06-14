@@ -1650,7 +1650,9 @@ def test_render_with_graphql_battery(tmp_path: Path):
     assert (pkg / "routes" / "graphql.py").is_file()
     assert (dest / "tests" / "functional" / "test_graphql.py").is_file()
     route = (pkg / "routes" / "graphql.py").read_text()
-    assert "GraphQLRouter" in route and 'prefix="/graphql"' in route
+    # GraphQL endpoint mounts at /graphql via the GraphQLRouter's own `path` (not an
+    # include_router prefix) — FastAPI 0.137 rejects an empty child path + empty prefix.
+    assert "GraphQLRouter" in route and 'path="/graphql"' in route
 
 
 def test_render_without_graphql_has_none(tmp_path: Path):

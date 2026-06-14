@@ -16,7 +16,7 @@
 - [ ] FWK9 — Propagate the PI + MEMORY conventions into generated projects (template payload)  deps: FWK1, FWK2
 
 ## Done
-- [x] FWK5 — Plan 27: review/eval engine onto LiteLLM (claude -p re-homed as an in-process CustomLLM provider; near-zero adapter, so the adapter-removal step was dropped). Spike-gated on `anthropic_messages`; parity + live smoke + caching all green  → log:#0026
+- [x] FWK5 — Plan 27: review/eval engine onto LiteLLM (claude -p re-homed as an in-process CustomLLM provider; near-zero adapter, so the adapter-removal step was dropped). Spike-gated on `anthropic_messages`; parity + live smoke + caching all green  → log:#0027
 - [x] FWK10 — PI v2 migration + gh-only convention re-pointing  → log:#0017
 - [x] FWK2 — Plan 26: adopt the Committed Memory convention  → log:#0013
 - [x] FWK1 — Plan 25: adopt the PI convention  → log:#0005
