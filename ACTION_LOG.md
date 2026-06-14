@@ -412,3 +412,12 @@ SecretStr round-trip, litellm resolves (to **1.89.0**, floor 1.88.1), ruff
 format+check clean on the render, and a baseline (no-agents) render leaks neither
 SecretStr nor litellm. Noted: litellm ships no type stubs → the service task owes a
 targeted mypy override under the agents guard.
+
+#### #0041 · completed · FWK12 · 2026-06-14
+Task 4 — agent `errors` (AgentError/AgentExhausted) + in-process `metrics` modules
+(hand-rolled Prometheus exposition singleton, house pattern: thread-safe, label-light,
+p99 gauge). TDD red→green, 7 unit tests. Opus code-quality review = APPROVE-WITH-NITS;
+applied the substantive nit (fixed-precision `:.6f` cost rendering to kill scientific
+notation / float-accumulation noise — matters for FWK14 cost dashboards) plus a
+tiny-cost test, a reset() test, and a comment on the intentional `_p99` divergence from
+observability/metrics.py. ruff format+check clean on the render.

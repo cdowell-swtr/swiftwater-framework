@@ -1,0 +1,74 @@
+"""Agents battery — hermetic unit tests (no network, no DB)."""
+
+from {{ package_name }}.agents.errors import AgentError, AgentExhausted
+from {{ package_name }}.agents.metrics import AgentMetrics
+
+
+def test_exhausted_is_an_agent_error():
+    assert issubclass(AgentExhausted, AgentError)
+
+
+def test_metrics_record_call_outcomes():
+    m = AgentMetrics()
+    m.record_call("success")
+    m.record_call("success")
+    m.record_call("error")
+    out = m.render_prometheus()
+    assert 'app_agent_calls_total{outcome="success"} 2' in out
+    assert 'app_agent_calls_total{outcome="error"} 1' in out
+    assert 'app_agent_calls_total{outcome="exhausted"} 0' in out
+    assert "# TYPE app_agent_calls_total counter" in out
+
+
+def test_metrics_record_tokens_and_cost():
+    m = AgentMetrics()
+    m.record_tokens(input=10, output=5, cache_read=3)
+    m.record_cost(0.0021)
+    out = m.render_prometheus()
+    assert 'app_agent_tokens_total{kind="input"} 10' in out
+    assert 'app_agent_tokens_total{kind="output"} 5' in out
+    assert 'app_agent_tokens_total{kind="cache_read"} 3' in out
+    assert "app_agent_cost_usd_total 0.002100" in out
+
+
+def test_metrics_latency_p99_gauge_present():
+    m = AgentMetrics()
+    for v in (10.0, 20.0, 30.0):
+        m.record_latency_ms(v)
+    out = m.render_prometheus()
+    assert "# TYPE app_agent_call_latency_p99_ms gauge" in out
+    assert "app_agent_call_latency_p99_ms " in out
+
+
+def test_metrics_cost_avoids_scientific_notation():
+    m = AgentMetrics()
+    m.record_cost(0.0000123)
+    cost_line = [
+        ln
+        for ln in m.render_prometheus().splitlines()
+        if ln.startswith("app_agent_cost_usd_total")
+    ][0]
+    value_part = cost_line.split(" ", 1)[1]
+    assert "e" not in value_part  # no scientific notation in the value
+    assert cost_line == "app_agent_cost_usd_total 0.000012"
+
+
+def test_metrics_reset_clears_all():
+    m = AgentMetrics()
+    m.record_call("success")
+    m.record_tokens(input=5)
+    m.record_cost(0.01)
+    m.record_latency_ms(12.0)
+    m.reset()
+    out = m.render_prometheus()
+    assert 'app_agent_calls_total{outcome="success"} 0' in out
+    assert 'app_agent_tokens_total{kind="input"} 0' in out
+    assert "app_agent_cost_usd_total 0.000000" in out
+    assert "app_agent_call_latency_p99_ms 0" in out
+
+
+def test_unknown_outcome_is_ignored():
+    m = AgentMetrics()
+    m.record_call("bogus")
+    out = m.render_prometheus()
+    assert 'app_agent_calls_total{outcome="success"} 0' in out
