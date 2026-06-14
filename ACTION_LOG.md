@@ -434,3 +434,12 @@ comment); (2) cache-read tokens now read the real nested `usage.prompt_tokens_de
 cached_tokens` (the flat `cache_read_input_tokens` field doesn't exist → metric would
 silently always be 0). Also wrapped structured-parse failures in AgentError + added
 no-system/parse-failure tests.
+
+#### #0043 · completed · FWK12 · 2026-06-14
+Task 6 — `POST /agents/complete` demo route (auto-registered via include_routers; no
+main.py edit) + wired `agent_metrics.render_prometheus()` into the `/metrics` endpoint
+under the agents guard. Error→HTTP mapping: AgentExhausted→503 (caught first),
+everything else→502. TDD functional test (mocked litellm, no DB): text/usage response,
+503 exhaustion, 502 provider error, /metrics carries the agent series — 4 green.
+ruff+mypy clean. Controller-level quality check (simple plumbing; deep service logic
+already Opus-reviewed); branch-end Opus review will cover the whole branch.
