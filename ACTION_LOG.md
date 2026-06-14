@@ -389,3 +389,9 @@ package_name:'demo', batteries:['agents']})` call (the entrypoint the test suite
 instead of `framework new` — the CLI derives the package name from NAME and can't pin
 `demo`, which the plans' `src/demo/…` paths + `from demo.…` imports require. Resolves
 the one helper placeholder flagged at plan handoff.
+
+#### #0038 · amended · FWK12 · 2026-06-14
+Fixed a task-ordering bug in the FWK12 plan: the `litellm` dependency (Task 7) must be
+applied before the service/route tasks (5–6), which `import litellm` in their
+render-based tests — otherwise `uv sync` in the render omits litellm and the tests fail
+at import. Added an execution-order note (1→2→3→4→7→5→6→8→9); task numbers unchanged.
