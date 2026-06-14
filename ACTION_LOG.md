@@ -402,3 +402,13 @@ agents) and shipped its obs artifacts (Prometheus `HighAgentCallFailureRate` ale
 4-panel Grafana dashboard) as path-conditional `.jinja` files. obs-completeness suite
 green (14 passed, agents case included); batteries + copier-runner green (271).
 Implementer staged; controller committed.
+
+#### #0040 · completed · FWK12 · 2026-06-14
+Tasks 3+7 (litellm dep pulled ahead of the service task per the ordering fix) — added
+the guarded agent settings block (`agent_provider/model/max_tokens/temperature` +
+`agent_api_key: SecretStr`, the framework's first SecretStr field) and the guarded
+`litellm>=1.88.1` generated-project dep. Render checks green: settings parse +
+SecretStr round-trip, litellm resolves (to **1.89.0**, floor 1.88.1), ruff
+format+check clean on the render, and a baseline (no-agents) render leaks neither
+SecretStr nor litellm. Noted: litellm ships no type stubs → the service task owes a
+targeted mypy override under the agents guard.

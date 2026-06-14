@@ -25,6 +25,7 @@ dependencies = [
 {% endif %}{% if "redis" in batteries %}    "redis>=5",
 {% endif %}{% if "redis" in batteries or "workers" in batteries %}    "opentelemetry-instrumentation-redis>=0.48b0",
 {% endif %}{% if "consumers" in batteries %}    "httpx>=0.28",
+{% endif %}{% if "agents" in batteries %}    "litellm>=1.88.1",
 {% endif %}]
 
 [dependency-groups]
