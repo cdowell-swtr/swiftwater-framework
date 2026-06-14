@@ -421,3 +421,16 @@ applied the substantive nit (fixed-precision `:.6f` cost rendering to kill scien
 notation / float-accumulation noise — matters for FWK14 cost dashboards) plus a
 tiny-cost test, a reset() test, and a comment on the intentional `_p99` divergence from
 observability/metrics.py. ruff format+check clean on the render.
+
+#### #0042 · completed · FWK12 · 2026-06-14
+Task 5 — `AgentService` (LiteLLM completion + structured output): explicit api_key
+pass-through (SecretStr), provider/model prefix, usage→metrics, lazy litellm import,
+error→AgentExhausted/AgentError mapping; + a litellm `[[tool.mypy.overrides]]`
+(no PEP 561 stubs). TDD, 13 unit tests, mypy+ruff clean. Opus review = APPROVE-WITH-NITS
+with two empirically-verified fixes applied: (1) removed dead `except
+litellm.exceptions.APIError` (litellm's concrete errors don't subclass it — real base is
+the undeclared `openai.OpenAIError`; now RateLimitError→exhausted, broad→error w/ noqa +
+comment); (2) cache-read tokens now read the real nested `usage.prompt_tokens_details.
+cached_tokens` (the flat `cache_read_input_tokens` field doesn't exist → metric would
+silently always be 0). Also wrapped structured-parse failures in AgentError + added
+no-system/parse-failure tests.

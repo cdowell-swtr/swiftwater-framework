@@ -86,3 +86,10 @@ ignore_missing_imports = true
 module = ["celery", "celery.*"]
 ignore_missing_imports = true
 {%- endif %}
+{%- if "agents" in batteries %}
+
+[[tool.mypy.overrides]]
+# litellm ships without PEP 561 type information; ignore its missing stubs.
+module = ["litellm", "litellm.*"]
+ignore_missing_imports = true
+{%- endif %}
