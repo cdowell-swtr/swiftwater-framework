@@ -9,8 +9,22 @@ free — normalisation is shared, not duplicated.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Literal
+
+# litellm schedules a fire-and-forget async success-logging coroutine; under the
+# `asyncio.run` we drive `anthropic_messages` with, the loop closes before that
+# coroutine is awaited, so the GC later emits a benign "coroutine
+# '...async_success_handler' was never awaited" RuntimeWarning. We consume no litellm
+# callbacks, so the dropped telemetry is harmless — suppress just that one warning.
+# A persistent filter (not a context manager) is required because the warning fires
+# at GC time, after any call-scoped `catch_warnings` block has exited.
+warnings.filterwarnings(
+    "ignore",
+    message=r"coroutine '.*async_success_handler' was never awaited",
+    category=RuntimeWarning,
+)
 
 
 @dataclass(frozen=True)

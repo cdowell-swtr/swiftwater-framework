@@ -591,7 +591,7 @@ def test_eval_unparseable_response_is_non_fatal(tmp_path, monkeypatch):
     eval run (regression: a malformed contracts response with trailing data
     crashed the paid eval). It is scored as no findings for that repeat — a miss
     on a bad fixture — and the run completes with a normal verdict, not a
-    traceback. Only anthropic.APIError aborts (scores are then unreliable)."""
+    traceback. Only an openai.APIError (litellm's base) aborts (scores unreliable)."""
     import framework_cli.cli as cli_mod
     from framework_cli.review.findings import FindingsParseError
 
@@ -943,33 +943,6 @@ def test_eval_findings_out_includes_instrumentation(tmp_path, monkeypatch):
     assert bad_obj["raw_text"] == '[{"path":"a.py"}]'
     assert bad_obj["turns"] == 1
     assert bad_obj["tool_calls"] == []
-
-
-def test_eval_aborts_loudly_on_api_error(tmp_path, monkeypatch):
-    """An API/credit/rate-limit failure is NOT a non-detection: the eval must abort
-    loudly (so a contaminated scorecard is impossible), not silently score 0."""
-    import anthropic
-    import httpx
-
-    import framework_cli.cli as cli_mod
-
-    _make_fixture(tmp_path, "security", "bad", "b1", "+++ b/a.py\n", "a.py")
-    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
-
-    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
-    monkeypatch.setattr(cli_mod, "realize_cached", _fake_realize_cached)
-
-    def _credit_wall(diff, root, spec, **kw):
-        req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-        raise anthropic.APIError("credit balance is too low", req, body=None)
-
-    monkeypatch.setattr(cli_mod, "_eval_run", _credit_wall)
-    result = runner.invoke(
-        app, ["eval", "security", "--fixtures", str(tmp_path), "--backend", "api"]
-    )
-    assert result.exit_code == 3, result.output
-    assert "ABORTED" in result.output
-    assert "review-security" in result.output
 
 
 def test_eval_aborts_loudly_on_litellm_api_error(tmp_path, monkeypatch):

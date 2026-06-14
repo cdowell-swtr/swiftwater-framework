@@ -995,7 +995,8 @@ def eval_agents(
 
     A malformed agent response (FindingsParseError) is scored as no findings for
     that single repeat and reported via a WARNING (and a ``parse_error`` marker in
-    ``--findings-out``); only ``anthropic.APIError`` aborts the whole run.
+    ``--findings-out``); only an ``openai.APIError`` (litellm's error base) aborts
+    the whole run.
     """
     from framework_cli.review.evals import (
         DEFAULT_THRESHOLDS,
@@ -1024,7 +1025,6 @@ def eval_agents(
 
     import tempfile
 
-    import anthropic
     import openai
 
     from framework_cli.review.backend import BackendExhausted
@@ -1085,14 +1085,13 @@ def eval_agents(
                         err=True,
                     )
                     raise typer.Exit(4) from exc
-                except (anthropic.APIError, openai.APIError) as exc:
-                    # The API path now routes through litellm, whose error types all
-                    # derive from openai.APIError (the real common ancestor —
-                    # litellm.exceptions.APIError is only a sibling). Catch that so a
-                    # non-rate-limit API failure (auth, 5xx, connection, bad request)
-                    # aborts cleanly instead of crashing uncaught. litellm
-                    # RateLimitError already arrives as BackendExhausted (handled
-                    # above); anthropic.APIError is kept as belt-and-suspenders.
+                except openai.APIError as exc:
+                    # The API path routes through litellm, whose error types all derive
+                    # from openai.APIError (the real common ancestor — litellm.exceptions
+                    # .APIError is only a sibling). Catch that so a non-rate-limit API
+                    # failure (auth, 5xx, connection, bad request) aborts cleanly instead
+                    # of crashing uncaught. litellm RateLimitError already arrives as
+                    # BackendExhausted (handled above).
                     typer.echo(
                         f"\neval: ABORTED at {spec.name} — API error "
                         f"({type(exc).__name__}): {exc}",

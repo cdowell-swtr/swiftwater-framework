@@ -250,3 +250,20 @@ battery), FWK13 (`--with HotSwapAgents` battery). New follow-up folded into FWK1
 benign litellm `coroutine … was never awaited` RuntimeWarning under `asyncio.run`
 (cosmetic; silence later). Branch `plan-27-litellm-backend-foundation`, 8 commits;
 ready for PR (master protected).
+
+#### #0027 · completed · FWK5 · 2026-06-14
+Folded the FWK11 cleanup into this PR (user request). (1) Removed dead
+`runner.default_client` (no `src/` caller post-migration) and retargeted its 5 tests
+to exercise `_max_retries()` directly (retry-budget coverage preserved). (2) **Dropped
+the `anthropic` dependency** — assessment was clean: its only live uses were
+`default_client` + the now-unreachable `except anthropic.APIError` belt-and-suspenders
+(the API path is 100% litellm, whose errors derive from `openai.APIError`). Narrowed
+the eval abort to `except openai.APIError`, removed the superseded
+`test_eval_aborts_loudly_on_api_error`, and declared `openai>=2.0` as a direct dep
+(it was already imported directly + is litellm's base). `anthropic` is now fully
+absent from the lock (litellm doesn't require it). (3) Silenced the litellm
+`async_success_handler` "coroutine never awaited" RuntimeWarning via a persistent,
+narrowly-scoped module filter in `backend.py` (a call-scoped filter can't catch it —
+it fires at GC time after `asyncio.run` closes the loop); verified gone on a live
+subagent smoke run. Gate: 446 passed / 3 skipped, ruff+format+mypy clean. FWK11 is now
+just the externalization.
