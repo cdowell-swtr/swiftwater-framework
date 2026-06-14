@@ -281,3 +281,61 @@ narrowly-scoped module filter in `backend.py` (a call-scoped filter can't catch 
 it fires at GC time after `asyncio.run` closes the loop); verified gone on a live
 subagent smoke run. Gate: 446 passed / 3 skipped, ruff+format+mypy clean. FWK11 is now
 just the externalization.
+
+#### #0029 · note · FWK11 · 2026-06-14
+Brainstormed + wrote the FWK11 design spec + implementation plan: extract the in-tree
+`claude -p` LiteLLM provider into a standalone git-tag package
+(`cdowell-swtr/litellm-claude-cli`, public) that the framework depends on and FWK13
+ships to projects. Decisions: external package (not template-payload duplication);
+**git-tag** distribution (no PyPI, matches the gh-only posture); the framework deletes
+its in-tree copy and depends on the package; entry-point auto-registration is
+**spike-gated** (Task 1 — unverified in litellm 1.88.1) with explicit `register()` as
+the guaranteed fallback; three test layers with the **litellm-dispatch integration
+test** (FWK5's S2 probe made a kept, stronger test) as the critical one; package
+carries its own gated live smoke (it can't borrow the framework's). Two-phase plan: A
+= stand up the package repo + cut a real v0.1.0 tag, B = framework cutover. Executing
+via subagent-driven-development on branch `fwk11-litellm-claude-cli-extraction`.
+
+#### #0030 · completed · FWK11 · 2026-06-14
+Task 1 (entry-point spike) — **NO-GO**. Source-conclusive: litellm 1.88.1 inits
+`custom_provider_map` as an empty list (`litellm/__init__.py:1382`) and has **no**
+entry-point loading that populates it (the `importlib.metadata` usages are all version
+lookups); PR #15881 isn't in this release. So the package ships explicit `register()`
+only — no `pyproject` entry point, no auto-registration test. The framework already
+registers explicitly in its seam; FWK13 will add a one-line `register()` call to
+generated projects. Task 5 takes its NO-GO path (README documents `register()`);
+everything else in the plan is unaffected.
+
+#### #0031 · completed · FWK11 · 2026-06-14
+Phase A Tasks 2–6 — stood up the `litellm-claude-cli` package repo (public,
+`cdowell-swtr/litellm-claude-cli`). Scaffolded pyproject (hatchling, `litellm>=1.88.1`,
+NO entry point per the spike) + `.gitignore`/`.python-version`/README (documents
+explicit `register()`). Moved the provider module verbatim → `src/litellm_claude_cli/
+__init__.py` (only change: the module docstring reworded to drop two `framework_cli`
+mentions — verified by diff to be docstring-only, zero functional change; `grep -c
+framework_cli` = 0) and its 17 unit tests → `tests/test_provider.py` (one import line
+re-pointed). Added the critical **litellm-dispatch integration test**
+(`test_litellm_dispatch.py` — `anthropic_messages(model="claude-cli/…")` round-trips
+through the real provider, offline) and the gated live smoke. Package gate: 18 passed
+/ 1 skipped, ruff+format+mypy clean. Note: the package's own `uv sync` resolved
+litellm **1.89.0** (floor `>=1.88.1`) and the integration test passes on it — watch
+for a 1.88.1→1.89.0 bump when the framework re-locks in Phase B.
+
+#### #0032 · completed · FWK11 · 2026-06-14
+Phase A Task 7 — package CI + release. Added `.github/workflows/ci.yml` (Node-24-pinned
+`checkout@v5` + `setup-uv@v7`; ruff/format/mypy/pytest, no framework tiers), pushed
+`master`, set light branch protection (required `ci` check), and cut the real `v0.1.0`
+tag. The package is now installable via
+`git+https://github.com/cdowell-swtr/litellm-claude-cli@v0.1.0` — unblocks Phase B.
+
+#### #0033 · completed · FWK11 · 2026-06-14
+Phase B — framework cutover. Added `litellm-claude-cli` to deps via `[tool.uv.sources]`
+(git tag), repointed `backend.py`'s two seam imports to `from litellm_claude_cli import
+…`, `git rm`'d the in-tree `litellm_provider.py` + `test_litellm_provider.py`. uv lock
+kept litellm at **1.88.1** (no bump). Framework gate green: 429 passed / 3 skipped
+(seam tests — incl. the real-litellm wrapped-exhaustion cause-chain test — unchanged =
+behavior preserved), ruff+format+mypy clean. **Packaging fix folded in:** the package
+lacked a `py.typed` marker (mypy needed an `ignore_missing_imports` override, and every
+future consumer would too), so shipped `py.typed` → cut **v0.1.1**, repointed the
+framework to v0.1.1, and dropped the override (mypy clean on the package's own types).
+Package now properly typed for all consumers.

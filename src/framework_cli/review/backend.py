@@ -213,7 +213,7 @@ class _SubagentMessages:
     def __init__(self, runner: Any | None = None) -> None:
         import litellm
 
-        from framework_cli.review.litellm_provider import ClaudeCliLLM
+        from litellm_claude_cli import ClaudeCliLLM
 
         handler = ClaudeCliLLM() if runner is None else ClaudeCliLLM(runner=runner)
         existing = [
@@ -235,7 +235,7 @@ class _SubagentMessages:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> Message:
-        from framework_cli.review.litellm_provider import ClaudeExhausted
+        from litellm_claude_cli import ClaudeExhausted
 
         try:
             return _anthropic_messages(
