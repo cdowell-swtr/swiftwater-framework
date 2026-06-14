@@ -295,3 +295,13 @@ test** (FWK5's S2 probe made a kept, stronger test) as the critical one; package
 carries its own gated live smoke (it can't borrow the framework's). Two-phase plan: A
 = stand up the package repo + cut a real v0.1.0 tag, B = framework cutover. Executing
 via subagent-driven-development on branch `fwk11-litellm-claude-cli-extraction`.
+
+#### #0030 · completed · FWK11 · 2026-06-14
+Task 1 (entry-point spike) — **NO-GO**. Source-conclusive: litellm 1.88.1 inits
+`custom_provider_map` as an empty list (`litellm/__init__.py:1382`) and has **no**
+entry-point loading that populates it (the `importlib.metadata` usages are all version
+lookups); PR #15881 isn't in this release. So the package ships explicit `register()`
+only — no `pyproject` entry point, no auto-registration test. The framework already
+registers explicitly in its seam; FWK13 will add a one-line `register()` call to
+generated projects. Task 5 takes its NO-GO path (README documents `register()`);
+everything else in the plan is unaffected.
