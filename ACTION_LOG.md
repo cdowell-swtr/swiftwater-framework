@@ -122,3 +122,17 @@ Promoted the gh-only vendoring/registration learning into the committed store
 (`framework-consumes-patterns-via-github-vendoring`, now 46) — public-safe +
 project-useful, so the committed store is its proper home (travels to every
 machine). gitleaks clean; invariants 46↔46. (Native duplicates pruned separately.)
+
+#### #0019 · note · 2026-06-14
+Hotfix (standalone, off master): the render matrix went red on every **graphql**
+combo — `fastapi==0.137.0` now raises `FastAPIError: Prefix and path cannot be both
+empty` for Strawberry's GraphiQL GET route (empty path), which surfaces at
+`app.include_router` during `create_app`. Upstream drift (latest strawberry 0.316.0
++ fastapi 0.137 are incompatible), NOT caused by any in-flight work — master is
+equally affected; the FWK5 PR was just the first render run after the bump. Fix:
+mount the GraphQL endpoint via the `GraphQLRouter`'s own `path="/graphql"` instead of
+an `include_router(prefix="/graphql")` over an empty child path (endpoint URL
+unchanged at `/graphql`). Verified by re-render: `create_app` builds, 108/108
+generated-project tests pass across graphql+react. Updated the copier assertion
+(`path="/graphql"` not `prefix="/graphql"`). gate green. Lands before FWK5 so its
+render-complete goes green on rebase.

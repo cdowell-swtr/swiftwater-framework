@@ -19,6 +19,10 @@ def _configure_graphql_router() -> GraphQLRouter:
     get_logger().info("graphql_ide_configured", introspection_enabled=ide)
     return GraphQLRouter(
         build_schema(disable_introspection=not ide),
+        # Mount the GraphQL endpoint at a non-empty path on the router itself. Strawberry's
+        # default empty path ("") tripped FastAPI 0.137's "Prefix and path cannot be both
+        # empty" guard once the router was included with no further prefix.
+        path="/graphql",
         # strawberry infers Context=None for an un-parametrized GraphQLRouter, so it types
         # context_getter as returning None and rejects our dict-returning FastAPI DI getter.
         context_getter=get_context,  # type: ignore[arg-type]
@@ -26,4 +30,4 @@ def _configure_graphql_router() -> GraphQLRouter:
     )
 
 
-router.include_router(_configure_graphql_router(), prefix="/graphql")
+router.include_router(_configure_graphql_router())
