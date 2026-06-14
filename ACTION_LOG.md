@@ -457,3 +457,17 @@ a clean first pre-commit pass — exercises the generated project's mypy accepti
 `import litellm` via the override, ruff, gitleaks) — green in 44s. Eval-fixture coupling
 check: none (thresholds.yaml hits were the words "review agents", not change.patch
 anchors).
+
+#### #0045 · completed · FWK12 · 2026-06-14
+Task 9 — branch-end whole-branch Opus review = **APPROVE / merge** (no Critical or
+Important findings). Verified empirically: SecretStr key never logged/serialized/echoed
+(route returns generic detail strings); Jinja guard isolation both ways (rendered
+['agents'] vs [] and diffed — nothing leaks into a no-agents render; agents render wires
+route autodiscovery + /metrics + settings + obs; agents+workers coexist); metric names
+consistent across metrics.py → agents_alerts.yml → agents.json (no dead series); FWK14
+seams (`_call(**extra)`, `_with_system`) clean. Two minors: (1) spec listed an
+`agents/config.py` that was correctly folded into `AgentService._model` (YAGNI — a module
+for a one-line provider/model f-string would be over-built); recording the deviation
+here. (2) no fail-fast on an empty `agent_api_key` (unset key → 502 on first call) —
+deferred to FWK14 (noted on its PLAN line). FWK12 complete; moving to Done and finishing
+the branch.
