@@ -353,3 +353,18 @@ the HotSwapAgents battery must write the dep as a **PEP 508 direct reference**
 (`litellm-claude-cli @ git+…@vX.Y.Z`), not `[tool.uv.sources]` — recorded as a ⚠ on the
 FWK13 plan line. Nits (entry-point-absence regression test; dispatch-level exhaustion
 test) noted as optional, acceptable as-is.
+
+#### #0035 · note · FWK12 · 2026-06-14
+Brainstormed the `--with agents` battery (row 3 of the LiteLLM agent-capability
+roadmap). Design spec written + self-reviewed:
+`docs/superpowers/specs/2026-06-14-agents-battery-design.md`. Decisions: plain
+LiteLLM over an API key (subscription hot-swap stays FWK13); split into two
+mergeable slices — **FWK12** runtime core (config + completion/structured-output
+service + one `/agents/complete` route + in-process obs + tests) then **FWK14**
+agentic loop (tool registry + bounded run loop + read-only `Item` DB tool +
+`/agents/run` + loop/tool obs). Avoided an `a/b` sub-key (PI IDs are flat ints) —
+filed slice 2 as fresh **FWK14** (deps: FWK12). Config flows through the central
+`APP_`-prefixed `Settings` with `agent_api_key: SecretStr` passed explicitly to
+LiteLLM (the `provider` field is the FWK13 hot-swap seam); obs is `in-process`
+(calls/latency/tokens/cost + error-rate alert + dashboard). PLAN.md: FWK12 line
+re-scoped to slice 1, FWK14 added, FWK13 unchanged.
