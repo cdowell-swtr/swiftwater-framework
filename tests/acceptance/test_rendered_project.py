@@ -182,6 +182,65 @@ def test_rendered_project_with_webhooks_battery_passes(tmp_path: Path):
     not _docker_available(),
     reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
 )
+def test_rendered_project_with_agents_battery_passes(tmp_path: Path):
+    # Renders a project with the agents battery active, asserts the battery files were
+    # emitted, then runs unit+functional (70% gate) to confirm both agents test files
+    # (tests/unit/test_agents_unit.py + tests/functional/test_agents.py) are collected
+    # and pass — exercising the LiteLLM-backed AgentService (mocked), the in-process
+    # metrics, and the /agents/complete route's 200 / 503 / 502 paths.
+    data_with_agents = {**DATA, "batteries": ["agents"]}
+    dest = tmp_path / "demo"
+    render_project(dest, data_with_agents)
+
+    # Battery files must exist in the rendered project.
+    assert (dest / "src" / "demo" / "agents" / "service.py").exists(), (
+        "agents/service.py was not rendered by the agents battery"
+    )
+    assert (dest / "src" / "demo" / "routes" / "agents.py").exists(), (
+        "routes/agents.py was not rendered by the agents battery"
+    )
+    assert (dest / "tests" / "unit" / "test_agents_unit.py").exists(), (
+        "tests/unit/test_agents_unit.py was not rendered by the agents battery"
+    )
+    assert (dest / "tests" / "functional" / "test_agents.py").exists(), (
+        "tests/functional/test_agents.py was not rendered by the agents battery"
+    )
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    # Run unit + functional tiers (70% gate) — collects the agents tests (LiteLLM is
+    # monkeypatched, so no network / API key is needed) and runs them.
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional coverage gate did not pass for the agents battery project:\n"
+        + result.stdout
+        + result.stderr
+    )
+    # Prove the agents functional tests actually ran: the route handler reaches full
+    # coverage only when test_agents.py exercises the 200 / 503-exhaustion / 502-error
+    # paths (router autodiscovery imports routes/agents.py on every create_app() call,
+    # yielding import-only coverage — so the filename appearing is NOT sufficient proof).
+    combined_output = result.stdout + result.stderr
+    agents_cov_line = next(
+        (ln for ln in combined_output.splitlines() if "routes/agents.py" in ln), ""
+    )
+    assert "100%" in agents_cov_line, (
+        f"Agents route not fully exercised; coverage line: {agents_cov_line!r}\n"
+        "Expected 100% coverage of routes/agents.py — was "
+        "tests/functional/test_agents.py collected and did it pass?\n" + combined_output
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
 def test_rendered_project_with_workers_battery_passes(tmp_path: Path):
     # Renders a project with the workers battery active, asserts the battery files
     # were emitted, then runs unit+functional (70% gate) to confirm both workers test
@@ -431,6 +490,36 @@ def test_rendered_project_precommit_clean_with_docs_battery(tmp_path: Path):
     )
     assert result.returncode == 0, (
         f"pre-commit hooks did not pass cleanly on a docs-battery project:\n{result.stdout}\n{result.stderr}"
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("git") is None,
+    reason="uv and git are required for this test",
+)
+def test_rendered_project_precommit_clean_with_agents_battery(tmp_path: Path):
+    # The agents battery adds the agents/ module (service/metrics/errors), the
+    # /agents/complete route, the litellm dep + a litellm mypy override, and the agent
+    # settings (incl. a SecretStr). A freshly generated agents-battery project must make
+    # a clean first pass on the NO-DOCKER hooks — in particular the generated project's
+    # mypy must accept `import litellm` (no PEP 561 stubs) via the override.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["agents"]})
+
+    subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    result = subprocess.run(
+        ["uv", "run", "pre-commit", "run", "--all-files"],
+        cwd=dest,
+        env={**os.environ, "SKIP": "coverage-threshold"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"pre-commit hooks did not pass cleanly on an agents-battery project:\n{result.stdout}\n{result.stderr}"
     )
 
 

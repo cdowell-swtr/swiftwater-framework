@@ -1,6 +1,9 @@
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+{%- if "agents" in batteries %}
+from pydantic import SecretStr
+{%- endif %}
 
 
 class Settings(BaseSettings):
@@ -71,6 +74,17 @@ class Settings(BaseSettings):
 
     # Downstream inventory service (Pact consumer demo). Override per environment.
     inventory_url: str = "http://inventory:8080"
+{%- endif %}
+{%- if "agents" in batteries %}
+
+    # LLM agent runtime (read from APP_AGENT_*). The key is passed explicitly to LiteLLM —
+    # nothing is read out-of-band from provider-native env vars. `agent_provider` is the seam
+    # the HotSwapAgents battery (subscription <-> API) plugs into.
+    agent_provider: str = "anthropic"
+    agent_model: str = "claude-sonnet-4-6"
+    agent_max_tokens: int = 4096
+    agent_temperature: float = 0.0
+    agent_api_key: SecretStr = SecretStr("")
 {%- endif %}
 {%- if "react" in batteries %}
 

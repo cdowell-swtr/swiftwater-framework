@@ -98,6 +98,12 @@ def metrics(request: Request) -> PlainTextResponse:
 
     body += frontend_metrics.render_prometheus()
 {%- endif %}
+{%- if "agents" in batteries %}
+
+    from {{ package_name }}.agents.metrics import agent_metrics
+
+    body += agent_metrics.render_prometheus()
+{%- endif %}
 {% if "workers" in batteries %}
     from {{ package_name }}.db.engine import SessionLocal
     from {{ package_name }}.tasks import dead_letter as _dead_letter

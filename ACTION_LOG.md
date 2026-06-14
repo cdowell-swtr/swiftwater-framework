@@ -353,3 +353,121 @@ the HotSwapAgents battery must write the dep as a **PEP 508 direct reference**
 (`litellm-claude-cli @ git+…@vX.Y.Z`), not `[tool.uv.sources]` — recorded as a ⚠ on the
 FWK13 plan line. Nits (entry-point-absence regression test; dispatch-level exhaustion
 test) noted as optional, acceptable as-is.
+
+#### #0035 · note · FWK12 · 2026-06-14
+Brainstormed the `--with agents` battery (row 3 of the LiteLLM agent-capability
+roadmap). Design spec written + self-reviewed:
+`docs/superpowers/specs/2026-06-14-agents-battery-design.md`. Decisions: plain
+LiteLLM over an API key (subscription hot-swap stays FWK13); split into two
+mergeable slices — **FWK12** runtime core (config + completion/structured-output
+service + one `/agents/complete` route + in-process obs + tests) then **FWK14**
+agentic loop (tool registry + bounded run loop + read-only `Item` DB tool +
+`/agents/run` + loop/tool obs). Avoided an `a/b` sub-key (PI IDs are flat ints) —
+filed slice 2 as fresh **FWK14** (deps: FWK12). Config flows through the central
+`APP_`-prefixed `Settings` with `agent_api_key: SecretStr` passed explicitly to
+LiteLLM (the `provider` field is the FWK13 hot-swap seam); obs is `in-process`
+(calls/latency/tokens/cost + error-rate alert + dashboard). PLAN.md: FWK12 line
+re-scoped to slice 1, FWK14 added, FWK13 unchanged.
+
+#### #0036 · note · FWK12 · 2026-06-14
+Wrote the implementation plans for the agents battery (both slices), TDD/bite-sized,
+no-placeholder, grounded in a thorough wiring recon of the template (route
+autodiscovery, hand-rolled metrics exposition, the `in-process` obs-completeness
+contract, the Item repo): `docs/superpowers/plans/2026-06-14-agents-battery-core.md`
+(FWK12) and `…-agents-battery-loop.md` (FWK14, executes post-FWK12-merge). Two
+plan-time refinements folded back into the spec for consistency: latency is realized
+as a **p99 gauge** (house metrics style), not a histogram; metric series are
+**label-light** (dropped the `model` label per the house cardinality doctrine). Plans
+restate the review-model policy (Opus code-quality/branch-end), the framework-slice
+gate cadence (skip-marker commits + one branch-end review), and the template-payload
+TDD loop. No DB migration needed (completion is stateless; FWK14 tools read the
+existing `items` table).
+
+#### #0037 · amended · FWK12 · 2026-06-14
+Pinned the plans' render-for-TDD helper to a direct `render_project(dest, {...,
+package_name:'demo', batteries:['agents']})` call (the entrypoint the test suite uses)
+instead of `framework new` — the CLI derives the package name from NAME and can't pin
+`demo`, which the plans' `src/demo/…` paths + `from demo.…` imports require. Resolves
+the one helper placeholder flagged at plan handoff.
+
+#### #0038 · amended · FWK12 · 2026-06-14
+Fixed a task-ordering bug in the FWK12 plan: the `litellm` dependency (Task 7) must be
+applied before the service/route tasks (5–6), which `import litellm` in their
+render-based tests — otherwise `uv sync` in the render omits litellm and the tests fail
+at import. Added an execution-order note (1→2→3→4→7→5→6→8→9); task numbers unchanged.
+
+#### #0039 · completed · FWK12 · 2026-06-14
+Tasks 1+2 — registered the `agents` BatterySpec (`obs="in-process"`, no gated review
+agents) and shipped its obs artifacts (Prometheus `HighAgentCallFailureRate` alert +
+4-panel Grafana dashboard) as path-conditional `.jinja` files. obs-completeness suite
+green (14 passed, agents case included); batteries + copier-runner green (271).
+Implementer staged; controller committed.
+
+#### #0040 · completed · FWK12 · 2026-06-14
+Tasks 3+7 (litellm dep pulled ahead of the service task per the ordering fix) — added
+the guarded agent settings block (`agent_provider/model/max_tokens/temperature` +
+`agent_api_key: SecretStr`, the framework's first SecretStr field) and the guarded
+`litellm>=1.88.1` generated-project dep. Render checks green: settings parse +
+SecretStr round-trip, litellm resolves (to **1.89.0**, floor 1.88.1), ruff
+format+check clean on the render, and a baseline (no-agents) render leaks neither
+SecretStr nor litellm. Noted: litellm ships no type stubs → the service task owes a
+targeted mypy override under the agents guard.
+
+#### #0041 · completed · FWK12 · 2026-06-14
+Task 4 — agent `errors` (AgentError/AgentExhausted) + in-process `metrics` modules
+(hand-rolled Prometheus exposition singleton, house pattern: thread-safe, label-light,
+p99 gauge). TDD red→green, 7 unit tests. Opus code-quality review = APPROVE-WITH-NITS;
+applied the substantive nit (fixed-precision `:.6f` cost rendering to kill scientific
+notation / float-accumulation noise — matters for FWK14 cost dashboards) plus a
+tiny-cost test, a reset() test, and a comment on the intentional `_p99` divergence from
+observability/metrics.py. ruff format+check clean on the render.
+
+#### #0042 · completed · FWK12 · 2026-06-14
+Task 5 — `AgentService` (LiteLLM completion + structured output): explicit api_key
+pass-through (SecretStr), provider/model prefix, usage→metrics, lazy litellm import,
+error→AgentExhausted/AgentError mapping; + a litellm `[[tool.mypy.overrides]]`
+(no PEP 561 stubs). TDD, 13 unit tests, mypy+ruff clean. Opus review = APPROVE-WITH-NITS
+with two empirically-verified fixes applied: (1) removed dead `except
+litellm.exceptions.APIError` (litellm's concrete errors don't subclass it — real base is
+the undeclared `openai.OpenAIError`; now RateLimitError→exhausted, broad→error w/ noqa +
+comment); (2) cache-read tokens now read the real nested `usage.prompt_tokens_details.
+cached_tokens` (the flat `cache_read_input_tokens` field doesn't exist → metric would
+silently always be 0). Also wrapped structured-parse failures in AgentError + added
+no-system/parse-failure tests.
+
+#### #0043 · completed · FWK12 · 2026-06-14
+Task 6 — `POST /agents/complete` demo route (auto-registered via include_routers; no
+main.py edit) + wired `agent_metrics.render_prometheus()` into the `/metrics` endpoint
+under the agents guard. Error→HTTP mapping: AgentExhausted→503 (caught first),
+everything else→502. TDD functional test (mocked litellm, no DB): text/usage response,
+503 exhaustion, 502 provider error, /metrics carries the agent series — 4 green.
+ruff+mypy clean. Controller-level quality check (simple plumbing; deep service logic
+already Opus-reviewed); branch-end Opus review will cover the whole branch.
+
+#### #0044 · completed · FWK12 · 2026-06-14
+Task 8 — verification + acceptance coverage. Framework gate green (ruff check + format,
+mypy src = 45 files clean) and the full non-acceptance suite = 889 passed / 3 skipped
+(no regression). Found a gap: the acceptance suite had per-battery tests for
+websockets/webhooks/workers/etc. but NONE for agents — added two: (1)
+`test_rendered_project_with_agents_battery_passes` (renders agents, asserts the battery
+files, runs the 70% unit+functional gate, and proves test_agents.py actually ran via
+100% coverage of routes/agents.py) — green in 58s; (2)
+`test_rendered_project_precommit_clean_with_agents_battery` (a fresh agents render makes
+a clean first pre-commit pass — exercises the generated project's mypy accepting
+`import litellm` via the override, ruff, gitleaks) — green in 44s. Eval-fixture coupling
+check: none (thresholds.yaml hits were the words "review agents", not change.patch
+anchors).
+
+#### #0045 · completed · FWK12 · 2026-06-14
+Task 9 — branch-end whole-branch Opus review = **APPROVE / merge** (no Critical or
+Important findings). Verified empirically: SecretStr key never logged/serialized/echoed
+(route returns generic detail strings); Jinja guard isolation both ways (rendered
+['agents'] vs [] and diffed — nothing leaks into a no-agents render; agents render wires
+route autodiscovery + /metrics + settings + obs; agents+workers coexist); metric names
+consistent across metrics.py → agents_alerts.yml → agents.json (no dead series); FWK14
+seams (`_call(**extra)`, `_with_system`) clean. Two minors: (1) spec listed an
+`agents/config.py` that was correctly folded into `AgentService._model` (YAGNI — a module
+for a one-line provider/model f-string would be over-built); recording the deviation
+here. (2) no fail-fast on an empty `agent_api_key` (unset key → 502 on first call) —
+deferred to FWK14 (noted on its PLAN line). FWK12 complete; moving to Done and finishing
+the branch.
