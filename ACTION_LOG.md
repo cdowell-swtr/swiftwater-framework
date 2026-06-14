@@ -320,3 +320,10 @@ through the real provider, offline) and the gated live smoke. Package gate: 18 p
 / 1 skipped, ruff+format+mypy clean. Note: the package's own `uv sync` resolved
 litellm **1.89.0** (floor `>=1.88.1`) and the integration test passes on it — watch
 for a 1.88.1→1.89.0 bump when the framework re-locks in Phase B.
+
+#### #0032 · completed · FWK11 · 2026-06-14
+Phase A Task 7 — package CI + release. Added `.github/workflows/ci.yml` (Node-24-pinned
+`checkout@v5` + `setup-uv@v7`; ruff/format/mypy/pytest, no framework tiers), pushed
+`master`, set light branch protection (required `ci` check), and cut the real `v0.1.0`
+tag. The package is now installable via
+`git+https://github.com/cdowell-swtr/litellm-claude-cli@v0.1.0` — unblocks Phase B.
