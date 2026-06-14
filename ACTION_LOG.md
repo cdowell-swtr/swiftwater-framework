@@ -281,3 +281,17 @@ narrowly-scoped module filter in `backend.py` (a call-scoped filter can't catch 
 it fires at GC time after `asyncio.run` closes the loop); verified gone on a live
 subagent smoke run. Gate: 446 passed / 3 skipped, ruff+format+mypy clean. FWK11 is now
 just the externalization.
+
+#### #0029 · note · FWK11 · 2026-06-14
+Brainstormed + wrote the FWK11 design spec + implementation plan: extract the in-tree
+`claude -p` LiteLLM provider into a standalone git-tag package
+(`cdowell-swtr/litellm-claude-cli`, public) that the framework depends on and FWK13
+ships to projects. Decisions: external package (not template-payload duplication);
+**git-tag** distribution (no PyPI, matches the gh-only posture); the framework deletes
+its in-tree copy and depends on the package; entry-point auto-registration is
+**spike-gated** (Task 1 — unverified in litellm 1.88.1) with explicit `register()` as
+the guaranteed fallback; three test layers with the **litellm-dispatch integration
+test** (FWK5's S2 probe made a kept, stronger test) as the critical one; package
+carries its own gated live smoke (it can't borrow the framework's). Two-phase plan: A
+= stand up the package repo + cut a real v0.1.0 tag, B = framework cutover. Executing
+via subagent-driven-development on branch `fwk11-litellm-claude-cli-extraction`.

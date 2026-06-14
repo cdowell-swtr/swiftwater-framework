@@ -7,7 +7,7 @@
 ## Next
 - [ ] FWK3 — Plan 22c: per-agent reviewer reference docs (the 19 reviewers; retire the two promissory notes in working/review-system.md)
 - [ ] FWK4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
-- [ ] FWK11 — Externalize the claude-cli CustomLLM plugin to its own repo/package (entry-point registered)  deps: FWK5
+- [ ] FWK11 — Externalize the claude-cli CustomLLM plugin to its own repo/package (entry-point registered)  deps: FWK5  → spec+plan: `docs/superpowers/specs/2026-06-14-litellm-claude-cli-extraction-design.md`, `docs/superpowers/plans/2026-06-14-litellm-claude-cli-extraction.md` (in progress)
 - [ ] FWK12 — `--with Agents` battery: ship the LiteLLM-based agent capability as template payload  deps: FWK5
 - [ ] FWK13 — `--with HotSwapAgents` battery: subscription↔API hot-swap via the externalized claude-cli plugin dependency  deps: FWK11, FWK12
 - [ ] FWK6 — Plan 29: data-store runtime parity (services.yml/dev.yml; unblock the hardcoded co-located-container assumption)
