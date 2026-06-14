@@ -395,3 +395,10 @@ Fixed a task-ordering bug in the FWK12 plan: the `litellm` dependency (Task 7) m
 applied before the service/route tasks (5–6), which `import litellm` in their
 render-based tests — otherwise `uv sync` in the render omits litellm and the tests fail
 at import. Added an execution-order note (1→2→3→4→7→5→6→8→9); task numbers unchanged.
+
+#### #0039 · completed · FWK12 · 2026-06-14
+Tasks 1+2 — registered the `agents` BatterySpec (`obs="in-process"`, no gated review
+agents) and shipped its obs artifacts (Prometheus `HighAgentCallFailureRate` alert +
+4-panel Grafana dashboard) as path-conditional `.jinja` files. obs-completeness suite
+green (14 passed, agents case included); batteries + copier-runner green (271).
+Implementer staged; controller committed.

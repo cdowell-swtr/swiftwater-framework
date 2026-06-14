@@ -1,0 +1,12 @@
+groups:
+- name: agents
+  rules:
+  - alert: HighAgentCallFailureRate
+    # Errors + provider-exhaustion as a share of all agent calls. A wedged or quota-exhausted
+    # provider is the failure mode that matters; tune the 0.1 threshold per app.
+    expr: sum(rate(app_agent_calls_total{outcome=~"error|exhausted"}[5m])) / clamp_min(sum(rate(app_agent_calls_total[5m])), 1) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Over 10% of LLM agent calls are failing or hitting provider quota (check the provider key, rate limits, and budget)

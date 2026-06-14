@@ -29,6 +29,12 @@ _BATTERIES: dict[str, BatterySpec] = {
         "Signed inbound webhook ingress (HMAC) with an idempotent inbox",
         obs="in-process",
     ),
+    "agents": BatterySpec(
+        "agents",
+        "LiteLLM-backed LLM agent runtime (completion, structured output, "
+        "tool-calling loop) with full observability",
+        obs="in-process",
+    ),
     "websockets": BatterySpec(
         "websockets",
         "FastAPI WebSocket routes + a connection manager",
