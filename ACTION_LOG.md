@@ -339,3 +339,17 @@ lacked a `py.typed` marker (mypy needed an `ignore_missing_imports` override, an
 future consumer would too), so shipped `py.typed` → cut **v0.1.1**, repointed the
 framework to v0.1.1, and dropped the override (mypy clean on the package's own types).
 Package now properly typed for all consumers.
+
+#### #0034 · note · FWK11 · 2026-06-14
+Branch-end Opus review (post-merge, for apparatus-parity): **APPROVE-WITH-NITS**;
+verified clean — extraction fidelity (docstring-only diff), cutover completeness (no
+dangling refs), packaging (py.typed in wheel), tags, seam binding. Two Important
+findings handled: **I1** — the package README pinned `@v0.1.0` (pre-`py.typed`) while
+the release/framework pin is v0.1.1; fixed both README snippets → v0.1.1 (pushed to the
+package repo). **I2** — the framework's `[tool.uv.sources]` git dep is **uv-only**; a
+plain-`pip` install would miss it. Acceptable for the uv-native framework (CLAUDE.md
+mandates uv), but it matters for **FWK13**: generated projects may be pip-installed, so
+the HotSwapAgents battery must write the dep as a **PEP 508 direct reference**
+(`litellm-claude-cli @ git+…@vX.Y.Z`), not `[tool.uv.sources]` — recorded as a ⚠ on the
+FWK13 plan line. Nits (entry-point-absence regression test; dispatch-level exhaustion
+test) noted as optional, acceptable as-is.
