@@ -327,3 +327,15 @@ Phase A Task 7 — package CI + release. Added `.github/workflows/ci.yml` (Node-
 `master`, set light branch protection (required `ci` check), and cut the real `v0.1.0`
 tag. The package is now installable via
 `git+https://github.com/cdowell-swtr/litellm-claude-cli@v0.1.0` — unblocks Phase B.
+
+#### #0033 · completed · FWK11 · 2026-06-14
+Phase B — framework cutover. Added `litellm-claude-cli` to deps via `[tool.uv.sources]`
+(git tag), repointed `backend.py`'s two seam imports to `from litellm_claude_cli import
+…`, `git rm`'d the in-tree `litellm_provider.py` + `test_litellm_provider.py`. uv lock
+kept litellm at **1.88.1** (no bump). Framework gate green: 429 passed / 3 skipped
+(seam tests — incl. the real-litellm wrapped-exhaustion cause-chain test — unchanged =
+behavior preserved), ruff+format+mypy clean. **Packaging fix folded in:** the package
+lacked a `py.typed` marker (mypy needed an `ignore_missing_imports` override, and every
+future consumer would too), so shipped `py.typed` → cut **v0.1.1**, repointed the
+framework to v0.1.1, and dropped the override (mypy clean on the package's own types).
+Package now properly typed for all consumers.

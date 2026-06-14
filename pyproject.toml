@@ -5,6 +5,7 @@ description = "CLI scaffold framework for solid, observable, testable Python pro
 requires-python = ">=3.12"
 dependencies = [
     "litellm>=1.88.1",
+    "litellm-claude-cli",
     "openai>=2.0",
     "typer>=0.15",
     "copier>=9.4",
@@ -46,6 +47,9 @@ testpaths = ["tests"]
 
 [tool.ruff]
 src = ["src", "tests"]
+
+[tool.uv.sources]
+litellm-claude-cli = { git = "https://github.com/cdowell-swtr/litellm-claude-cli", tag = "v0.1.1" }
 
 [tool.mypy]
 files = ["src"]

@@ -7,7 +7,6 @@
 ## Next
 - [ ] FWK3 — Plan 22c: per-agent reviewer reference docs (the 19 reviewers; retire the two promissory notes in working/review-system.md)
 - [ ] FWK4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
-- [ ] FWK11 — Externalize the claude-cli CustomLLM plugin to its own repo/package (entry-point registered)  deps: FWK5  → spec+plan: `docs/superpowers/specs/2026-06-14-litellm-claude-cli-extraction-design.md`, `docs/superpowers/plans/2026-06-14-litellm-claude-cli-extraction.md` (in progress)
 - [ ] FWK12 — `--with Agents` battery: ship the LiteLLM-based agent capability as template payload  deps: FWK5
 - [ ] FWK13 — `--with HotSwapAgents` battery: subscription↔API hot-swap via the externalized claude-cli plugin dependency  deps: FWK11, FWK12
 - [ ] FWK6 — Plan 29: data-store runtime parity (services.yml/dev.yml; unblock the hardcoded co-located-container assumption)
@@ -16,6 +15,7 @@
 - [ ] FWK9 — Propagate the PI + MEMORY conventions into generated projects (template payload)  deps: FWK1, FWK2
 
 ## Done
+- [x] FWK11 — Externalized the claude-cli CustomLLM plugin to its own public package (`cdowell-swtr/litellm-claude-cli` @ v0.1.1, git-tag dep); framework deleted its in-tree copy and depends on it; entry-point auto-reg NO-GO in litellm 1.88.1 → explicit `register()`. Unblocks FWK13  → log:#0033
 - [x] FWK5 — Plan 27: review/eval engine onto LiteLLM (claude -p re-homed as an in-process CustomLLM provider; near-zero adapter, so the adapter-removal step was dropped). Spike-gated on `anthropic_messages`; parity + live smoke + caching all green  → log:#0027
 - [x] FWK10 — PI v2 migration + gh-only convention re-pointing  → log:#0017
 - [x] FWK2 — Plan 26: adopt the Committed Memory convention  → log:#0013
