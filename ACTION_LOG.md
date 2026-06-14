@@ -368,3 +368,17 @@ filed slice 2 as fresh **FWK14** (deps: FWK12). Config flows through the central
 LiteLLM (the `provider` field is the FWK13 hot-swap seam); obs is `in-process`
 (calls/latency/tokens/cost + error-rate alert + dashboard). PLAN.md: FWK12 line
 re-scoped to slice 1, FWK14 added, FWK13 unchanged.
+
+#### #0036 · note · FWK12 · 2026-06-14
+Wrote the implementation plans for the agents battery (both slices), TDD/bite-sized,
+no-placeholder, grounded in a thorough wiring recon of the template (route
+autodiscovery, hand-rolled metrics exposition, the `in-process` obs-completeness
+contract, the Item repo): `docs/superpowers/plans/2026-06-14-agents-battery-core.md`
+(FWK12) and `…-agents-battery-loop.md` (FWK14, executes post-FWK12-merge). Two
+plan-time refinements folded back into the spec for consistency: latency is realized
+as a **p99 gauge** (house metrics style), not a histogram; metric series are
+**label-light** (dropped the `model` label per the house cardinality doctrine). Plans
+restate the review-model policy (Opus code-quality/branch-end), the framework-slice
+gate cadence (skip-marker commits + one branch-end review), and the template-payload
+TDD loop. No DB migration needed (completion is stateless; FWK14 tools read the
+existing `items` table).

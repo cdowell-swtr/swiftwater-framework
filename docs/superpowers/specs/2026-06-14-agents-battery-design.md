@@ -129,14 +129,19 @@ The framework-internal `BackendExhausted` is not reused.
 ## Observability (`in-process`)
 
 `metrics.py` registers instruments on the app's existing `/metrics` endpoint
-(no new service — `obs="in-process"`):
+(no new service — `obs="in-process"`). The template's metrics are hand-rolled
+Prometheus-exposition strings (see `observability/metrics.py`), so these follow
+that house style — and are **label-light by design** (the model id is *not* a
+label: it is effectively constant per deployment, and the house pattern keeps
+cardinality bounded to small enums):
 
-- `agent_calls_total{model, outcome}` — `outcome ∈ {success, error, exhausted}`
-  (+ `max_iterations` in FWK14)
-- `agent_call_latency_seconds` — histogram
-- `agent_tokens_total{model, kind}` — `kind ∈ {input, output, cache_read}`
-- `agent_cost_usd_total{model}` — LiteLLM's computed per-call cost
-- FWK14: `agent_tool_calls_total{tool, outcome}`, `agent_loop_iterations`
+- `app_agent_calls_total{outcome}` — `outcome ∈ {success, error, exhausted}`
+- `app_agent_call_latency_p99_ms` — a **p99 gauge** (matching the base
+  `app_request_latency_p99_ms`), not a histogram
+- `app_agent_tokens_total{kind}` — `kind ∈ {input, output, cache_read}`
+- `app_agent_cost_usd_total` — LiteLLM's computed per-call cost (cumulative)
+- FWK14: `app_agent_tool_calls_total{tool, outcome}` and
+  `app_agent_runs_total{outcome ∈ {completed, max_iterations, error}}`
 
 The `in-process` surface owes an **alert** and a **dashboard**:
 
