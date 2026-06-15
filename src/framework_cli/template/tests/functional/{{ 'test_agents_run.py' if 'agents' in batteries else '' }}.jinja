@@ -1,0 +1,85 @@
+"""agents battery — POST /agents/run over seeded items (mocked litellm)."""
+
+import litellm
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine
+
+from {{ package_name }}.config.settings import Settings
+from {{ package_name }}.db.engine import build_session_factory, get_session
+from {{ package_name }}.db.repository import create_item
+from {{ package_name }}.main import create_app
+
+
+class _ToolCall:
+    id = "c1"
+    type = "function"
+
+    class function:
+        name = "search_items"
+        arguments = '{"query": "alpha"}'
+
+
+class _Step1:
+    content = None
+    tool_calls = [_ToolCall()]
+
+
+class _Step2:
+    content = "Found: alpha widget"
+    tool_calls = None
+
+
+class _Usage:
+    prompt_tokens = 4
+    completion_tokens = 2
+    prompt_tokens_details = None
+
+
+def _resp(message):
+    return type(
+        "R", (), {"choices": [type("C", (), {"message": message})()], "usage": _Usage()}
+    )()
+
+
+@pytest.fixture
+def client(engine: Engine, monkeypatch):
+    factory = build_session_factory(engine)
+    with factory() as s:
+        create_item(s, "alpha widget")
+        s.commit()
+    responses = [_resp(_Step1()), _resp(_Step2())]
+    monkeypatch.setattr(litellm, "completion", lambda **_: responses.pop(0))
+    monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0)
+
+    def override():
+        with factory() as session:
+            yield session
+
+    app = create_app(
+        Settings(llm_api_key="k", database_url=str(engine.url), serve_spa=False)
+    )
+    app.dependency_overrides[get_session] = override
+    with TestClient(app) as c:
+        yield c
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        conn.execute(text("TRUNCATE TABLE items RESTART IDENTITY CASCADE"))
+        conn.commit()
+
+
+def test_run_route_executes_tool_then_answers(client):
+    r = client.post("/agents/run", json={"prompt": "find alpha"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["outcome"] == "completed"
+    assert body["text"] == "Found: alpha widget"
+    assert body["tool_calls"] == ["search_items"]
+
+
+def test_metrics_endpoint_includes_agent_series(client):
+    client.post("/agents/run", json={"prompt": "find alpha"})
+    out = client.get("/metrics").text
+    assert "app_agent_tool_calls_total" in out
+    assert "app_agent_runs_total" in out

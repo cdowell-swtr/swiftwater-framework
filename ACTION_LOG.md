@@ -718,3 +718,11 @@ results, repeat until the model stops or `max_iterations` (counted outcome, not 
 in 3 nits: removed a dead `if tool_calls:` guard, commented the error-string convention,
 + 2 hardening tests (multi-tool-call correlation, exact call-count at the cap). 9 unit
 green, mypy+ruff clean.
+
+#### #0069 · completed · FWK14 · 2026-06-15
+Task 7 — `POST /agents/run` route (auto-discovered; builds `AgentRunner(LLMService(settings),
+max_iterations=settings.agent_max_iterations)` over `default_registry()` + a `SessionDep`
+ToolContext; LLMExhausted→503, other→502) + wired `agent_metrics` into `/metrics` under
+the agents guard. TDD functional test (seeded items, mocked litellm tool-round→answer):
+outcome=completed, text + tool_calls correct, /metrics carries the agent series. 2 green,
+ruff+mypy clean. Controller review (plumbing).
