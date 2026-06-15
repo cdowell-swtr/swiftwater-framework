@@ -529,3 +529,13 @@ cause-chain exception with a `reset_hint` attr → LLMExhausted), keyless-by-def
 `KEY_REQUIRING_PROVIDERS` allowlist. FWK16 is the first battery with `requires` → the
 obs/acceptance per-battery render tests must resolve requires. Also moved FWK15 (the llm
 rename, v0.2.6) to Done.
+
+#### #0050 · note · FWK13 · 2026-06-15
+Wrote the FWK13 (Slice 1: LLM profiles) implementation plan, TDD/bite-sized, grounded in
+the current post-rename llm battery code: `docs/superpowers/plans/2026-06-15-llm-profiles.md`.
+9 tasks: LLMExhausted.reset_hint → LLMProfile/settings → profiles.py resolution →
+per-profile metrics → profile-aware service (key fail-fast + duck-typed exhaustion) →
+route profile → per-profile obs → render/acceptance → branch-end review + v0.2.7 release
+(bundled). Key seam locked: base llm stays plugin-free (duck-typed `reset_hint` exhaustion,
+`KEY_REQUIRING_PROVIDERS` keyless-by-default). FWK16 (claude-cli provider + the requires
+test handling) is the next slice, not this plan.
