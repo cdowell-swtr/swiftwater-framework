@@ -610,3 +610,15 @@ clean alone → obs-completeness passes UNMODIFIED (the spec-anticipated obs-tes
 change is unnecessary; only the acceptance test needs `requires` resolution). 8 tasks;
 dep is a PEP 508 git ref (`@v0.1.1`, pip-installable). Branched off the merged v0.2.7
 master.
+
+#### #0058 · completed · FWK16 · 2026-06-15
+Tasks 1+2 — registered the `claudesubscriptioncli` BatterySpec (`requires=("llm",)`,
+`obs="rides-existing"`, no gated review agents) + added the `litellm-claude-cli` dep as a
+PEP 508 git ref (`@v0.1.1`). **Discovery:** hatchling rejects `@ git+...` direct refs
+unless `[tool.hatch.metadata] allow-direct-references = true` — added that, gated on the
+same battery (without it `uv sync`'s build step errors). resolve closure
+`['claudesubscriptioncli','llm']`; obs-completeness passes UNMODIFIED (rides-existing,
+renders clean alone — confirms the plan's call that the spec-anticipated obs-test change
+is unnecessary); 272 framework tests green; dep installs (cached); baseline + llm-only
+renders omit the dep AND the hatch stanza (guard isolation verified — both renders valid
+TOML + format-clean).
