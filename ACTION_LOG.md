@@ -590,3 +590,10 @@ of the default profile, obs-series<->metrics-name consistency, FWK16 seam ready)
 2 nits: token dashboard panel `sum by (profile, kind)` (keep both dimensions) + stale
 alert comment. Deferred (noted): unknown-profile currently -> 502 (could be 400-class) on
 the demo route. FWK13 -> Done.
+
+#### #0056 · completed · release · 2026-06-15
+Cut **v0.2.7** (bundled into the FWK13 PR). Bumped pyproject `0.2.6->0.2.7`, `uv lock`,
+dogfood tag pin -> `v0.2.7`; ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build`
+-> framework_cli-0.2.7.{whl,tar.gz}, 27 version-consistency tests green. Ships LLM
+profiles (per-task selection) to builders — Meridian can define profiles now; the
+claude-cli subscription profile lands with FWK16.
