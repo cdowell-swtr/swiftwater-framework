@@ -733,3 +733,11 @@ all agents unit/functional tests) green in 52s. Full verification: ruff+format+m
 no eval coupling, full non-acceptance suite 891 passed/3 skipped, obs series consistency
 exact (metrics emit app_agent_runs_total + app_agent_tool_calls_total; alert+dashboard
 reference exactly those — no orphans).
+
+#### #0071 · completed · FWK14 · 2026-06-15
+Task 9 branch-end. Controller whole-branch review (the respond seam + runner already got
+deep Opus reviews): 6 code commits; the llm-battery change is ONLY service.py (`respond()`
++ the behavior-preserving `complete()` refactor) — verified; guard isolation clean (no
+agents symbols leak into an llm-only render); obs series consistent. Full suite 891
+passed/3 skipped + agents acceptance green. FWK14 -> Done. The full agent arc
+(FWK11→5→12→15→13→16→14) is complete.
