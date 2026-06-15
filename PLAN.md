@@ -7,7 +7,7 @@
 ## Next
 - [ ] FWK3 — Plan 22c: per-agent reviewer reference docs (the 19 reviewers; retire the two promissory notes in working/review-system.md)
 - [ ] FWK4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
-- [ ] FWK14 — `--with agents` battery (**the real agent**): tool registry + bounded run loop + read-only Item DB tool + agentic route + loop/tool obs. `requires=("llm",)` — builds the tool loop on the `llm` runtime.  deps: FWK15  plan: `docs/superpowers/plans/2026-06-14-agents-battery-loop.md` (re-anchor to `llm`/`agents` names)
+- [ ] FWK14 — `--with agents` battery (**the real agent**): tool registry + bounded run loop + read-only Item DB tool + `POST /agents/run` + tool/run obs. `requires=("llm",)`, `obs="in-process"`. Seam: one new `LLMService.respond()` (raw tool-capable completion; `complete()` refactored onto it) — the agent inherits profiles + the subscription backend (`run(profile="sub")`).  deps: FWK15  spec: `docs/superpowers/specs/2026-06-15-agents-tool-loop-design.md` (supersedes the stale `…2026-06-14-agents-battery-loop.md`)
 - [ ] FWK6 — Plan 29: data-store runtime parity (services.yml/dev.yml; unblock the hardcoded co-located-container assumption)
 - [ ] FWK7 — Plan 30: full reverse integrity-coverage check + 23-file battery-infra classification  deps: consumes INTENTIONALLY_UNLOCKED (shipped v0.2.4)
 - [ ] FWK8 — Traefik docker-provider acceptance coverage (the gap that hid the v3.1 → Docker 27 `task dev` break)

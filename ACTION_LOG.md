@@ -659,3 +659,17 @@ dogfood tag pin -> `v0.2.8`; ruff+mypy(dogfood) clean, `uv lock --check` clean, 
 -> framework_cli-0.2.8.{whl,tar.gz}, 27 version-consistency tests green. Ships the
 claude-cli subscription provider — Meridian can now route a profile through the
 subscription (the thing that unblocks heavy use without per-token API cost).
+
+#### #0063 · note · FWK14 · 2026-06-15
+Brainstormed the modern FWK14 (`--with agents` tool loop). The stale
+`2026-06-14-agents-battery-loop.md` plan is superseded — it predated the llm rename,
+profiles, and the separate-battery taxonomy. New design spec:
+`docs/superpowers/specs/2026-06-15-agents-tool-loop-design.md`. Key decision (seam): the
+agent loop is a SEPARATE `agents` battery (`requires=("llm",)`, `obs="in-process"`) with
+an `AgentRunner` that delegates model calls to `LLMService` via ONE new public method,
+`respond()` (raw tool-capable completion; `complete()` refactored onto it) — so the agent
+inherits profiles + the subscription backend for free (`run(profile="sub")` = on the
+Claude subscription). agents/ module = tools.py (read-only Item tools) + runner.py
+(bounded loop, `agent_max_iterations` cap) + metrics.py (`app_agent_tool_calls_total` /
+`app_agent_runs_total`) + `POST /agents/run`. Like claudesubscriptioncli, only the
+acceptance test needs `requires` resolution; obs test passes on the battery alone.
