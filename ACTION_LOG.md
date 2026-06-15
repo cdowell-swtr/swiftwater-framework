@@ -539,3 +539,11 @@ route profile → per-profile obs → render/acceptance → branch-end review + 
 (bundled). Key seam locked: base llm stays plugin-free (duck-typed `reset_hint` exhaustion,
 `KEY_REQUIRING_PROVIDERS` keyless-by-default). FWK16 (claude-cli provider + the requires
 test handling) is the next slice, not this plan.
+
+#### #0051 · completed · FWK13 · 2026-06-15
+Tasks 1+2 — `LLMExhausted` gains a keyword `reset_hint` attribute (enables the service's
+duck-typed exhaustion); added `LLMProfile(BaseModel)` + `llm_profiles: dict[str,
+LLMProfile]` (env `APP_LLM_PROFILES` JSON) to settings, all guarded by `"llm" in
+batteries`. Forward-ref resolves without model_rebuild (same-module order). 15 unit tests
+green, ruff+mypy clean, baseline render leaks neither symbol. Implementer staged;
+controller committed.

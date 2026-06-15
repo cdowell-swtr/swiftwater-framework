@@ -206,3 +206,17 @@ def test_complete_no_system_omits_system_message(monkeypatch, service):
     assert msgs[0]["role"] == "user"
     assert msgs[0]["content"] == "hello"
     assert all(m["role"] != "system" for m in msgs)
+
+
+def test_exhausted_carries_reset_hint():
+    from {{ package_name }}.llm.errors import LLMExhausted
+
+    exc = LLMExhausted("slow down", reset_hint="resets 11:30am")
+    assert exc.reset_hint == "resets 11:30am"
+    assert str(exc) == "slow down"
+
+
+def test_exhausted_reset_hint_defaults_none():
+    from {{ package_name }}.llm.errors import LLMExhausted
+
+    assert LLMExhausted("x").reset_hint is None
