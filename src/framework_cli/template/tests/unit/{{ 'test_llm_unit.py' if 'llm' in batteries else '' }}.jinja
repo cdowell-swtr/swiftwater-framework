@@ -220,3 +220,115 @@ def test_exhausted_reset_hint_defaults_none():
     from {{ package_name }}.llm.errors import LLMExhausted
 
     assert LLMExhausted("x").reset_hint is None
+
+
+# ---------------------------------------------------------------------------
+# Profile resolution tests
+# ---------------------------------------------------------------------------
+
+
+def _psettings(**over):
+    from {{ package_name }}.config.settings import Settings
+
+    base = dict(
+        llm_provider="anthropic",
+        llm_model="claude-sonnet-4-6",
+        llm_api_key="defkey",
+        llm_max_tokens=4096,
+        llm_temperature=0.0,
+    )
+    base.update(over)
+    return Settings(**base)
+
+
+def test_resolve_default_profile_uses_llm_fields():
+    from {{ package_name }}.llm.profiles import resolve_profile
+
+    r = resolve_profile(_psettings())
+    assert r.name == "default"
+    assert r.model_id == "anthropic/claude-sonnet-4-6"
+    assert r.api_key == "defkey"
+    assert r.requires_key is True
+
+
+def test_named_profile_overlays_default():
+    from {{ package_name }}.config.settings import LLMProfile
+    from {{ package_name }}.llm.profiles import resolve_profile
+
+    s = _psettings(
+        llm_profiles={"cheap": LLMProfile(model="claude-haiku-4-5-20251001")}
+    )
+    r = resolve_profile(s, "cheap")
+    assert r.model_id == "anthropic/claude-haiku-4-5-20251001"
+    assert r.api_key == "defkey"
+
+
+def test_profile_with_own_provider_is_keyless_when_not_key_requiring():
+    from {{ package_name }}.config.settings import LLMProfile
+    from {{ package_name }}.llm.profiles import resolve_profile
+
+    s = _psettings(
+        llm_profiles={
+            "sub": LLMProfile(provider="claude-cli", model="claude-sonnet-4-6")
+        }
+    )
+    r = resolve_profile(s, "sub")
+    assert r.model_id == "claude-cli/claude-sonnet-4-6"
+    assert r.requires_key is False
+
+
+def test_per_call_overrides_layer_on_top():
+    from {{ package_name }}.llm.profiles import resolve_profile
+
+    r = resolve_profile(_psettings(), "default", provider="openai", model="gpt-x")
+    assert r.model_id == "openai/gpt-x"
+
+
+def test_unknown_profile_raises_llm_error():
+    import pytest
+
+    from {{ package_name }}.llm.errors import LLMError
+    from {{ package_name }}.llm.profiles import resolve_profile
+
+    with pytest.raises(LLMError):
+        resolve_profile(_psettings(), "nope")
+
+
+def test_profile_supplies_own_api_key():
+    from {{ package_name }}.config.settings import LLMProfile
+    from {{ package_name }}.llm.profiles import resolve_profile
+
+    s = _psettings(llm_profiles={"acct2": LLMProfile(api_key="othersecret")})
+    assert resolve_profile(s, "acct2").api_key == "othersecret"
+
+
+def test_per_call_override_composes_with_named_profile():
+    from {{ package_name }}.config.settings import LLMProfile
+    from {{ package_name }}.llm.profiles import resolve_profile
+
+    s = _psettings(
+        llm_profiles={"cheap": LLMProfile(model="claude-haiku-4-5-20251001")}
+    )
+    r = resolve_profile(s, "cheap", model="claude-opus-4-8")
+    assert (
+        r.model_id == "anthropic/claude-opus-4-8"
+    )  # per-call model wins over the profile's
+
+
+def test_falsy_but_valid_overrides_are_kept():
+    from {{ package_name }}.config.settings import LLMProfile
+    from {{ package_name }}.llm.profiles import resolve_profile
+
+    s = _psettings(llm_profiles={"z": LLMProfile(temperature=0.0, max_tokens=1)})
+    r = resolve_profile(_psettings(llm_temperature=0.7, llm_max_tokens=4096))
+    assert r.temperature == 0.7  # default kept
+    r2 = resolve_profile(s, "z")
+    assert (
+        r2.temperature == 0.0 and r2.max_tokens == 1
+    )  # falsy-but-valid profile values kept
+
+
+def test_resolved_profile_repr_hides_api_key():
+    from {{ package_name }}.llm.profiles import resolve_profile
+
+    assert "defkey" not in repr(resolve_profile(_psettings()))

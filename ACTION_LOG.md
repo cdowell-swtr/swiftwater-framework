@@ -547,3 +547,13 @@ LLMProfile]` (env `APP_LLM_PROFILES` JSON) to settings, all guarded by `"llm" in
 batteries`. Forward-ref resolves without model_rebuild (same-module order). 15 unit tests
 green, ruff+mypy clean, baseline render leaks neither symbol. Implementer staged;
 controller committed.
+
+#### #0052 · completed · FWK13 · 2026-06-15
+Task 3 — `llm/profiles.py`: `resolve_profile` (default ← named overlay ← per-call
+override) → `ResolvedProfile` (`.model_id`, `.requires_key`) + `KEY_REQUIRING_PROVIDERS
+= {anthropic, openai}` (keyless-by-default so the base llm battery needs zero knowledge
+of claude-cli). TDD, 24 unit tests. Opus review = APPROVE-WITH-NITS; applied: **api_key
+`field(repr=False)`** (the dataclass auto-repr leaked the plaintext key — closed while
+still inert, before Task 5 wires it live), case-insensitive `requires_key`, an
+or-vs-is-not-None comment, + 4 locking tests (own-key inheritance, per-call+named compose,
+temperature=0.0/max_tokens=0 kept, repr hides key). mypy+ruff clean.
