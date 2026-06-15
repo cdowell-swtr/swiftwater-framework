@@ -1,4 +1,4 @@
-"""Process-wide agent metrics — hand-rolled Prometheus exposition (no client lib).
+"""Process-wide LLM metrics — hand-rolled Prometheus exposition (no client lib).
 
 Mirrors the house pattern (observability/metrics.py, webhooks/metrics.py): a thread-safe
 module-level singleton, label-light by design. `outcome` and `kind` are bounded enums;
@@ -23,7 +23,7 @@ def _p99(samples: list[float]) -> float:
     return ordered[idx]
 
 
-class AgentMetrics:
+class LLMMetrics:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._calls: dict[str, int] = {o: 0 for o in CALL_OUTCOMES}
@@ -55,28 +55,28 @@ class AgentMetrics:
     def render_prometheus(self) -> str:
         with self._lock:
             calls = "".join(
-                f'app_agent_calls_total{{outcome="{o}"}} {self._calls[o]}\n'
+                f'app_llm_calls_total{{outcome="{o}"}} {self._calls[o]}\n'
                 for o in CALL_OUTCOMES
             )
             tokens = "".join(
-                f'app_agent_tokens_total{{kind="{k}"}} {self._tokens[k]}\n'
+                f'app_llm_tokens_total{{kind="{k}"}} {self._tokens[k]}\n'
                 for k in TOKEN_KINDS
             )
             cost = self._cost_usd
             p99 = _p99(self._latencies_ms)
         return (
-            "# HELP app_agent_calls_total LLM agent calls by outcome\n"
-            "# TYPE app_agent_calls_total counter\n"
+            "# HELP app_llm_calls_total LLM calls by outcome\n"
+            "# TYPE app_llm_calls_total counter\n"
             f"{calls}"
-            "# HELP app_agent_tokens_total LLM tokens consumed by kind\n"
-            "# TYPE app_agent_tokens_total counter\n"
+            "# HELP app_llm_tokens_total LLM tokens consumed by kind\n"
+            "# TYPE app_llm_tokens_total counter\n"
             f"{tokens}"
-            "# HELP app_agent_cost_usd_total Cumulative LLM spend in USD\n"
-            "# TYPE app_agent_cost_usd_total counter\n"
-            f"app_agent_cost_usd_total {cost:.6f}\n"
-            "# HELP app_agent_call_latency_p99_ms p99 agent-call latency in ms\n"
-            "# TYPE app_agent_call_latency_p99_ms gauge\n"
-            f"app_agent_call_latency_p99_ms {p99}\n"
+            "# HELP app_llm_cost_usd_total Cumulative LLM spend in USD\n"
+            "# TYPE app_llm_cost_usd_total counter\n"
+            f"app_llm_cost_usd_total {cost:.6f}\n"
+            "# HELP app_llm_call_latency_p99_ms p99 LLM-call latency in ms\n"
+            "# TYPE app_llm_call_latency_p99_ms gauge\n"
+            f"app_llm_call_latency_p99_ms {p99}\n"
         )
 
     def reset(self) -> None:
@@ -87,5 +87,5 @@ class AgentMetrics:
             self._latencies_ms = []
 
 
-agent_metrics = AgentMetrics()
-"""Process-wide singleton imported by the agents service and the /metrics route."""
+llm_metrics = LLMMetrics()
+"""Process-wide singleton imported by the llm service and the /metrics route."""

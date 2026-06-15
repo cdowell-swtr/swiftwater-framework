@@ -1,19 +1,19 @@
 {
-  "uid": "agents",
-  "title": "Agents",
-  "tags": ["agents"],
+  "uid": "llm",
+  "title": "LLM",
+  "tags": ["llm"],
   "schemaVersion": 39,
   "version": 1,
   "time": {"from": "now-1h", "to": "now"},
   "panels": [
     {
       "id": 1,
-      "title": "Agent calls by outcome",
+      "title": "LLM calls by outcome",
       "type": "timeseries",
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
       "targets": [
-        {"refId": "A", "expr": "sum by (outcome) (rate(app_agent_calls_total[5m]))", "legendFormat": "__auto"}
+        {"refId": "A", "expr": "sum by (outcome) (rate(app_llm_calls_total[5m]))", "legendFormat": "__auto"}
       ],
       "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []}
     },
@@ -24,7 +24,7 @@
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
       "targets": [
-        {"refId": "A", "expr": "app_agent_call_latency_p99_ms", "legendFormat": "p99"}
+        {"refId": "A", "expr": "app_llm_call_latency_p99_ms", "legendFormat": "p99"}
       ],
       "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []}
     },
@@ -35,7 +35,7 @@
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
       "targets": [
-        {"refId": "A", "expr": "sum by (kind) (rate(app_agent_tokens_total[5m]))", "legendFormat": "__auto"}
+        {"refId": "A", "expr": "sum by (kind) (rate(app_llm_tokens_total[5m]))", "legendFormat": "__auto"}
       ],
       "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
     },
@@ -46,7 +46,7 @@
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
       "targets": [
-        {"refId": "A", "expr": "app_agent_cost_usd_total", "legendFormat": "cost"}
+        {"refId": "A", "expr": "app_llm_cost_usd_total", "legendFormat": "cost"}
       ],
       "fieldConfig": {"defaults": {"unit": "currencyUSD"}, "overrides": []}
     }

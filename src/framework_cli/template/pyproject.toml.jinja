@@ -25,7 +25,7 @@ dependencies = [
 {% endif %}{% if "redis" in batteries %}    "redis>=5",
 {% endif %}{% if "redis" in batteries or "workers" in batteries %}    "opentelemetry-instrumentation-redis>=0.48b0",
 {% endif %}{% if "consumers" in batteries %}    "httpx>=0.28",
-{% endif %}{% if "agents" in batteries %}    "litellm>=1.88.1",
+{% endif %}{% if "llm" in batteries %}    "litellm>=1.88.1",
 {% endif %}]
 
 [dependency-groups]
@@ -86,7 +86,7 @@ ignore_missing_imports = true
 module = ["celery", "celery.*"]
 ignore_missing_imports = true
 {%- endif %}
-{%- if "agents" in batteries %}
+{%- if "llm" in batteries %}
 
 [[tool.mypy.overrides]]
 # litellm ships without PEP 561 type information; ignore its missing stubs.

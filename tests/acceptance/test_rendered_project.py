@@ -182,34 +182,34 @@ def test_rendered_project_with_webhooks_battery_passes(tmp_path: Path):
     not _docker_available(),
     reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
 )
-def test_rendered_project_with_agents_battery_passes(tmp_path: Path):
-    # Renders a project with the agents battery active, asserts the battery files were
-    # emitted, then runs unit+functional (70% gate) to confirm both agents test files
-    # (tests/unit/test_agents_unit.py + tests/functional/test_agents.py) are collected
-    # and pass — exercising the LiteLLM-backed AgentService (mocked), the in-process
-    # metrics, and the /agents/complete route's 200 / 503 / 502 paths.
-    data_with_agents = {**DATA, "batteries": ["agents"]}
+def test_rendered_project_with_llm_battery_passes(tmp_path: Path):
+    # Renders a project with the llm battery active, asserts the battery files were
+    # emitted, then runs unit+functional (70% gate) to confirm both llm test files
+    # (tests/unit/test_llm_unit.py + tests/functional/test_llm.py) are collected
+    # and pass — exercising the LiteLLM-backed LLMService (mocked), the in-process
+    # metrics, and the /llm/complete route's 200 / 503 / 502 paths.
+    data_with_llm = {**DATA, "batteries": ["llm"]}
     dest = tmp_path / "demo"
-    render_project(dest, data_with_agents)
+    render_project(dest, data_with_llm)
 
     # Battery files must exist in the rendered project.
-    assert (dest / "src" / "demo" / "agents" / "service.py").exists(), (
-        "agents/service.py was not rendered by the agents battery"
+    assert (dest / "src" / "demo" / "llm" / "service.py").exists(), (
+        "llm/service.py was not rendered by the llm battery"
     )
-    assert (dest / "src" / "demo" / "routes" / "agents.py").exists(), (
-        "routes/agents.py was not rendered by the agents battery"
+    assert (dest / "src" / "demo" / "routes" / "llm.py").exists(), (
+        "routes/llm.py was not rendered by the llm battery"
     )
-    assert (dest / "tests" / "unit" / "test_agents_unit.py").exists(), (
-        "tests/unit/test_agents_unit.py was not rendered by the agents battery"
+    assert (dest / "tests" / "unit" / "test_llm_unit.py").exists(), (
+        "tests/unit/test_llm_unit.py was not rendered by the llm battery"
     )
-    assert (dest / "tests" / "functional" / "test_agents.py").exists(), (
-        "tests/functional/test_agents.py was not rendered by the agents battery"
+    assert (dest / "tests" / "functional" / "test_llm.py").exists(), (
+        "tests/functional/test_llm.py was not rendered by the llm battery"
     )
 
     sync = subprocess.run(["uv", "sync"], cwd=dest)
     assert sync.returncode == 0, "uv sync failed in the generated project"
 
-    # Run unit + functional tiers (70% gate) — collects the agents tests (LiteLLM is
+    # Run unit + functional tiers (70% gate) — collects the llm tests (LiteLLM is
     # monkeypatched, so no network / API key is needed) and runs them.
     result = subprocess.run(
         ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
@@ -218,22 +218,22 @@ def test_rendered_project_with_agents_battery_passes(tmp_path: Path):
         text=True,
     )
     assert result.returncode == 0, (
-        "the 70% unit+functional coverage gate did not pass for the agents battery project:\n"
+        "the 70% unit+functional coverage gate did not pass for the llm battery project:\n"
         + result.stdout
         + result.stderr
     )
-    # Prove the agents functional tests actually ran: the route handler reaches full
-    # coverage only when test_agents.py exercises the 200 / 503-exhaustion / 502-error
-    # paths (router autodiscovery imports routes/agents.py on every create_app() call,
+    # Prove the llm functional tests actually ran: the route handler reaches full
+    # coverage only when test_llm.py exercises the 200 / 503-exhaustion / 502-error
+    # paths (router autodiscovery imports routes/llm.py on every create_app() call,
     # yielding import-only coverage — so the filename appearing is NOT sufficient proof).
     combined_output = result.stdout + result.stderr
-    agents_cov_line = next(
-        (ln for ln in combined_output.splitlines() if "routes/agents.py" in ln), ""
+    llm_cov_line = next(
+        (ln for ln in combined_output.splitlines() if "routes/llm.py" in ln), ""
     )
-    assert "100%" in agents_cov_line, (
-        f"Agents route not fully exercised; coverage line: {agents_cov_line!r}\n"
-        "Expected 100% coverage of routes/agents.py — was "
-        "tests/functional/test_agents.py collected and did it pass?\n" + combined_output
+    assert "100%" in llm_cov_line, (
+        f"LLM route not fully exercised; coverage line: {llm_cov_line!r}\n"
+        "Expected 100% coverage of routes/llm.py — was "
+        "tests/functional/test_llm.py collected and did it pass?\n" + combined_output
     )
 
 
@@ -497,14 +497,14 @@ def test_rendered_project_precommit_clean_with_docs_battery(tmp_path: Path):
     shutil.which("uv") is None or shutil.which("git") is None,
     reason="uv and git are required for this test",
 )
-def test_rendered_project_precommit_clean_with_agents_battery(tmp_path: Path):
-    # The agents battery adds the agents/ module (service/metrics/errors), the
-    # /agents/complete route, the litellm dep + a litellm mypy override, and the agent
-    # settings (incl. a SecretStr). A freshly generated agents-battery project must make
+def test_rendered_project_precommit_clean_with_llm_battery(tmp_path: Path):
+    # The llm battery adds the llm/ module (service/metrics/errors), the
+    # /llm/complete route, the litellm dep + a litellm mypy override, and the llm
+    # settings (incl. a SecretStr). A freshly generated llm-battery project must make
     # a clean first pass on the NO-DOCKER hooks — in particular the generated project's
     # mypy must accept `import litellm` (no PEP 561 stubs) via the override.
     dest = tmp_path / "demo"
-    render_project(dest, {**DATA, "batteries": ["agents"]})
+    render_project(dest, {**DATA, "batteries": ["llm"]})
 
     subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
     subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
@@ -519,7 +519,7 @@ def test_rendered_project_precommit_clean_with_agents_battery(tmp_path: Path):
         text=True,
     )
     assert result.returncode == 0, (
-        f"pre-commit hooks did not pass cleanly on an agents-battery project:\n{result.stdout}\n{result.stderr}"
+        f"pre-commit hooks did not pass cleanly on an llm-battery project:\n{result.stdout}\n{result.stderr}"
     )
 
 

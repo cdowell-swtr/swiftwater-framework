@@ -486,3 +486,28 @@ v0.2.4" markers in CLAUDE.md/meta-plan — the meta-plan is genuinely frozen at 
 would falsely claim the meta-plan covers it. Release goes via a `chore(release)` PR
 (master is protected), then a lightweight `v0.2.5` tag → release.yml. Enables the Meridian
 upgrade to pull the agents battery from a real tag.
+
+#### #0047 · completed · FWK15 · 2026-06-15
+Renamed the shipped `agents`-core battery → **`--with llm`** (it's an LLM runtime, not
+an agent; the tool loop is the future `agents` battery). `git mv`'d the 6 brace-named
+paths (module dir, alert, dashboard, route, 2 test files) + scripted the content rename
+(token/module/`LLMService`/`LLM*`/`app_llm_*`/`/llm/complete`/`APP_LLM_*`/obs files),
+then a prose pass + grep-driven straggler cleanup. **Caught by verification (not the
+script):** pathlib-join path checks + a variable name in the acceptance test still
+pointed at `agents/`/`routes/agents.py` (would have failed at runtime) — fixed; grep the
+RENDERED project, not just source, since a stray `app_agent_*` silently orphans the
+alert/dashboard. Verified: llm render clean (structure + zero residual agent in app
+code + baseline leaks nothing), generated llm tests 17 green, ruff+format+mypy clean;
+framework obs-completeness/copier/batteries 285 green (obs guard now validates the `llm`
+surface); both llm acceptance tests green. Updated spec (re-taxonomy note + mapping),
+PLAN (FWK12 superseded; added FWK15; **re-scoped FWK13 → `hotswapllm` as a transport
+extension of `llm` that PRECEDES FWK14 `agents`** per user), committed taxonomy memory
+[[llm-vs-agents-battery-taxonomy]]. Re-releases as v0.2.6 so Meridian upgrades onto the
+honest name. (v0.2.5's `--with agents` stays a brief unconsumed blip.)
+
+#### #0048 · completed · release · 2026-06-15
+Cut **v0.2.6** (bundled into the FWK15 rename PR, v0.2.4-style — one PR, one
+render-matrix). Bumped pyproject `0.2.5→0.2.6`, `uv lock`, `DOGFOOD_COMMIT→"v0.2.6"`;
+ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build` → framework_cli-0.2.6.
+{whl,tar.gz}, version-consistency tests green. Ships the `--with llm` rename so Meridian
+upgrades onto the honest battery name. (Frozen-through markers left at v0.2.4 as before.)

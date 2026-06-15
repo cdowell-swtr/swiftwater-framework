@@ -1,0 +1,33 @@
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+
+from {{ package_name }}.llm.errors import LLMExhausted
+from {{ package_name }}.llm.metrics import llm_metrics
+from {{ package_name }}.llm.service import LLMService
+
+router = APIRouter()
+
+
+class CompleteRequest(BaseModel):
+    prompt: str
+    system: str | None = None
+
+
+class CompleteResponse(BaseModel):
+    text: str
+    usage: dict[str, int]
+
+
+@router.post("/llm/complete", response_model=CompleteResponse)
+def complete(body: CompleteRequest, request: Request) -> CompleteResponse:
+    """One-shot LLM completion — demonstrates the LLM runtime end to end."""
+    service = LLMService(request.app.state.settings, metrics=llm_metrics)
+    try:
+        result = service.complete(
+            [{"role": "user", "content": body.prompt}], system=body.system
+        )
+    except LLMExhausted as exc:
+        raise HTTPException(status_code=503, detail="LLM provider exhausted") from exc
+    except Exception as exc:  # noqa: BLE001  # LLMError and any other provider/transport failure
+        raise HTTPException(status_code=502, detail="LLM provider error") from exc
+    return CompleteResponse(text=result.text, usage=result.usage)

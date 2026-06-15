@@ -1,37 +1,49 @@
-# `--with agents` Battery — Design
+# `--with llm` + `--with agents` Batteries — Design
 
-> Design spec for the **`--with agents`** battery: a LiteLLM-backed LLM agent
-> runtime shipped as template payload. Status: approved (brainstorming,
-> 2026-06-14). This is **row 3** of the LiteLLM agent-capability roadmap
+> **⚠ Re-taxonomy (FWK15, 2026-06-15).** This spec was written for a single
+> `--with agents` battery built in two slices. We split it into two batteries with
+> honest names: **`--with llm`** (the LLM runtime — completion + structured output,
+> what shipped in v0.2.5) and **`--with agents`** (the tool-calling loop, which
+> `requires=("llm",)`). Everywhere below, read the FWK12 "runtime core" as the
+> **`llm`** battery and apply the rename mapping: token `agents`→`llm`, module
+> `agents/`→`llm/`, `AgentService`→`LLMService`, `Agent{Error,Exhausted,Metrics}`→
+> `LLM*`, settings `agent_*`/`APP_AGENT_*`→`llm_*`/`APP_LLM_*`, metrics
+> `app_agent_*`→`app_llm_*`, route `/agents/complete`→`/llm/complete`, obs
+> `agents_alerts.yml`/`agents.json`→`llm_*`. The FWK14 "agentic loop" remains the
+> **`agents`** battery. Roadmap order: **`llm` → `hotswapllm` (FWK13, a transport
+> extension of `llm`) → `agents` (FWK14)**.
+
+> Design spec for the LiteLLM-backed LLM runtime + agent batteries shipped as
+> template payload. Status: approved (brainstorming, 2026-06-14; re-taxonomy
+> 2026-06-15). This is **row 3** of the LiteLLM agent-capability roadmap
 > (`2026-06-13-litellm-backend-foundation-design.md`) — the plain-LiteLLM,
 > API-key capability. The subscription↔API hot-swap is the separate
-> `--with HotSwapAgents` battery (FWK13).
->
-> Execution: two mergeable slices — **FWK12** (runtime core) then **FWK14**
-> (agentic loop). Each lands as its own plan/branch/merge.
+> `--with hotswapllm` battery (FWK13), a transport extension of `--with llm`.
 
 ## Context & goal
 
 FWK5 re-homed the framework's own review/eval engine onto LiteLLM, proving the
-in-process transport. This battery ships that capability *outward*: a generated
-project scaffolded with `--with agents` gets an idiomatic, observable,
-house-style LLM agent runtime — completion, structured output, and a bounded
-tool-calling loop — built on **plain LiteLLM over a provider API key**.
+in-process transport. These batteries ship that capability *outward*: a generated
+project scaffolded with **`--with llm`** gets an idiomatic, observable,
+house-style **LLM runtime** — completion + structured output — built on **plain
+LiteLLM over a provider API key**; **`--with agents`** (`requires=("llm",)`) adds
+a bounded tool-calling loop on top.
 
 The capability is provider-agnostic in principle (LiteLLM's reach) but ships
 defaulting to Anthropic over an API key. Swapping the API path for the
-subscription `claude-cli` provider (subscription↔API hot-swap) is explicitly the
-downstream `--with HotSwapAgents` battery (FWK13); the `provider` config field
-designed here is the seam it plugs into.
+subscription `claude-cli` provider (subscription↔API hot-swap) is the
+`--with hotswapllm` battery (FWK13) — a transport extension of `llm` that lands
+**before** `agents`; the `provider` config field designed here is the seam it
+plugs into.
 
 ## Scope & slicing
 
-One battery token, `agents`, built in two slices:
+Two batteries (`requires` chains `agents` → `llm`):
 
-| Slice | Ships |
+| Battery | Ships |
 |-------|-------|
-| **FWK12** — runtime core | config + completion service (text + structured output) + one demo route + in-process observability + tests. After this lands, `--with agents` is a complete, useful capability. |
-| **FWK14** — agentic loop | tool registration + a bounded run loop + a read-only `Item` DB tool + an agentic demo route + loop/tool observability + tests. Upgrades the same battery from "completion service" to "agent". |
+| **`llm`** (FWK12 shipped as `agents` v0.2.5; renamed FWK15 v0.2.6) | config + completion service (text + structured output) + one demo route (`/llm/complete`) + in-process observability + tests. A complete, useful LLM capability on its own. |
+| **`agents`** (FWK14, `requires=("llm",)`) | tool registration + a bounded run loop + a read-only `Item` DB tool + an agentic demo route + loop/tool observability + tests. The real agent, built on the `llm` runtime. |
 
 Battery registration (`batteries.py`):
 
