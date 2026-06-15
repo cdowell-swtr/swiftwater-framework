@@ -11,6 +11,7 @@ router = APIRouter()
 class CompleteRequest(BaseModel):
     prompt: str
     system: str | None = None
+    profile: str = "default"
 
 
 class CompleteResponse(BaseModel):
@@ -24,7 +25,9 @@ def complete(body: CompleteRequest, request: Request) -> CompleteResponse:
     service = LLMService(request.app.state.settings, metrics=llm_metrics)
     try:
         result = service.complete(
-            [{"role": "user", "content": body.prompt}], system=body.system
+            [{"role": "user", "content": body.prompt}],
+            system=body.system,
+            profile=body.profile,
         )
     except LLMExhausted as exc:
         raise HTTPException(status_code=503, detail="LLM provider exhausted") from exc

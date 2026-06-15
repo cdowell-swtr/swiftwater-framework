@@ -4,9 +4,9 @@ groups:
   - alert: HighLLMCallFailureRate
     # Errors + provider-exhaustion as a share of all LLM calls. A wedged or quota-exhausted
     # provider is the failure mode that matters; tune the 0.1 threshold per app.
-    expr: sum(rate(app_llm_calls_total{outcome=~"error|exhausted"}[5m])) / clamp_min(sum(rate(app_llm_calls_total[5m])), 1) > 0.1
+    expr: sum by (profile) (rate(app_llm_calls_total{outcome=~"error|exhausted"}[5m])) / clamp_min(sum by (profile) (rate(app_llm_calls_total[5m])), 1) > 0.1
     for: 5m
     labels:
       severity: warning
     annotations:
-      summary: Over 10% of LLM calls are failing or hitting provider quota (check the provider key, rate limits, and budget)
+      summary: Over 10% of LLM calls are failing or hitting provider quota for an LLM profile (check the provider key, rate limits, and budget)

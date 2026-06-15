@@ -572,3 +572,10 @@ collision-free in vendored litellm/openai, and `profile` is config-bounded (per-
 provider/model overrides change model_id but NOT the profile label → no cardinality
 inflation). Recorded an FWK16 watch-out (keep ClaudeExhausted off the RateLimitError
 lineage) on its PLAN line.
+
+#### #0054 · completed · FWK13 · 2026-06-15
+Tasks 6+7 — `/llm/complete` accepts an optional `profile` (defaults "default"; unknown →
+LLMError → existing broad except → 502); per-profile obs: alert is now per-profile
+failure rate (`sum by (profile)`), dashboard panels group calls/tokens/cost by profile
+(latency p99 unchanged). Functional 5 green, obs-completeness[llm] green, valid JSON,
+ruff+mypy clean. Controller review (simple wiring).
