@@ -706,3 +706,15 @@ read-only `get_item`/`search_items` over the existing Item repo — no write too
 `agents/metrics.py` (`app_agent_tool_calls_total{tool,outcome}` / `app_agent_runs_total
 {outcome}` hand-rolled singleton). TDD: 3 hermetic unit + 3 functional (Postgres) green,
 mypy+ruff clean. Controller review (mirrors proven llm patterns; the runner gets Opus).
+
+#### #0068 · completed · FWK14 · 2026-06-15
+Task 6 — `agents/runner.py`: the bounded tool-calling loop over `LLMService.respond()`.
+Dispatch tool_calls (correlated by `tool_call_id`), append the serialized assistant turn
+(OpenAI wire shape — implementer's improvement over the plan's raw-object append) + tool
+results, repeat until the model stops or `max_iterations` (counted outcome, not raised);
+`LLMError`/`LLMExhausted` → `run="error"` once + re-raise. Profiles pass through
+(`run(profile="sub")`). TDD, hermetic stub-service tests. Opus review = APPROVE
+(empirically verified bound/correlation/serialization/error-accounting/read-only); folded
+in 3 nits: removed a dead `if tool_calls:` guard, commented the error-string convention,
++ 2 hardening tests (multi-tool-call correlation, exact call-count at the cap). 9 unit
+green, mypy+ruff clean.

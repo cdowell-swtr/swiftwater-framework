@@ -46,3 +46,196 @@ def test_agent_metrics_tool_calls_and_runs():
     assert 'app_agent_runs_total{outcome="max_iterations"} 1' in out
     assert 'app_agent_runs_total{outcome="error"} 0' in out
     assert "# TYPE app_agent_tool_calls_total counter" in out
+
+
+# ---------------------------------------------------------------------------
+# AgentRunner — bounded tool-calling loop
+# ---------------------------------------------------------------------------
+
+
+class _ToolCall:
+    def __init__(self, call_id, name, arguments):
+        self.id = call_id
+        self.type = "function"
+        self.function = type("F", (), {"name": name, "arguments": arguments})()
+
+
+class _Msg:
+    def __init__(self, content, tool_calls=None):
+        self.content = content
+        self.tool_calls = tool_calls
+
+
+class _Resp:
+    def __init__(self, content, tool_calls=None):
+        self.choices = [type("C", (), {"message": _Msg(content, tool_calls)})()]
+
+
+class _StubService:
+    def __init__(self, responses):
+        self._responses = responses
+        self.calls = []
+
+    def respond(self, messages, system=None, *, profile="default", tools=None):
+        self.calls.append(
+            {"messages": list(messages), "profile": profile, "tools": tools}
+        )
+        return self._responses.pop(0)
+
+
+def _echo_registry():
+    from {{ package_name }}.agents.tools import Tool, ToolRegistry
+
+    reg = ToolRegistry()
+    reg.register(
+        Tool(
+            name="lookup",
+            description="lookup",
+            parameters={
+                "type": "object",
+                "properties": {"q": {"type": "string"}},
+                "required": ["q"],
+            },
+            handler=lambda args, ctx: f"value-for-{args['q']}",
+        )
+    )
+    return reg
+
+
+def test_run_dispatches_tool_then_completes():
+    from {{ package_name }}.agents.metrics import AgentMetrics
+    from {{ package_name }}.agents.runner import AgentRunner, RunResult
+    from {{ package_name }}.agents.tools import ToolContext
+
+    svc = _StubService(
+        [
+            _Resp(None, tool_calls=[_ToolCall("c1", "lookup", '{"q": "x"}')]),
+            _Resp("final answer", tool_calls=None),
+        ]
+    )
+    m = AgentMetrics()
+    result = AgentRunner(svc, max_iterations=5, metrics=m).run(
+        [{"role": "user", "content": "do it"}],
+        registry=_echo_registry(),
+        context=ToolContext(session=None),
+    )
+    assert isinstance(result, RunResult)
+    assert result.text == "final answer"
+    assert result.outcome == "completed"
+    assert result.iterations == 2
+    assert result.tool_calls == ["lookup"]
+    assert any(
+        msg.get("role") == "tool" and "value-for-x" in msg.get("content", "")
+        for msg in svc.calls[1]["messages"]
+    )
+    out = m.render_prometheus()
+    assert 'app_agent_tool_calls_total{tool="lookup",outcome="success"} 1' in out
+    assert 'app_agent_runs_total{outcome="completed"} 1' in out
+
+
+def test_run_passes_profile_through():
+    from {{ package_name }}.agents.runner import AgentRunner
+    from {{ package_name }}.agents.tools import ToolContext
+
+    svc = _StubService([_Resp("done", tool_calls=None)])
+    AgentRunner(svc, max_iterations=5).run(
+        [{"role": "user", "content": "x"}],
+        profile="sub",
+        context=ToolContext(session=None),
+    )
+    assert svc.calls[0]["profile"] == "sub"
+
+
+def test_run_stops_at_iteration_cap():
+    from {{ package_name }}.agents.metrics import AgentMetrics
+    from {{ package_name }}.agents.runner import AgentRunner
+    from {{ package_name }}.agents.tools import ToolContext
+
+    always = [
+        _Resp(None, tool_calls=[_ToolCall("c", "lookup", '{"q": "x"}')])
+        for _ in range(10)
+    ]
+    svc = _StubService(always)
+    m = AgentMetrics()
+    result = AgentRunner(svc, max_iterations=3, metrics=m).run(
+        [{"role": "user", "content": "loop"}],
+        registry=_echo_registry(),
+        context=ToolContext(session=None),
+    )
+    assert result.outcome == "max_iterations"
+    assert result.iterations == 3
+    assert 'app_agent_runs_total{outcome="max_iterations"} 1' in m.render_prometheus()
+
+
+def test_run_records_error_outcome_on_llm_error():
+    import pytest
+
+    from {{ package_name }}.agents.metrics import AgentMetrics
+    from {{ package_name }}.agents.runner import AgentRunner
+    from {{ package_name }}.agents.tools import ToolContext
+    from {{ package_name }}.llm.errors import LLMError
+
+    class _Boom:
+        def respond(self, *a, **k):
+            raise LLMError("kaboom")
+
+    m = AgentMetrics()
+    with pytest.raises(LLMError):
+        AgentRunner(_Boom(), max_iterations=5, metrics=m).run(
+            [{"role": "user", "content": "x"}], context=ToolContext(session=None)
+        )
+    assert 'app_agent_runs_total{outcome="error"} 1' in m.render_prometheus()
+
+
+def test_run_dispatches_multiple_tool_calls_in_one_turn():
+    from {{ package_name }}.agents.metrics import AgentMetrics
+    from {{ package_name }}.agents.runner import AgentRunner
+    from {{ package_name }}.agents.tools import ToolContext
+
+    svc = _StubService(
+        [
+            _Resp(
+                None,
+                tool_calls=[
+                    _ToolCall("id1", "lookup", '{"q": "a"}'),
+                    _ToolCall("id2", "lookup", '{"q": "b"}'),
+                ],
+            ),
+            _Resp("done", tool_calls=None),
+        ]
+    )
+    m = AgentMetrics()
+    result = AgentRunner(svc, max_iterations=5, metrics=m).run(
+        [{"role": "user", "content": "x"}],
+        registry=_echo_registry(),
+        context=ToolContext(session=None),
+    )
+    assert result.outcome == "completed"
+    assert result.tool_calls == ["lookup", "lookup"]
+    # both tool_calls correlated by id in the second model call's message history
+    second = svc.calls[1]["messages"]
+    tool_ids = [m2.get("tool_call_id") for m2 in second if m2.get("role") == "tool"]
+    assert tool_ids == ["id1", "id2"]
+    assert (
+        'app_agent_tool_calls_total{tool="lookup",outcome="success"} 2'
+        in m.render_prometheus()
+    )
+
+
+def test_run_makes_exactly_max_iterations_model_calls_at_cap():
+    from {{ package_name }}.agents.metrics import AgentMetrics
+    from {{ package_name }}.agents.runner import AgentRunner
+    from {{ package_name }}.agents.tools import ToolContext
+
+    always = [
+        _Resp(None, tool_calls=[_ToolCall("c", "lookup", '{"q": "x"}')])
+        for _ in range(10)
+    ]
+    svc = _StubService(always)
+    m = AgentMetrics()
+    AgentRunner(svc, max_iterations=3, metrics=m).run(
+        [{"role": "user", "content": "x"}],
+        registry=_echo_registry(),
+        context=ToolContext(session=None),
+    )
+    assert len(svc.calls) == 3  # exactly max_iterations model calls, no overrun
