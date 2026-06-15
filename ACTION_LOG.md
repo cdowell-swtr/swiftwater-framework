@@ -652,3 +652,10 @@ controller whole-branch review (the core wiring already got a deep Opus review i
 llm core untouched**, guard isolation verified both renders. Captured the hatchling
 gotcha as a committed memory [[pep508-git-dep-needs-hatch-allow-direct-references]]. FWK16
 -> Done.
+
+#### #0062 · completed · release · 2026-06-15
+Cut **v0.2.8** (bundled into the FWK16 PR). Bumped pyproject `0.2.7->0.2.8`, `uv lock`,
+dogfood tag pin -> `v0.2.8`; ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build`
+-> framework_cli-0.2.8.{whl,tar.gz}, 27 version-consistency tests green. Ships the
+claude-cli subscription provider — Meridian can now route a profile through the
+subscription (the thing that unblocks heavy use without per-token API cost).
