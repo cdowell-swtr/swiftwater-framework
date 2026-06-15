@@ -1,8 +1,8 @@
 """Process-wide LLM metrics — hand-rolled Prometheus exposition (no client lib).
 
-Mirrors the house pattern (observability/metrics.py, webhooks/metrics.py): a thread-safe
-module-level singleton, label-light by design. `outcome` and `kind` are bounded enums;
-the model id is deliberately NOT a label (it is effectively constant per deployment).
+Mirrors the house pattern: thread-safe module-level singleton, label-light. `outcome`
+and `kind` are bounded enums; `profile` is bounded by the named-profile config set
+(gives per-profile cost/usage visibility). The model id is deliberately NOT a label.
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ CALL_OUTCOMES = ("success", "error", "exhausted")
 TOKEN_KINDS = ("input", "output", "cache_read")
 
 
-# Nearest-rank p99 (spec formula). Intentionally differs by up to one rank from
-# observability/metrics.py's ceil-based p99 — both are valid estimators; kept separate to avoid coupling.
+# Nearest-rank p99 (spec formula); intentionally differs by up to one rank from
+# observability/metrics.py's ceil-based p99 — both valid; kept separate to avoid coupling.
 def _p99(samples: list[float]) -> float:
     if not samples:
         return 0.0
@@ -26,27 +26,33 @@ def _p99(samples: list[float]) -> float:
 class LLMMetrics:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._calls: dict[str, int] = {o: 0 for o in CALL_OUTCOMES}
-        self._tokens: dict[str, int] = {k: 0 for k in TOKEN_KINDS}
-        self._cost_usd = 0.0
+        self._calls: dict[tuple[str, str], int] = {}  # (profile, outcome) -> count
+        self._tokens: dict[tuple[str, str], int] = {}  # (profile, kind) -> count
+        self._cost_usd: dict[str, float] = {}  # profile -> usd
         self._latencies_ms: list[float] = []
 
-    def record_call(self, outcome: str) -> None:
+    def record_call(self, outcome: str, profile: str = "default") -> None:
+        if outcome not in CALL_OUTCOMES:
+            return
         with self._lock:
-            if outcome in self._calls:
-                self._calls[outcome] += 1
+            key = (profile, outcome)
+            self._calls[key] = self._calls.get(key, 0) + 1
 
     def record_tokens(
-        self, *, input: int = 0, output: int = 0, cache_read: int = 0
+        self, profile: str, *, input: int = 0, output: int = 0, cache_read: int = 0
     ) -> None:
         with self._lock:
-            self._tokens["input"] += max(0, input)
-            self._tokens["output"] += max(0, output)
-            self._tokens["cache_read"] += max(0, cache_read)
+            for kind, value in (
+                ("input", input),
+                ("output", output),
+                ("cache_read", cache_read),
+            ):
+                key = (profile, kind)
+                self._tokens[key] = self._tokens.get(key, 0) + max(0, value)
 
-    def record_cost(self, usd: float) -> None:
+    def record_cost(self, profile: str, usd: float) -> None:
         with self._lock:
-            self._cost_usd += max(0.0, usd)
+            self._cost_usd[profile] = self._cost_usd.get(profile, 0.0) + max(0.0, usd)
 
     def record_latency_ms(self, ms: float) -> None:
         with self._lock:
@@ -55,25 +61,28 @@ class LLMMetrics:
     def render_prometheus(self) -> str:
         with self._lock:
             calls = "".join(
-                f'app_llm_calls_total{{outcome="{o}"}} {self._calls[o]}\n'
-                for o in CALL_OUTCOMES
+                f'app_llm_calls_total{{profile="{p}",outcome="{o}"}} {n}\n'
+                for (p, o), n in sorted(self._calls.items())
             )
             tokens = "".join(
-                f'app_llm_tokens_total{{kind="{k}"}} {self._tokens[k]}\n'
-                for k in TOKEN_KINDS
+                f'app_llm_tokens_total{{profile="{p}",kind="{k}"}} {n}\n'
+                for (p, k), n in sorted(self._tokens.items())
             )
-            cost = self._cost_usd
+            cost = "".join(
+                f'app_llm_cost_usd_total{{profile="{p}"}} {c:.6f}\n'
+                for p, c in sorted(self._cost_usd.items())
+            )
             p99 = _p99(self._latencies_ms)
         return (
-            "# HELP app_llm_calls_total LLM calls by outcome\n"
+            "# HELP app_llm_calls_total LLM calls by profile and outcome\n"
             "# TYPE app_llm_calls_total counter\n"
             f"{calls}"
-            "# HELP app_llm_tokens_total LLM tokens consumed by kind\n"
+            "# HELP app_llm_tokens_total LLM tokens consumed by profile and kind\n"
             "# TYPE app_llm_tokens_total counter\n"
             f"{tokens}"
-            "# HELP app_llm_cost_usd_total Cumulative LLM spend in USD\n"
+            "# HELP app_llm_cost_usd_total Cumulative LLM spend in USD by profile\n"
             "# TYPE app_llm_cost_usd_total counter\n"
-            f"app_llm_cost_usd_total {cost:.6f}\n"
+            f"{cost}"
             "# HELP app_llm_call_latency_p99_ms p99 LLM-call latency in ms\n"
             "# TYPE app_llm_call_latency_p99_ms gauge\n"
             f"app_llm_call_latency_p99_ms {p99}\n"
@@ -81,9 +90,9 @@ class LLMMetrics:
 
     def reset(self) -> None:
         with self._lock:
-            self._calls = {o: 0 for o in CALL_OUTCOMES}
-            self._tokens = {k: 0 for k in TOKEN_KINDS}
-            self._cost_usd = 0.0
+            self._calls = {}
+            self._tokens = {}
+            self._cost_usd = {}
             self._latencies_ms = []
 
 

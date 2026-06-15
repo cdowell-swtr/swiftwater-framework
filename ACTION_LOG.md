@@ -557,3 +557,18 @@ of claude-cli). TDD, 24 unit tests. Opus review = APPROVE-WITH-NITS; applied: **
 still inert, before Task 5 wires it live), case-insensitive `requires_key`, an
 or-vs-is-not-None comment, + 4 locking tests (own-key inheritance, per-call+named compose,
 temperature=0.0/max_tokens=0 kept, repr hides key). mypy+ruff clean.
+
+#### #0053 · completed · FWK13 · 2026-06-15
+Tasks 4+5 (coupled — the metric signature change ripples into the service) — profile
+labels on the LLM spend series (`app_llm_calls_total{profile,outcome}` / tokens / cost;
+latency stays an unlabeled p99 gauge) + a profile-aware `LLMService`: `resolve_profile`
+per call, key fail-fast (`KEY_REQUIRING` provider + empty key → LLMError before the
+network call), duck-typed exhaustion (any cause-chain exception with a `reset_hint` attr
+→ LLMExhausted, `_NO_HINT` sentinel distinguishes absent-vs-None). Relabeled 8 existing
+metric/service tests; added profile/fail-fast/keyless/exhaustion tests. 31 unit + 4
+functional green, mypy+ruff clean. Opus review = APPROVE-WITH-NITS (no must-fix); applied
+the cosmetic docstring rewrap. Empirically verified by the reviewer: `reset_hint` name is
+collision-free in vendored litellm/openai, and `profile` is config-bounded (per-call
+provider/model overrides change model_id but NOT the profile label → no cardinality
+inflation). Recorded an FWK16 watch-out (keep ClaudeExhausted off the RateLimitError
+lineage) on its PLAN line.

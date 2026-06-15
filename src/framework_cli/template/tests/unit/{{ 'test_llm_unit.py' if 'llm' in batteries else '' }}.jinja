@@ -10,31 +10,36 @@ from {{ package_name }}.llm.service import LLMService, CompletionResult
 from {{ package_name }}.config.settings import Settings
 
 
+def _new_metrics():
+    from {{ package_name }}.llm.metrics import LLMMetrics
+
+    return LLMMetrics()
+
+
 def test_exhausted_is_an_llm_error():
     assert issubclass(LLMExhausted, LLMError)
 
 
 def test_metrics_record_call_outcomes():
     m = LLMMetrics()
-    m.record_call("success")
-    m.record_call("success")
-    m.record_call("error")
+    m.record_call("success", "default")
+    m.record_call("success", "default")
+    m.record_call("error", "default")
     out = m.render_prometheus()
-    assert 'app_llm_calls_total{outcome="success"} 2' in out
-    assert 'app_llm_calls_total{outcome="error"} 1' in out
-    assert 'app_llm_calls_total{outcome="exhausted"} 0' in out
+    assert 'app_llm_calls_total{profile="default",outcome="success"} 2' in out
+    assert 'app_llm_calls_total{profile="default",outcome="error"} 1' in out
     assert "# TYPE app_llm_calls_total counter" in out
 
 
 def test_metrics_record_tokens_and_cost():
     m = LLMMetrics()
-    m.record_tokens(input=10, output=5, cache_read=3)
-    m.record_cost(0.0021)
+    m.record_tokens("default", input=10, output=5, cache_read=3)
+    m.record_cost("default", 0.0021)
     out = m.render_prometheus()
-    assert 'app_llm_tokens_total{kind="input"} 10' in out
-    assert 'app_llm_tokens_total{kind="output"} 5' in out
-    assert 'app_llm_tokens_total{kind="cache_read"} 3' in out
-    assert "app_llm_cost_usd_total 0.002100" in out
+    assert 'app_llm_tokens_total{profile="default",kind="input"} 10' in out
+    assert 'app_llm_tokens_total{profile="default",kind="output"} 5' in out
+    assert 'app_llm_tokens_total{profile="default",kind="cache_read"} 3' in out
+    assert 'app_llm_cost_usd_total{profile="default"} 0.002100' in out
 
 
 def test_metrics_latency_p99_gauge_present():
@@ -48,28 +53,28 @@ def test_metrics_latency_p99_gauge_present():
 
 def test_metrics_cost_avoids_scientific_notation():
     m = LLMMetrics()
-    m.record_cost(0.0000123)
+    m.record_cost("default", 0.0000123)
     cost_line = [
         ln
         for ln in m.render_prometheus().splitlines()
-        if ln.startswith("app_llm_cost_usd_total")
+        if ln.startswith("app_llm_cost_usd_total{")
     ][0]
     value_part = cost_line.split(" ", 1)[1]
     assert "e" not in value_part  # no scientific notation in the value
-    assert cost_line == "app_llm_cost_usd_total 0.000012"
+    assert cost_line == 'app_llm_cost_usd_total{profile="default"} 0.000012'
 
 
 def test_metrics_reset_clears_all():
     m = LLMMetrics()
-    m.record_call("success")
-    m.record_tokens(input=5)
-    m.record_cost(0.01)
+    m.record_call("success", "default")
+    m.record_tokens("default", input=5)
+    m.record_cost("default", 0.01)
     m.record_latency_ms(12.0)
     m.reset()
     out = m.render_prometheus()
-    assert 'app_llm_calls_total{outcome="success"} 0' in out
-    assert 'app_llm_tokens_total{kind="input"} 0' in out
-    assert "app_llm_cost_usd_total 0.000000" in out
+    assert "app_llm_calls_total{" not in out
+    assert "app_llm_tokens_total{" not in out
+    assert "app_llm_cost_usd_total{" not in out
     assert "app_llm_call_latency_p99_ms 0" in out
 
 
@@ -77,7 +82,32 @@ def test_unknown_outcome_is_ignored():
     m = LLMMetrics()
     m.record_call("bogus")
     out = m.render_prometheus()
-    assert 'app_llm_calls_total{outcome="success"} 0' in out
+    # unknown outcome is silently dropped; no series for "bogus"
+    assert "bogus" not in out
+
+
+def test_metrics_label_by_profile():
+    m = _new_metrics()
+    m.record_call("success", "default")
+    m.record_call("success", "cheap")
+    m.record_call("error", "cheap")
+    m.record_tokens("cheap", input=10, output=5, cache_read=3)
+    m.record_cost("cheap", 0.0021)
+    out = m.render_prometheus()
+    assert 'app_llm_calls_total{profile="default",outcome="success"} 1' in out
+    assert 'app_llm_calls_total{profile="cheap",outcome="success"} 1' in out
+    assert 'app_llm_calls_total{profile="cheap",outcome="error"} 1' in out
+    assert 'app_llm_tokens_total{profile="cheap",kind="input"} 10' in out
+    assert 'app_llm_cost_usd_total{profile="cheap"} 0.002100' in out
+
+
+def test_metrics_reset_clears_all_new():
+    m = _new_metrics()
+    m.record_call("success", "cheap")
+    m.record_cost("cheap", 0.01)
+    m.reset()
+    assert m.render_prometheus().count("app_llm_calls_total{") == 0
+    assert "app_llm_call_latency_p99_ms 0" in m.render_prometheus()
 
 
 class _Msg:
@@ -110,6 +140,20 @@ def _settings() -> Settings:
     )
 
 
+def _psettings(**over):
+    from {{ package_name }}.config.settings import Settings
+
+    base = dict(
+        llm_provider="anthropic",
+        llm_model="claude-sonnet-4-6",
+        llm_api_key="defkey",
+        llm_max_tokens=4096,
+        llm_temperature=0.0,
+    )
+    base.update(over)
+    return Settings(**base)
+
+
 def test_complete_returns_text_and_usage(monkeypatch):
     captured = {}
 
@@ -131,9 +175,9 @@ def test_complete_returns_text_and_usage(monkeypatch):
     assert captured["api_key"] == "k"
     assert captured["messages"][0] == {"role": "system", "content": "be brief"}
     out = metrics.render_prometheus()
-    assert 'app_llm_calls_total{outcome="success"} 1' in out
-    assert 'app_llm_tokens_total{kind="input"} 12' in out
-    assert "app_llm_cost_usd_total 0.000900" in out
+    assert 'app_llm_calls_total{profile="default",outcome="success"} 1' in out
+    assert 'app_llm_tokens_total{profile="default",kind="input"} 12' in out
+    assert 'app_llm_cost_usd_total{profile="default"} 0.000900' in out
 
 
 def test_complete_maps_rate_limit_to_exhausted(monkeypatch):
@@ -148,7 +192,10 @@ def test_complete_maps_rate_limit_to_exhausted(monkeypatch):
 
     with pytest.raises(LLMExhausted):
         svc.complete([{"role": "user", "content": "hi"}])
-    assert 'app_llm_calls_total{outcome="exhausted"} 1' in metrics.render_prometheus()
+    assert (
+        'app_llm_calls_total{profile="default",outcome="exhausted"} 1'
+        in metrics.render_prometheus()
+    )
 
 
 def test_complete_maps_generic_error(monkeypatch):
@@ -163,7 +210,10 @@ def test_complete_maps_generic_error(monkeypatch):
 
     with pytest.raises(LLMError):
         svc.complete([{"role": "user", "content": "hi"}])
-    assert 'app_llm_calls_total{outcome="error"} 1' in metrics.render_prometheus()
+    assert (
+        'app_llm_calls_total{profile="default",outcome="error"} 1'
+        in metrics.render_prometheus()
+    )
 
 
 @pytest.fixture()
@@ -225,20 +275,6 @@ def test_exhausted_reset_hint_defaults_none():
 # ---------------------------------------------------------------------------
 # Profile resolution tests
 # ---------------------------------------------------------------------------
-
-
-def _psettings(**over):
-    from {{ package_name }}.config.settings import Settings
-
-    base = dict(
-        llm_provider="anthropic",
-        llm_model="claude-sonnet-4-6",
-        llm_api_key="defkey",
-        llm_max_tokens=4096,
-        llm_temperature=0.0,
-    )
-    base.update(over)
-    return Settings(**base)
 
 
 def test_resolve_default_profile_uses_llm_fields():
@@ -332,3 +368,108 @@ def test_resolved_profile_repr_hides_api_key():
     from {{ package_name }}.llm.profiles import resolve_profile
 
     assert "defkey" not in repr(resolve_profile(_psettings()))
+
+
+# ---------------------------------------------------------------------------
+# New service tests: profile-aware calls and exhaustion duck-typing
+# ---------------------------------------------------------------------------
+
+
+def test_complete_uses_named_profile_and_labels_metrics(monkeypatch):
+    import litellm
+
+    from {{ package_name }}.config.settings import LLMProfile
+    from {{ package_name }}.llm.service import LLMService
+
+    captured = {}
+    monkeypatch.setattr(
+        litellm, "completion", lambda **k: captured.update(k) or _Resp("hi")
+    )
+    monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0)
+    s = _psettings(
+        llm_profiles={"cheap": LLMProfile(model="claude-haiku-4-5-20251001")}
+    )
+    m = _new_metrics()
+    LLMService(s, metrics=m).complete(
+        [{"role": "user", "content": "x"}], profile="cheap"
+    )
+    assert captured["model"] == "anthropic/claude-haiku-4-5-20251001"
+    assert (
+        'app_llm_calls_total{profile="cheap",outcome="success"} 1'
+        in m.render_prometheus()
+    )
+
+
+def test_complete_per_call_override(monkeypatch):
+    import litellm
+
+    from {{ package_name }}.llm.service import LLMService
+
+    captured = {}
+    monkeypatch.setattr(
+        litellm, "completion", lambda **k: captured.update(k) or _Resp("h")
+    )
+    monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0)
+    LLMService(_psettings(), metrics=_new_metrics()).complete(
+        [{"role": "user", "content": "x"}], provider="openai", model="gpt-x"
+    )
+    assert captured["model"] == "openai/gpt-x"
+
+
+def test_keyless_provider_passes_no_api_key(monkeypatch):
+    import litellm
+
+    from {{ package_name }}.config.settings import LLMProfile
+    from {{ package_name }}.llm.service import LLMService
+
+    captured = {}
+    monkeypatch.setattr(
+        litellm, "completion", lambda **k: captured.update(k) or _Resp("h")
+    )
+    monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0)
+    s = _psettings(
+        llm_api_key="",
+        llm_profiles={"sub": LLMProfile(provider="claude-cli", model="m")},
+    )
+    LLMService(s, metrics=_new_metrics()).complete(
+        [{"role": "user", "content": "x"}], profile="sub"
+    )
+    assert "api_key" not in captured
+
+
+def test_empty_key_for_key_requiring_provider_fails_fast():
+    import pytest
+
+    from {{ package_name }}.llm.errors import LLMError
+    from {{ package_name }}.llm.service import LLMService
+
+    with pytest.raises(LLMError, match="no API key"):
+        LLMService(_psettings(llm_api_key=""), metrics=_new_metrics()).complete(
+            [{"role": "user", "content": "x"}]
+        )
+
+
+def test_reset_hint_exception_maps_to_exhausted(monkeypatch):
+    import litellm
+    import pytest
+
+    from {{ package_name }}.llm.errors import LLMExhausted
+    from {{ package_name }}.llm.service import LLMService
+
+    class _Sub(Exception):
+        def __init__(self):
+            super().__init__("subscription used up")
+            self.reset_hint = "resets 11:30am"
+
+    def boom(**_):
+        try:
+            raise _Sub()
+        except _Sub as inner:
+            raise RuntimeError("litellm wrapped it") from inner
+
+    monkeypatch.setattr(litellm, "completion", boom)
+    with pytest.raises(LLMExhausted) as ei:
+        LLMService(_psettings(), metrics=_new_metrics()).complete(
+            [{"role": "user", "content": "x"}]
+        )
+    assert ei.value.reset_hint == "resets 11:30am"
