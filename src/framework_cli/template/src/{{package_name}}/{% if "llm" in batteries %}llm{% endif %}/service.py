@@ -1,7 +1,7 @@
-"""AgentService — a thin, observable LiteLLM wrapper over a provider API key.
+"""LLMService — a thin, observable LiteLLM wrapper over a provider API key.
 
 Plain LiteLLM (OpenAI-shaped `litellm.completion`); the provider key is passed explicitly.
-Stateless. The HotSwapAgents battery later swaps the provider/model prefix to route to the
+Stateless. The HotSwapLLM battery later swaps the provider/model prefix to route to the
 subscription `claude-cli` provider — this service does not change for that.
 """
 
@@ -14,8 +14,8 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from ..config.settings import Settings
-from .errors import AgentError, AgentExhausted
-from .metrics import AgentMetrics, agent_metrics
+from .errors import LLMError, LLMExhausted
+from .metrics import LLMMetrics, llm_metrics
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -28,16 +28,16 @@ class CompletionResult:
     usage: dict[str, int]
 
 
-class AgentService:
+class LLMService:
     def __init__(
-        self, settings: Settings, *, metrics: AgentMetrics | None = None
+        self, settings: Settings, *, metrics: LLMMetrics | None = None
     ) -> None:
         self._settings = settings
-        self._metrics = metrics or agent_metrics
+        self._metrics = metrics or llm_metrics
 
     @property
     def _model(self) -> str:
-        return f"{self._settings.agent_provider}/{self._settings.agent_model}"
+        return f"{self._settings.llm_provider}/{self._settings.llm_model}"
 
     def _with_system(
         self, messages: list[Message], system: str | None
@@ -47,29 +47,29 @@ class AgentService:
         return [{"role": "system", "content": system}, *messages]
 
     def _call(self, messages: list[Message], **extra: Any) -> Any:
-        # Lazy import keeps litellm off the import path until an agent call actually happens.
+        # Lazy import keeps litellm off the import path until an LLM call actually happens.
         import litellm
 
         started = perf_counter()
         try:
             response = litellm.completion(
                 model=self._model,
-                api_key=self._settings.agent_api_key.get_secret_value(),
-                max_tokens=self._settings.agent_max_tokens,
-                temperature=self._settings.agent_temperature,
+                api_key=self._settings.llm_api_key.get_secret_value(),
+                max_tokens=self._settings.llm_max_tokens,
+                temperature=self._settings.llm_temperature,
                 messages=messages,
                 **extra,
             )
         except litellm.exceptions.RateLimitError as exc:
             self._metrics.record_call("exhausted")
-            raise AgentExhausted(str(exc)) from exc
+            raise LLMExhausted(str(exc)) from exc
         except Exception as exc:  # noqa: BLE001
             # litellm normalizes provider/transport failures to OpenAI-shaped exception types
             # (openai.OpenAIError subclasses); litellm.exceptions.OpenAIError does NOT catch
             # them (name collision between litellm's own class and openai's). Catching Exception
             # here is intentional — the inner guard below re-raises unknown errors verbatim.
             self._metrics.record_call("error")
-            raise AgentError(str(exc)) from exc
+            raise LLMError(str(exc)) from exc
 
         self._metrics.record_latency_ms((perf_counter() - started) * 1000)
         self._metrics.record_call("success")
@@ -106,7 +106,7 @@ class AgentService:
         return {
             "input": getattr(usage, "prompt_tokens", 0) or 0,
             "output": getattr(usage, "completion_tokens", 0) or 0,
-            "cache_read": AgentService._cache_read_tokens(usage)
+            "cache_read": LLMService._cache_read_tokens(usage)
             if usage is not None
             else 0,
         }
@@ -130,4 +130,4 @@ class AgentService:
         try:
             return schema.model_validate_json(content)
         except ValidationError as exc:
-            raise AgentError(f"structured output did not match schema: {exc}") from exc
+            raise LLMError(f"structured output did not match schema: {exc}") from exc

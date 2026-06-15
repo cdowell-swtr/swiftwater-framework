@@ -1,83 +1,83 @@
-"""Agents battery — hermetic unit tests (no network, no DB)."""
+"""LLM battery — hermetic unit tests (no network, no DB)."""
 
 import litellm
 import pytest
 from pydantic import BaseModel
 
-from {{ package_name }}.agents.errors import AgentError, AgentExhausted
-from {{ package_name }}.agents.metrics import AgentMetrics
-from {{ package_name }}.agents.service import AgentService, CompletionResult
+from {{ package_name }}.llm.errors import LLMError, LLMExhausted
+from {{ package_name }}.llm.metrics import LLMMetrics
+from {{ package_name }}.llm.service import LLMService, CompletionResult
 from {{ package_name }}.config.settings import Settings
 
 
-def test_exhausted_is_an_agent_error():
-    assert issubclass(AgentExhausted, AgentError)
+def test_exhausted_is_an_llm_error():
+    assert issubclass(LLMExhausted, LLMError)
 
 
 def test_metrics_record_call_outcomes():
-    m = AgentMetrics()
+    m = LLMMetrics()
     m.record_call("success")
     m.record_call("success")
     m.record_call("error")
     out = m.render_prometheus()
-    assert 'app_agent_calls_total{outcome="success"} 2' in out
-    assert 'app_agent_calls_total{outcome="error"} 1' in out
-    assert 'app_agent_calls_total{outcome="exhausted"} 0' in out
-    assert "# TYPE app_agent_calls_total counter" in out
+    assert 'app_llm_calls_total{outcome="success"} 2' in out
+    assert 'app_llm_calls_total{outcome="error"} 1' in out
+    assert 'app_llm_calls_total{outcome="exhausted"} 0' in out
+    assert "# TYPE app_llm_calls_total counter" in out
 
 
 def test_metrics_record_tokens_and_cost():
-    m = AgentMetrics()
+    m = LLMMetrics()
     m.record_tokens(input=10, output=5, cache_read=3)
     m.record_cost(0.0021)
     out = m.render_prometheus()
-    assert 'app_agent_tokens_total{kind="input"} 10' in out
-    assert 'app_agent_tokens_total{kind="output"} 5' in out
-    assert 'app_agent_tokens_total{kind="cache_read"} 3' in out
-    assert "app_agent_cost_usd_total 0.002100" in out
+    assert 'app_llm_tokens_total{kind="input"} 10' in out
+    assert 'app_llm_tokens_total{kind="output"} 5' in out
+    assert 'app_llm_tokens_total{kind="cache_read"} 3' in out
+    assert "app_llm_cost_usd_total 0.002100" in out
 
 
 def test_metrics_latency_p99_gauge_present():
-    m = AgentMetrics()
+    m = LLMMetrics()
     for v in (10.0, 20.0, 30.0):
         m.record_latency_ms(v)
     out = m.render_prometheus()
-    assert "# TYPE app_agent_call_latency_p99_ms gauge" in out
-    assert "app_agent_call_latency_p99_ms " in out
+    assert "# TYPE app_llm_call_latency_p99_ms gauge" in out
+    assert "app_llm_call_latency_p99_ms " in out
 
 
 def test_metrics_cost_avoids_scientific_notation():
-    m = AgentMetrics()
+    m = LLMMetrics()
     m.record_cost(0.0000123)
     cost_line = [
         ln
         for ln in m.render_prometheus().splitlines()
-        if ln.startswith("app_agent_cost_usd_total")
+        if ln.startswith("app_llm_cost_usd_total")
     ][0]
     value_part = cost_line.split(" ", 1)[1]
     assert "e" not in value_part  # no scientific notation in the value
-    assert cost_line == "app_agent_cost_usd_total 0.000012"
+    assert cost_line == "app_llm_cost_usd_total 0.000012"
 
 
 def test_metrics_reset_clears_all():
-    m = AgentMetrics()
+    m = LLMMetrics()
     m.record_call("success")
     m.record_tokens(input=5)
     m.record_cost(0.01)
     m.record_latency_ms(12.0)
     m.reset()
     out = m.render_prometheus()
-    assert 'app_agent_calls_total{outcome="success"} 0' in out
-    assert 'app_agent_tokens_total{kind="input"} 0' in out
-    assert "app_agent_cost_usd_total 0.000000" in out
-    assert "app_agent_call_latency_p99_ms 0" in out
+    assert 'app_llm_calls_total{outcome="success"} 0' in out
+    assert 'app_llm_tokens_total{kind="input"} 0' in out
+    assert "app_llm_cost_usd_total 0.000000" in out
+    assert "app_llm_call_latency_p99_ms 0" in out
 
 
 def test_unknown_outcome_is_ignored():
-    m = AgentMetrics()
+    m = LLMMetrics()
     m.record_call("bogus")
     out = m.render_prometheus()
-    assert 'app_agent_calls_total{outcome="success"} 0' in out
+    assert 'app_llm_calls_total{outcome="success"} 0' in out
 
 
 class _Msg:
@@ -106,7 +106,7 @@ class _Resp:
 
 def _settings() -> Settings:
     return Settings(
-        agent_api_key="k", agent_model="claude-sonnet-4-6", agent_provider="anthropic"
+        llm_api_key="k", llm_model="claude-sonnet-4-6", llm_provider="anthropic"
     )
 
 
@@ -120,8 +120,8 @@ def test_complete_returns_text_and_usage(monkeypatch):
     monkeypatch.setattr(litellm, "completion", fake_completion)
     monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0009)
 
-    metrics = AgentMetrics()
-    svc = AgentService(_settings(), metrics=metrics)
+    metrics = LLMMetrics()
+    svc = LLMService(_settings(), metrics=metrics)
     result = svc.complete([{"role": "user", "content": "hi"}], system="be brief")
 
     assert isinstance(result, CompletionResult)
@@ -131,9 +131,9 @@ def test_complete_returns_text_and_usage(monkeypatch):
     assert captured["api_key"] == "k"
     assert captured["messages"][0] == {"role": "system", "content": "be brief"}
     out = metrics.render_prometheus()
-    assert 'app_agent_calls_total{outcome="success"} 1' in out
-    assert 'app_agent_tokens_total{kind="input"} 12' in out
-    assert "app_agent_cost_usd_total 0.000900" in out
+    assert 'app_llm_calls_total{outcome="success"} 1' in out
+    assert 'app_llm_tokens_total{kind="input"} 12' in out
+    assert "app_llm_cost_usd_total 0.000900" in out
 
 
 def test_complete_maps_rate_limit_to_exhausted(monkeypatch):
@@ -143,12 +143,12 @@ def test_complete_maps_rate_limit_to_exhausted(monkeypatch):
         )
 
     monkeypatch.setattr(litellm, "completion", boom)
-    metrics = AgentMetrics()
-    svc = AgentService(_settings(), metrics=metrics)
+    metrics = LLMMetrics()
+    svc = LLMService(_settings(), metrics=metrics)
 
-    with pytest.raises(AgentExhausted):
+    with pytest.raises(LLMExhausted):
         svc.complete([{"role": "user", "content": "hi"}])
-    assert 'app_agent_calls_total{outcome="exhausted"} 1' in metrics.render_prometheus()
+    assert 'app_llm_calls_total{outcome="exhausted"} 1' in metrics.render_prometheus()
 
 
 def test_complete_maps_generic_error(monkeypatch):
@@ -158,17 +158,17 @@ def test_complete_maps_generic_error(monkeypatch):
         )
 
     monkeypatch.setattr(litellm, "completion", boom)
-    metrics = AgentMetrics()
-    svc = AgentService(_settings(), metrics=metrics)
+    metrics = LLMMetrics()
+    svc = LLMService(_settings(), metrics=metrics)
 
-    with pytest.raises(AgentError):
+    with pytest.raises(LLMError):
         svc.complete([{"role": "user", "content": "hi"}])
-    assert 'app_agent_calls_total{outcome="error"} 1' in metrics.render_prometheus()
+    assert 'app_llm_calls_total{outcome="error"} 1' in metrics.render_prometheus()
 
 
 @pytest.fixture()
-def service() -> AgentService:
-    return AgentService(_settings(), metrics=AgentMetrics())
+def service() -> LLMService:
+    return LLMService(_settings(), metrics=LLMMetrics())
 
 
 class Person(BaseModel):
@@ -182,14 +182,14 @@ def test_complete_structured_parses_into_schema(monkeypatch):
     )
     monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0)
 
-    svc = AgentService(_settings(), metrics=AgentMetrics())
+    svc = LLMService(_settings(), metrics=LLMMetrics())
     person = svc.complete_structured([{"role": "user", "content": "x"}], Person)
     assert person == Person(name="Ada", age=36)
 
 
-def test_complete_structured_bad_json_raises_agent_error(monkeypatch, service):
+def test_complete_structured_bad_json_raises_llm_error(monkeypatch, service):
     monkeypatch.setattr(litellm, "completion", lambda **kw: _Resp("not json"))
-    with pytest.raises(AgentError):
+    with pytest.raises(LLMError):
         service.complete_structured([{"role": "user", "content": "x"}], Person)
 
 

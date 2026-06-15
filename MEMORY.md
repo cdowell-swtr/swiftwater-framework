@@ -12,6 +12,7 @@ doubt, native.
 
 ## Index
 
+- [LLM vs agents battery taxonomy](_memory/llm-vs-agents-battery-taxonomy.md) — the agent capability is TWO batteries: `--with llm` (runtime; v0.2.5's `agents` renamed in v0.2.6/FWK15) + `--with agents` (tool loop, `requires` llm); `hotswapllm` extends `llm` and lands before `agents`. A tools-less completion service is an LLM integration, not an agent.
 - [Verify master content after a PR merge](_memory/verify-master-content-after-pr-merge.md) — a PR merge can silently land an EARLIER commit, not the tip (PR #15 merged `d9fc144`, dropping 2 later commits incl. the reconciliation; caught by a pre-`/clear` grep). Always grep master for a marker after merging; prefer single-commit/squash PRs; check the merge's PR-side parent is the branch tip.
 - [master is protected (GitHub ruleset)](_memory/master-branch-protection-ruleset.md) — no direct pushes; PR required (0 approvals, self-merge OK); required checks `gate`+`build`+`render-complete`; no force-push/delete; admins enforced. `render-complete` = stable umbrella over the dynamic render matrix. Review agents advisory (no gh-secret keys). Emergency: disable ruleset 17579429.
 - [Scaffold from a real tag, not default branch](_memory/scaffold-from-real-tag-not-default-branch.md) — `framework new` bakes `_commit: v<pyproject-version>` as the upskill anchor; it must be a real tag. Master HEAD with an un-bumped pyproject records a lying anchor → cut a release first. (v0.2.0 cut 2026-06-11, so the anchor is now real.)
