@@ -688,3 +688,13 @@ its obs alert (`HighAgentRunFailureRate` over `app_agent_runs_total`) + 2-panel 
 (tool calls, run outcomes). resolve closure `['agents','llm']`; obs-completeness passes
 UNMODIFIED (agents adds its own alert+dashboard, renders clean alone); 272 tests green;
 dashboard JSON valid.
+
+#### #0066 · completed · FWK14 · 2026-06-15
+Task 2 — added `LLMService.respond()` (raw tool-capable completion: returns the litellm
+response so the agent loop sees content + tool_calls; adds `tools`/`tool_choice="auto"`
+only when tools given) and refactored `complete()` onto it. The ONLY llm-battery change.
+`complete_structured` untouched (response_format ≠ tools). Behavior-preserving: full llm
+suite green (33 unit + 5 functional). Opus review = APPROVE (traced: resolve once, `_call`
+once, same response to `_usage_dict` — no double-call/metric; empty-list tools edge
+correct). Minors deferred (Any return + raw-shape coupling — acceptable for the
+intra-battery seam).

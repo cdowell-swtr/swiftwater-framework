@@ -137,6 +137,30 @@ class LLMService:
             else 0,
         }
 
+    def respond(
+        self,
+        messages: list[Message],
+        system: str | None = None,
+        *,
+        profile: str = "default",
+        provider: str | None = None,
+        model: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Any:
+        """Raw model response (choices[0].message has content + tool_calls; .usage present).
+
+        The tool-capable lower-level call the agent loop builds on. Honors profiles, cost
+        metrics, exhaustion, and the key fail-fast exactly as complete() does.
+        """
+        resolved = resolve_profile(
+            self._settings, profile, provider=provider, model=model
+        )
+        extra: dict[str, Any] = {}
+        if tools:
+            extra["tools"] = tools
+            extra["tool_choice"] = "auto"
+        return self._call(self._with_system(messages, system), resolved, **extra)
+
     def complete(
         self,
         messages: list[Message],
@@ -146,10 +170,9 @@ class LLMService:
         provider: str | None = None,
         model: str | None = None,
     ) -> CompletionResult:
-        resolved = resolve_profile(
-            self._settings, profile, provider=provider, model=model
+        response = self.respond(
+            messages, system, profile=profile, provider=provider, model=model
         )
-        response = self._call(self._with_system(messages, system), resolved)
         text = response.choices[0].message.content or ""
         return CompletionResult(text=text, usage=self._usage_dict(response))
 
