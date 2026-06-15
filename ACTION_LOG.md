@@ -471,3 +471,18 @@ for a one-line provider/model f-string would be over-built); recording the devia
 here. (2) no fail-fast on an empty `agent_api_key` (unset key → 502 on first call) —
 deferred to FWK14 (noted on its PLAN line). FWK12 complete; moving to Done and finishing
 the branch.
+
+#### #0046 · completed · release · 2026-06-14
+Cut **v0.2.5** — bundles everything on master since v0.2.4: the **agents battery**
+(FWK12, headline builder-facing capability + new `litellm` generated-project dep), the
+LiteLLM review-engine foundation (FWK5), the externalized `litellm-claude-cli` package
+(FWK11), and the GraphQL mount fix (#29). Patch bump (user choice; consistent with the
+0.2.x per-plan cadence). Bumped pyproject `0.2.4→0.2.5`, `uv lock` (framework-cli→0.2.5),
+`DOGFOOD_COMMIT→"v0.2.5"`. Validated: ruff+mypy(dogfood) clean, `uv lock --check` clean,
+`uv build` → framework_cli-0.2.5.{whl,tar.gz}, 27 release/dogfood/version tests green.
+**Deviation from the literal release-cut procedure:** did NOT bump the "FROZEN through
+v0.2.4" markers in CLAUDE.md/meta-plan — the meta-plan is genuinely frozen at v0.2.4
+(Plan 28); the v0.2.5 work (FWK5/11/12) is tracked in PLAN.md, so bumping the marker
+would falsely claim the meta-plan covers it. Release goes via a `chore(release)` PR
+(master is protected), then a lightweight `v0.2.5` tag → release.yml. Enables the Meridian
+upgrade to pull the agents battery from a real tag.
