@@ -698,3 +698,11 @@ suite green (33 unit + 5 functional). Opus review = APPROVE (traced: resolve onc
 once, same response to `_usage_dict` — no double-call/metric; empty-list tools edge
 correct). Minors deferred (Any return + raw-shape coupling — acceptable for the
 intra-battery seam).
+
+#### #0067 · completed · FWK14 · 2026-06-15
+Tasks 3+4+5 — agent-module building blocks: `agent_max_iterations` setting (agents guard,
+default 5); `agents/tools.py` (`ToolContext`/`Tool`/`ToolRegistry`/`default_registry` with
+read-only `get_item`/`search_items` over the existing Item repo — no write tools);
+`agents/metrics.py` (`app_agent_tool_calls_total{tool,outcome}` / `app_agent_runs_total
+{outcome}` hand-rolled singleton). TDD: 3 hermetic unit + 3 functional (Postgres) green,
+mypy+ruff clean. Controller review (mirrors proven llm patterns; the runner gets Opus).

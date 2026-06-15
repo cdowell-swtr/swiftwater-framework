@@ -1,0 +1,48 @@
+"""agents battery — hermetic tool-registry + loop tests (no network, no DB)."""
+
+
+def test_registry_dispatch_and_schemas():
+    from {{ package_name }}.agents.tools import Tool, ToolContext, ToolRegistry
+
+    reg = ToolRegistry()
+    reg.register(
+        Tool(
+            name="echo",
+            description="echo back",
+            parameters={
+                "type": "object",
+                "properties": {"x": {"type": "string"}},
+                "required": ["x"],
+            },
+            handler=lambda args, ctx: f"echo:{args['x']}",
+        )
+    )
+    schemas = reg.schemas()
+    assert schemas[0]["type"] == "function"
+    assert schemas[0]["function"]["name"] == "echo"
+    assert reg.dispatch("echo", {"x": "hi"}, ToolContext(session=None)) == "echo:hi"
+
+
+def test_registry_unknown_tool_returns_error_string():
+    from {{ package_name }}.agents.tools import ToolContext, ToolRegistry
+
+    out = ToolRegistry().dispatch("nope", {}, ToolContext(session=None))
+    assert out.startswith("error:") and "unknown tool" in out.lower()
+
+
+def test_agent_metrics_tool_calls_and_runs():
+    from {{ package_name }}.agents.metrics import AgentMetrics
+
+    m = AgentMetrics()
+    m.record_tool_call("get_item", "success")
+    m.record_tool_call("get_item", "success")
+    m.record_tool_call("search_items", "error")
+    m.record_run("completed")
+    m.record_run("max_iterations")
+    out = m.render_prometheus()
+    assert 'app_agent_tool_calls_total{tool="get_item",outcome="success"} 2' in out
+    assert 'app_agent_tool_calls_total{tool="search_items",outcome="error"} 1' in out
+    assert 'app_agent_runs_total{outcome="completed"} 1' in out
+    assert 'app_agent_runs_total{outcome="max_iterations"} 1' in out
+    assert 'app_agent_runs_total{outcome="error"} 0' in out
+    assert "# TYPE app_agent_tool_calls_total counter" in out

@@ -1,0 +1,43 @@
+"""agents battery — read-only Item tools over a real Postgres."""
+
+import pytest
+from sqlalchemy import Engine
+
+from {{ package_name }}.agents.tools import ToolContext, default_registry
+from {{ package_name }}.db.engine import build_session_factory
+from {{ package_name }}.db.repository import create_item
+
+
+@pytest.fixture
+def session(engine: Engine):
+    factory = build_session_factory(engine)
+    with factory() as s:
+        create_item(s, "alpha widget")
+        create_item(s, "beta gadget")
+        yield s
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        conn.execute(text("TRUNCATE TABLE items RESTART IDENTITY CASCADE"))
+        conn.commit()
+
+
+def test_get_item_returns_known_row(session):
+    out = default_registry().dispatch(
+        "get_item", {"id": 1}, ToolContext(session=session)
+    )
+    assert "alpha widget" in out
+
+
+def test_get_item_missing_is_graceful(session):
+    out = default_registry().dispatch(
+        "get_item", {"id": 9999}, ToolContext(session=session)
+    )
+    assert "not found" in out.lower()
+
+
+def test_search_items_filters_by_name(session):
+    out = default_registry().dispatch(
+        "search_items", {"query": "beta"}, ToolContext(session=session)
+    )
+    assert "beta gadget" in out and "alpha widget" not in out
