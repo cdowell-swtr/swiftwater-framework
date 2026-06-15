@@ -1,0 +1,123 @@
+"""claudesubscriptioncli battery — registration + keyless routing + exhaustion (mocked CLI)."""
+
+import os
+
+import litellm
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _restore_provider_map():
+    """Snapshot/restore the process-global litellm.custom_provider_map around each test, so
+    mutating it here can't leak into other tests (structural isolation, not by convention)."""
+    saved = litellm.custom_provider_map
+    yield
+    litellm.custom_provider_map = saved
+
+
+def test_register_installs_claude_cli_provider():
+    import litellm_claude_cli
+
+    litellm.custom_provider_map = []
+    litellm_claude_cli.register()
+    assert "claude-cli" in [p["provider"] for p in litellm.custom_provider_map]
+
+
+def test_register_is_idempotent():
+    import litellm_claude_cli
+
+    litellm.custom_provider_map = []
+    litellm_claude_cli.register()
+    litellm_claude_cli.register()
+    assert [p["provider"] for p in litellm.custom_provider_map].count("claude-cli") == 1
+
+
+def test_create_app_registers_claude_cli_when_battery_active():
+    litellm.custom_provider_map = []
+    # Settings values are irrelevant here; we only assert create_app registered the provider.
+    from {{ package_name }}.config.settings import Settings
+    from {{ package_name }}.main import create_app
+
+    create_app(Settings(llm_api_key="k", serve_spa=False))
+    assert "claude-cli" in [p["provider"] for p in (litellm.custom_provider_map or [])]
+
+
+def test_claude_cli_profile_routes_keyless(monkeypatch):
+    from {{ package_name }}.config.settings import LLMProfile, Settings
+    from {{ package_name }}.llm.metrics import LLMMetrics
+    from {{ package_name }}.llm.service import LLMService
+
+    captured = {}
+
+    class _Msg:
+        content = "hi"
+        tool_calls = None
+
+    class _Resp:
+        choices = [type("C", (), {"message": _Msg()})()]
+        usage = None
+
+    monkeypatch.setattr(
+        litellm, "completion", lambda **k: captured.update(k) or _Resp()
+    )
+    monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0)
+    s = Settings(
+        llm_api_key="",
+        llm_profiles={
+            "sub": LLMProfile(provider="claude-cli", model="claude-sonnet-4-6")
+        },
+    )
+    LLMService(s, metrics=LLMMetrics()).complete(
+        [{"role": "user", "content": "x"}], profile="sub"
+    )
+    assert captured["model"] == "claude-cli/claude-sonnet-4-6"
+    assert "api_key" not in captured
+
+
+def test_claude_exhausted_maps_to_llm_exhausted(monkeypatch):
+    from litellm_claude_cli import ClaudeExhausted
+
+    from {{ package_name }}.config.settings import LLMProfile, Settings
+    from {{ package_name }}.llm.errors import LLMExhausted
+    from {{ package_name }}.llm.metrics import LLMMetrics
+    from {{ package_name }}.llm.service import LLMService
+
+    def boom(**_):
+        try:
+            raise ClaudeExhausted("subscription used up", reset_hint="resets 11:30am")
+        except ClaudeExhausted as inner:
+            raise RuntimeError("litellm wrapped it") from inner
+
+    monkeypatch.setattr(litellm, "completion", boom)
+    s = Settings(
+        llm_api_key="",
+        llm_profiles={"sub": LLMProfile(provider="claude-cli", model="m")},
+    )
+    with pytest.raises(LLMExhausted) as ei:
+        LLMService(s, metrics=LLMMetrics()).complete(
+            [{"role": "user", "content": "x"}], profile="sub"
+        )
+    assert ei.value.reset_hint == "resets 11:30am"
+
+
+@pytest.mark.skipif(
+    os.environ.get("LLM_SUBSCRIPTION_SMOKE") != "1",
+    reason="set LLM_SUBSCRIPTION_SMOKE=1 with an authenticated `claude` CLI to run",
+)
+def test_live_subscription_completion():
+    from {{ package_name }}.config.settings import LLMProfile, Settings
+    from {{ package_name }}.llm.metrics import LLMMetrics
+    from {{ package_name }}.llm.service import LLMService
+    from {{ package_name }}.main import create_app
+
+    create_app(Settings(llm_api_key="", serve_spa=False))
+    s = Settings(
+        llm_api_key="",
+        llm_profiles={
+            "sub": LLMProfile(provider="claude-cli", model="claude-sonnet-4-6")
+        },
+    )
+    result = LLMService(s, metrics=LLMMetrics()).complete(
+        [{"role": "user", "content": "Reply with the single word: ok"}], profile="sub"
+    )
+    assert result.text.strip()

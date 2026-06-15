@@ -622,3 +622,16 @@ renders clean alone — confirms the plan's call that the spec-anticipated obs-t
 is unnecessary); 272 framework tests green; dep installs (cached); baseline + llm-only
 renders omit the dep AND the hatch stanza (guard isolation verified — both renders valid
 TOML + format-clean).
+
+#### #0059 · completed · FWK16 · 2026-06-15
+Tasks 3+4 — wired the claude-cli subscription provider: `create_app` startup guard calls
+the package's idempotent `litellm_claude_cli.register()` (lazy function-local import →
+package off the import path when the battery is off); runtime-caveat docs in SECRETS.md
+(keyless, needs an authenticated `claude` on PATH, not baked into the image); unit tests
+(register install/idempotent, create_app registers, keyless `claude-cli/<model>` routing
+with no api_key, real `ClaudeExhausted`→`LLMExhausted` through a wrapped cause chain) +
+a gated live smoke. **Base llm service untouched** — the FWK13 keyless + duck-typed
+exhaustion seam handles claude-cli transparently. No mypy override needed (function-local
+import). Opus review = APPROVE; folded in 2 nits: an autouse fixture snapshotting
+`litellm.custom_provider_map` (structural test isolation) + a clarifying comment. 5
+pass/1 skip, ruff+mypy clean.
