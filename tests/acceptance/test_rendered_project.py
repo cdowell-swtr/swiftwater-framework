@@ -277,6 +277,41 @@ def test_rendered_project_with_claudesubscriptioncli_battery_passes(tmp_path: Pa
     not _docker_available(),
     reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
 )
+def test_rendered_project_with_agents_battery_passes(tmp_path: Path):
+    # agents requires llm, so render the dependency-closed set (as the CLI does). Confirms the
+    # agents module + route render and the battery's unit + functional tests (tool registry,
+    # read-only Item tools, the run loop, POST /agents/run) run.
+    data = {**DATA, "batteries": resolve(["agents"])}
+    dest = tmp_path / "demo"
+    render_project(dest, data)
+
+    assert (dest / "src" / "demo" / "agents" / "runner.py").exists(), (
+        "agents/runner.py was not rendered"
+    )
+    assert (dest / "src" / "demo" / "routes" / "agents.py").exists(), (
+        "routes/agents.py was not rendered"
+    )
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional gate did not pass for the agents battery project:\n"
+        + result.stdout
+        + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
 def test_rendered_project_with_workers_battery_passes(tmp_path: Path):
     # Renders a project with the workers battery active, asserts the battery files
     # were emitted, then runs unit+functional (70% gate) to confirm both workers test

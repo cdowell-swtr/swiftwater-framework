@@ -726,3 +726,10 @@ ToolContext; LLMExhausted→503, other→502) + wired `agent_metrics` into `/met
 the agents guard. TDD functional test (seeded items, mocked litellm tool-round→answer):
 outcome=completed, text + tool_calls correct, /metrics carries the agent series. 2 green,
 ruff+mypy clean. Controller review (plumbing).
+
+#### #0070 · completed · FWK14 · 2026-06-15
+Task 8 — agents acceptance test (renders `resolve(['agents'])` + runs the 70% gate incl.
+all agents unit/functional tests) green in 52s. Full verification: ruff+format+mypy clean,
+no eval coupling, full non-acceptance suite 891 passed/3 skipped, obs series consistency
+exact (metrics emit app_agent_runs_total + app_agent_tool_calls_total; alert+dashboard
+reference exactly those — no orphans).
