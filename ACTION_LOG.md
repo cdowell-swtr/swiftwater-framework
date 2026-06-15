@@ -642,3 +642,13 @@ renders the dependency-closed set (`resolve(['claudesubscriptioncli'])` → +llm
 does), asserts the unit test + PEP 508 dep rendered, `uv sync` (fetches the git dep), runs
 the 70% unit+functional gate. Green in 46s. This is the only test that needs `requires`
 resolution (the obs test passes on the battery alone).
+
+#### #0061 · completed · FWK16 · 2026-06-15
+Task 6 verify + Task 7 branch-end. Framework gate green (ruff+format+mypy), no eval
+coupling, full non-acceptance suite 890 passed/3 skipped (obs-completeness gained the
+claudesubscriptioncli case), claudesubscriptioncli acceptance green (46s). Branch-end
+controller whole-branch review (the core wiring already got a deep Opus review in Unit B
+= APPROVE): clean small diff, all claude refs behind the battery guard in main.py, **base
+llm core untouched**, guard isolation verified both renders. Captured the hatchling
+gotcha as a committed memory [[pep508-git-dep-needs-hatch-allow-direct-references]]. FWK16
+-> Done.
