@@ -511,3 +511,21 @@ render-matrix). Bumped pyproject `0.2.5→0.2.6`, `uv lock`, `DOGFOOD_COMMIT→"
 ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build` → framework_cli-0.2.6.
 {whl,tar.gz}, version-consistency tests green. Ships the `--with llm` rename so Meridian
 upgrades onto the honest battery name. (Frozen-through markers left at v0.2.4 as before.)
+
+#### #0049 · note · FWK13 · 2026-06-15
+Brainstormed the per-task LLM selection capability. User pivoted from a single
+API↔subscription hot-swap to **named LLM profiles** (different provider/model/backend
+per task) + per-call overrides for spikes — which subsumes hot-swap (API vs sub = two
+profiles). Design spec written + self-reviewed: `docs/superpowers/specs/
+2026-06-15-llm-profiles-and-subscription-design.md`. Restructured into two slices:
+**FWK13** = profiles in the base `--with llm` (named profiles via `APP_LLM_PROFILES`
+JSON, `default` back-compat, per-call provider/model override, per-profile cost
+metrics, key fail-fast, duck-typed `reset_hint` exhaustion = subscription-ready);
+**FWK16** = `--with claudesubscriptioncli` (`requires` llm; adds the litellm-claude-cli
+PEP-508 dep + claude-cli registration so `provider: claude-cli` is a valid keyless
+profile). Renamed `hotswapllm`→`claudesubscriptioncli` (provider+channel+interface) per
+user. Key seam: base llm stays plugin-free — exhaustion is detected duck-typed (any
+cause-chain exception with a `reset_hint` attr → LLMExhausted), keyless-by-default via a
+`KEY_REQUIRING_PROVIDERS` allowlist. FWK16 is the first battery with `requires` → the
+obs/acceptance per-battery render tests must resolve requires. Also moved FWK15 (the llm
+rename, v0.2.6) to Done.
