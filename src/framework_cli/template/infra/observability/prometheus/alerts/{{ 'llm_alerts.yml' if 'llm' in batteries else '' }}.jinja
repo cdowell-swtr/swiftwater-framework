@@ -2,8 +2,8 @@ groups:
 - name: llm
   rules:
   - alert: HighLLMCallFailureRate
-    # Errors + provider-exhaustion as a share of all LLM calls. A wedged or quota-exhausted
-    # provider is the failure mode that matters; tune the 0.1 threshold per app.
+    # Per-profile error + provider-exhaustion rate (share of that profile's calls). A wedged
+    # or quota-exhausted provider is the failure mode that matters; tune the 0.1 threshold per app.
     expr: sum by (profile) (rate(app_llm_calls_total{outcome=~"error|exhausted"}[5m])) / clamp_min(sum by (profile) (rate(app_llm_calls_total[5m])), 1) > 0.1
     for: 5m
     labels:

@@ -30,12 +30,12 @@
     },
     {
       "id": 3,
-      "title": "Tokens by kind",
+      "title": "Tokens by profile and kind",
       "type": "timeseries",
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
       "targets": [
-        {"refId": "A", "expr": "sum by (profile) (rate(app_llm_tokens_total[5m]))", "legendFormat": "__auto"}
+        {"refId": "A", "expr": "sum by (profile, kind) (rate(app_llm_tokens_total[5m]))", "legendFormat": "__auto"}
       ],
       "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
     },

@@ -579,3 +579,14 @@ LLMError → existing broad except → 502); per-profile obs: alert is now per-p
 failure rate (`sum by (profile)`), dashboard panels group calls/tokens/cost by profile
 (latency p99 unchanged). Functional 5 green, obs-completeness[llm] green, valid JSON,
 ruff+mypy clean. Controller review (simple wiring).
+
+#### #0055 · completed · FWK13 · 2026-06-15
+Task 8 verify + Task 9 branch-end. Framework gate green (ruff+format+mypy), full
+non-acceptance suite 889 passed/3 skipped, both llm acceptance tests green, rendered-
+project straggler grep clean (no `._model`, all obs series by-profile), no eval-fixture
+coupling. Branch-end Opus review = APPROVE-WITH-NITS / MERGE (empirically verified:
+secret masking end-to-end incl. profile keys, guard isolation both ways, backward-compat
+of the default profile, obs-series<->metrics-name consistency, FWK16 seam ready). Applied
+2 nits: token dashboard panel `sum by (profile, kind)` (keep both dimensions) + stale
+alert comment. Deferred (noted): unknown-profile currently -> 502 (could be 400-class) on
+the demo route. FWK13 -> Done.
