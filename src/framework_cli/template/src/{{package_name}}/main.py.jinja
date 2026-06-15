@@ -51,6 +51,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # in dev the Vite server serves the SPA, so this is skipped.
         app.mount("/", StaticFiles(directory=str(_dist), html=True), name="spa")
 {%- endif %}
+{%- if "claudesubscriptioncli" in batteries %}
+
+    # Register the claude-cli subscription provider so an LLM profile may set
+    # provider="claude-cli". Idempotent; needs an authenticated `claude` CLI on PATH at runtime.
+    from litellm_claude_cli import register as register_claude_cli
+
+    register_claude_cli()
+{%- endif %}
     configure_tracing(app, settings)
     return app
 

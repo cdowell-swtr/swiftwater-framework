@@ -597,3 +597,65 @@ dogfood tag pin -> `v0.2.7`; ruff+mypy(dogfood) clean, `uv lock --check` clean, 
 -> framework_cli-0.2.7.{whl,tar.gz}, 27 version-consistency tests green. Ships LLM
 profiles (per-task selection) to builders — Meridian can define profiles now; the
 claude-cli subscription profile lands with FWK16.
+
+#### #0057 · note · FWK16 · 2026-06-15
+Wrote the FWK16 (`--with claudesubscriptioncli`) plan: `docs/superpowers/plans/
+2026-06-15-claudesubscriptioncli.md`. Slice 2 of the subscription design. Simplified at
+plan time after inspecting the installed package: `litellm_claude_cli.register()` is an
+idempotent public helper (no custom register module needed — call it in create_app's
+startup guard), and `ClaudeExhausted` carries `reset_hint` and is NOT a RateLimitError →
+caught by FWK13's duck-typed exhaustion seam → **zero base-llm service changes**. Also:
+no claudesubscriptioncli-guarded file lives in the `llm/` dir, so the battery renders
+clean alone → obs-completeness passes UNMODIFIED (the spec-anticipated obs-test requires
+change is unnecessary; only the acceptance test needs `requires` resolution). 8 tasks;
+dep is a PEP 508 git ref (`@v0.1.1`, pip-installable). Branched off the merged v0.2.7
+master.
+
+#### #0058 · completed · FWK16 · 2026-06-15
+Tasks 1+2 — registered the `claudesubscriptioncli` BatterySpec (`requires=("llm",)`,
+`obs="rides-existing"`, no gated review agents) + added the `litellm-claude-cli` dep as a
+PEP 508 git ref (`@v0.1.1`). **Discovery:** hatchling rejects `@ git+...` direct refs
+unless `[tool.hatch.metadata] allow-direct-references = true` — added that, gated on the
+same battery (without it `uv sync`'s build step errors). resolve closure
+`['claudesubscriptioncli','llm']`; obs-completeness passes UNMODIFIED (rides-existing,
+renders clean alone — confirms the plan's call that the spec-anticipated obs-test change
+is unnecessary); 272 framework tests green; dep installs (cached); baseline + llm-only
+renders omit the dep AND the hatch stanza (guard isolation verified — both renders valid
+TOML + format-clean).
+
+#### #0059 · completed · FWK16 · 2026-06-15
+Tasks 3+4 — wired the claude-cli subscription provider: `create_app` startup guard calls
+the package's idempotent `litellm_claude_cli.register()` (lazy function-local import →
+package off the import path when the battery is off); runtime-caveat docs in SECRETS.md
+(keyless, needs an authenticated `claude` on PATH, not baked into the image); unit tests
+(register install/idempotent, create_app registers, keyless `claude-cli/<model>` routing
+with no api_key, real `ClaudeExhausted`→`LLMExhausted` through a wrapped cause chain) +
+a gated live smoke. **Base llm service untouched** — the FWK13 keyless + duck-typed
+exhaustion seam handles claude-cli transparently. No mypy override needed (function-local
+import). Opus review = APPROVE; folded in 2 nits: an autouse fixture snapshotting
+`litellm.custom_provider_map` (structural test isolation) + a clarifying comment. 5
+pass/1 skip, ruff+mypy clean.
+
+#### #0060 · completed · FWK16 · 2026-06-15
+Task 5 — acceptance test `test_rendered_project_with_claudesubscriptioncli_battery_passes`:
+renders the dependency-closed set (`resolve(['claudesubscriptioncli'])` → +llm, as the CLI
+does), asserts the unit test + PEP 508 dep rendered, `uv sync` (fetches the git dep), runs
+the 70% unit+functional gate. Green in 46s. This is the only test that needs `requires`
+resolution (the obs test passes on the battery alone).
+
+#### #0061 · completed · FWK16 · 2026-06-15
+Task 6 verify + Task 7 branch-end. Framework gate green (ruff+format+mypy), no eval
+coupling, full non-acceptance suite 890 passed/3 skipped (obs-completeness gained the
+claudesubscriptioncli case), claudesubscriptioncli acceptance green (46s). Branch-end
+controller whole-branch review (the core wiring already got a deep Opus review in Unit B
+= APPROVE): clean small diff, all claude refs behind the battery guard in main.py, **base
+llm core untouched**, guard isolation verified both renders. Captured the hatchling
+gotcha as a committed memory [[pep508-git-dep-needs-hatch-allow-direct-references]]. FWK16
+-> Done.
+
+#### #0062 · completed · release · 2026-06-15
+Cut **v0.2.8** (bundled into the FWK16 PR). Bumped pyproject `0.2.7->0.2.8`, `uv lock`,
+dogfood tag pin -> `v0.2.8`; ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build`
+-> framework_cli-0.2.8.{whl,tar.gz}, 27 version-consistency tests green. Ships the
+claude-cli subscription provider — Meridian can now route a profile through the
+subscription (the thing that unblocks heavy use without per-token API cost).

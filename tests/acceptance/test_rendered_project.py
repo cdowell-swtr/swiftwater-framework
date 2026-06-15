@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from framework_cli.batteries import resolve
 from framework_cli.copier_runner import render_project
 from framework_cli.downskill import remove_battery
 from framework_cli.integrity.checker import check
@@ -234,6 +235,41 @@ def test_rendered_project_with_llm_battery_passes(tmp_path: Path):
         f"LLM route not fully exercised; coverage line: {llm_cov_line!r}\n"
         "Expected 100% coverage of routes/llm.py — was "
         "tests/functional/test_llm.py collected and did it pass?\n" + combined_output
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
+)
+def test_rendered_project_with_claudesubscriptioncli_battery_passes(tmp_path: Path):
+    # claudesubscriptioncli requires llm, so render the dependency-closed set (as the CLI does).
+    # Confirms the litellm-claude-cli git dep installs, register() wires at startup, and the
+    # battery's unit tests (registration + keyless routing + ClaudeExhausted mapping) run.
+    data = {**DATA, "batteries": resolve(["claudesubscriptioncli"])}
+    dest = tmp_path / "demo"
+    render_project(dest, data)
+
+    assert (dest / "tests" / "unit" / "test_claudesubscriptioncli.py").exists(), (
+        "the claudesubscriptioncli unit test was not rendered"
+    )
+    assert "litellm-claude-cli @ git+" in (dest / "pyproject.toml").read_text(), (
+        "the litellm-claude-cli PEP 508 dep was not rendered"
+    )
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed (could not fetch litellm-claude-cli?)"
+
+    result = subprocess.run(
+        ["bash", "scripts/coverage.sh", "70", "unit", "functional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the 70% unit+functional gate did not pass for the claudesubscriptioncli project:\n"
+        + result.stdout
+        + result.stderr
     )
 
 

@@ -35,6 +35,13 @@ _BATTERIES: dict[str, BatterySpec] = {
         "full observability — the agents battery builds its tool loop on this",
         obs="in-process",
     ),
+    "claudesubscriptioncli": BatterySpec(
+        "claudesubscriptioncli",
+        "Route an LLM profile through your Claude subscription via the claude CLI "
+        "(litellm-claude-cli). requires the llm battery; needs an authenticated `claude` on PATH",
+        requires=("llm",),
+        obs="rides-existing",
+    ),
     "websockets": BatterySpec(
         "websockets",
         "FastAPI WebSocket routes + a connection manager",

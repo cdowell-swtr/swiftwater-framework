@@ -26,6 +26,7 @@ dependencies = [
 {% endif %}{% if "redis" in batteries or "workers" in batteries %}    "opentelemetry-instrumentation-redis>=0.48b0",
 {% endif %}{% if "consumers" in batteries %}    "httpx>=0.28",
 {% endif %}{% if "llm" in batteries %}    "litellm>=1.88.1",
+{% endif %}{% if "claudesubscriptioncli" in batteries %}    "litellm-claude-cli @ git+https://github.com/cdowell-swtr/litellm-claude-cli@v0.1.1",
 {% endif %}]
 
 [dependency-groups]
@@ -54,7 +55,10 @@ docs = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
+{% if "claudesubscriptioncli" in batteries %}
+[tool.hatch.metadata]
+allow-direct-references = true
+{% endif %}
 [tool.hatch.build.targets.wheel]
 packages = ["src/{{ package_name }}"]
 
