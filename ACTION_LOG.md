@@ -504,3 +504,10 @@ PLAN (FWK12 superseded; added FWK15; **re-scoped FWK13 → `hotswapllm` as a tra
 extension of `llm` that PRECEDES FWK14 `agents`** per user), committed taxonomy memory
 [[llm-vs-agents-battery-taxonomy]]. Re-releases as v0.2.6 so Meridian upgrades onto the
 honest name. (v0.2.5's `--with agents` stays a brief unconsumed blip.)
+
+#### #0048 · completed · release · 2026-06-15
+Cut **v0.2.6** (bundled into the FWK15 rename PR, v0.2.4-style — one PR, one
+render-matrix). Bumped pyproject `0.2.5→0.2.6`, `uv lock`, `DOGFOOD_COMMIT→"v0.2.6"`;
+ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build` → framework_cli-0.2.6.
+{whl,tar.gz}, version-consistency tests green. Ships the `--with llm` rename so Meridian
+upgrades onto the honest battery name. (Frozen-through markers left at v0.2.4 as before.)
