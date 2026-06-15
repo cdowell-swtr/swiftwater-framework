@@ -2,7 +2,26 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 {%- if "llm" in batteries %}
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
+{%- endif %}
+
+
+{%- if "llm" in batteries %}
+
+
+class LLMProfile(BaseModel):
+    """One named LLM config. Unset fields inherit the `default` profile (the llm_* settings).
+
+    Defined as a JSON map in APP_LLM_PROFILES, e.g.
+    APP_LLM_PROFILES='{"smart":{"provider":"anthropic","model":"claude-opus-4-8"},
+                       "cheap":{"model":"claude-haiku-4-5-20251001"}}'
+    """
+
+    provider: str | None = None
+    model: str | None = None
+    api_key: SecretStr | None = None
+    max_tokens: int | None = None
+    temperature: float | None = None
 {%- endif %}
 
 
@@ -85,6 +104,9 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.0
     llm_api_key: SecretStr = SecretStr("")
+    # Additional named profiles (JSON in APP_LLM_PROFILES). "default" is reserved — it is
+    # the llm_* fields above, not a key here. Each profile's unset fields inherit default.
+    llm_profiles: dict[str, "LLMProfile"] = {}
 {%- endif %}
 {%- if "react" in batteries %}
 

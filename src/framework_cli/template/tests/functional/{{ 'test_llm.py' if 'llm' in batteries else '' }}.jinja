@@ -72,3 +72,25 @@ def test_metrics_endpoint_includes_llm_series(client):
     body = client.get("/metrics").text
     assert "app_llm_calls_total" in body
     assert "app_llm_cost_usd_total" in body
+
+
+def test_complete_route_passes_profile(monkeypatch):
+    import json
+
+    import litellm
+    from fastapi.testclient import TestClient
+
+    from {{ package_name }}.config.settings import Settings
+    from {{ package_name }}.main import create_app
+
+    captured = {}
+    monkeypatch.setattr(
+        litellm, "completion", lambda **k: captured.update(k) or _Resp()
+    )
+    monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0)
+    profiles = json.loads('{"cheap":{"model":"claude-haiku-4-5-20251001"}}')
+    app = create_app(Settings(llm_api_key="k", serve_spa=False, llm_profiles=profiles))
+    with TestClient(app) as c:
+        r = c.post("/llm/complete", json={"prompt": "hi", "profile": "cheap"})
+    assert r.status_code == 200
+    assert captured["model"] == "anthropic/claude-haiku-4-5-20251001"

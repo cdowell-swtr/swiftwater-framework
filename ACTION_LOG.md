@@ -511,3 +511,89 @@ render-matrix). Bumped pyproject `0.2.5→0.2.6`, `uv lock`, `DOGFOOD_COMMIT→"
 ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build` → framework_cli-0.2.6.
 {whl,tar.gz}, version-consistency tests green. Ships the `--with llm` rename so Meridian
 upgrades onto the honest battery name. (Frozen-through markers left at v0.2.4 as before.)
+
+#### #0049 · note · FWK13 · 2026-06-15
+Brainstormed the per-task LLM selection capability. User pivoted from a single
+API↔subscription hot-swap to **named LLM profiles** (different provider/model/backend
+per task) + per-call overrides for spikes — which subsumes hot-swap (API vs sub = two
+profiles). Design spec written + self-reviewed: `docs/superpowers/specs/
+2026-06-15-llm-profiles-and-subscription-design.md`. Restructured into two slices:
+**FWK13** = profiles in the base `--with llm` (named profiles via `APP_LLM_PROFILES`
+JSON, `default` back-compat, per-call provider/model override, per-profile cost
+metrics, key fail-fast, duck-typed `reset_hint` exhaustion = subscription-ready);
+**FWK16** = `--with claudesubscriptioncli` (`requires` llm; adds the litellm-claude-cli
+PEP-508 dep + claude-cli registration so `provider: claude-cli` is a valid keyless
+profile). Renamed `hotswapllm`→`claudesubscriptioncli` (provider+channel+interface) per
+user. Key seam: base llm stays plugin-free — exhaustion is detected duck-typed (any
+cause-chain exception with a `reset_hint` attr → LLMExhausted), keyless-by-default via a
+`KEY_REQUIRING_PROVIDERS` allowlist. FWK16 is the first battery with `requires` → the
+obs/acceptance per-battery render tests must resolve requires. Also moved FWK15 (the llm
+rename, v0.2.6) to Done.
+
+#### #0050 · note · FWK13 · 2026-06-15
+Wrote the FWK13 (Slice 1: LLM profiles) implementation plan, TDD/bite-sized, grounded in
+the current post-rename llm battery code: `docs/superpowers/plans/2026-06-15-llm-profiles.md`.
+9 tasks: LLMExhausted.reset_hint → LLMProfile/settings → profiles.py resolution →
+per-profile metrics → profile-aware service (key fail-fast + duck-typed exhaustion) →
+route profile → per-profile obs → render/acceptance → branch-end review + v0.2.7 release
+(bundled). Key seam locked: base llm stays plugin-free (duck-typed `reset_hint` exhaustion,
+`KEY_REQUIRING_PROVIDERS` keyless-by-default). FWK16 (claude-cli provider + the requires
+test handling) is the next slice, not this plan.
+
+#### #0051 · completed · FWK13 · 2026-06-15
+Tasks 1+2 — `LLMExhausted` gains a keyword `reset_hint` attribute (enables the service's
+duck-typed exhaustion); added `LLMProfile(BaseModel)` + `llm_profiles: dict[str,
+LLMProfile]` (env `APP_LLM_PROFILES` JSON) to settings, all guarded by `"llm" in
+batteries`. Forward-ref resolves without model_rebuild (same-module order). 15 unit tests
+green, ruff+mypy clean, baseline render leaks neither symbol. Implementer staged;
+controller committed.
+
+#### #0052 · completed · FWK13 · 2026-06-15
+Task 3 — `llm/profiles.py`: `resolve_profile` (default ← named overlay ← per-call
+override) → `ResolvedProfile` (`.model_id`, `.requires_key`) + `KEY_REQUIRING_PROVIDERS
+= {anthropic, openai}` (keyless-by-default so the base llm battery needs zero knowledge
+of claude-cli). TDD, 24 unit tests. Opus review = APPROVE-WITH-NITS; applied: **api_key
+`field(repr=False)`** (the dataclass auto-repr leaked the plaintext key — closed while
+still inert, before Task 5 wires it live), case-insensitive `requires_key`, an
+or-vs-is-not-None comment, + 4 locking tests (own-key inheritance, per-call+named compose,
+temperature=0.0/max_tokens=0 kept, repr hides key). mypy+ruff clean.
+
+#### #0053 · completed · FWK13 · 2026-06-15
+Tasks 4+5 (coupled — the metric signature change ripples into the service) — profile
+labels on the LLM spend series (`app_llm_calls_total{profile,outcome}` / tokens / cost;
+latency stays an unlabeled p99 gauge) + a profile-aware `LLMService`: `resolve_profile`
+per call, key fail-fast (`KEY_REQUIRING` provider + empty key → LLMError before the
+network call), duck-typed exhaustion (any cause-chain exception with a `reset_hint` attr
+→ LLMExhausted, `_NO_HINT` sentinel distinguishes absent-vs-None). Relabeled 8 existing
+metric/service tests; added profile/fail-fast/keyless/exhaustion tests. 31 unit + 4
+functional green, mypy+ruff clean. Opus review = APPROVE-WITH-NITS (no must-fix); applied
+the cosmetic docstring rewrap. Empirically verified by the reviewer: `reset_hint` name is
+collision-free in vendored litellm/openai, and `profile` is config-bounded (per-call
+provider/model overrides change model_id but NOT the profile label → no cardinality
+inflation). Recorded an FWK16 watch-out (keep ClaudeExhausted off the RateLimitError
+lineage) on its PLAN line.
+
+#### #0054 · completed · FWK13 · 2026-06-15
+Tasks 6+7 — `/llm/complete` accepts an optional `profile` (defaults "default"; unknown →
+LLMError → existing broad except → 502); per-profile obs: alert is now per-profile
+failure rate (`sum by (profile)`), dashboard panels group calls/tokens/cost by profile
+(latency p99 unchanged). Functional 5 green, obs-completeness[llm] green, valid JSON,
+ruff+mypy clean. Controller review (simple wiring).
+
+#### #0055 · completed · FWK13 · 2026-06-15
+Task 8 verify + Task 9 branch-end. Framework gate green (ruff+format+mypy), full
+non-acceptance suite 889 passed/3 skipped, both llm acceptance tests green, rendered-
+project straggler grep clean (no `._model`, all obs series by-profile), no eval-fixture
+coupling. Branch-end Opus review = APPROVE-WITH-NITS / MERGE (empirically verified:
+secret masking end-to-end incl. profile keys, guard isolation both ways, backward-compat
+of the default profile, obs-series<->metrics-name consistency, FWK16 seam ready). Applied
+2 nits: token dashboard panel `sum by (profile, kind)` (keep both dimensions) + stale
+alert comment. Deferred (noted): unknown-profile currently -> 502 (could be 400-class) on
+the demo route. FWK13 -> Done.
+
+#### #0056 · completed · release · 2026-06-15
+Cut **v0.2.7** (bundled into the FWK13 PR). Bumped pyproject `0.2.6->0.2.7`, `uv lock`,
+dogfood tag pin -> `v0.2.7`; ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build`
+-> framework_cli-0.2.7.{whl,tar.gz}, 27 version-consistency tests green. Ships LLM
+profiles (per-task selection) to builders — Meridian can define profiles now; the
+claude-cli subscription profile lands with FWK16.
