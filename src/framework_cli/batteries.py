@@ -35,6 +35,13 @@ _BATTERIES: dict[str, BatterySpec] = {
         "full observability — the agents battery builds its tool loop on this",
         obs="in-process",
     ),
+    "agents": BatterySpec(
+        "agents",
+        "LLM agent: a bounded tool-calling loop over read-only domain tools "
+        "(POST /agents/run). requires the llm battery",
+        requires=("llm",),
+        obs="in-process",
+    ),
     "claudesubscriptioncli": BatterySpec(
         "claudesubscriptioncli",
         "Route an LLM profile through your Claude subscription via the claude CLI "

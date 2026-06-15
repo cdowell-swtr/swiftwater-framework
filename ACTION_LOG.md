@@ -681,3 +681,10 @@ refactor) → agent_max_iterations → tools.py (read-only Item tools) → agent
 runner.py (bounded loop, Opus) → `POST /agents/run` + /metrics → render/acceptance
 (resolved set) → branch-end + v0.2.9. Grounded in the current llm service/repo. Only the
 acceptance test needs `requires` resolution (obs test passes on the battery alone).
+
+#### #0065 · completed · FWK14 · 2026-06-15
+Task 1 — registered the `agents` BatterySpec (`requires=("llm",)`, `obs="in-process"`) +
+its obs alert (`HighAgentRunFailureRate` over `app_agent_runs_total`) + 2-panel dashboard
+(tool calls, run outcomes). resolve closure `['agents','llm']`; obs-completeness passes
+UNMODIFIED (agents adds its own alert+dashboard, renders clean alone); 272 tests green;
+dashboard JSON valid.
