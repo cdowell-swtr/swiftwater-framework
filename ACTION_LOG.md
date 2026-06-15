@@ -673,3 +673,11 @@ Claude subscription). agents/ module = tools.py (read-only Item tools) + runner.
 (bounded loop, `agent_max_iterations` cap) + metrics.py (`app_agent_tool_calls_total` /
 `app_agent_runs_total`) + `POST /agents/run`. Like claudesubscriptioncli, only the
 acceptance test needs `requires` resolution; obs test passes on the battery alone.
+
+#### #0064 · note · FWK14 · 2026-06-15
+Wrote the FWK14 (agents tool loop) plan: `docs/superpowers/plans/2026-06-15-agents-tool-loop.md`.
+9 tasks: BatterySpec + obs → `LLMService.respond()` seam (+ behavior-preserving `complete()`
+refactor) → agent_max_iterations → tools.py (read-only Item tools) → agent metrics →
+runner.py (bounded loop, Opus) → `POST /agents/run` + /metrics → render/acceptance
+(resolved set) → branch-end + v0.2.9. Grounded in the current llm service/repo. Only the
+acceptance test needs `requires` resolution (obs test passes on the battery alone).
