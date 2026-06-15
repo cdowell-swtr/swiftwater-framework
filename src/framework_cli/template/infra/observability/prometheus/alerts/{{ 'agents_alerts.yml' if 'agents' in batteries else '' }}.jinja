@@ -1,0 +1,12 @@
+groups:
+- name: agents
+  rules:
+  - alert: HighAgentRunFailureRate
+    # Share of agent runs that errored or hit the iteration cap (a non-converging or
+    # failing agent). Tune the 0.2 threshold per app.
+    expr: sum(rate(app_agent_runs_total{outcome=~"error|max_iterations"}[5m])) / clamp_min(sum(rate(app_agent_runs_total[5m])), 1) > 0.2
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Over 20% of agent runs failed or hit the iteration cap (check tools, prompts, and the model)

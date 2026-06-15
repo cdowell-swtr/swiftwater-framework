@@ -108,6 +108,11 @@ class Settings(BaseSettings):
     # the llm_* fields above, not a key here. Each profile's unset fields inherit default.
     llm_profiles: dict[str, "LLMProfile"] = {}
 {%- endif %}
+{%- if "agents" in batteries %}
+
+    # Agent tool-loop: hard cap on tool-calling rounds per run (APP_AGENT_MAX_ITERATIONS).
+    agent_max_iterations: int = 5
+{%- endif %}
 {%- if "react" in batteries %}
 
     # Frontend RUM: query-string params captured for attribution (fail-closed allowlist).

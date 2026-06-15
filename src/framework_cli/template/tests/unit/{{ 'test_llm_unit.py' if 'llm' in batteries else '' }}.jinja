@@ -473,3 +473,38 @@ def test_reset_hint_exception_maps_to_exhausted(monkeypatch):
             [{"role": "user", "content": "x"}]
         )
     assert ei.value.reset_hint == "resets 11:30am"
+
+
+def test_respond_returns_raw_response_and_passes_tools(monkeypatch):
+    import litellm
+
+    from {{ package_name }}.llm.service import LLMService
+
+    captured = {}
+    monkeypatch.setattr(
+        litellm, "completion", lambda **k: captured.update(k) or _Resp("hi")
+    )
+    monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0)
+    tools = [{"type": "function", "function": {"name": "t", "parameters": {}}}]
+    resp = LLMService(_psettings(), metrics=_new_metrics()).respond(
+        [{"role": "user", "content": "x"}], tools=tools
+    )
+    assert resp.choices[0].message.content == "hi"  # raw response, not extracted text
+    assert captured["tools"] == tools
+    assert captured["tool_choice"] == "auto"
+
+
+def test_respond_omits_tools_when_none(monkeypatch):
+    import litellm
+
+    from {{ package_name }}.llm.service import LLMService
+
+    captured = {}
+    monkeypatch.setattr(
+        litellm, "completion", lambda **k: captured.update(k) or _Resp("h")
+    )
+    monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0)
+    LLMService(_psettings(), metrics=_new_metrics()).respond(
+        [{"role": "user", "content": "x"}]
+    )
+    assert "tools" not in captured and "tool_choice" not in captured

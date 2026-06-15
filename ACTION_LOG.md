@@ -659,3 +659,92 @@ dogfood tag pin -> `v0.2.8`; ruff+mypy(dogfood) clean, `uv lock --check` clean, 
 -> framework_cli-0.2.8.{whl,tar.gz}, 27 version-consistency tests green. Ships the
 claude-cli subscription provider — Meridian can now route a profile through the
 subscription (the thing that unblocks heavy use without per-token API cost).
+
+#### #0063 · note · FWK14 · 2026-06-15
+Brainstormed the modern FWK14 (`--with agents` tool loop). The stale
+`2026-06-14-agents-battery-loop.md` plan is superseded — it predated the llm rename,
+profiles, and the separate-battery taxonomy. New design spec:
+`docs/superpowers/specs/2026-06-15-agents-tool-loop-design.md`. Key decision (seam): the
+agent loop is a SEPARATE `agents` battery (`requires=("llm",)`, `obs="in-process"`) with
+an `AgentRunner` that delegates model calls to `LLMService` via ONE new public method,
+`respond()` (raw tool-capable completion; `complete()` refactored onto it) — so the agent
+inherits profiles + the subscription backend for free (`run(profile="sub")` = on the
+Claude subscription). agents/ module = tools.py (read-only Item tools) + runner.py
+(bounded loop, `agent_max_iterations` cap) + metrics.py (`app_agent_tool_calls_total` /
+`app_agent_runs_total`) + `POST /agents/run`. Like claudesubscriptioncli, only the
+acceptance test needs `requires` resolution; obs test passes on the battery alone.
+
+#### #0064 · note · FWK14 · 2026-06-15
+Wrote the FWK14 (agents tool loop) plan: `docs/superpowers/plans/2026-06-15-agents-tool-loop.md`.
+9 tasks: BatterySpec + obs → `LLMService.respond()` seam (+ behavior-preserving `complete()`
+refactor) → agent_max_iterations → tools.py (read-only Item tools) → agent metrics →
+runner.py (bounded loop, Opus) → `POST /agents/run` + /metrics → render/acceptance
+(resolved set) → branch-end + v0.2.9. Grounded in the current llm service/repo. Only the
+acceptance test needs `requires` resolution (obs test passes on the battery alone).
+
+#### #0065 · completed · FWK14 · 2026-06-15
+Task 1 — registered the `agents` BatterySpec (`requires=("llm",)`, `obs="in-process"`) +
+its obs alert (`HighAgentRunFailureRate` over `app_agent_runs_total`) + 2-panel dashboard
+(tool calls, run outcomes). resolve closure `['agents','llm']`; obs-completeness passes
+UNMODIFIED (agents adds its own alert+dashboard, renders clean alone); 272 tests green;
+dashboard JSON valid.
+
+#### #0066 · completed · FWK14 · 2026-06-15
+Task 2 — added `LLMService.respond()` (raw tool-capable completion: returns the litellm
+response so the agent loop sees content + tool_calls; adds `tools`/`tool_choice="auto"`
+only when tools given) and refactored `complete()` onto it. The ONLY llm-battery change.
+`complete_structured` untouched (response_format ≠ tools). Behavior-preserving: full llm
+suite green (33 unit + 5 functional). Opus review = APPROVE (traced: resolve once, `_call`
+once, same response to `_usage_dict` — no double-call/metric; empty-list tools edge
+correct). Minors deferred (Any return + raw-shape coupling — acceptable for the
+intra-battery seam).
+
+#### #0067 · completed · FWK14 · 2026-06-15
+Tasks 3+4+5 — agent-module building blocks: `agent_max_iterations` setting (agents guard,
+default 5); `agents/tools.py` (`ToolContext`/`Tool`/`ToolRegistry`/`default_registry` with
+read-only `get_item`/`search_items` over the existing Item repo — no write tools);
+`agents/metrics.py` (`app_agent_tool_calls_total{tool,outcome}` / `app_agent_runs_total
+{outcome}` hand-rolled singleton). TDD: 3 hermetic unit + 3 functional (Postgres) green,
+mypy+ruff clean. Controller review (mirrors proven llm patterns; the runner gets Opus).
+
+#### #0068 · completed · FWK14 · 2026-06-15
+Task 6 — `agents/runner.py`: the bounded tool-calling loop over `LLMService.respond()`.
+Dispatch tool_calls (correlated by `tool_call_id`), append the serialized assistant turn
+(OpenAI wire shape — implementer's improvement over the plan's raw-object append) + tool
+results, repeat until the model stops or `max_iterations` (counted outcome, not raised);
+`LLMError`/`LLMExhausted` → `run="error"` once + re-raise. Profiles pass through
+(`run(profile="sub")`). TDD, hermetic stub-service tests. Opus review = APPROVE
+(empirically verified bound/correlation/serialization/error-accounting/read-only); folded
+in 3 nits: removed a dead `if tool_calls:` guard, commented the error-string convention,
++ 2 hardening tests (multi-tool-call correlation, exact call-count at the cap). 9 unit
+green, mypy+ruff clean.
+
+#### #0069 · completed · FWK14 · 2026-06-15
+Task 7 — `POST /agents/run` route (auto-discovered; builds `AgentRunner(LLMService(settings),
+max_iterations=settings.agent_max_iterations)` over `default_registry()` + a `SessionDep`
+ToolContext; LLMExhausted→503, other→502) + wired `agent_metrics` into `/metrics` under
+the agents guard. TDD functional test (seeded items, mocked litellm tool-round→answer):
+outcome=completed, text + tool_calls correct, /metrics carries the agent series. 2 green,
+ruff+mypy clean. Controller review (plumbing).
+
+#### #0070 · completed · FWK14 · 2026-06-15
+Task 8 — agents acceptance test (renders `resolve(['agents'])` + runs the 70% gate incl.
+all agents unit/functional tests) green in 52s. Full verification: ruff+format+mypy clean,
+no eval coupling, full non-acceptance suite 891 passed/3 skipped, obs series consistency
+exact (metrics emit app_agent_runs_total + app_agent_tool_calls_total; alert+dashboard
+reference exactly those — no orphans).
+
+#### #0071 · completed · FWK14 · 2026-06-15
+Task 9 branch-end. Controller whole-branch review (the respond seam + runner already got
+deep Opus reviews): 6 code commits; the llm-battery change is ONLY service.py (`respond()`
++ the behavior-preserving `complete()` refactor) — verified; guard isolation clean (no
+agents symbols leak into an llm-only render); obs series consistent. Full suite 891
+passed/3 skipped + agents acceptance green. FWK14 -> Done. The full agent arc
+(FWK11→5→12→15→13→16→14) is complete.
+
+#### #0072 · completed · release · 2026-06-15
+Cut **v0.2.9** (bundled into the FWK14 PR). Bumped pyproject `0.2.8->0.2.9`, `uv lock`,
+dogfood tag pin -> `v0.2.9`; ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build`
+-> framework_cli-0.2.9.{whl,tar.gz}, 27 version-consistency tests green. Ships the
+`--with agents` tool loop — the capstone of the agent arc (llm → claudesubscriptioncli →
+agents). Meridian can now run a tool-using agent on its subscription via `run(profile="sub")`.
