@@ -635,3 +635,10 @@ exhaustion seam handles claude-cli transparently. No mypy override needed (funct
 import). Opus review = APPROVE; folded in 2 nits: an autouse fixture snapshotting
 `litellm.custom_provider_map` (structural test isolation) + a clarifying comment. 5
 pass/1 skip, ruff+mypy clean.
+
+#### #0060 · completed · FWK16 · 2026-06-15
+Task 5 — acceptance test `test_rendered_project_with_claudesubscriptioncli_battery_passes`:
+renders the dependency-closed set (`resolve(['claudesubscriptioncli'])` → +llm, as the CLI
+does), asserts the unit test + PEP 508 dep rendered, `uv sync` (fetches the git dep), runs
+the 70% unit+functional gate. Green in 46s. This is the only test that needs `requires`
+resolution (the obs test passes on the battery alone).
