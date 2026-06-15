@@ -597,3 +597,16 @@ dogfood tag pin -> `v0.2.7`; ruff+mypy(dogfood) clean, `uv lock --check` clean, 
 -> framework_cli-0.2.7.{whl,tar.gz}, 27 version-consistency tests green. Ships LLM
 profiles (per-task selection) to builders — Meridian can define profiles now; the
 claude-cli subscription profile lands with FWK16.
+
+#### #0057 · note · FWK16 · 2026-06-15
+Wrote the FWK16 (`--with claudesubscriptioncli`) plan: `docs/superpowers/plans/
+2026-06-15-claudesubscriptioncli.md`. Slice 2 of the subscription design. Simplified at
+plan time after inspecting the installed package: `litellm_claude_cli.register()` is an
+idempotent public helper (no custom register module needed — call it in create_app's
+startup guard), and `ClaudeExhausted` carries `reset_hint` and is NOT a RateLimitError →
+caught by FWK13's duck-typed exhaustion seam → **zero base-llm service changes**. Also:
+no claudesubscriptioncli-guarded file lives in the `llm/` dir, so the battery renders
+clean alone → obs-completeness passes UNMODIFIED (the spec-anticipated obs-test requires
+change is unnecessary; only the acceptance test needs `requires` resolution). 8 tasks;
+dep is a PEP 508 git ref (`@v0.1.1`, pip-installable). Branched off the merged v0.2.7
+master.
