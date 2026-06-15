@@ -741,3 +741,10 @@ deep Opus reviews): 6 code commits; the llm-battery change is ONLY service.py (`
 agents symbols leak into an llm-only render); obs series consistent. Full suite 891
 passed/3 skipped + agents acceptance green. FWK14 -> Done. The full agent arc
 (FWK11→5→12→15→13→16→14) is complete.
+
+#### #0072 · completed · release · 2026-06-15
+Cut **v0.2.9** (bundled into the FWK14 PR). Bumped pyproject `0.2.8->0.2.9`, `uv lock`,
+dogfood tag pin -> `v0.2.9`; ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build`
+-> framework_cli-0.2.9.{whl,tar.gz}, 27 version-consistency tests green. Ships the
+`--with agents` tool loop — the capstone of the agent arc (llm → claudesubscriptioncli →
+agents). Meridian can now run a tool-using agent on its subscription via `run(profile="sub")`.
