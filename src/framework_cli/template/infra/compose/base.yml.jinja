@@ -1,5 +1,9 @@
 # Base service definitions, shared by all profiles. Compose merges this with the
 # profile overlay: `docker compose -f infra/compose/base.yml -f infra/compose/dev.yml ...`.
+# A per-project name isolates this stack's containers/network/volumes from any other stack
+# on the host, so two generated projects (or a `task dev` stack and the acceptance tier)
+# can coexist. COMPOSE_PROJECT_NAME in the env still overrides this when set.
+name: {{ project_slug }}
 services:
   app:
     build:

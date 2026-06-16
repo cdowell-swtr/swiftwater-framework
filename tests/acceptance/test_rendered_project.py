@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import socket
 import ssl
@@ -34,6 +35,78 @@ def _docker_available() -> bool:
 def _compose_env() -> dict[str, str]:
     """Env for `docker compose up` so the dev app runs as the host user (host-owned bind writes)."""
     return {**os.environ, "UID": str(os.getuid()), "GID": str(os.getgid())}
+
+
+def _free_tcp_port() -> int:
+    """An OS-assigned free TCP port (bind :0, read it back, release). Used to give each
+    co-running stack distinct, non-colliding host ports without guessing fixed numbers."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return int(s.getsockname()[1])
+
+
+def _compose_host_port(
+    dest: Path, compose_files: list[str], service: str, container_port: int
+) -> int:
+    """The ephemeral host port docker assigned to <service>:<container_port> for this stack."""
+    fargs: list[str] = []
+    for f in compose_files:
+        fargs += ["-f", f]
+    out = subprocess.run(
+        ["docker", "compose", *fargs, "port", service, str(container_port)],
+        cwd=dest,
+        env=_compose_env(),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    # docker prints "0.0.0.0:NNNNN" (or "[::]:NNNNN"); take the trailing port.
+    return int(out.rsplit(":", 1)[1])
+
+
+@pytest.fixture(autouse=True)
+def _isolate_compose_project(request, monkeypatch):
+    """Give each acceptance test its OWN docker compose project namespace.
+
+    The generated project sets no top-level compose `name:`, so
+    `docker compose -f infra/compose/base.yml …` derives the project name from the
+    compose-file directory → `compose`. A developer's `task dev` stack (or another
+    acceptance test) uses the SAME name and so shares container/network/volume names:
+    without isolation an `up` reuses the other stack's containers and the `down -v`
+    teardown DESTROYS its postgres volume. A unique COMPOSE_PROJECT_NAME — honoured by
+    `up` (via `_compose_env()`, which spreads `os.environ`) and by the bare `down` calls
+    (inherited env) alike — keeps each test's stack in its own namespace and scopes
+    `down -v` to that test only. FWK31 (now IMPLEMENTED template-side: a per-slug project
+    name + parameterized host ports) lets two generated projects co-run on one host; this
+    fixture additionally binds every published host port to an ephemeral port (below) so a
+    test stack never collides with a live UAT stack or another test on a fixed host port.
+    """
+    safe = (
+        re.sub(r"[^a-z0-9]+", "-", request.node.name.lower()).strip("-")[:40] or "test"
+    )
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", f"swfwacc-{safe}")
+    # FWK31: bind every published host port to an ephemeral port (0 -> docker picks a free
+    # one) so a test stack never collides with a live UAT stack or another test. Tests that
+    # connect to a service discover the assigned port via `_compose_host_port` below.
+    for var in (
+        "HTTP_HOST_PORT",
+        "POSTGRES_HOST_PORT",
+        "TRAEFIK_HTTPS_PORT",
+        "TRAEFIK_HTTP_PORT",
+        "MONGO_HOST_PORT",
+        "REDIS_HOST_PORT",
+        "FRONTEND_HOST_PORT",
+        "PROMETHEUS_HOST_PORT",
+        "GRAFANA_HOST_PORT",
+        "ALERTMANAGER_HOST_PORT",
+        "LOKI_HOST_PORT",
+        "TEMPO_HOST_PORT",
+        "POSTGRES_EXPORTER_HOST_PORT",
+        "MONGODB_EXPORTER_HOST_PORT",
+        "CELERY_EXPORTER_HOST_PORT",
+        "REDIS_EXPORTER_HOST_PORT",
+    ):
+        monkeypatch.setenv(var, "0")
 
 
 @pytest.mark.skipif(
@@ -751,13 +824,15 @@ def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
     ]
     assert subprocess.run(up, cwd=dest, env=_compose_env()).returncode == 0
     try:
-        # app is published on 8000 in the `lite` profile (no Traefik)
+        # app is published on 8000 in the `lite` profile (no Traefik); discover the
+        # ephemeral host port docker assigned (FWK31 binds host ports to 0).
+        port = _compose_host_port(dest, [base, dev], "app", 8000)
         deadline = time.time() + 90
         body = None
         while time.time() < deadline:
             try:
                 with urllib.request.urlopen(
-                    "http://localhost:8000/health", timeout=3
+                    f"http://localhost:{port}/health", timeout=3
                 ) as resp:
                     if resp.status == 200:
                         body = json.loads(resp.read())
@@ -803,6 +878,8 @@ def test_rendered_project_dev_stack_routes_through_traefik(tmp_path: Path):
 
     assert subprocess.run(up, cwd=dest, env=_compose_env()).returncode == 0
     try:
+        # FWK31 binds Traefik's 443 to an ephemeral host port; discover it.
+        https_port = _compose_host_port(dest, files, "traefik", 443)
         host = f"{DATA['project_slug']}.localhost"
         caroot = subprocess.run(
             ["mkcert", "-CAROOT"], capture_output=True, text=True
@@ -819,7 +896,7 @@ def test_rendered_project_dev_stack_routes_through_traefik(tmp_path: Path):
         last_err = "no attempt"
         while time.time() < deadline:
             try:
-                raw = socket.create_connection(("127.0.0.1", 443), timeout=5)
+                raw = socket.create_connection(("127.0.0.1", https_port), timeout=5)
                 with ctx.wrap_socket(raw, server_hostname=host) as ssock:
                     ssock.sendall(
                         f"GET /health HTTP/1.1\r\nHost: {host}\r\n"
@@ -892,12 +969,17 @@ def test_rendered_project_dev_stack_prometheus_scrapes_app(tmp_path: Path):
     ]
     assert subprocess.run(up, cwd=dest, env=_compose_env()).returncode == 0
     try:
+        # FWK31 binds prometheus's 9090 to an ephemeral host port; discover it.
+        prom_port = _compose_host_port(
+            dest, [base, "infra/compose/observability.yml", dev], "prometheus", 9090
+        )
         deadline = time.time() + 120
         up_targets = None
         while time.time() < deadline:
             try:
                 with urllib.request.urlopen(
-                    "http://localhost:9090/api/v1/targets?state=active", timeout=3
+                    f"http://localhost:{prom_port}/api/v1/targets?state=active",
+                    timeout=3,
                 ) as resp:
                     data = json.loads(resp.read())
                     actives = data.get("data", {}).get("activeTargets", [])
@@ -958,12 +1040,16 @@ def test_rendered_project_app_logs_reach_loki(tmp_path: Path):
     ]
     assert subprocess.run(up, cwd=dest).returncode == 0
     try:
+        # FWK31 binds host ports to ephemeral ones; discover the app's and Loki's.
+        files = [base, "infra/compose/observability.yml", dev]
+        app_port = _compose_host_port(dest, files, "app", 8000)
+        loki_port = _compose_host_port(dest, files, "loki", 3100)
         # wait for the app, then generate some log lines (each request is logged)
         deadline = time.time() + 60
         while time.time() < deadline:
             try:
                 urllib.request.urlopen(
-                    "http://localhost:8000/heartbeat", timeout=3
+                    f"http://localhost:{app_port}/heartbeat", timeout=3
                 ).read()
                 break
             except OSError:
@@ -971,7 +1057,7 @@ def test_rendered_project_app_logs_reach_loki(tmp_path: Path):
         for _ in range(5):
             try:
                 urllib.request.urlopen(
-                    "http://localhost:8000/heartbeat", timeout=3
+                    f"http://localhost:{app_port}/heartbeat", timeout=3
                 ).read()
             except OSError:
                 pass
@@ -988,7 +1074,8 @@ def test_rendered_project_app_logs_reach_loki(tmp_path: Path):
             )
             try:
                 with urllib.request.urlopen(
-                    f"http://localhost:3100/loki/api/v1/query_range?{q}", timeout=5
+                    f"http://localhost:{loki_port}/loki/api/v1/query_range?{q}",
+                    timeout=5,
                 ) as resp:
                     data = json.loads(resp.read())
                     result = data.get("data", {}).get("result", [])
@@ -1042,11 +1129,15 @@ def test_rendered_project_traces_reach_tempo(tmp_path: Path):
     ]
     assert subprocess.run(up, cwd=dest).returncode == 0
     try:
+        # FWK31 binds host ports to ephemeral ones; discover the app's and Tempo's.
+        files = [base, "infra/compose/observability.yml", dev]
+        app_port = _compose_host_port(dest, files, "app", 8000)
+        tempo_port = _compose_host_port(dest, files, "tempo", 3200)
         deadline = time.time() + 60
         while time.time() < deadline:
             try:
                 urllib.request.urlopen(
-                    "http://localhost:8000/heartbeat", timeout=3
+                    f"http://localhost:{app_port}/heartbeat", timeout=3
                 ).read()
                 break
             except OSError:
@@ -1054,7 +1145,7 @@ def test_rendered_project_traces_reach_tempo(tmp_path: Path):
         for _ in range(5):
             try:
                 urllib.request.urlopen(
-                    "http://localhost:8000/heartbeat", timeout=3
+                    f"http://localhost:{app_port}/heartbeat", timeout=3
                 ).read()
             except OSError:
                 pass
@@ -1063,7 +1154,7 @@ def test_rendered_project_traces_reach_tempo(tmp_path: Path):
         while time.time() < deadline and not found:
             try:
                 with urllib.request.urlopen(
-                    "http://localhost:3200/api/search?q=%7Bresource.service.name%3D%22demo%22%7D&limit=1",
+                    f"http://localhost:{tempo_port}/api/search?q=%7Bresource.service.name%3D%22demo%22%7D&limit=1",
                     timeout=5,
                 ) as resp:
                     data = json.loads(resp.read())
@@ -1113,14 +1204,15 @@ def test_rendered_project_smoke_and_sniff_against_lite(tmp_path: Path):
     ]
     assert subprocess.run(up, cwd=dest).returncode == 0
     try:
+        # FWK31 binds the app's 8000 to an ephemeral host port; discover it.
+        port = _compose_host_port(dest, [base, dev], "app", 8000)
+        target = f"http://localhost:{port}"
         # wait for /health (seeded lite app)
         deadline = time.time() + 120
         ready = False
         while time.time() < deadline:
             try:
-                with urllib.request.urlopen(
-                    "http://localhost:8000/health", timeout=3
-                ) as r:
+                with urllib.request.urlopen(f"{target}/health", timeout=3) as r:
                     if r.status == 200:
                         ready = True
                         break
@@ -1129,8 +1221,8 @@ def test_rendered_project_smoke_and_sniff_against_lite(tmp_path: Path):
         assert ready, "lite app did not serve /health within 120s"
         env = {
             **os.environ,
-            "SMOKE_TARGET": "http://localhost:8000",
-            "SNIFF_TARGET": "http://localhost:8000",
+            "SMOKE_TARGET": target,
+            "SNIFF_TARGET": target,
         }
         smoke = subprocess.run(
             ["uv", "run", "pytest", "tests/smoke", "-q"], cwd=dest, env=env
@@ -1143,7 +1235,7 @@ def test_rendered_project_smoke_and_sniff_against_lite(tmp_path: Path):
         e2e = subprocess.run(
             ["uv", "run", "pytest", "tests/e2e", "-q"],
             cwd=dest,
-            env={**os.environ, "E2E_TARGET": "http://localhost:8000"},
+            env={**os.environ, "E2E_TARGET": target},
         )
         assert e2e.returncode == 0, "remote-mode e2e failed against the live lite stack"
     finally:
@@ -1304,12 +1396,14 @@ def test_rendered_project_dev_stack_serves_seeded_items(tmp_path: Path):
     ]
     assert subprocess.run(up, cwd=dest).returncode == 0
     try:
+        # FWK31 binds the app's 8000 to an ephemeral host port; discover it.
+        port = _compose_host_port(dest, [base, dev], "app", 8000)
         deadline = time.time() + 120
         items = None
         while time.time() < deadline:
             try:
                 with urllib.request.urlopen(
-                    "http://localhost:8000/items", timeout=3
+                    f"http://localhost:{port}/items", timeout=3
                 ) as resp:
                     if resp.status == 200:
                         payload = json.loads(resp.read())
@@ -1844,12 +1938,15 @@ def test_rendered_project_dev_lite_stack_leaves_no_root_owned_files(tmp_path: Pa
     assert subprocess.run(up, cwd=dest, env=_compose_env()).returncode == 0
     served = False
     try:
+        # FWK31 binds the app's 8000 to an ephemeral host port; discover it so the readiness
+        # wait (which makes the ownership scan below non-vacuous) actually connects.
+        port = _compose_host_port(dest, [base, dev], "app", 8000)
         # let uvicorn import the app + write __pycache__ into the bind-mounted src
         deadline = time.time() + 90
         while time.time() < deadline:
             try:
                 with urllib.request.urlopen(
-                    "http://localhost:8000/health", timeout=3
+                    f"http://localhost:{port}/health", timeout=3
                 ) as resp:
                     if resp.status == 200:
                         served = True
@@ -2044,11 +2141,16 @@ def test_rendered_frontend_dev_stack_leaves_no_root_owned_files(tmp_path: Path):
     bad: list[Path] = []
     try:
         assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        # FWK31 binds frontend's 5173 to an ephemeral host port; discover it so the
+        # readiness wait (which makes the ownership scan non-vacuous) actually connects.
+        port = _compose_host_port(dest, [base, obs, dev], "frontend", 5173)
         # npm ci over the network + vite startup; wait for the dev server (non-vacuous).
         deadline = time.time() + 240
         while time.time() < deadline:
             try:
-                with urllib.request.urlopen("http://localhost:5173", timeout=3) as resp:
+                with urllib.request.urlopen(
+                    f"http://localhost:{port}", timeout=3
+                ) as resp:
                     if resp.status == 200:
                         served = True
                         break
@@ -2077,3 +2179,84 @@ def test_rendered_frontend_dev_stack_leaves_no_root_owned_files(tmp_path: Path):
         "frontend dev server did not serve on :5173 within 240s — scan would be vacuous"
     )
     assert not bad, f"root/non-host-owned files left in frontend/: {bad[:5]}"
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="docker required: brings up two concurrent dev:lite stacks",
+)
+def test_two_dev_lite_stacks_corun_without_collision(tmp_path: Path):
+    """FWK31: two stacks of the same project run at once — distinct compose projects +
+    distinct host ports — and tearing one down leaves the other healthy (isolated volumes)."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    files = ["infra/compose/base.yml", "infra/compose/dev.yml"]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+
+    def up(project: str) -> int:
+        # OS-picked free ports per stack — never fixed 8000/5432, which a live consumer
+        # stack on this box may already hold (the very scenario FWK31 addresses).
+        http_port = _free_tcp_port()
+        pg_port = _free_tcp_port()
+        env = {
+            **_compose_env(),
+            "COMPOSE_PROJECT_NAME": project,
+            "HTTP_HOST_PORT": str(http_port),
+            "POSTGRES_HOST_PORT": str(pg_port),
+        }
+        assert (
+            subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    *fargs,
+                    "--profile",
+                    "lite",
+                    "up",
+                    "-d",
+                    "--build",
+                ],
+                cwd=dest,
+                env=env,
+            ).returncode
+            == 0
+        ), f"{project} up failed"
+        return http_port
+
+    def down(project: str) -> None:
+        subprocess.run(
+            ["docker", "compose", *fargs, "--profile", "lite", "down", "-v"],
+            cwd=dest,
+            env={**_compose_env(), "COMPOSE_PROJECT_NAME": project},
+        )
+
+    def healthy(port: int) -> bool:
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:{port}/health", timeout=3
+                ) as r:
+                    if r.status == 200:
+                        return True
+            except OSError:
+                time.sleep(2)
+        return False
+
+    # Both stacks are ALWAYS torn down (once each) on every exit path. `down -v` on an
+    # already-removed project is an idempotent no-op, so tearing A down inside the body
+    # and again here is harmless.
+    try:
+        p_a = up("swfwacc-corun-a")
+        p_b = up("swfwacc-corun-b")
+        assert healthy(p_a) and healthy(p_b), (
+            "both stacks must serve /health concurrently"
+        )
+        down("swfwacc-corun-a")  # tear A down...
+        assert healthy(p_b), "B stays healthy after A's down -v (isolated volumes)"
+    finally:
+        down("swfwacc-corun-a")
+        down("swfwacc-corun-b")

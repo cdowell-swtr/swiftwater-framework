@@ -1093,3 +1093,191 @@ Fix: declared `tzlocal>=5.2` in the workers deps (`pyproject.toml.jinja`) + exte
 → uv lock+sync → `import demo.tasks` OK + `test_dlq_redaction` collects (7 tests). Master CI green on
 merge (renders HEAD); ships a patch release so consumers get it via `framework upgrade`. Unblocks PR
 #45 (FWK31) once it rebases onto this.
+
+#### #0103 · completed · FWK31 · 2026-06-16
+Diagnosed + interim-fixed the docker dev:lite acceptance collision (surfaced by Meridian's local
+`task dev`). ROOT CAUSE: generated projects set no compose `name:`, so `docker compose -f
+infra/compose/base.yml` derives project name from the dir → `compose` for EVERY project; the
+acceptance tier and a consumer's `task dev` thus share container/network/volume names + host :8000.
+The `test_…dev_lite_stack_serves_health` failure was its app booting against Meridian's reused
+`compose-postgres-1` (never healthy → 90s timeout); worse, the test's `down -v` would DELETE the
+shared `compose_pgdata` volume = Meridian's DB. Interim fix (no release): `_isolate_compose_project`
+autouse fixture sets a unique `COMPOSE_PROJECT_NAME` (`swfwacc-<testname>`) per acceptance test —
+picked up by `up` (`_compose_env` spreads os.environ) AND the bare `down` calls (inherited env), so
+`down -v` is scoped to the test's own volume. Verified: serves_health now PASSES (32s, isolated
+`swfwacc-…` stack). Opened FWK31 for the template-side fix (per-slug project name + parameterized
+host port so two generated projects co-run; ships a release).
+
+#### #0104 · completed · FWK31 · 2026-06-16
+Brainstorm → design spec for the template-side compose isolation (scope confirmed: full
+concurrency, two+ live stacks at once — UAT-in-browser + tests). Design: (1) `name: {{ project_slug }}`
+in base.yml; (2) all 16 published host ports → `${<SERVICE>_HOST_PORT:-default}` (dev.yml 7 +
+observability.yml 9); (3) a single `PORT_OFFSET` applied by `task dev` to shift all ports (one-knob
+co-run); (4) acceptance tests set `*_HOST_PORT=0` + discover via `docker compose port` (ephemeral,
+collide with nothing); (5) upgrade re-seed accepted (small seed DB; documented not migrated).
+Constraint: NO `APP_` prefix on the port vars (app pydantic settings namespace). staging/prod deploy
+untouched. Ships a patch release. Spec:
+`docs/superpowers/specs/2026-06-16-fwk31-compose-isolation-design.md`. Next: writing-plans.
+
+#### #0105 · completed · FWK31 · 2026-06-16
+Implementation plan written (7 tasks, TDD). Design refinement during planning: the PORT_OFFSET knob
+is a single `scripts/compose.sh` wrapper (exports all 16 `*_HOST_PORT` as default+offset unless set,
+then execs `docker compose "$@"`) rather than 16+ arithmetic entries in the Taskfile — `task dev`
+routes through it; tests bypass it by setting the env directly. App-port var is `HTTP_HOST_PORT` (NOT
+`APP_HOST_PORT` — the pydantic settings namespace). Tasks: 1 name, 2 dev.yml ports, 3 observability
+ports (9th is celery-exporter:9808, not otel-collector), 4 wrapper+Taskfile, 5 acceptance ephemeral
+ports + `docker compose port` discovery, 6 two-stack co-run proof, 7 upgrade note + gate + review +
+release. Plan: `docs/superpowers/plans/2026-06-16-fwk31-compose-isolation.md`. Next: execute.
+
+#### #0106 · completed · FWK31 · 2026-06-16
+Task 1 of 7 complete: added `name: {{ project_slug }}` as the first YAML key in
+`src/framework_cli/template/infra/compose/base.yml.jinja` (after the leading comment block),
+with a comment explaining the isolation benefit and that `COMPOSE_PROJECT_NAME` overrides it.
+TDD: test wrote red (`name: demo` absent), template edit made it green (1 passed 1.43s).
+Rendered compose validates (`compose config OK`). Ruff format+lint clean.
+
+#### #0107 · completed · FWK31 · 2026-06-16
+Task 2 of 7 complete: parameterized all 7 host-side ports in
+`src/framework_cli/template/infra/compose/dev.yml.jinja` with `${VAR:-default}` form.
+Vars: `HTTP_HOST_PORT:-8000`, `POSTGRES_HOST_PORT:-5432`, `TRAEFIK_HTTPS_PORT:-443`,
+`TRAEFIK_HTTP_PORT:-80`, `MONGO_HOST_PORT:-27017`, `REDIS_HOST_PORT:-6379`,
+`FRONTEND_HOST_PORT:-5173`. APP_-prefix ban confirmed (no `APP_HOST_PORT` or `APP_PORT` leaks).
+Documented all 7 vars (+ `PORT_OFFSET`) in the FRAMEWORK region of
+`src/framework_cli/template/.env.example.jinja`, battery-gated (`mongodb`/`redis|workers`/`react`
+conditional vars). Placement: inside the framework region (consistent with existing non-APP vars
+like `GRAFANA_ADMIN_PASSWORD`; no test forbids non-APP vars in that region).
+TDD: test red → green (1 passed 1.59s). `docker compose config` validates. Ruff clean.
+
+#### #0108 · completed · FWK31 · 2026-06-16
+Task 3 of 7 complete: parameterized all 9 published host-side ports in
+`src/framework_cli/template/infra/compose/observability.yml.jinja` with `${VAR:-default}` form.
+Vars: `PROMETHEUS_HOST_PORT:-9090`, `GRAFANA_HOST_PORT:-3000`, `ALERTMANAGER_HOST_PORT:-9093`,
+`LOKI_HOST_PORT:-3100`, `TEMPO_HOST_PORT:-3200`, `POSTGRES_EXPORTER_HOST_PORT:-9187`,
+`MONGODB_EXPORTER_HOST_PORT:-9216` (mongodb battery), `CELERY_EXPORTER_HOST_PORT:-9808`
+(workers battery), `REDIS_EXPORTER_HOST_PORT:-9121` (redis|workers battery). otel-collector
+(internal, no host port) left unchanged. Extended the FWK31 block in
+`src/framework_cli/template/.env.example.jinja` with the 9 obs vars (battery-gated where
+applicable), placed adjacent to the dev port vars within the framework region. `docker compose
+--profile dev config` validates cleanly; cross-file `depends_on` errors (pre-existing, caused by
+splitof battery services across overlay+dev files) still occur without `--profile`. TDD: test
+red → green (1 passed 1.57s). Full quality gate clean.
+
+#### #0109 · completed · FWK31 · 2026-06-16
+Task 4 of 7 complete: PORT_OFFSET wrapper (`scripts/compose.sh`) + Taskfile wiring.
+Created `src/framework_cli/template/scripts/compose.sh` (plain `.sh`, no Jinja interpolation —
+matches the `coverage.sh`/`load.sh` convention for static scripts). Wrapper exports all 16
+`*_HOST_PORT` vars as `default+PORT_OFFSET` unless already set in the environment, then
+`exec docker compose "$@"`. Unset `PORT_OFFSET` defaults to 0 (today's ports unchanged).
+Modified `src/framework_cli/template/Taskfile.yml.jinja`: `dev` and `dev:lite` cmds now
+call `./scripts/compose.sh` instead of `docker compose` directly; file-set, profiles, flags,
+env (UID/GID), and preconditions unchanged. Offset proof: `PORT_OFFSET=100` produces
+`published: "8100"` (HTTP) + `published: "5532"` (postgres) in `docker compose config`.
+shellcheck clean. TDD: test red → green (1 passed). Full quality gate clean.
+
+#### #0110 · completed · FWK31 · 2026-06-16
+Follow-up fix to Task 4: `src/framework_cli/template/scripts/compose.sh` was stored in git as
+mode 100644 (not executable). Copier preserves the source git file mode, so every rendered
+project received a non-executable `scripts/compose.sh`, making `task dev` / `task dev:lite` fail
+with "permission denied". Fixed via `git update-index --chmod=+x`. Added regression guard to
+`tests/test_copier_runner.py::test_render_compose_wrapper_and_taskfile_use_offset`:
+`assert os.access(wrapper, os.X_OK)`. Rendered mode now `-rwxr-xr-x` (confirmed). Test green.
+
+#### #0111 · completed · FWK31 · 2026-06-16
+Task 5: the acceptance docker-up tier (`tests/acceptance/test_rendered_project.py`) now binds
+RANDOM host ports and discovers the assigned port at connect time, so a test stack never
+collides with a live UAT/`task dev` stack or another test. Extended the autouse
+`_isolate_compose_project` fixture to set all 16 `*_HOST_PORT=0` (docker → ephemeral) and
+refreshed its docstring (FWK31 is now IMPLEMENTED). Added a `_compose_host_port(dest, files,
+service, container_port)` helper that runs `docker compose <-f…> port <svc> <cport>` (under
+`_compose_env()`, so it resolves the SAME monkeypatched COMPOSE_PROJECT_NAME stack) and parses
+the trailing port from `0.0.0.0:NNNNN` / `[::]:NNNNN`.
+Deviation — plan under-enumerated the affected tests: it claimed only 4 connect and that the
+`*_leaves_no_root_owned_files` tests "do not connect." A grep audit found NINE connecting tests
+that needed the port-discovery rewire (the blanket `=0` breaks every fixed `localhost:<port>`):
+dev_lite_stack_serves_health (app:8000), dev_stack_routes_through_traefik (traefik:443 — only
+the port swapped; TLS chain-verify + Host header untouched), dev_stack_prometheus_scrapes_app
+(prometheus:9090), app_logs_reach_loki (app:8000 + loki:3100 — two discoveries),
+traces_reach_tempo (app:8000 + tempo:3200), smoke_and_sniff_against_lite (app:8000 →
+SMOKE/SNIFF/E2E_TARGET), dev_stack_serves_seeded_items (app:8000), dev_lite_stack_leaves_no_root
+(app:8000 /health readiness — DOES connect, contra the plan), frontend_dev_stack_leaves_no_root
+(frontend:5173 readiness — DOES connect). Only `test_rendered_workers_dev_stack_leaves_no_root`
+needed NO edit: it waits on a filesystem path (`__pycache__` appearing in the bind mount), never
+opens a socket. Verified by the real docker tier: `pytest -k "dev_lite_stack_serves_health or
+routes_through_traefik or prometheus_scrapes or serves_seeded or logs_reach_loki or
+traces_reach_tempo or smoke_and_sniff or leaves_no_root"` → 10 passed, 0 skipped (345s), all on
+random host ports. ruff format + check clean.
+
+#### #0112 · completed · FWK31 · 2026-06-16
+Task 6: the end-to-end isolation proof. New acceptance test
+`test_two_dev_lite_stacks_corun_without_collision` brings up TWO `dev:lite` stacks of the SAME
+generated project concurrently under distinct compose project names (`swfwacc-corun-a`/`-b`),
+asserts both serve `/health` at once, tears A down with `down -v`, and asserts B stays healthy
+(isolated postgres volume). This is the definitive proof of the FWK31 claim: a per-slug compose
+`name:` + parameterized `${VAR:-default}` host ports let two stacks of one project co-run on one
+host without container/network/volume or port collision.
+Refinement vs the plan's draft — the plan used FIXED host ports (8000/8100, 5432/5532). On this
+dev box (and on a developer's box generally) a live consumer / `task dev` stack may already hold
+8000/5432 — the very scenario FWK31 exists to solve — so fixed ports would flake. Instead added a
+`_free_tcp_port()` helper (bind `:0`, read the OS-assigned port back, release) and gave each
+stack its own OS-picked free HTTP + postgres ports, polling those. Collision-proof on both the
+dev box and CI, and still proves the claim (distinct project names + distinct, non-colliding
+host ports). The `lite` profile publishes BOTH the app (`${HTTP_HOST_PORT:-8000}:8000`) and
+postgres (`${POSTGRES_HOST_PORT:-5432}:5432`), so both env overrides are live. The autouse
+`_isolate_compose_project` fixture's `*_HOST_PORT=0` + COMPOSE_PROJECT_NAME are overridden by the
+explicit per-stack `env=` dicts. Teardown is bulletproof: both `up` calls live inside the `try`
+and the `finally` tears down both projects (an idempotent no-op on an already-removed / never-
+created project), so A and B are always cleaned up on every exit path.
+Verified by the real docker tier: `pytest ::test_two_dev_lite_stacks_corun_without_collision` →
+1 passed (54s); post-run `docker ps -a`/`volume ls --filter name=swfwacc-corun` both empty (no
+leaks). ruff format + check clean.
+
+#### #0113 · completed · FWK31 · 2026-06-16
+Task 7 Step 1: consumer-facing docs + upgrade re-seed note in generated README, with TDD guard.
+Verified the deploy claim by reading staging.yml.jinja and prod.yml.jinja — both are
+self-contained and do NOT reference infra/compose/base.yml (claim is accurate and safe).
+Added `test_render_readme_documents_compose_isolation_and_upgrade` to tests/test_copier_runner.py;
+confirmed RED (`PORT_OFFSET` not in rendered readme), then added two blocks to README.md.jinja:
+(1) "Running a second stack" note in the Local stack section (PORT_OFFSET usage, per-project name
+isolation, link to .env.example for full var list); (2) "Upgrading from an earlier release"
+subsection explaining the base.yml compose name change from `compose` → `{{ project_slug }}`,
+orphaned volumes, and re-seed steps (`task dev` + `task db:seed`). Confirmed GREEN (1 passed).
+Render sanity: `{{ project_slug }}` interpolated correctly to `demo`, markdown headings intact.
+ruff format --check + check clean. Files changed: src/framework_cli/template/README.md.jinja,
+tests/test_copier_runner.py.
+
+#### #0114 · completed · FWK31 · 2026-06-16
+Fix review finding C1 (gate failure) + I1 (coverage-honesty gap) for scripts/compose.sh.
+C1: `test_every_surface_is_classified` was failing because `script:scripts/compose.sh` was
+unclassified in the FWK29 registry. I1: the existing wrapper test only did static string
+checks, so the wrapper could not be classified EXERCISED.
+
+Three changes: (1) Added `test_compose_wrapper_shifts_host_ports_by_offset` to
+tests/test_copier_runner.py — renders the project, shims `docker` on PATH with a script that
+dumps `env` to a capture file, then drives `./scripts/compose.sh up` three ways: PORT_OFFSET=100
+(asserts HTTP_HOST_PORT=8100, POSTGRES_HOST_PORT=5532, GRAFANA_HOST_PORT=3100), PORT_OFFSET=100
+with HTTP_HOST_PORT=9999 override (asserts override respected), and no offset (asserts
+HTTP_HOST_PORT=8000). Test passes in 1.93s — the wrapper already worked. (2) Added
+`script:scripts/compose.sh` to tests/runtime_coverage/registry.py as EXERCISED, evidence
+= `test_compose_wrapper_shifts_host_ports_by_offset`, inserted before `script:scripts/coverage.sh`
+(alphabetical). (3) Added a one-line overflow note to `src/framework_cli/template/scripts/compose.sh`
+near the _p function noting that PORT_OFFSET pushing a port past 65535 will fail at bind time.
+
+Verified: `pytest tests/runtime_coverage/ tests/test_copier_runner.py::test_compose_wrapper_shifts_host_ports_by_offset -q`
+→ 10 passed (5.11s), EXIT=0; `test_every_surface_is_classified` now green. Shellcheck on the
+rendered compose.sh: CLEAN. ruff format --check + check: CLEAN.
+Files changed: tests/test_copier_runner.py, tests/runtime_coverage/registry.py,
+src/framework_cli/template/scripts/compose.sh.
+
+#### #0115 · completed · FWK31 · 2026-06-16
+Cut release **v0.2.11** for the FWK31 compose-isolation template payload (per
+release-cut-procedure, folded into PR #45 per the repo convention of shipping feature+release
+in one PR). Bumped pyproject `0.2.10 → 0.2.11`, `DOGFOOD_COMMIT v0.2.10 → v0.2.11`
+(src/framework_cli/dogfood.py), regenerated uv.lock (`framework-cli v0.2.10 → v0.2.11`).
+Meta-plan/CLAUDE.md untouched (frozen — matches the v0.2.10 release commit's file set). Moved
+FWK31 to PLAN Done. Pre-release gate green: ruff check + ruff format --check + mypy src clean;
+full non-acceptance suite 920 passed / 3 skipped / 0 failed; docker acceptance tier (ephemeral
+ports + two-stack co-run) green locally; render validation across baseline/all-batteries/
+workers+react (default `compose config` OK, PORT_OFFSET=100 shifts to 8100). render-matrix
+(`render-complete`) on the PR is the authoritative proof. Tag v0.2.11 → release.yml publishes
+the GitHub Release; consumers re-seed local dev on upgrade (per-project compose name orphans
+old `compose_*` volumes — documented in the generated README).

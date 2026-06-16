@@ -48,6 +48,34 @@ task dev:lite  # app only at http://localhost:8000 (no Traefik)
 
 Service addresses are documented in `SERVICES.md`.
 
+Each stack uses the compose project name `{{ project_slug }}`, so two clones or checkouts of
+this repo get isolated containers, networks, and volumes. To run a second stack alongside the
+first on the same machine, shift its host ports with `PORT_OFFSET`:
+
+```bash
+PORT_OFFSET=100 task dev       # shifts all host ports by 100 (app: 8100, Postgres: 5532, …)
+PORT_OFFSET=100 task dev:lite  # lite variant with the same offset
+```
+
+Alternatively, set individual `*_HOST_PORT` variables in your `.env`. See `.env.example` for the
+full list of overridable port variables.
+
+### Upgrading from an earlier release
+
+This release sets a per-project compose `name:` in `infra/compose/base.yml`, so an existing
+local stack's compose project changes from `compose` to `{{ project_slug }}`. Your old
+`compose_*` dev volumes (including the Postgres data volume) are orphaned — not migrated — and
+the new stack starts with a fresh dev database. Re-seed local dev after upgrading:
+
+```bash
+task dev           # brings up the new stack and runs migrations
+task db:seed       # loads seed data into the fresh database
+```
+
+`task db:migrate` and `task db:seed` are also available independently if needed. Production and
+staging deploys are unaffected — `infra/compose/staging.yml` and `infra/compose/prod.yml` are
+self-contained and do not include `infra/compose/base.yml`.
+
 With the full `task dev` stack, observability is at: Grafana `http://localhost:3000` (SLO dashboard), Prometheus `http://localhost:9090`, Alertmanager `http://localhost:9093`. Alert rules and the dashboard are generated from the SLO definitions — run `task observability:gen` after changing them.
 
 Application logs (structlog JSON) are shipped to Loki by Promtail and queryable in Grafana under the Loki datasource — e.g. `{service="app"}` (filter by `level`, find a request by its `correlation_id`).

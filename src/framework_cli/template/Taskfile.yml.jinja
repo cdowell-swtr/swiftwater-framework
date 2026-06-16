@@ -25,7 +25,7 @@ tasks:
       GID:
         sh: id -g
     cmds:
-      - docker compose -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev up --build
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev up --build
 
   dev:lite:
     desc: App only over plain HTTP at localhost:8000 (no Traefik) — resource-light.
@@ -40,7 +40,7 @@ tasks:
       GID:
         sh: id -g
     cmds:
-      - docker compose -f infra/compose/base.yml -f infra/compose/dev.yml --profile lite up --build
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/dev.yml --profile lite up --build
 
   dev:reset:
     desc: Tear the local stack down (including volumes) and rebuild.

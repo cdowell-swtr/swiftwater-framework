@@ -3364,3 +3364,120 @@ def test_ci_security_job_can_read_pull_requests(tmp_path: Path):
     perms = ci["jobs"]["security"]["permissions"]
     assert perms.get("contents") == "read"
     assert perms.get("pull-requests") == "read"
+
+
+def test_render_base_compose_sets_per_project_name(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    base = (dest / "infra" / "compose" / "base.yml").read_text()
+    # A per-project compose name isolates container/network/volume namespaces from any
+    # other stack on the host (FWK31). DATA's project_slug is "demo".
+    assert "name: demo" in base
+
+
+def test_render_dev_compose_parameterizes_host_ports(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(
+        dest, {**DATA, "batteries": ["mongodb", "redis", "workers", "react"]}
+    )
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    for var, default in [
+        ("HTTP_HOST_PORT", "8000"),
+        ("POSTGRES_HOST_PORT", "5432"),
+        ("TRAEFIK_HTTPS_PORT", "443"),
+        ("TRAEFIK_HTTP_PORT", "80"),
+        ("MONGO_HOST_PORT", "27017"),
+        ("REDIS_HOST_PORT", "6379"),
+        ("FRONTEND_HOST_PORT", "5173"),
+    ]:
+        assert f"${{{var}:-{default}}}:" in dev, f"{var} not parameterized"
+    # Guard the APP_-prefix ban: no host-port var leaks into the app settings namespace.
+    assert "APP_HOST_PORT" not in dev and "APP_PORT" not in dev
+
+
+def test_render_observability_parameterizes_host_ports(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb", "redis", "workers"]})
+    obs = (dest / "infra" / "compose" / "observability.yml").read_text()
+    for var, default in [
+        ("PROMETHEUS_HOST_PORT", "9090"),
+        ("GRAFANA_HOST_PORT", "3000"),
+        ("ALERTMANAGER_HOST_PORT", "9093"),
+        ("LOKI_HOST_PORT", "3100"),
+        ("TEMPO_HOST_PORT", "3200"),
+        ("POSTGRES_EXPORTER_HOST_PORT", "9187"),
+        ("MONGODB_EXPORTER_HOST_PORT", "9216"),
+        ("CELERY_EXPORTER_HOST_PORT", "9808"),
+        ("REDIS_EXPORTER_HOST_PORT", "9121"),
+    ]:
+        assert f"${{{var}:-{default}}}:" in obs, f"{var} not parameterized"
+
+
+def test_render_compose_wrapper_and_taskfile_use_offset(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    wrapper = dest / "scripts" / "compose.sh"
+    assert wrapper.is_file()
+    assert os.access(wrapper, os.X_OK), (
+        "rendered scripts/compose.sh must be executable (task dev calls ./scripts/compose.sh)"
+    )
+    body = wrapper.read_text()
+    # The wrapper derives host ports from PORT_OFFSET and defaults, then execs compose.
+    assert (
+        "PORT_OFFSET" in body
+        and "HTTP_HOST_PORT" in body
+        and "exec docker compose" in body
+    )
+    # Taskfile dev/dev:lite route through the wrapper (so the offset applies).
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "scripts/compose.sh" in taskfile
+
+
+def test_render_readme_documents_compose_isolation_and_upgrade(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    readme = (dest / "README.md").read_text()
+    # The PORT_OFFSET co-run capability is documented for consumers (FWK31).
+    assert "PORT_OFFSET" in readme
+    # The upgrade re-seed note explains the compose project-name change and recovery steps.
+    assert "db:seed" in readme and "base.yml" in readme
+
+
+def test_compose_wrapper_shifts_host_ports_by_offset(tmp_path: Path):
+    """The rendered scripts/compose.sh shifts every host port by PORT_OFFSET and respects
+    an explicit per-var override, before exec-ing docker compose (FWK31)."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    capture = tmp_path / "captured-env.txt"
+    shim = bindir / "docker"
+    shim.write_text('#!/usr/bin/env bash\nenv > "$CAPTURE_FILE"\n')
+    shim.chmod(0o755)
+
+    def run_wrapper(extra_env: dict[str, str]) -> dict[str, str]:
+        env = {
+            **os.environ,
+            "PATH": f"{bindir}:{os.environ['PATH']}",
+            "CAPTURE_FILE": str(capture),
+            **extra_env,
+        }
+        result = subprocess.run(["./scripts/compose.sh", "up"], cwd=dest, env=env)
+        assert result.returncode == 0
+        return dict(
+            line.split("=", 1)
+            for line in capture.read_text().splitlines()
+            if "=" in line
+        )
+
+    # PORT_OFFSET shifts every default port by the offset.
+    shifted = run_wrapper({"PORT_OFFSET": "100"})
+    assert shifted["HTTP_HOST_PORT"] == "8100"
+    assert shifted["POSTGRES_HOST_PORT"] == "5532"
+    assert shifted["GRAFANA_HOST_PORT"] == "3100"
+    # An explicit per-var override is respected (not shifted).
+    overridden = run_wrapper({"PORT_OFFSET": "100", "HTTP_HOST_PORT": "9999"})
+    assert overridden["HTTP_HOST_PORT"] == "9999"
+    # No offset → today's defaults (single-stack DX preserved).
+    defaults = run_wrapper({})
+    assert defaults["HTTP_HOST_PORT"] == "8000"
