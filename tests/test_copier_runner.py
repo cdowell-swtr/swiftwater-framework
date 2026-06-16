@@ -3393,3 +3393,21 @@ def test_render_dev_compose_parameterizes_host_ports(tmp_path: Path):
         assert f"${{{var}:-{default}}}:" in dev, f"{var} not parameterized"
     # Guard the APP_-prefix ban: no host-port var leaks into the app settings namespace.
     assert "APP_HOST_PORT" not in dev and "APP_PORT" not in dev
+
+
+def test_render_observability_parameterizes_host_ports(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb", "redis", "workers"]})
+    obs = (dest / "infra" / "compose" / "observability.yml").read_text()
+    for var, default in [
+        ("PROMETHEUS_HOST_PORT", "9090"),
+        ("GRAFANA_HOST_PORT", "3000"),
+        ("ALERTMANAGER_HOST_PORT", "9093"),
+        ("LOKI_HOST_PORT", "3100"),
+        ("TEMPO_HOST_PORT", "3200"),
+        ("POSTGRES_EXPORTER_HOST_PORT", "9187"),
+        ("MONGODB_EXPORTER_HOST_PORT", "9216"),
+        ("CELERY_EXPORTER_HOST_PORT", "9808"),
+        ("REDIS_EXPORTER_HOST_PORT", "9121"),
+    ]:
+        assert f"${{{var}:-{default}}}:" in obs, f"{var} not parameterized"

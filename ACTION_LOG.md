@@ -1147,3 +1147,17 @@ Documented all 7 vars (+ `PORT_OFFSET`) in the FRAMEWORK region of
 conditional vars). Placement: inside the framework region (consistent with existing non-APP vars
 like `GRAFANA_ADMIN_PASSWORD`; no test forbids non-APP vars in that region).
 TDD: test red → green (1 passed 1.59s). `docker compose config` validates. Ruff clean.
+
+#### #0108 · completed · FWK31 · 2026-06-16
+Task 3 of 7 complete: parameterized all 9 published host-side ports in
+`src/framework_cli/template/infra/compose/observability.yml.jinja` with `${VAR:-default}` form.
+Vars: `PROMETHEUS_HOST_PORT:-9090`, `GRAFANA_HOST_PORT:-3000`, `ALERTMANAGER_HOST_PORT:-9093`,
+`LOKI_HOST_PORT:-3100`, `TEMPO_HOST_PORT:-3200`, `POSTGRES_EXPORTER_HOST_PORT:-9187`,
+`MONGODB_EXPORTER_HOST_PORT:-9216` (mongodb battery), `CELERY_EXPORTER_HOST_PORT:-9808`
+(workers battery), `REDIS_EXPORTER_HOST_PORT:-9121` (redis|workers battery). otel-collector
+(internal, no host port) left unchanged. Extended the FWK31 block in
+`src/framework_cli/template/.env.example.jinja` with the 9 obs vars (battery-gated where
+applicable), placed adjacent to the dev port vars within the framework region. `docker compose
+--profile dev config` validates cleanly; cross-file `depends_on` errors (pre-existing, caused by
+splitof battery services across overlay+dev files) still occur without `--profile`. TDD: test
+red → green (1 passed 1.57s). Full quality gate clean.

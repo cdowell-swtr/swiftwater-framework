@@ -13,7 +13,7 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=15d"
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_HOST_PORT:-9090}:9090"
     volumes:
       - "../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
       - "../observability/prometheus/alerts:/etc/prometheus/alerts:ro"
@@ -28,7 +28,7 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
     ports:
-      - "3000:3000"
+      - "${GRAFANA_HOST_PORT:-3000}:3000"
     volumes:
       - "../observability/grafana/provisioning:/etc/grafana/provisioning:ro"
       - "../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro"
@@ -40,7 +40,7 @@ services:
     command:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
     ports:
-      - "9093:9093"
+      - "${ALERTMANAGER_HOST_PORT:-9093}:9093"
     volumes:
       - "../observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"
       # On deploy, materialize APP_ALERT_WEBHOOK_URL as /etc/alertmanager/webhook_url (a mounted
@@ -50,7 +50,7 @@ services:
     image: grafana/loki:3.2.1
     command: ["-config.file=/etc/loki/loki-config.yml"]
     ports:
-      - "3100:3100"
+      - "${LOKI_HOST_PORT:-3100}:3100"
     volumes:
       - "../observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro"
       - "lokidata:/loki"
@@ -68,7 +68,7 @@ services:
     image: grafana/tempo:2.6.1
     command: ["-config.file=/etc/tempo/tempo.yml"]
     ports:
-      - "3200:3200"
+      - "${TEMPO_HOST_PORT:-3200}:3200"
     volumes:
       - "../observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro"
       - "tempodata:/var/tempo"
@@ -86,7 +86,7 @@ services:
     environment:
       DATA_SOURCE_NAME: "postgresql://app:${POSTGRES_PASSWORD:-app}@postgres:5432/app?sslmode=disable"
     ports:
-      - "9187:9187"
+      - "${POSTGRES_EXPORTER_HOST_PORT:-9187}:9187"
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,7 +96,7 @@ services:
     image: percona/mongodb_exporter:0.43
     command: ["--mongodb.uri=mongodb://mongo:27017", "--collect-all"]
     ports:
-      - "9216:9216"
+      - "${MONGODB_EXPORTER_HOST_PORT:-9216}:9216"
     depends_on:
       mongo:
         condition: service_healthy
@@ -107,7 +107,7 @@ services:
     image: danihodovic/celery-exporter:0.10.5
     command: ["--broker-url=redis://redis:6379/0"]
     ports:
-      - "9808:9808"
+      - "${CELERY_EXPORTER_HOST_PORT:-9808}:9808"
     depends_on:
       redis:
         condition: service_healthy
@@ -118,7 +118,7 @@ services:
     image: oliver006/redis_exporter:v1.62.0
     command: ["--redis.addr=redis://redis:6379"]
     ports:
-      - "9121:9121"
+      - "${REDIS_EXPORTER_HOST_PORT:-9121}:9121"
     depends_on:
       redis:
         condition: service_healthy
