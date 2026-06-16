@@ -961,3 +961,16 @@ a ranked gap as covered — no inflation) + a successor-pointer naming `tests/ru
 as the authoritative current view. Gate green: 9 runtime_coverage tests pass, ruff check + format
 clean, mypy src clean (unaffected — tests/-only). FWK29 → Done. Next: finish the branch (PR, no
 release) then FWK30 (the open-world reviewer) is unblocked — the registry it defers to now exists.
+
+#### #0090 · completed · FWK30 · 2026-06-16
+Brainstorm → design spec for the open-world coverage-gap reviewer (FWK29 registry now exists,
+unblocking it). Decisions: **scope = both halves** (A new-kind/unclassified enumerable surface +
+B in-app code-path surfaces), prompt draws a hard coverage-lens boundary vs `architecture`
+(design soundness) and `observability*` (instrumentation); **B is diff-anchored (B-i)** not a
+whole-tree audit; **defers to `registry.py` by reading the source directly** (no generated
+manifest); **full repo diff seed** via a per-agent diff scope (resolves the target-scope wrinkle —
+the other 5 framework agents keep template-excluding `framework_diff()`); **glob-gated activation**
+(`template/**`, `tests/runtime_coverage/**`) — needs the framework-target dispatch to honor
+`active_when`/`trigger_globs`; **advisory** (`block_threshold=None`). Eval fixture pair (positive
+flag + negative defer-to-same-PR-registry) for calibration. Spec:
+`docs/superpowers/specs/2026-06-16-fwk30-coverage-gap-reviewer-design.md`. Next: writing-plans.
