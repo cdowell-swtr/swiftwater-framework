@@ -795,3 +795,11 @@ with TLS verify ON against the mkcert root CA → 200. Verify-ON makes the cert 
 load-bearing (cert-gen/mount/tls.yml regression fails the handshake; docker-provider
 regression fails the route) — both surfaces, one assertion. Corrected the proof note
 (local execution, not render-matrix).
+
+#### #0077 · note · FWK8 · 2026-06-15
+Wrote the FWK8 plan: `docs/superpowers/plans/2026-06-15-traefik-acceptance.md`. 3 tasks:
+(1) the cert+route regression-guard test (render → `task certs` → up dev → TLS-verified
+200 through Traefik); (2) **prove it bites** — temp-downgrade Traefik v3.6→v3.5 → test
+FAILS (reproduces the Docker-27 break), revert → PASS (the TDD-analog, since the bug is
+already fixed); the cert surface bites by construction (verify-ON). (3) finalize, NO
+release (test-only, not in the wheel; local-only since acceptance is CI-ignored).
