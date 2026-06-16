@@ -1,6 +1,6 @@
 ---
 name: flaky-realize-cached-copytree-git-gc-race
-description: The flaky test_realize_cached_reuses_base_render failure is a copytree-vs-git-auto-GC race; fix is disabling auto-gc on the base repo.
+description: The flaky realize_cached copytree failure is a loose-object-vs-GC race; FIXED durably in FWK33 by packing each cached base (gc.auto 0 alone was insufficient).
 scope: project
 metadata: 
   node_type: memory
@@ -8,10 +8,10 @@ metadata:
   originSessionId: f1b70b94-559d-4a71-b5cd-a53c1296c731
 ---
 
-**Symptom:** `test_realize_cached_reuses_base_render` (and potentially other `realize_cached`/`realize_fixture` users) intermittently fails with `shutil.Error: [Errno 2] No such file or directory: …/.git/objects/<xx>` — vanished loose objects mid-copy. Hit once on PR #13's `gate` job (`pytest -q --ignore=tests/acceptance`); **transient, clears on rerun**, unrelated to whatever change is in flight.
+**Symptom:** `realize_cached` users (`test_realize_cached_reuses_base_render`; `test_realize_cached_builds_framework_shaped_base_for_coverage_gap`) intermittently fail with `shutil.Error: [Errno 2] No such file or directory: …/.git/objects/<xx>` — vanished loose objects mid-copy. Seen on PR #13's `gate` and again on the v0.2.11 release run's `gate`; transient, clears on rerun, unrelated to the change in flight.
 
-**Cause:** `evals.realize_cached` does `shutil.copytree(base, work)` over a base project that contains a **live `.git`** dir. Git's background auto-GC can repack loose objects mid-copy, so `shutil` then fails on a path that disappeared.
+**Cause:** `evals.realize_cached` does `shutil.copytree(base, work)` over a base repo whose `.git` holds **loose objects** (~342 after a fresh `init`+`commit`). Git packing/pruning a loose object mid-copy makes `shutil` fail on the vanished path.
 
-**Fix (cheap, safe, standalone):** immediately after `git init` in **both** `realize_cached` and `realize_fixture`, set `git config gc.auto 0` (and `maintenance.auto false`) on the base repo so no background repack can race the copy. Not blocking; good fit to fold into Plan 23 (eval/reviewer tooling) or do as a one-off.
+**RESOLVED — FWK33 (2026-06-16, PR #47).** The earlier guess — `git config gc.auto 0` after `git init` — was applied to `_framework_base` yet it **still raced** there, so gc.auto 0 alone is INSUFFICIENT (the loose objects are still present to race). The durable fix is to leave **no loose objects** in the copytree source: `_freeze_git_base(repo)` = `git config gc.auto 0` + `git repack -adq`, called after each cached base's commit (both the framework-shaped `_framework_base` and the rendered base in `realize_cached`). Deterministic guard `test_framework_base_is_packed_with_no_loose_objects` asserts `git count-objects` loose count == 0. If this class ever recurs, check any NEW cached-base/copytree-of-.git site calls `_freeze_git_base` (or packs) before being copied.
 
-(Preserved 2026-06-12 from the abandoned `plan21-reviewer-rework` branch before it was deleted; master's meta-plan kept only a one-line pointer to this under Plan 23.)
+(Originally preserved 2026-06-12 from the abandoned `plan21-reviewer-rework` branch; updated 2026-06-16 when FWK33 shipped the durable fix.)

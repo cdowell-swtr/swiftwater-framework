@@ -1299,4 +1299,6 @@ asserts the loose-object count is 0 and in-pack > 0 (RED before fix: 342 loose; 
 
 Verified: flaky test looped 15x then all green; `tests/review/` 324 passed; ruff check + format
 + mypy src clean. Test/eval-infra only, no release. Branch `fwk33-coverage-gap-fixture-gc-race`
-to PR. See [[flaky-realize-cached-copytree-git-gc-race]].
+→ PR #47. Also updated the committed memory `_memory/flaky-realize-cached-copytree-git-gc-race.md`
+(+ its MEMORY.md pointer): the earlier `gc.auto 0`-only guess was insufficient; record the
+durable pack-the-base fix. See [[flaky-realize-cached-copytree-git-gc-race]].
