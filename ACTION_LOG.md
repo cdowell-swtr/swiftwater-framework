@@ -932,3 +932,11 @@ for the rest); (4) reconcile the inventory + finalize. Grounded the code in real
 Two execution-time unknowns flagged with remedies: all-batteries co-render (fallback to the
 matrix `full` set) and rendered service/job-name drift (print + correct the representative).
 Test-only → no release.
+
+#### #0087 · completed · FWK29 · 2026-06-16
+Task 1 (subagent-driven): the six enumeration rules `tests/runtime_coverage/enumerate.py` +
+unit tests. All-batteries render co-renders cleanly → **91 surface keys** (more exhaustive than
+the ~50–60 estimate). One representative corrected: the rendered project's ci.yml lint job is
+`lint`, not `gate` (that's the framework's own job name). Spec review (Sonnet) ✓; code-quality
+(Opus) ✓ APPROVE — folded in its suggestion: an exact-set assertion pinning the 3 Dockerfile
+stages (multiplicity, not just presence). 3 tests pass. Controller commits (implementer staged).
