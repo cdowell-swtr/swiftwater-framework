@@ -387,3 +387,62 @@ def test_agentic_recovery_is_bounded(tmp_path):
         )
     # bounded: a couple of recovery nudges, not all 12 turns burned on retries
     assert len(client.calls) <= 4
+
+
+class _SerializingClient:
+    """Mimics litellm: JSON-serializes the messages on every create() (raising if a
+    non-serializable block leaked into the replayed turns), then returns the queued
+    response. The plain _ScriptedClient never serializes, so it cannot catch the
+    block-not-serializable regression this guards."""
+
+    def __init__(self, responses):
+        import json
+
+        self._json = json
+        self._responses = list(responses)
+        self.calls = []
+        self.messages = self
+
+    def create(self, **kwargs):
+        self._json.dumps(kwargs["messages"])  # litellm serializes the replayed turns
+        self.calls.append(kwargs)
+        return self._responses.pop(0)
+
+
+def test_agentic_multi_turn_messages_are_json_serializable(tmp_path):
+    """Regression: the loop must store wire-format dicts for each assistant turn, so a
+    multi-turn (tool-using) loop re-serializes cleanly via litellm. Backend block
+    dataclasses are not JSON-serializable — storing them raised
+    'TextBlock is not JSON serializable' on the second request (FWK30 surfaced this:
+    coverage-gap is always multi-turn)."""
+    (tmp_path / "x.py").write_text("BAD = 1\n")
+    client = _SerializingClient(
+        [
+            _Resp(
+                [
+                    _TextBlock("Let me look."),
+                    _ToolUse("t1", "glob", {"pattern": "*.py"}),
+                ]
+            ),
+            _Resp(
+                [
+                    _TextBlock(
+                        '[{"path": "x.py", "line": 1, "severity": "high", "message": "bad"}]'
+                    )
+                ]
+            ),
+        ]
+    )
+    findings = run_agent_agentic(
+        "--- a/x.py\n+++ b/x.py\n",
+        tmp_path,
+        get_agent("architecture"),
+        client,
+        max_turns=12,
+    )
+    assert findings == [Finding("x.py", 1, "high", "bad")]
+    # The assistant turn replayed on the 2nd request is wire-format dicts (text + tool_use).
+    assistant = [m for m in client.calls[1]["messages"] if m["role"] == "assistant"]
+    assert assistant and all(isinstance(b, dict) for b in assistant[0]["content"])
+    assert any(b.get("type") == "tool_use" for b in assistant[0]["content"])
+    assert any(b.get("type") == "text" for b in assistant[0]["content"])

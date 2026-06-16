@@ -1049,3 +1049,15 @@ now-unneeded README breadcrumb); (3) defense-in-depth — `active_agents` batter
 framework_only (+ a battery-gated framework_only exclusion test). Seed now carries each surface
 directly (bad→k8s; good→overlay+registry). 69 review/eval tests green; ruff+mypy clean. Remaining:
 live eval calibration (Issue #1) — needs the eval key/backend.
+
+#### #0099 · completed · FWK30 · 2026-06-16
+Engine bugfix (FWK30-surfaced, controller TDD): the agentic tool-loop stored backend response
+blocks (`backend.TextBlock`/`ToolUseBlock` dataclasses) directly into `messages`; on a multi-turn
+(tool-using) call litellm serializes the replayed messages → `TypeError: TextBlock is not JSON
+serializable`. Latent because every other agentic agent is calibrated via the free subagent backend
+and the scripted unit-test client never serialized; coverage-gap is the framework's first ALWAYS-
+multi-turn agentic agent (must read registry.py/enumerate.py) run on the paid api backend. Fix:
+`_assistant_turn()` converts blocks to Anthropic wire-format dicts (`{"type":"text"...}` /
+`{"type":"tool_use"...}`, empty text dropped) at both append sites in agentic.py. Regression test
+adds a `_SerializingClient` that json.dumps messages each turn (the scripted client didn't). 322
+review tests green. Also fixes the same crash on the production review runtime path.
