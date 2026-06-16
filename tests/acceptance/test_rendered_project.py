@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import socket
 import ssl
@@ -34,6 +35,27 @@ def _docker_available() -> bool:
 def _compose_env() -> dict[str, str]:
     """Env for `docker compose up` so the dev app runs as the host user (host-owned bind writes)."""
     return {**os.environ, "UID": str(os.getuid()), "GID": str(os.getgid())}
+
+
+@pytest.fixture(autouse=True)
+def _isolate_compose_project(request, monkeypatch):
+    """Give each acceptance test its OWN docker compose project namespace.
+
+    The generated project sets no top-level compose `name:`, so
+    `docker compose -f infra/compose/base.yml …` derives the project name from the
+    compose-file directory → `compose`. A developer's `task dev` stack (or another
+    acceptance test) uses the SAME name and so shares container/network/volume names:
+    without isolation an `up` reuses the other stack's containers and the `down -v`
+    teardown DESTROYS its postgres volume. A unique COMPOSE_PROJECT_NAME — honoured by
+    `up` (via `_compose_env()`, which spreads `os.environ`) and by the bare `down` calls
+    (inherited env) alike — keeps each test's stack in its own namespace and scopes
+    `down -v` to that test only. FWK31 tracks the template-side fix (a per-slug project
+    name + parameterized host port) so two generated projects can co-run on one host.
+    """
+    safe = (
+        re.sub(r"[^a-z0-9]+", "-", request.node.name.lower()).strip("-")[:40] or "test"
+    )
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", f"swfwacc-{safe}")
 
 
 @pytest.mark.skipif(

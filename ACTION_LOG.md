@@ -1093,3 +1093,17 @@ Fix: declared `tzlocal>=5.2` in the workers deps (`pyproject.toml.jinja`) + exte
 → uv lock+sync → `import demo.tasks` OK + `test_dlq_redaction` collects (7 tests). Master CI green on
 merge (renders HEAD); ships a patch release so consumers get it via `framework upgrade`. Unblocks PR
 #45 (FWK31) once it rebases onto this.
+
+#### #0103 · completed · FWK31 · 2026-06-16
+Diagnosed + interim-fixed the docker dev:lite acceptance collision (surfaced by Meridian's local
+`task dev`). ROOT CAUSE: generated projects set no compose `name:`, so `docker compose -f
+infra/compose/base.yml` derives project name from the dir → `compose` for EVERY project; the
+acceptance tier and a consumer's `task dev` thus share container/network/volume names + host :8000.
+The `test_…dev_lite_stack_serves_health` failure was its app booting against Meridian's reused
+`compose-postgres-1` (never healthy → 90s timeout); worse, the test's `down -v` would DELETE the
+shared `compose_pgdata` volume = Meridian's DB. Interim fix (no release): `_isolate_compose_project`
+autouse fixture sets a unique `COMPOSE_PROJECT_NAME` (`swfwacc-<testname>`) per acceptance test —
+picked up by `up` (`_compose_env` spreads os.environ) AND the bare `down` calls (inherited env), so
+`down -v` is scoped to the test's own volume. Verified: serves_health now PASSES (32s, isolated
+`swfwacc-…` stack). Opened FWK31 for the template-side fix (per-slug project name + parameterized
+host port so two generated projects co-run; ships a release).
