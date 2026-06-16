@@ -1128,3 +1128,10 @@ routes through it; tests bypass it by setting the env directly. App-port var is 
 ports (9th is celery-exporter:9808, not otel-collector), 4 wrapper+Taskfile, 5 acceptance ephemeral
 ports + `docker compose port` discovery, 6 two-stack co-run proof, 7 upgrade note + gate + review +
 release. Plan: `docs/superpowers/plans/2026-06-16-fwk31-compose-isolation.md`. Next: execute.
+
+#### #0106 · completed · FWK31 · 2026-06-16
+Task 1 of 7 complete: added `name: {{ project_slug }}` as the first YAML key in
+`src/framework_cli/template/infra/compose/base.yml.jinja` (after the leading comment block),
+with a comment explaining the isolation benefit and that `COMPOSE_PROJECT_NAME` overrides it.
+TDD: test wrote red (`name: demo` absent), template edit made it green (1 passed 1.43s).
+Rendered compose validates (`compose config OK`). Ruff format+lint clean.

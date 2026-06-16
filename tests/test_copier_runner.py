@@ -3364,3 +3364,12 @@ def test_ci_security_job_can_read_pull_requests(tmp_path: Path):
     perms = ci["jobs"]["security"]["permissions"]
     assert perms.get("contents") == "read"
     assert perms.get("pull-requests") == "read"
+
+
+def test_render_base_compose_sets_per_project_name(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    base = (dest / "infra" / "compose" / "base.yml").read_text()
+    # A per-project compose name isolates container/network/volume namespaces from any
+    # other stack on the host (FWK31). DATA's project_slug is "demo".
+    assert "name: demo" in base
