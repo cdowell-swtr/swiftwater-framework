@@ -1,6 +1,8 @@
 import json
 import os
 import shutil
+import socket
+import ssl
 import subprocess
 import time
 import urllib.request
@@ -767,6 +769,87 @@ def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
         assert "request_latency_p99_ms" in body["slos"]
     finally:
         subprocess.run(down, cwd=dest)
+
+
+@pytest.mark.skipif(
+    not _docker_available()
+    or shutil.which("mkcert") is None
+    or shutil.which("task") is None,
+    reason="docker + mkcert + go-task required (local-only dev-stack tier)",
+)
+def test_rendered_project_dev_stack_routes_through_traefik(tmp_path: Path):
+    # Regression guard for the v3.1->Docker-27 break AND the mkcert cert path (the incident's
+    # origin). The --profile dev tests START Traefik but never route THROUGH it; this one does.
+    # A *verified* 200 proves the whole chain: `task certs`/mkcert issued a valid cert -> it
+    # mounted -> tls.yml loaded it -> Traefik served it for *.localhost and the client TRUSTED
+    # it -> AND the docker provider discovered the labeled app and proxied to :8000.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    certs = subprocess.run(["task", "certs"], cwd=dest, capture_output=True, text=True)
+    assert certs.returncode == 0, "task certs failed:\n" + certs.stdout + certs.stderr
+
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    up = ["docker", "compose", *fargs, "--profile", "dev", "up", "-d", "--build"]
+    down = ["docker", "compose", *fargs, "--profile", "dev", "down", "-v"]
+
+    assert subprocess.run(up, cwd=dest, env=_compose_env()).returncode == 0
+    try:
+        host = f"{DATA['project_slug']}.localhost"
+        caroot = subprocess.run(
+            ["mkcert", "-CAROOT"], capture_output=True, text=True
+        ).stdout.strip()
+        # Trust ONLY the mkcert CA, so a verified handshake proves Traefik served the real
+        # mkcert cert (task certs -> mount -> tls.yml), not a default. We connect to 127.0.0.1
+        # directly ({slug}.localhost is not in this host's DNS) and route via the Host header;
+        # check_hostname is off because the cert's wildcard SAN *.localhost is browser-valid
+        # but OpenSSL won't match it to {slug}.localhost — the CHAIN check is the cert proof.
+        ctx = ssl.create_default_context(cafile=str(Path(caroot) / "rootCA.pem"))
+        ctx.check_hostname = False
+        deadline = time.time() + 120
+        body = None
+        last_err = "no attempt"
+        while time.time() < deadline:
+            try:
+                raw = socket.create_connection(("127.0.0.1", 443), timeout=5)
+                with ctx.wrap_socket(raw, server_hostname=host) as ssock:
+                    ssock.sendall(
+                        f"GET /health HTTP/1.1\r\nHost: {host}\r\n"
+                        f"Connection: close\r\n\r\n".encode()
+                    )
+                    data = b""
+                    while True:
+                        chunk = ssock.recv(4096)
+                        if not chunk:
+                            break
+                        data += chunk
+                head, _, payload = data.partition(b"\r\n\r\n")
+                status = int(head.split(b"\r\n", 1)[0].split()[1])
+                if status == 200:
+                    body = json.loads(payload)
+                    break
+                last_err = f"HTTP {status} via Traefik"
+            except (
+                OSError
+            ) as exc:  # ssl.SSLError (chain) + conn errors while it settles
+                last_err = f"{type(exc).__name__}: {exc}"
+                time.sleep(3)
+        assert body is not None, (
+            f"no chain-verified 200 through Traefik within 120s (last: {last_err}) — "
+            "docker-provider routing or the mkcert cert chain (task certs/mount/tls.yml) is broken"
+        )
+        assert body["status"] in {"ok", "degraded"}
+        assert "request_latency_p99_ms" in body["slos"]
+    finally:
+        subprocess.run(down, cwd=dest, env=_compose_env())
 
 
 @pytest.mark.skipif(

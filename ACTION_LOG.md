@@ -770,3 +770,50 @@ Cut **v0.2.10** (bundled into the FWK17 PR). Bumped pyproject `0.2.9->0.2.10`, `
 dogfood tag pin -> `v0.2.10`; ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build`
 -> framework_cli-0.2.10.{whl,tar.gz}, 27 version-consistency tests green. Ships the
 Docker-builder git fix so claudesubscriptioncli consumers' `docker build` works.
+
+#### #0075 · note · FWK8 · 2026-06-15
+Brainstormed FWK8 (Traefik docker-provider acceptance coverage). Key finding: the 10
+`--profile dev` acceptance tests already START Traefik but NEVER route through it (they
+hit prometheus/seeded-items/app:8000 directly) — Traefik with a broken docker provider
+still starts (`up -d` doesn't wait), so the v3.1→Docker-27 break was invisible. Design
+(approved): a dedicated test that ROUTES `https://{slug}.localhost/health` through Traefik
+(dev profile, TLS-verify-off, app already labeled) → 200 proves the docker provider
+connected + discovered + proxied. Spec: `docs/superpowers/specs/2026-06-15-traefik-docker-
+provider-acceptance-design.md`. Test-only → NO release (not in the wheel). User expanded
+scope into the broader CLASS → spun off **FWK18** (agentic assessment of all
+provisioned-but-unexercised real-runtime surfaces → conditional framework-native
+coverage-gap reviewer); sequenced after FWK8.
+
+#### #0076 · amended · FWK8 · 2026-06-15
+Revised the FWK8 spec per user: the mkcert/`task certs` cert path is the incident's
+ORIGIN (a WSL/Windows cert inconsistency) — verify-off + Traefik's default cert left it
+uncovered. Found `task certs` issues a `*.localhost` mkcert cert that `dynamic/tls.yml`
+loads. Found `ci.yml` runs `pytest --ignore=tests/acceptance` → the docker dev-stack tier
+is LOCAL-ONLY (this box has docker+mkcert+go-task), so no mkcert-availability obstacle.
+Revised test: render → `task certs` → up dev → route `https://{slug}.localhost/health`
+with TLS verify ON against the mkcert root CA → 200. Verify-ON makes the cert path
+load-bearing (cert-gen/mount/tls.yml regression fails the handshake; docker-provider
+regression fails the route) — both surfaces, one assertion. Corrected the proof note
+(local execution, not render-matrix).
+
+#### #0077 · note · FWK8 · 2026-06-15
+Wrote the FWK8 plan: `docs/superpowers/plans/2026-06-15-traefik-acceptance.md`. 3 tasks:
+(1) the cert+route regression-guard test (render → `task certs` → up dev → TLS-verified
+200 through Traefik); (2) **prove it bites** — temp-downgrade Traefik v3.6→v3.5 → test
+FAILS (reproduces the Docker-27 break), revert → PASS (the TDD-analog, since the bug is
+already fixed); the cert surface bites by construction (verify-ON). (3) finalize, NO
+release (test-only, not in the wheel; local-only since acceptance is CI-ignored).
+
+#### #0078 · completed · FWK8 · 2026-06-15
+Implemented + debugged the Traefik route-through test. First run FAILED on the fixed
+(v3.6) codebase — systematic-debugging found TWO test-design bugs (NOT framework bugs):
+(1) `{slug}.localhost` doesn't resolve in Python here (`/etc/nsswitch.conf` = `files dns`,
+no nss-myhostname; getaddrinfo fails — browsers resolve `*.localhost` internally, glibc
+doesn't) → connect to `127.0.0.1:443` + `Host` header for routing; (2) OpenSSL's
+`X509_check_host` won't match the cert's `*.localhost` wildcard SAN to `{slug}.localhost`
+(single-label parent — browser-valid, OpenSSL stricter) → `check_hostname=False` + chain-
+verify against the mkcert-ONLY CA (still proves Traefik served the real mkcert cert, not a
+default). Validated the fix against a live stack (served cert issuer = mkcert CA, SAN
+*.localhost, HTTP 200). Bite-proven: v3.5 → FAIL (`HTTP 404` — docker provider broken,
+cert/file-provider fine), v3.6 → PASS (stable, ~45s, twice). Synced the spec to the impl;
+captured [[testing-traefik-tls-route-from-python]]. Test-only → NO release.
