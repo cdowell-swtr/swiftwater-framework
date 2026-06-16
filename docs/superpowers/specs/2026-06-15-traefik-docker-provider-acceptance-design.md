@@ -61,10 +61,21 @@ A single dedicated docker-acceptance test in
    `env=_compose_env()` (host UID/GID; the dev profile needs the observability
    overlay or grafana's image-less override fails config validation —
    [[compose-profile-dev-needs-observability-overlay]]).
-4. **Route through Traefik with TLS verification ON:** build an `ssl` context
-   trusting the **mkcert root CA** (`cafile = $(mkcert -CAROOT)/rootCA.pem`), then
-   poll `https://{project_slug}.localhost/health` (Traefik's `websecure`/443) until
-   HTTP 200 within a generous deadline (~120s — the dev stack is heavier than `lite`).
+4. **Route through Traefik with the cert chain verified:** open a TLS socket to
+   **`127.0.0.1:443`** (Traefik's `websecure`), trusting **only** the mkcert root CA
+   (`ssl.create_default_context(cafile=$(mkcert -CAROOT)/rootCA.pem)`), with SNI =
+   `{slug}.localhost`, and send `GET /health` with `Host: {slug}.localhost`. Poll
+   until HTTP 200 within a generous deadline (~120s — the dev stack is heavier than
+   `lite`). Two environment realities forced this exact shape (found while building):
+   - **Connect to `127.0.0.1`, not `{slug}.localhost`:** `*.localhost` is **not** in
+     this host's DNS (`/etc/nsswitch.conf` is `files dns`, no `nss-myhostname`), so
+     Python's `getaddrinfo` can't resolve it (browsers resolve it internally;
+     `urllib`/glibc don't). Route by the `Host` header instead.
+   - **`check_hostname = False` (chain verify only):** OpenSSL's `X509_check_host`
+     refuses to match the cert's wildcard SAN `*.localhost` against `{slug}.localhost`
+     (single-label parent — browser-valid, OpenSSL stricter). The **chain** check
+     (trusting the mkcert-only CA) is what proves the served cert is the real mkcert
+     cert, not a default — so the cert path stays load-bearing.
 5. **Assert** status 200 and the app's `/health` JSON shape (`status ∈ {ok, degraded}`,
    `slos` present).
 6. **Tear down** in `finally`: `docker compose … --profile dev down -v`.
