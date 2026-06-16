@@ -999,3 +999,13 @@ Task 2 (Sonnet impl, controller-verified): authored `src/framework_cli/review/ag
 (76 lines) — coverage lens, hard boundaries vs review-architecture/observability/env-parity, strict
 "exercised" definition, two diff-anchored gaps (new-kind + in-app), defer-to-registry by reading
 registry.py/enumerate.py, JSON-only output. +2 prompt tests (4 total in test_coverage_gap.py). Green.
+
+#### #0094 · completed · FWK30 · 2026-06-16
+Task 3 (Sonnet impl, controller-verified): registered `coverage-gap` in `_SPECS` (review-coverage-gap,
+advisory/None, file-trigger, AGENTIC_MODEL/Opus, agentic, framework_only+reviews_template,
+trigger_globs template/** + runtime_coverage/**) + `FRAMEWORK_AGENTS` (alphabetical, 6→7) + context.py
+exception comment. Updated test_framework_target (7-tuple), test_context_policy (agentic set), +3 spec
+tests. Glob form `**` confirmed (fnmatch `*` spans `/`). 60 targeted tests green; test_full_active_sets
+still green (framework_only keeps it out of the 15-agent PR set). KNOWN TRANSIENT RED:
+test_evals::test_every_registered_agent_has_fixtures (coverage-gap has no fixtures yet) — restored
+green by Task 6.

@@ -33,6 +33,7 @@ def test_every_agent_has_an_explicit_context_strategy():
     }
     agentic = {
         "architecture",
+        "coverage-gap",
         "data-lineage",
         "privacy",
         "api-design",

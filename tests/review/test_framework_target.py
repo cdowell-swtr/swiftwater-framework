@@ -44,6 +44,7 @@ def test_framework_agents_are_the_expected_subset_and_registered():
     assert FRAMEWORK_AGENTS == (
         "application-logic",
         "architecture",
+        "coverage-gap",
         "dependency",
         "documentation",
         "security",

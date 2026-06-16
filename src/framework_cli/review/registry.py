@@ -311,6 +311,25 @@ _SPECS: dict[str, AgentSpec] = {
             ),
         ),
     ),
+    # FWK30 — open-world coverage-gap reviewer. Framework-self-review only (reviews the
+    # template payload + the FWK29 registry, neither of which exists in a generated
+    # project). Advisory + agentic; reads registry.py/enumerate.py via its tools to defer
+    # to the closed-world ratchet. Gated to template/registry changes; fed the
+    # template-inclusive diff (reviews_template).
+    "coverage-gap": AgentSpec(
+        "review-coverage-gap",
+        _prompt("coverage-gap"),
+        None,  # advisory — surfaces, never blocks
+        "file-trigger",
+        AGENTIC_MODEL,
+        trigger_globs=(
+            "src/framework_cli/template/**",
+            "tests/runtime_coverage/**",
+        ),
+        context=ContextPolicy("agentic"),
+        framework_only=True,
+        reviews_template=True,
+    ),
 }
 
 
