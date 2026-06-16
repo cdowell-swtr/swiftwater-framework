@@ -817,3 +817,59 @@ default). Validated the fix against a live stack (served cert issuer = mkcert CA
 *.localhost, HTTP 200). Bite-proven: v3.5 → FAIL (`HTTP 404` — docker provider broken,
 cert/file-provider fine), v3.6 → PASS (stable, ~45s, twice). Synced the spec to the impl;
 captured [[testing-traefik-tls-route-from-python]]. Test-only → NO release.
+
+#### #0079 · note · FWK18a · 2026-06-15
+Brainstormed + re-keyed FWK18 → **FWK18a** (assessment now) + **FWK18b** (durable mechanism,
+designed from FWK18a's evidence). Wrote the FWK18a design spec:
+`docs/superpowers/specs/2026-06-15-runtime-coverage-assessment-design.md` — a multi-agent
+`Workflow` sweep over 7 provisioned-surface clusters (Docker image build, base/dev stack,
+observability, data+services, entrypoint/certs/tasks, non-dev overlays, per-battery live
+wiring); per-cluster finders classify exercised/indirect/unexercised with file:line evidence
+both sides → adversarial-verify each gap (refute it) → synthesize a ranked inventory. Shared
+"exercised = a test DRIVES it and asserts its effect" heuristic. Recon already shows ≥1 gap
+(baseline `docker build` never run — only the claudesubscriptioncli builder stage is built).
+Output: `docs/superpowers/assessments/2026-06-15-runtime-coverage-gaps.md`; each gap → a
+follow-on test task. Process note: FWK18a's "implementation" is RUNNING the Workflow, not a
+TDD code plan, so it skips writing-plans. NO release (analysis + docs). Branch
+`fwk18a-coverage-assessment`.
+
+#### #0080 · note · FWK18a · 2026-06-15
+On user pushback ("no need for a plan?"), wrote a plan after all — not a TDD code plan but
+the executable design of the Workflow: `docs/superpowers/plans/2026-06-15-coverage-assessment.md`.
+Mapped the 7 clusters to REAL template file-lists (cross-checked vs `find infra -type f`: all
+8 compose overlays, every Dockerfile stage, full observability tree, entrypoint, Taskfile,
+traefik) + the test-side grep targets + the finder/verifier/synthesizer schemas + prompts.
+Highest-leverage review point flagged = a finder pointed at an incomplete file-list reads a
+surface as "covered". Recon showed the acceptance suite is LARGE (prometheus/loki/tempo/
+deploy-e2e/root-owned all covered) → Phase-2 adversarial-verify + a controller manual
+spot-check (Step 3) are the over-claim defense. Awaiting user review of the cluster file-lists
+before running.
+
+#### #0081 · amended · FWK18a · 2026-06-15
+User caught a real design gap: the finders give independent analysis WITHIN each cluster, but
+nothing independently checks whether the 7-cluster TAXONOMY is complete (a forgotten category
+→ no finder surfaces it; the assessment's own blind spot). The 7 were infra-centric, missing
+provisioned execution surfaces outside `infra/` (`.github/workflows/*`, `.pre-commit-config`,
+`alembic/`, `seed.py`, frontend build). Added **Phase 0 — independent surface census**: 2
+enumerators BLIND to the clusters (orthogonal lenses: by-lifecycle, by-directory) catalogue
+all provisioned runtime/build surfaces over the whole template → controller reconcile (plain
+JS) maps each to a seed cluster → the residual answers "do other clusters exist?" and becomes
+an 8th assessed cluster if non-empty. Updated spec + plan; the spec's old "no discovery agent
+needed" line was exactly the flawed assumption.
+
+#### #0082 · completed · FWK18a · 2026-06-15
+Ran the assessment Workflow (65 agents, 2.77M tokens, ~20 min; 5 overturned gaps). Two
+script bugs first: a missing closing paren in the Find-phase parallel (node --check on a
+/tmp copy pinpointed it — `return` at top level is a node-check false-positive the harness
+allows), and the nested-backtick-escape risk → rewrote prompts with `.join('\n')` arrays,
+no backticks inside strings. RESULTS: census 130 surfaces; the independent Phase-0 taxonomy
+check (user's catch) PAID OFF — 84 fell outside the 7 seed clusters, 51 were true residual
+CATEGORIES the infra-centric partition missed (app-bootstrap/create_app/lifespan, the whole
+CI-time lifecycle, pre-commit/.claude hooks, deploy orchestration) → assessed as an 8th
+cluster. Find: 116 surfaces, 63 EXERCISED, 53 candidate gaps; adversarial verify killed 5
+(incl. my own pre-assessment "baseline docker build never run" headline — the dev:lite test
+builds the runtime image at test_rendered_project.py:720). Synth → 27 ranked entries (8 high
+/ 15 med / 4 low). Controller hand-validated 4 highs (prod.yml config-only; workers eager;
+claudesubscriptioncli --target builder only; lite runtime build) — all held. Wrote the
+inventory + 10 grouped follow-on tasks (FWK19–28) + 4 recurring-shape seeds for FWK18b to
+`docs/superpowers/assessments/2026-06-15-runtime-coverage-gaps.md`. No release.
