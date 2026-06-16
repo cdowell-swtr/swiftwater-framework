@@ -1081,3 +1081,15 @@ test. 323 review tests green, ruff/format/mypy clean. PLAN.md: FWK30 → Done. F
 961 pass / 2 docker dev:lite acceptance failures (CI-ignored tier; pre-existing, template untouched
 by FWK30 — flagged separately for investigation, `serves_health` reproduces independent of branch).
 Next: finish the branch (PR; no release — review-infra only).
+
+#### #0102 · completed · FWK32 · 2026-06-16
+Born-red dependency drift (like FWK17). render-matrix went green→red between FWK29 (17:07Z) and
+FWK30 (20:21Z) with FWK30 touching no template/workers code → external: celery's beat scheduler
+imports `tzlocal` (get_localzone) but celery no longer declares it; the render-matrix resolves
+fresh (no --frozen) so a fresh `uv sync` dropped tzlocal → `import <pkg>.tasks` fails → workers
+projects' own suites fail to collect (`test_dlq_redaction`), and any consumer on workers is broken.
+Fix: declared `tzlocal>=5.2` in the workers deps (`pyproject.toml.jinja`) + extended
+`test_render_with_workers_battery_adds_celery_dep` to assert it. Verified end-to-end: workers render
+→ uv lock+sync → `import demo.tasks` OK + `test_dlq_redaction` collects (7 tests). Master CI green on
+merge (renders HEAD); ships a patch release so consumers get it via `framework upgrade`. Unblocks PR
+#45 (FWK31) once it rebases onto this.
