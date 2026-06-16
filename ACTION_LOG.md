@@ -1030,3 +1030,11 @@ original bad-fixture design (a new compose overlay) which was wrong — overlays
 coverage-gap defers them; the bad case must be a kind outside the six rules. Patches generated from
 real `git diff --staged` (validate_patch_hunks []). thresholds.yaml: coverage-gap 0.67/0.34. Full
 review suite GREEN (319 passed) — test_every_registered_agent_has_fixtures restored.
+
+#### #0097 · completed · FWK30 · 2026-06-16
+Task 4 (Sonnet impl, controller-verified): per-agent diff scope in the live `review` command. On the
+framework target a `reviews_template` agent (coverage-gap) now sources the template-INCLUSIVE
+`pr_diff()`; the five general framework agents keep template-excluding `framework_diff()`. Resolves
+the target-scope wrinkle so coverage-gap's template/registry trigger-globs match the gate at
+cli.py:1804 (else it always skipped) and it sees same-PR registry classification. `pr_diff` already
+imported; no new type-ignore. 17 targeted/framework-target tests green.

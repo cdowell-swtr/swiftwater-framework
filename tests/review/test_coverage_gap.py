@@ -114,3 +114,45 @@ def test_realize_cached_builds_framework_shaped_base_for_coverage_gap(tmp_path):
     assert (root / "src" / "framework_cli" / "template").is_dir()
     # The seeded change is in the diff (proves the patch applied to this base).
     assert "seeded comment for the fixture" in diff
+
+
+def test_reviews_template_agent_sources_full_diff_on_framework_target(monkeypatch):
+    """coverage-gap (reviews_template) must be fed pr_diff (template-inclusive), not the
+    template-excluding framework_diff — otherwise its template trigger-globs never match."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setenv("ANTHROPIC_RUNTIME_API_KEY", "x")
+    template_diff = (
+        "diff --git a/src/framework_cli/template/infra/compose/cache.yml.jinja "
+        "b/src/framework_cli/template/infra/compose/cache.yml.jinja\n"
+        "--- /dev/null\n"
+        "+++ b/src/framework_cli/template/infra/compose/cache.yml.jinja\n"
+        "@@ -0,0 +1,1 @@\n+services: {}\n"
+    )
+    seen = {}
+
+    def fake_pr_diff():
+        return template_diff
+
+    def fake_framework_diff():
+        return ""  # template excluded → empty
+
+    def fake_review_run(diff, spec, force_agentic=False, backend=None):
+        seen["diff"] = diff
+        seen["agent"] = spec.name
+        return []
+
+    monkeypatch.setattr(cli_mod, "pr_diff", fake_pr_diff)
+    monkeypatch.setattr(cli_mod, "framework_diff", fake_framework_diff)
+    monkeypatch.setattr(cli_mod, "_review_run", fake_review_run)
+
+    from typer.testing import CliRunner
+    from framework_cli.cli import app
+
+    result = CliRunner().invoke(
+        app, ["review", "coverage-gap", "--target", "framework", "--backend", "api"]
+    )
+    assert result.exit_code == 0
+    # It was NOT skipped as not-triggered, and it saw the template-inclusive diff.
+    assert seen.get("agent") == "review-coverage-gap"
+    assert "template/infra/compose/cache.yml.jinja" in seen["diff"]

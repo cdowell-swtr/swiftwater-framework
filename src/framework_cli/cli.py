@@ -1800,7 +1800,15 @@ def review(
 
     _backend = _make_backend(res.backend, RUNTIME_KEY_ENV)  # type: ignore[attr-defined]
     try:
-        diff = framework_diff() if target == "framework" else _review_diff()
+        if target == "framework":
+            # The five general framework agents review CLI/tooling source only
+            # (framework_diff excludes the template payload). A reviews_template agent
+            # (FWK30 coverage-gap) is the deliberate exception — it gets the full,
+            # template-inclusive diff so its template/registry trigger-globs match and it
+            # can see any same-PR registry classification.
+            diff = pr_diff() if spec.reviews_template else framework_diff()
+        else:
+            diff = _review_diff()
         if spec.trigger_globs and not matches_globs(
             changed_files(diff), spec.trigger_globs
         ):
