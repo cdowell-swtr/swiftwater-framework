@@ -770,3 +770,16 @@ Cut **v0.2.10** (bundled into the FWK17 PR). Bumped pyproject `0.2.9->0.2.10`, `
 dogfood tag pin -> `v0.2.10`; ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build`
 -> framework_cli-0.2.10.{whl,tar.gz}, 27 version-consistency tests green. Ships the
 Docker-builder git fix so claudesubscriptioncli consumers' `docker build` works.
+
+#### #0075 · note · FWK8 · 2026-06-15
+Brainstormed FWK8 (Traefik docker-provider acceptance coverage). Key finding: the 10
+`--profile dev` acceptance tests already START Traefik but NEVER route through it (they
+hit prometheus/seeded-items/app:8000 directly) — Traefik with a broken docker provider
+still starts (`up -d` doesn't wait), so the v3.1→Docker-27 break was invisible. Design
+(approved): a dedicated test that ROUTES `https://{slug}.localhost/health` through Traefik
+(dev profile, TLS-verify-off, app already labeled) → 200 proves the docker provider
+connected + discovered + proxied. Spec: `docs/superpowers/specs/2026-06-15-traefik-docker-
+provider-acceptance-design.md`. Test-only → NO release (not in the wheel). User expanded
+scope into the broader CLASS → spun off **FWK18** (agentic assessment of all
+provisioned-but-unexercised real-runtime surfaces → conditional framework-native
+coverage-gap reviewer); sequenced after FWK8.

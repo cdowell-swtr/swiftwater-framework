@@ -9,7 +9,8 @@
 - [ ] FWK4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
 - [ ] FWK6 — Plan 29: data-store runtime parity (services.yml/dev.yml; unblock the hardcoded co-located-container assumption)
 - [ ] FWK7 — Plan 30: full reverse integrity-coverage check + 23-file battery-infra classification  deps: consumes INTENTIONALLY_UNLOCKED (shipped v0.2.4)
-- [ ] FWK8 — Traefik docker-provider acceptance coverage (the gap that hid the v3.1 → Docker 27 `task dev` break)
+- [ ] FWK8 — Traefik docker-provider acceptance coverage: a test that **routes a request through** Traefik (`https://{slug}.localhost/health` via the dev profile) — the dev-profile tests start Traefik but never route through it, which hid the v3.1 → Docker 27 `task dev` break. Test-only (no release).  spec: `docs/superpowers/specs/2026-06-15-traefik-docker-provider-acceptance-design.md`
+- [ ] FWK18 — **Provisioned-but-unexercised real-runtime/build coverage** (the class behind FWK17 + FWK8): (1) a rigorous agentic assessment sweeping the template (compose `prod`/`staging`/`app-host`, Dockerfile runtime/frontend stages, entrypoint, certs, healthchecks, per-battery wiring) for surfaces provisioned but never *exercised* by a test → ranked gap inventory; (2) IF the pattern recurs, a **framework-native** coverage-gap reviewer in `FRAMEWORK_AGENTS` (NOT shipped to rendered projects). Sequenced after FWK8.
 - [ ] FWK9 — Propagate the PI + MEMORY conventions into generated projects (template payload)  deps: FWK1, FWK2
 
 ## Done
