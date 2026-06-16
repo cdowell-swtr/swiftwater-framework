@@ -1118,3 +1118,13 @@ collide with nothing); (5) upgrade re-seed accepted (small seed DB; documented n
 Constraint: NO `APP_` prefix on the port vars (app pydantic settings namespace). staging/prod deploy
 untouched. Ships a patch release. Spec:
 `docs/superpowers/specs/2026-06-16-fwk31-compose-isolation-design.md`. Next: writing-plans.
+
+#### #0105 · completed · FWK31 · 2026-06-16
+Implementation plan written (7 tasks, TDD). Design refinement during planning: the PORT_OFFSET knob
+is a single `scripts/compose.sh` wrapper (exports all 16 `*_HOST_PORT` as default+offset unless set,
+then execs `docker compose "$@"`) rather than 16+ arithmetic entries in the Taskfile — `task dev`
+routes through it; tests bypass it by setting the env directly. App-port var is `HTTP_HOST_PORT` (NOT
+`APP_HOST_PORT` — the pydantic settings namespace). Tasks: 1 name, 2 dev.yml ports, 3 observability
+ports (9th is celery-exporter:9808, not otel-collector), 4 wrapper+Taskfile, 5 acceptance ephemeral
+ports + `docker compose port` discovery, 6 two-stack co-run proof, 7 upgrade note + gate + review +
+release. Plan: `docs/superpowers/plans/2026-06-16-fwk31-compose-isolation.md`. Next: execute.
