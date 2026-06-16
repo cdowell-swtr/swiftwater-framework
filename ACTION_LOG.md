@@ -953,3 +953,11 @@ EXERCISED-transitively (runtime serves /health through COPY --from=builder) vs f
 KNOWN_GAP (SPA built-not-served, H6). Implementer flagged 4 inventory disagreements/extensions
 for Task 4 reconciliation (gen_observability.py not in inventory→EXEMPT; dev.yml:frontend→FWK21
 by analogy to H6; services.yml split FWK19/FWK20; coverage-threshold EXERCISED-via-command nuance).
+
+#### #0089 · completed · FWK29 · 2026-06-16
+Task 4 (controller): reconciled the FWK18 inventory — added a "Correction (2026-06-16b):
+registry-seeding reconciliation" subsection capturing the 4 finer-grained items (none reclassified
+a ranked gap as covered — no inflation) + a successor-pointer naming `tests/runtime_coverage/registry.py`
+as the authoritative current view. Gate green: 9 runtime_coverage tests pass, ruff check + format
+clean, mypy src clean (unaffected — tests/-only). FWK29 → Done. Next: finish the branch (PR, no
+release) then FWK30 (the open-world reviewer) is unblocked — the registry it defers to now exists.
