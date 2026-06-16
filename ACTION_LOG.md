@@ -818,9 +818,9 @@ default). Validated the fix against a live stack (served cert issuer = mkcert CA
 cert/file-provider fine), v3.6 → PASS (stable, ~45s, twice). Synced the spec to the impl;
 captured [[testing-traefik-tls-route-from-python]]. Test-only → NO release.
 
-#### #0079 · note · FWK18a · 2026-06-15
-Brainstormed + re-keyed FWK18 → **FWK18a** (assessment now) + **FWK18b** (durable mechanism,
-designed from FWK18a's evidence). Wrote the FWK18a design spec:
+#### #0079 · note · FWK18 · 2026-06-15
+Brainstormed + re-keyed FWK18 → **FWK18** (assessment now) + **FWK29** (durable mechanism,
+designed from FWK18's evidence). Wrote the FWK18 design spec:
 `docs/superpowers/specs/2026-06-15-runtime-coverage-assessment-design.md` — a multi-agent
 `Workflow` sweep over 7 provisioned-surface clusters (Docker image build, base/dev stack,
 observability, data+services, entrypoint/certs/tasks, non-dev overlays, per-battery live
@@ -829,11 +829,11 @@ both sides → adversarial-verify each gap (refute it) → synthesize a ranked i
 "exercised = a test DRIVES it and asserts its effect" heuristic. Recon already shows ≥1 gap
 (baseline `docker build` never run — only the claudesubscriptioncli builder stage is built).
 Output: `docs/superpowers/assessments/2026-06-15-runtime-coverage-gaps.md`; each gap → a
-follow-on test task. Process note: FWK18a's "implementation" is RUNNING the Workflow, not a
+follow-on test task. Process note: FWK18's "implementation" is RUNNING the Workflow, not a
 TDD code plan, so it skips writing-plans. NO release (analysis + docs). Branch
 `fwk18a-coverage-assessment`.
 
-#### #0080 · note · FWK18a · 2026-06-15
+#### #0080 · note · FWK18 · 2026-06-15
 On user pushback ("no need for a plan?"), wrote a plan after all — not a TDD code plan but
 the executable design of the Workflow: `docs/superpowers/plans/2026-06-15-coverage-assessment.md`.
 Mapped the 7 clusters to REAL template file-lists (cross-checked vs `find infra -type f`: all
@@ -845,7 +845,7 @@ deploy-e2e/root-owned all covered) → Phase-2 adversarial-verify + a controller
 spot-check (Step 3) are the over-claim defense. Awaiting user review of the cluster file-lists
 before running.
 
-#### #0081 · amended · FWK18a · 2026-06-15
+#### #0081 · amended · FWK18 · 2026-06-15
 User caught a real design gap: the finders give independent analysis WITHIN each cluster, but
 nothing independently checks whether the 7-cluster TAXONOMY is complete (a forgotten category
 → no finder surfaces it; the assessment's own blind spot). The 7 were infra-centric, missing
@@ -857,7 +857,7 @@ JS) maps each to a seed cluster → the residual answers "do other clusters exis
 an 8th assessed cluster if non-empty. Updated spec + plan; the spec's old "no discovery agent
 needed" line was exactly the flawed assumption.
 
-#### #0082 · completed · FWK18a · 2026-06-15
+#### #0082 · completed · FWK18 · 2026-06-15
 Ran the assessment Workflow (65 agents, 2.77M tokens, ~20 min; 5 overturned gaps). Two
 script bugs first: a missing closing paren in the Find-phase parallel (node --check on a
 /tmp copy pinpointed it — `return` at top level is a node-check false-positive the harness
@@ -871,5 +871,16 @@ cluster. Find: 116 surfaces, 63 EXERCISED, 53 candidate gaps; adversarial verify
 builds the runtime image at test_rendered_project.py:720). Synth → 27 ranked entries (8 high
 / 15 med / 4 low). Controller hand-validated 4 highs (prod.yml config-only; workers eager;
 claudesubscriptioncli --target builder only; lite runtime build) — all held. Wrote the
-inventory + 10 grouped follow-on tasks (FWK19–28) + 4 recurring-shape seeds for FWK18b to
+inventory + 10 grouped follow-on tasks (FWK19–28) + 4 recurring-shape seeds for FWK29 to
 `docs/superpowers/assessments/2026-06-15-runtime-coverage-gaps.md`. No release.
+
+#### #0083 · amended · FWK18 · 2026-06-15
+Naming fix (user-flagged): the `a/b` suffixes FWK18a/FWK18b violate the PI convention — task
+IDs are monotonic, never-reused `<PFX>N` integers, no suffixes (pi-convention.md §1). Renamed
+**FWK18a → FWK18** (the assessment IS the original FWK18 plan) and **FWK18b → FWK29** (the
+durable mechanism is a separate plan; takes the next free monotonic id — FWK19–28 were already
+allocated to the follow-on tests, so allocation order gives it 29; priority lives in PLAN
+ordering, not the number). Swept the rename across PLAN, this log (entries #0079–#0082
+corrected in place, same-day), the spec/plan/assessment docs. Also removed a leftover DUPLICATE
+FWK29 line in PLAN (two near-identical durable-mechanism entries from the two-pass re-key) —
+kept the evidence-grounded one. Docs-only; branch `fwk18-rename-convention`; no release.

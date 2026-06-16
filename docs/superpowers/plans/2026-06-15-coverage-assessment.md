@@ -1,6 +1,6 @@
-# Provisioned-but-Unexercised Coverage Assessment (FWK18a) — Workflow Plan
+# Provisioned-but-Unexercised Coverage Assessment (FWK18) — Workflow Plan
 
-> **Not a TDD code plan.** FWK18a's deliverable is a *document* (a ranked gap
+> **Not a TDD code plan.** FWK18's deliverable is a *document* (a ranked gap
 > inventory), produced by running a multi-agent `Workflow`. This plan is the
 > executable design of that sweep: the per-cluster surface enumeration (the
 > finders' inputs), the agent prompts + output schemas, and the self-validation
@@ -13,7 +13,7 @@
 
 **Goal:** Produce a ranked inventory of template-provisioned real-runtime/build
 surfaces that no test *exercises* (drives + asserts the effect of), so each gap
-becomes a follow-on test task (à la FWK8/FWK17) and FWK18b is designed on evidence.
+becomes a follow-on test task (à la FWK8/FWK17) and FWK29 is designed on evidence.
 
 **Branch:** `fwk18a-coverage-assessment`. **No release** (analysis + docs only).
 
@@ -210,13 +210,13 @@ slowly; **low** = cosmetic/redundantly-covered-elsewhere.
   `docs/superpowers/assessments/2026-06-15-runtime-coverage-gaps.md`: the ranked
   table + a short method note (clusters, agent counts, what was spot-checked) + a
   "follow-on test tasks" section (each high/med gap → a proposed `FWK` id, sketched).
-- [ ] **Step 5 — PLAN/ACTION_LOG.** Tick FWK18a → Done with the gap count + the
+- [ ] **Step 5 — PLAN/ACTION_LOG.** Tick FWK18 → Done with the gap count + the
   headline gaps; append an ACTION_LOG completion entry. Commit (stage PLAN/ACTION_LOG
   + the assessment doc; separate add then commit per the gate hook).
 - [ ] **Step 6 — Finish the branch** ([[finishing-a-development-branch]]): one PR,
   confirm `gate`/`build`/`render-complete` green (no source touched → trivially),
   squash-merge. **No tag / no release.** Grep `master` post-merge for the assessment
-  filename ([[verify-master-content-after-pr-merge]]). FWK18b is then brainstormed
+  filename ([[verify-master-content-after-pr-merge]]). FWK29 is then brainstormed
   from the committed inventory.
 
 ---
