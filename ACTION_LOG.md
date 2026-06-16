@@ -817,3 +817,18 @@ default). Validated the fix against a live stack (served cert issuer = mkcert CA
 *.localhost, HTTP 200). Bite-proven: v3.5 → FAIL (`HTTP 404` — docker provider broken,
 cert/file-provider fine), v3.6 → PASS (stable, ~45s, twice). Synced the spec to the impl;
 captured [[testing-traefik-tls-route-from-python]]. Test-only → NO release.
+
+#### #0079 · note · FWK18a · 2026-06-15
+Brainstormed + re-keyed FWK18 → **FWK18a** (assessment now) + **FWK18b** (durable mechanism,
+designed from FWK18a's evidence). Wrote the FWK18a design spec:
+`docs/superpowers/specs/2026-06-15-runtime-coverage-assessment-design.md` — a multi-agent
+`Workflow` sweep over 7 provisioned-surface clusters (Docker image build, base/dev stack,
+observability, data+services, entrypoint/certs/tasks, non-dev overlays, per-battery live
+wiring); per-cluster finders classify exercised/indirect/unexercised with file:line evidence
+both sides → adversarial-verify each gap (refute it) → synthesize a ranked inventory. Shared
+"exercised = a test DRIVES it and asserts its effect" heuristic. Recon already shows ≥1 gap
+(baseline `docker build` never run — only the claudesubscriptioncli builder stage is built).
+Output: `docs/superpowers/assessments/2026-06-15-runtime-coverage-gaps.md`; each gap → a
+follow-on test task. Process note: FWK18a's "implementation" is RUNNING the Workflow, not a
+TDD code plan, so it skips writing-plans. NO release (analysis + docs). Branch
+`fwk18a-coverage-assessment`.
