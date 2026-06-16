@@ -638,16 +638,16 @@ git commit -m "feat(fwk30): framework-shaped eval realize for coverage-gap fixtu
 
 ## Task 6: Eval fixture pair (positive flag + negative defer) + thresholds
 
-**Why:** Calibrate the defer-to-registry behavior: a positive (a template surface added with NO classification → must flag) and a negative (the same surface added AND classified in the same change → must stay silent because the full-diff seed carries the registry entry).
+**Why:** Calibrate the two distinct correct behaviors. CORRECTION (caught in execution): the bad fixture must NOT be a new compose overlay — an overlay is one of `enumerate.py`'s SIX enumerable kinds, which coverage-gap *defers* to FWK29 (FWK29's completeness test already forces its classification, so the agent must stay silent on it). The bad case must be a genuine **new KIND** outside all six rules; the good case exercises the **defer** boundary.
 
-**Design of the pair (both anchored on a REAL enumerable surface):**
-- **bad/unexercised-cache-overlay** — `change.patch` adds a new compose overlay file under `src/framework_cli/template/infra/compose/` (a NEW `*.yml.jinja` surface) and adds NO `registry.py` entry. The agent must flag the unclassified overlay. `expect.json` `{"file": "<the overlay path>"}`.
-- **good/classified-cache-overlay** — `change.patch` adds the SAME overlay AND a matching `SurfaceClass(...)` entry in `tests/runtime_coverage/registry.py` (classified, e.g. EXEMPT or KNOWN_GAP with an FWK id). The agent must stay silent (defer to the same-PR classification).
+**Design of the pair:**
+- **bad/unexercised-k8s-manifest** (recall) — `change.patch` adds a new operational surface of a kind `enumerate.py` does NOT scan: a Kubernetes manifest at `src/framework_cli/template/infra/k8s/deployment.yaml.jinja`, with NO test driving it and NO `enumerate.py`/`registry.py` change. enumerate.py's six rules (compose overlays/services, Dockerfile stages, scripts, workflow jobs, hooks) are all blind to `infra/k8s/`, so FWK29's completeness test stays green while the surface ships unexercised — exactly coverage-gap's job. The agent must flag it. `expect.json` `{"file": "src/framework_cli/template/infra/k8s/deployment.yaml.jinja"}`.
+- **good/classified-cache-overlay** (defer / no-false-positive) — `change.patch` adds a new compose overlay `src/framework_cli/template/infra/compose/cache.yml.jinja` (an ENUMERABLE kind → FWK29's territory) AND the matching `SurfaceClass("overlay:cache.yml.jinja", ...)` entry in `tests/runtime_coverage/registry.py`. The agent must stay SILENT — it defers enumerable kinds to FWK29, and the same-PR registry entry confirms it's handled.
 
 **Files:**
-- Create: `tests/eval/fixtures/coverage-gap/bad/unexercised-cache-overlay/fixture.yaml`
-- Create: `tests/eval/fixtures/coverage-gap/bad/unexercised-cache-overlay/change.patch`
-- Create: `tests/eval/fixtures/coverage-gap/bad/unexercised-cache-overlay/expect.json`
+- Create: `tests/eval/fixtures/coverage-gap/bad/unexercised-k8s-manifest/fixture.yaml`
+- Create: `tests/eval/fixtures/coverage-gap/bad/unexercised-k8s-manifest/change.patch`
+- Create: `tests/eval/fixtures/coverage-gap/bad/unexercised-k8s-manifest/expect.json`
 - Create: `tests/eval/fixtures/coverage-gap/good/classified-cache-overlay/fixture.yaml`
 - Create: `tests/eval/fixtures/coverage-gap/good/classified-cache-overlay/change.patch`
 - Modify: `tests/eval/fixtures/thresholds.yaml`

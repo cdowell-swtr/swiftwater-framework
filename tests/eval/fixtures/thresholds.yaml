@@ -43,6 +43,9 @@ compliance:
 contracts:
   recall_min: 0.73  # observed 0.83
   fp_max: 0.10  # observed 0.00
+coverage-gap:
+  recall_min: 0.67
+  fp_max: 0.34
 data-integrity:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00

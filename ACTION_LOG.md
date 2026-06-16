@@ -1018,3 +1018,15 @@ instead of rendering a project (coverage-gap reviews framework SOURCE, not gener
 production-faithful). `_framework_repo_root()` = evals.py parents[3]. Render path byte-unchanged for
 all other agents (28 harness tests green). Impl learning for Task 6: `git apply` needs >=3 context
 lines at file top → fixtures must be generated from real `git diff`, never hand-counted 1-context hunks.
+
+#### #0096 · completed · FWK30 · 2026-06-16
+Task 6 (Sonnet impl, controller-verified) + plan-design correction. Eval fixture pair:
+**bad/unexercised-k8s-manifest** — adds a k8s Deployment at `template/infra/k8s/deployment.yaml.jinja`
+(a NEW KIND: enumerate.py scans compose/docker/scripts/workflows/hooks, NOT infra/k8s) + a tracked
+README breadcrumb so the realized seed-diff is non-empty (agentic agent then globs the new file) →
+must FLAG; **good/classified-cache-overlay** — adds a compose overlay (ENUMERABLE → FWK29's job) +
+the matching registry.py SurfaceClass in the same diff → must DEFER (silent). CORRECTED the plan's
+original bad-fixture design (a new compose overlay) which was wrong — overlays are enumerable and
+coverage-gap defers them; the bad case must be a kind outside the six rules. Patches generated from
+real `git diff --staged` (validate_patch_hunks []). thresholds.yaml: coverage-gap 0.67/0.34. Full
+review suite GREEN (319 passed) — test_every_registered_agent_has_fixtures restored.
