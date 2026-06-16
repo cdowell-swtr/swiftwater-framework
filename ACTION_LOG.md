@@ -1038,3 +1038,14 @@ framework target a `reviews_template` agent (coverage-gap) now sources the templ
 the target-scope wrinkle so coverage-gap's template/registry trigger-globs match the gate at
 cli.py:1804 (else it always skipped) and it sees same-PR registry classification. `pr_diff` already
 imported; no new type-ignore. 17 targeted/framework-target tests green.
+
+#### #0098 · completed · FWK30 · 2026-06-16
+Branch-end reviews: spec-compliance (Sonnet) ✓ all 9 reqs met, no extra; code-quality (Opus) ✓
+APPROVE WITH NITS (gating only on the live eval). Applied 3 review fixes (Sonnet impl): (1) evals.py
+framework-shaped realize now `git add -A` + `git diff --cached` so NEW surface files appear in the
+seed diff — production-faithful (pr_diff shows committed new files), replacing the fragile
+breadcrumb-inference path; (2) regenerated the bad fixture to the k8s manifest ALONE (dropped the
+now-unneeded README breadcrumb); (3) defense-in-depth — `active_agents` battery_extra sets also filter
+framework_only (+ a battery-gated framework_only exclusion test). Seed now carries each surface
+directly (bad→k8s; good→overlay+registry). 69 review/eval tests green; ruff+mypy clean. Remaining:
+live eval calibration (Issue #1) — needs the eval key/backend.

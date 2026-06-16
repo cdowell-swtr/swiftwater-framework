@@ -193,8 +193,16 @@ def realize_cached(
         subprocess.run(
             ["git", "apply", "-"], cwd=work, input=fx.patch, text=True, check=True
         )
+        # Stage so newly-added files (a new operational surface — exactly what coverage-gap
+        # hunts) appear in the seed diff, matching production pr_diff() which shows committed
+        # new files. A bare `git diff` would omit untracked additions.
+        subprocess.run(["git", "add", "-A"], cwd=work, check=True)
         diff = subprocess.run(
-            ["git", "diff"], cwd=work, capture_output=True, text=True, check=True
+            ["git", "diff", "--cached"],
+            cwd=work,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout
         return work, diff
 

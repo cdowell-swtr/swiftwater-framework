@@ -116,6 +116,28 @@ def test_realize_cached_builds_framework_shaped_base_for_coverage_gap(tmp_path):
     assert "seeded comment for the fixture" in diff
 
 
+def test_active_agents_excludes_battery_gated_framework_only_agent(monkeypatch):
+    """Defense-in-depth: a battery-gated framework_only agent must also be excluded."""
+    from framework_cli import batteries as bat
+    from framework_cli.review import registry
+
+    bat._BATTERIES["_fwbat"] = bat.BatterySpec(
+        "_fwbat", "x", gates_agents=("_fwbat-agent",), obs="rides-existing"
+    )
+    registry._SPECS["_fwbat-agent"] = registry.AgentSpec(
+        "review-fwbat",
+        "p",
+        None,
+        "battery",
+        registry.DEFAULT_MODEL,
+        framework_only=True,
+    )
+    try:
+        assert "_fwbat-agent" not in registry.active_agents("pull_request", ["_fwbat"])
+    finally:
+        del bat._BATTERIES["_fwbat"], registry._SPECS["_fwbat-agent"]
+
+
 def test_reviews_template_agent_sources_full_diff_on_framework_target(monkeypatch):
     """coverage-gap (reviews_template) must be fed pr_diff (template-inclusive), not the
     template-excluding framework_diff — otherwise its template trigger-globs never match."""

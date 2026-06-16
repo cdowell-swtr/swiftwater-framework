@@ -357,7 +357,10 @@ def active_agents(event: str, batteries: Sequence[str] = ()) -> list[str]:
         battery_extra = {
             k
             for k, s in _SPECS.items()
-            if s.active_when == "battery" and s.on_push and k in gated
+            if s.active_when == "battery"
+            and s.on_push
+            and k in gated
+            and not s.framework_only
         }
     else:
         base = {
@@ -366,6 +369,8 @@ def active_agents(event: str, batteries: Sequence[str] = ()) -> list[str]:
             if s.active_when in ("always", "file-trigger") and not s.framework_only
         }
         battery_extra = {
-            k for k, s in _SPECS.items() if s.active_when == "battery" and k in gated
+            k
+            for k, s in _SPECS.items()
+            if s.active_when == "battery" and k in gated and not s.framework_only
         }
     return sorted(base | battery_extra)

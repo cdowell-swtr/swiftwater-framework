@@ -1,15 +1,3 @@
-diff --git a/src/framework_cli/template/infra/deploy/README.md b/src/framework_cli/template/infra/deploy/README.md
-index 5cfe379..3908b11 100644
---- a/src/framework_cli/template/infra/deploy/README.md
-+++ b/src/framework_cli/template/infra/deploy/README.md
-@@ -240,3 +240,7 @@ reachable.
- ## Notifications
- 
- `notify.sh` logs by default. Wire your channel there (reuse the Alertmanager destination).
-+
-+## Kubernetes
-+
-+A Kubernetes deployment manifest is provided under `infra/k8s/`.
 diff --git a/src/framework_cli/template/infra/k8s/deployment.yaml.jinja b/src/framework_cli/template/infra/k8s/deployment.yaml.jinja
 new file mode 100644
 index 0000000..bfb0d06
