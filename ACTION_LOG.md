@@ -1281,3 +1281,24 @@ workers+react (default `compose config` OK, PORT_OFFSET=100 shifts to 8100). ren
 (`render-complete`) on the PR is the authoritative proof. Tag v0.2.11 → release.yml publishes
 the GitHub Release; consumers re-seed local dev on upgrade (per-project compose name orphans
 old `compose_*` volumes — documented in the generated README).
+
+#### #0116 · completed · FWK33 · 2026-06-16
+Durable fix for the recurring coverage-gap fixture GC race (the flake that failed the v0.2.11
+release run's gate job: `test_realize_cached_builds_framework_shaped_base_for_coverage_gap`
+raised `shutil.Error: .../.git/objects/XX: No such file or directory`). Root cause:
+`realize_cached` copytrees a cached base once per fixture, and each cached base
+(`_framework_base` for the framework-shaped coverage-gap path; the rendered base for the
+others) was left with ~342 LOOSE git objects. A loose object that git packs/prunes mid-copy
+makes copytree fail. `gc.auto=0` alone (already present on `_framework_base`) did not prevent it.
+
+Fix (src/framework_cli/review/evals.py): added `_freeze_git_base(repo)` = gc.auto=0 +
+`git repack -adq`, invoked after the base is built in BOTH cached-base sites. The copytree
+source is then a stable packfile with zero loose objects. Deterministic guard
+(tests/review/test_coverage_gap.py): `test_framework_base_is_packed_with_no_loose_objects`
+asserts the loose-object count is 0 and in-pack > 0 (RED before fix: 342 loose; GREEN after).
+
+Verified: flaky test looped 15x then all green; `tests/review/` 324 passed; ruff check + format
++ mypy src clean. Test/eval-infra only, no release. Branch `fwk33-coverage-gap-fixture-gc-race`
+→ PR #47. Also updated the committed memory `_memory/flaky-realize-cached-copytree-git-gc-race.md`
+(+ its MEMORY.md pointer): the earlier `gc.auto 0`-only guess was insufficient; record the
+durable pack-the-base fix. See [[flaky-realize-cached-copytree-git-gc-race]].

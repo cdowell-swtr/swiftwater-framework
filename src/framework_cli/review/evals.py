@@ -118,6 +118,19 @@ def _framework_repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def _freeze_git_base(repo: Path) -> None:
+    """Make a cached base repo stable to copy: disable auto-GC and pack all loose objects.
+
+    `realize_cached` copytrees a cached base once per fixture. A loose object that git packs
+    or prunes mid-copy makes `shutil.copytree` fail intermittently with
+    `No such file or directory: .../.git/objects/XX` — the recurring coverage-gap fixture
+    flake. `git repack -ad` leaves only a stable packfile (no loose objects to vanish), and
+    `gc.auto=0` keeps the pack from being rewritten under us.
+    """
+    subprocess.run(["git", "config", "gc.auto", "0"], cwd=repo, check=True)
+    subprocess.run(["git", "repack", "-adq"], cwd=repo, check=True)
+
+
 def _framework_base(base: Path) -> None:
     """Populate `base` with a minimal framework-shaped tree and an initial git commit."""
     root = _framework_repo_root()
@@ -136,6 +149,7 @@ def _framework_base(base: Path) -> None:
         cwd=base,
         check=True,
     )
+    _freeze_git_base(base)  # pack loose objects so per-fixture copytree can't race a GC
 
 
 _FIXTURE_ANSWERS = {
@@ -225,6 +239,9 @@ def realize_cached(
             cwd=base,
             check=True,
         )
+        _freeze_git_base(
+            base
+        )  # pack loose objects so per-fixture copytree can't race a GC
         cache[fx.batteries] = base
     work = base_dir / f"fx-{fx.agent}-{fx.kind}-{fx.name}"
     shutil.copytree(cache[fx.batteries], work)
