@@ -11,18 +11,24 @@ index 0000000..1b2c9e4
 +      test: ["CMD", "redis-cli", "ping"]
 +      interval: 10s
 diff --git a/tests/runtime_coverage/registry.py b/tests/runtime_coverage/registry.py
-index 9278cb3..866c7ee 100644
+index 9278cb3..b29b347 100644
 --- a/tests/runtime_coverage/registry.py
 +++ b/tests/runtime_coverage/registry.py
-@@ -35,6 +35,12 @@ _KG = Status.KNOWN_GAP
+@@ -35,6 +35,18 @@ _KG = Status.KNOWN_GAP
  
  
  REGISTRY: tuple[SurfaceClass, ...] = (
 +    SurfaceClass(
-+        "overlay:cache.yml.jinja",
++        "overlay:cache.yml",
 +        "infra/compose/cache.yml.jinja",
 +        _EM,
 +        "redis cache overlay — opt-in; classified in the same change (coverage-gap defers)",
++    ),
++    SurfaceClass(
++        "service:cache.yml:cache",
++        "infra/compose/cache.yml.jinja",
++        _EM,
++        "redis cache service — opt-in; classified in the same change (coverage-gap defers)",
 +    ),
      # ---- Dockerfile build stages -----------------------------------------------------
      SurfaceClass(

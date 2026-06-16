@@ -1061,3 +1061,13 @@ multi-turn agentic agent (must read registry.py/enumerate.py) run on the paid ap
 `{"type":"tool_use"...}`, empty text dropped) at both append sites in agentic.py. Regression test
 adds a `_SerializingClient` that json.dumps messages each turn (the scripted client didn't). 322
 review tests green. Also fixes the same crash on the production review runtime path.
+
+#### #0100 · completed · FWK30 · 2026-06-16
+Live calibration (paid api backend, Opus, repeat 3): **recall 1.00 / fp 0.00 PASS**. First run scored
+fp 1.00 — the agent (correctly!) flagged the "good" fixture because my registry classification used
+the TEMPLATE key `overlay:cache.yml.jinja` while enumerate.py emits RENDERED keys (`overlay:cache.yml`
++ the service `service:cache.yml:cache`), so the classification wouldn't satisfy FWK29. Regenerated the
+good fixture with both correct rendered keys → agent defers (0 findings ×3). Bad fixture: flags the
+k8s manifest as NEW-KIND ×3 with accurate reasoning. Annotated thresholds.yaml (recall_min 0.90 /
+fp_max 0.10, observed 1.00/0.00 per the -0.10/+0.10 convention); wrote scorecard
+docs/superpowers/eval-scorecards/2026-06-16-coverage-gap.md. 95 review/eval tests green.
