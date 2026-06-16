@@ -2,6 +2,13 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 WORKDIR /app
+{% if "claudesubscriptioncli" in batteries -%}
+# The claudesubscriptioncli battery pulls litellm-claude-cli from a public git ref, so the
+# builder needs `git` to clone it during `uv sync`. Gated on the battery — non-subscription
+# images stay lean. (A future PRIVATE git dep would additionally need a BuildKit secret.)
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+{% endif -%}
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project --no-dev
 COPY . .

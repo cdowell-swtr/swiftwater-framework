@@ -27,3 +27,17 @@ framework's OWN repo doesn't hit this — it uses `[tool.uv.sources]` for the sa
 package and uv handles the build — so it only surfaces in the template payload.
 See [[framework-consumes-patterns-via-github-vendoring]] for the broader
 "generated projects may be pip-installed" constraint.
+
+**Second gotcha — the Docker builder needs the `git` binary (FWK17, v0.2.10).** A
+`git+…` dep also fails in the generated project's Docker `build` because the
+builder image (`ghcr.io/astral-sh/uv:python3.12-bookworm-slim`) has **no `git`**,
+so `uv sync --frozen` can't clone it (`"Git executable not found"`). Fix: a
+battery-gated `apt-get install git` in the builder stage of `infra/docker/Dockerfile`.
+A future PRIVATE git dep would additionally need a BuildKit secret (`--mount=type=secret`).
+
+**Testing lesson (the FWK8 class):** this was invisible to our acceptance tier
+because those tests run `uv sync` on the **host** (which has git), never via
+`docker build` — only a real Docker build catches a build-environment-only
+failure. Caught by Meridian's CI (a consumer), per [[meridian-is-the-de-facto-integration-test]].
+The regression test added in FWK17 (`test_rendered_claudesubscriptioncli_docker_builder_stage_builds`)
+builds the rendered `--target builder` stage so this class can't recur silently.

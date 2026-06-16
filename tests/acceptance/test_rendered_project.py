@@ -310,6 +310,51 @@ def test_rendered_project_with_agents_battery_passes(tmp_path: Path):
 
 @pytest.mark.skipif(
     not _docker_available(),
+    reason="docker required: builds the rendered project's Docker builder stage",
+)
+def test_rendered_claudesubscriptioncli_docker_builder_stage_builds(tmp_path: Path):
+    # Regression (Meridian 2026-06-15): the claudesubscriptioncli battery adds a git-sourced
+    # dep (litellm-claude-cli @ git+...). The uv builder image has no `git`, so `uv sync` in
+    # the Docker builder stage failed to clone it ("Git executable not found"). Invisible to
+    # the host-uv-sync acceptance tests above — only a real `docker build` catches it. Build
+    # the builder stage (the failing step) for a claudesubscriptioncli render.
+    data = {**DATA, "batteries": resolve(["claudesubscriptioncli"])}
+    dest = tmp_path / "demo"
+    render_project(dest, data)
+
+    # Generate uv.lock on the host (which has git) so the Dockerfile's `COPY ... uv.lock`
+    # has a lockfile; the builder stage's `uv sync --frozen` then exercises the git clone.
+    lock = subprocess.run(["uv", "lock"], cwd=dest, capture_output=True, text=True)
+    assert lock.returncode == 0, "uv lock failed:\n" + lock.stdout + lock.stderr
+
+    result = subprocess.run(
+        [
+            "docker",
+            "build",
+            "--target",
+            "builder",
+            "-f",
+            "infra/docker/Dockerfile",
+            "-t",
+            "fwk-claudesub-builder-test",
+            ".",
+        ],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "DOCKER_BUILDKIT": "1"},
+    )
+    subprocess.run(
+        ["docker", "rmi", "-f", "fwk-claudesub-builder-test"], capture_output=True
+    )
+    assert result.returncode == 0, (
+        "the Docker builder stage failed for a claudesubscriptioncli render — git missing "
+        "for the litellm-claude-cli git dep?\n" + result.stdout + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
     reason="uv + docker required: the rendered suite runs DB tests against real Postgres",
 )
 def test_rendered_project_with_workers_battery_passes(tmp_path: Path):
