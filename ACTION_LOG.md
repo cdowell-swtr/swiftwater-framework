@@ -901,3 +901,21 @@ bring-up). **FWK19 re-scoped high→med**: staging/services.yml merge-validation
 live bring-up. Revised counts 4 high / 15 med / 7 low + 1 dropped. Standing highs unaffected:
 FWK20 (workers/beat live), FWK21 (battery Docker runtime). Inventory Correction section + inline
 entry markers + PLAN updated. Docs-only; branch `fwk19-22-deploy-rescope`; no release.
+
+#### #0085 · note · FWK29 · 2026-06-16
+Brainstormed the durable mechanism. Key reframe (user): a deterministic check is CLOSED-WORLD
+(only finds what it's wired for) — a good ratchet but NOT a reviewer, which was the original
+intention (open-world: find surfaces outside the scan's purview). So the mechanism is TWO
+complementary subsystems with a graduation loop: **FWK29 = deterministic completeness check +
+classification registry** (closed-world ratchet, gates CI, carries the re-rank) and **FWK30 =
+agentic framework-native coverage-gap reviewer** (open-world discovery, advisory, defers to
+FWK29's registry; recurring findings graduate into FWK29's rules). Decomposed foundation-first
+(reviewer needs the registry to defer to). FWK29 design: a `gate`-tier test renders all-batteries
+→ 6 enumeration rules (compose overlays/services, Dockerfile stages, scripts, workflow jobs,
+hooks; ~50–60 keys) → asserts each is classified EXERCISED|EXEMPT|KNOWN_GAP(FWK id) in a typed
+`tests/runtime_coverage/registry.py`; set-equality + reference-integrity, à la integrity/test_classes.
+THREE statuses (KNOWN_GAP lets it ship without blocking on FWK19–28; ratchet still stops NEW
+unclassified surfaces). In-app code paths explicitly OUT (FWK30's domain — the honest closed-world
+edge). Seeding = the rigorous re-rank + reconcile the FWK18 inventory. Spec written:
+`docs/superpowers/specs/2026-06-16-runtime-coverage-completeness-check-design.md`. Test-only →
+no release. Branch `fwk29-coverage-completeness-check`.
