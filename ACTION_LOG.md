@@ -1071,3 +1071,13 @@ good fixture with both correct rendered keys → agent defers (0 findings ×3). 
 k8s manifest as NEW-KIND ×3 with accurate reasoning. Annotated thresholds.yaml (recall_min 0.90 /
 fp_max 0.10, observed 1.00/0.00 per the -0.10/+0.10 convention); wrote scorecard
 docs/superpowers/eval-scorecards/2026-06-16-coverage-gap.md. 95 review/eval tests green.
+
+#### #0101 · completed · FWK30 · 2026-06-16
+Final whole-branch Opus review = **APPROVE** (merge-ready). Applied its one Minor (optional,
+pre-existing) hardening: the agentic recovery path now replays the model's raw text with a
+non-empty fallback (`text or "(no parseable content)"`) instead of routing through `_assistant_turn`
+(which could yield an API-invalid empty content list when the sole block is empty) + a regression
+test. 323 review tests green, ruff/format/mypy clean. PLAN.md: FWK30 → Done. Full suite earlier =
+961 pass / 2 docker dev:lite acceptance failures (CI-ignored tier; pre-existing, template untouched
+by FWK30 — flagged separately for investigation, `serves_health` reproduces independent of branch).
+Next: finish the branch (PR; no release — review-infra only).

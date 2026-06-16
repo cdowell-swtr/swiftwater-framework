@@ -220,7 +220,13 @@ def run_agent_agentic(
                 if recoveries < _MAX_RECOVERIES:
                     recoveries += 1
                     messages.append(
-                        {"role": "assistant", "content": _assistant_turn(resp.content)}
+                        # No tool_use on this turn — replay the model's raw (unparseable)
+                        # text, with a non-empty fallback so the assistant turn is never an
+                        # API-rejected empty content list.
+                        {
+                            "role": "assistant",
+                            "content": text or "(no parseable content)",
+                        }
                     )
                     messages.append({"role": "user", "content": _RECOVERY_INSTRUCTION})
                     continue

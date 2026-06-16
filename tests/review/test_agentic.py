@@ -446,3 +446,25 @@ def test_agentic_multi_turn_messages_are_json_serializable(tmp_path):
     assert assistant and all(isinstance(b, dict) for b in assistant[0]["content"])
     assert any(b.get("type") == "tool_use" for b in assistant[0]["content"])
     assert any(b.get("type") == "text" for b in assistant[0]["content"])
+
+
+def test_agentic_recovery_turn_is_serializable_and_non_empty(tmp_path):
+    """The recovery path (a no-tool_use turn whose text fails to parse) must replay a
+    NON-empty, JSON-serializable assistant turn — an empty content list is API-invalid."""
+    client = _SerializingClient(
+        [
+            _Resp([_TextBlock("I cannot use tools.")]),  # unparseable -> recovery
+            _Resp([_TextBlock("[]")]),  # then valid empty findings
+        ]
+    )
+    findings = run_agent_agentic(
+        "--- a/x.py\n+++ b/x.py\n",
+        tmp_path,
+        get_agent("architecture"),
+        client,
+        max_turns=12,
+    )
+    assert findings == []
+    # The 2nd request carries the recovery assistant turn — present and non-empty.
+    assistant = [m for m in client.calls[1]["messages"] if m["role"] == "assistant"]
+    assert assistant and assistant[0]["content"]
