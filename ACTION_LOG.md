@@ -993,3 +993,9 @@ Task 1 (Sonnet impl, controller-verified): `AgentSpec` gains `framework_only` + 
 (both default False); `active_agents()` excludes `framework_only` agents from both push + PR base
 sets (battery_extra untouched). New `tests/review/test_coverage_gap.py` (2 tests). 41 review tests
 green, ruff+mypy clean. No agent registered framework_only yet → active sets unchanged.
+
+#### #0093 · completed · FWK30 · 2026-06-16
+Task 2 (Sonnet impl, controller-verified): authored `src/framework_cli/review/agents/coverage-gap.md`
+(76 lines) — coverage lens, hard boundaries vs review-architecture/observability/env-parity, strict
+"exercised" definition, two diff-anchored gaps (new-kind + in-app), defer-to-registry by reading
+registry.py/enumerate.py, JSON-only output. +2 prompt tests (4 total in test_coverage_gap.py). Green.
