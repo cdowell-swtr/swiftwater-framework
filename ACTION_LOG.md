@@ -884,3 +884,20 @@ ordering, not the number). Swept the rename across PLAN, this log (entries #0079
 corrected in place, same-day), the spec/plan/assessment docs. Also removed a leftover DUPLICATE
 FWK29 line in PLAN (two near-identical durable-mechanism entries from the two-pass re-key) —
 kept the evidence-grounded one. Docs-only; branch `fwk18-rename-convention`; no release.
+
+#### #0084 · amended · FWK18 · 2026-06-16
+Deploy-model re-rank (user challenge: "do FWK19/FWK22 stand with no staging/prod deploy
+target defined?"). Verified the template: the ONLY shipped deploy target (compose-ssh.sh)
+brings up `app-host.yml` (app-only) — NOT prod.yml/staging.yml; `strategy.sh`'s `__target_*`
+hooks are intentional `_todo` stubs (exit 1) until a consumer wires a target; the orchestration
++ compose-ssh→app-host path are already covered by test_deploy_compose_ssh.py + test_deploy_e2e.py.
+The finders flagged "prod.yml never brought up" correctly but INFLATED the risk — they didn't
+model that no shipped path consumes prod/staging/services.yml (they're consumer-target
+scaffolding). Corrections: **H8/FWK22 DROPPED** (tombstone, id not reused — deploy is
+consumer-implemented by design; only a thin workflow-graph assert remained, actionlint covers
+the YAML). **H1/H2/H7 DEMOTED high→low** (guard = `compose config` merge-validation, not live
+bring-up). **FWK19 re-scoped high→med**: staging/services.yml merge-validation (CI-visible) +
+`test.yml` live (the one shipped+used overlay, via `task test:stack`); dropped the prod/staging
+live bring-up. Revised counts 4 high / 15 med / 7 low + 1 dropped. Standing highs unaffected:
+FWK20 (workers/beat live), FWK21 (battery Docker runtime). Inventory Correction section + inline
+entry markers + PLAN updated. Docs-only; branch `fwk19-22-deploy-rescope`; no release.
