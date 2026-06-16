@@ -974,3 +974,16 @@ the other 5 framework agents keep template-excluding `framework_diff()`); **glob
 `active_when`/`trigger_globs`; **advisory** (`block_threshold=None`). Eval fixture pair (positive
 flag + negative defer-to-same-PR-registry) for calibration. Spec:
 `docs/superpowers/specs/2026-06-16-fwk30-coverage-gap-reviewer-design.md`. Next: writing-plans.
+
+#### #0091 · completed · FWK30 · 2026-06-16
+Implementation plan written (7 tasks, TDD/bite-sized). Planning surfaced one spec gap and
+resolved it with the user: the eval harness is generated-project-shaped (`realize_*` renders
+a project), but coverage-gap reviews framework SOURCE (template jinja + `tests/runtime_coverage/
+registry.py`) — none of which exists in a render → **E1: a framework-shaped realize** (copy the
+template + runtime_coverage subtrees into a temp git repo, apply patch, diff; production-faithful).
+Also pinned the per-agent diff mechanism: glob-gating already exists at `cli.py:1804`, but matches
+against template-EXCLUDING `framework_diff()` → coverage-gap would always skip; fix = a
+`reviews_template` AgentSpec flag → `pr_diff()` on the framework target. And `framework_only` flag
+→ excluded from `active_agents()` (the generated-project set) so it doesn't leak into the 15-agent
+PR matrix / break `test_full_active_sets`. Plan:
+`docs/superpowers/plans/2026-06-16-fwk30-coverage-gap-reviewer.md`. Next: execute (subagent-driven).
