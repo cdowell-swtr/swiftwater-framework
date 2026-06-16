@@ -1302,3 +1302,18 @@ Verified: flaky test looped 15x then all green; `tests/review/` 324 passed; ruff
 → PR #47. Also updated the committed memory `_memory/flaky-realize-cached-copytree-git-gc-race.md`
 (+ its MEMORY.md pointer): the earlier `gc.auto 0`-only guess was insufficient; record the
 durable pack-the-base fix. See [[flaky-realize-cached-copytree-git-gc-race]].
+
+#### #0117 · in-progress · FWK34 · 2026-06-16
+Design spec for CLI/project version-sync, surfaced by Meridian (MDN26). Root cause traced this
+session: `restore`/`integrity` render the canonical from the BUNDLED installed-CLI template
+(`copier_runner.render_project`→`template_path()`), while `upgrade` renders from the git TAG
+(`run_update(vcs_ref=…)`); correct only when `version_tag(installed)==project _commit`. Meridian
+hit it (CLI v0.2.8, project upgraded to v0.2.11, git-Dockerfile fix shipped v0.2.10 → restore
+renders no-git `bc8d37` ≠ lock `856fec`). Empirically disproved the initial "battery-unaware"
+framing (`_answers` carries batteries; restore-equiv render reproduces the git Dockerfile
+byte-for-byte). Brainstormed design (A out — rejected; C+B+`--version`): shared skew helper,
+both-direction guard erroring in restore/integrity, `upgrade` assisted self-bump (uv-tool +
+TTY → prompt → `uv tool install …@target` + re-exec; else refuse; `--bump-cli` forces),
+`framework --version`. CI unaffected (generated `ci.yml` already pins `…@${_commit}`). Ships
+v0.2.12. Spec committed: `docs/superpowers/specs/2026-06-16-fwk34-cli-version-sync-design.md`.
+Next: writing-plans → implementation. Branch `fwk34-cli-version-sync`.
