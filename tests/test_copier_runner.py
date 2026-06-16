@@ -3373,3 +3373,23 @@ def test_render_base_compose_sets_per_project_name(tmp_path: Path):
     # A per-project compose name isolates container/network/volume namespaces from any
     # other stack on the host (FWK31). DATA's project_slug is "demo".
     assert "name: demo" in base
+
+
+def test_render_dev_compose_parameterizes_host_ports(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(
+        dest, {**DATA, "batteries": ["mongodb", "redis", "workers", "react"]}
+    )
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    for var, default in [
+        ("HTTP_HOST_PORT", "8000"),
+        ("POSTGRES_HOST_PORT", "5432"),
+        ("TRAEFIK_HTTPS_PORT", "443"),
+        ("TRAEFIK_HTTP_PORT", "80"),
+        ("MONGO_HOST_PORT", "27017"),
+        ("REDIS_HOST_PORT", "6379"),
+        ("FRONTEND_HOST_PORT", "5173"),
+    ]:
+        assert f"${{{var}:-{default}}}:" in dev, f"{var} not parameterized"
+    # Guard the APP_-prefix ban: no host-port var leaks into the app settings namespace.
+    assert "APP_HOST_PORT" not in dev and "APP_PORT" not in dev

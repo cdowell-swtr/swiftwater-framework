@@ -1135,3 +1135,15 @@ Task 1 of 7 complete: added `name: {{ project_slug }}` as the first YAML key in
 with a comment explaining the isolation benefit and that `COMPOSE_PROJECT_NAME` overrides it.
 TDD: test wrote red (`name: demo` absent), template edit made it green (1 passed 1.43s).
 Rendered compose validates (`compose config OK`). Ruff format+lint clean.
+
+#### #0107 · completed · FWK31 · 2026-06-16
+Task 2 of 7 complete: parameterized all 7 host-side ports in
+`src/framework_cli/template/infra/compose/dev.yml.jinja` with `${VAR:-default}` form.
+Vars: `HTTP_HOST_PORT:-8000`, `POSTGRES_HOST_PORT:-5432`, `TRAEFIK_HTTPS_PORT:-443`,
+`TRAEFIK_HTTP_PORT:-80`, `MONGO_HOST_PORT:-27017`, `REDIS_HOST_PORT:-6379`,
+`FRONTEND_HOST_PORT:-5173`. APP_-prefix ban confirmed (no `APP_HOST_PORT` or `APP_PORT` leaks).
+Documented all 7 vars (+ `PORT_OFFSET`) in the FRAMEWORK region of
+`src/framework_cli/template/.env.example.jinja`, battery-gated (`mongodb`/`redis|workers`/`react`
+conditional vars). Placement: inside the framework region (consistent with existing non-APP vars
+like `GRAFANA_ADMIN_PASSWORD`; no test forbids non-APP vars in that region).
+TDD: test red → green (1 passed 1.59s). `docker compose config` validates. Ruff clean.
