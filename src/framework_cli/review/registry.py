@@ -44,6 +44,12 @@ class AgentSpec:
     on_push: bool = False
     trigger_globs: tuple[str, ...] | None = None
     context: ContextPolicy = ContextPolicy("diff")
+    # framework_only: a self-review-only agent (e.g. coverage-gap reviews the framework's
+    # own template/registry). Excluded from active_agents() — the generated-project set.
+    framework_only: bool = False
+    # reviews_template: on the framework target, receive the template-INCLUSIVE diff
+    # (pr_diff) instead of framework_diff()'s template-excluding one.
+    reviews_template: bool = False
 
 
 def _prompt(name: str) -> str:
@@ -325,7 +331,9 @@ def active_agents(event: str, batteries: Sequence[str] = ()) -> list[str]:
     gated = {a for b in batteries for a in get_battery(b).gates_agents}
     if event == "push":
         base = {
-            k for k, s in _SPECS.items() if s.on_push and s.active_when != "battery"
+            k
+            for k, s in _SPECS.items()
+            if s.on_push and s.active_when != "battery" and not s.framework_only
         }
         battery_extra = {
             k
@@ -334,7 +342,9 @@ def active_agents(event: str, batteries: Sequence[str] = ()) -> list[str]:
         }
     else:
         base = {
-            k for k, s in _SPECS.items() if s.active_when in ("always", "file-trigger")
+            k
+            for k, s in _SPECS.items()
+            if s.active_when in ("always", "file-trigger") and not s.framework_only
         }
         battery_extra = {
             k for k, s in _SPECS.items() if s.active_when == "battery" and k in gated

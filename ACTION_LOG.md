@@ -987,3 +987,9 @@ against template-EXCLUDING `framework_diff()` → coverage-gap would always skip
 → excluded from `active_agents()` (the generated-project set) so it doesn't leak into the 15-agent
 PR matrix / break `test_full_active_sets`. Plan:
 `docs/superpowers/plans/2026-06-16-fwk30-coverage-gap-reviewer.md`. Next: execute (subagent-driven).
+
+#### #0092 · completed · FWK30 · 2026-06-16
+Task 1 (Sonnet impl, controller-verified): `AgentSpec` gains `framework_only` + `reviews_template`
+(both default False); `active_agents()` excludes `framework_only` agents from both push + PR base
+sets (battery_extra untouched). New `tests/review/test_coverage_gap.py` (2 tests). 41 review tests
+green, ruff+mypy clean. No agent registered framework_only yet → active sets unchanged.
