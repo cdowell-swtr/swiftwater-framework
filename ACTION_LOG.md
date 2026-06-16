@@ -856,3 +856,20 @@ all provisioned runtime/build surfaces over the whole template → controller re
 JS) maps each to a seed cluster → the residual answers "do other clusters exist?" and becomes
 an 8th assessed cluster if non-empty. Updated spec + plan; the spec's old "no discovery agent
 needed" line was exactly the flawed assumption.
+
+#### #0082 · completed · FWK18a · 2026-06-15
+Ran the assessment Workflow (65 agents, 2.77M tokens, ~20 min; 5 overturned gaps). Two
+script bugs first: a missing closing paren in the Find-phase parallel (node --check on a
+/tmp copy pinpointed it — `return` at top level is a node-check false-positive the harness
+allows), and the nested-backtick-escape risk → rewrote prompts with `.join('\n')` arrays,
+no backticks inside strings. RESULTS: census 130 surfaces; the independent Phase-0 taxonomy
+check (user's catch) PAID OFF — 84 fell outside the 7 seed clusters, 51 were true residual
+CATEGORIES the infra-centric partition missed (app-bootstrap/create_app/lifespan, the whole
+CI-time lifecycle, pre-commit/.claude hooks, deploy orchestration) → assessed as an 8th
+cluster. Find: 116 surfaces, 63 EXERCISED, 53 candidate gaps; adversarial verify killed 5
+(incl. my own pre-assessment "baseline docker build never run" headline — the dev:lite test
+builds the runtime image at test_rendered_project.py:720). Synth → 27 ranked entries (8 high
+/ 15 med / 4 low). Controller hand-validated 4 highs (prod.yml config-only; workers eager;
+claudesubscriptioncli --target builder only; lite runtime build) — all held. Wrote the
+inventory + 10 grouped follow-on tasks (FWK19–28) + 4 recurring-shape seeds for FWK18b to
+`docs/superpowers/assessments/2026-06-15-runtime-coverage-gaps.md`. No release.
