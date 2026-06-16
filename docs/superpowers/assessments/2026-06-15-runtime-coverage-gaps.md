@@ -6,6 +6,13 @@
 > `docs/superpowers/specs/2026-06-15-runtime-coverage-assessment-design.md`; plan:
 > `docs/superpowers/plans/2026-06-15-coverage-assessment.md`. Each gap is a candidate
 > follow-on test task; the recurring categories seed **FWK29** (the durable mechanism).
+>
+> **Successor (2026-06-16):** this prose inventory is now backed by an executable,
+> always-current registry — `tests/runtime_coverage/registry.py` (FWK29) — which
+> classifies all **91** enumerated operational surfaces as EXERCISED / EXEMPT /
+> KNOWN_GAP and fails CI if a new surface ships unclassified. The registry is
+> authoritative for *current* state; this document remains the prose rationale and
+> risk ranking. See the registry-seeding reconciliation below.
 
 ## Method & numbers
 
@@ -28,6 +35,17 @@ Consequences for the ranking:
 - **H1 (prod.yml), H2 (services.yml), H7 (staging.yml) — DEMOTED high → low.** No shipped path brings these up; they are scaffolding for a *consumer-written* target. "Bring prod up live and assert healthy" tests a path the framework never takes — the "ships silently to a consumer's prod (FWK17 class)" rating was inflated. The right guard is cheap `docker compose config` merge-validation (CI-visible), not live bring-up. (`test.yml`, which IS shipped + used by `task test:stack`, stays a live gap — see M-tier / FWK19.)
 
 The dev-stack/build highs the framework genuinely drives are unaffected and stand: **H3 (workers live broker→DLQ), H4 (beat), H5 (claudesubscriptioncli runtime image), H6 (react SPA served).**
+
+### Correction (2026-06-16b): registry-seeding reconciliation (FWK29)
+
+Building the FWK29 registry classified all **91** mechanically-enumerated surfaces (vs the 27-entry prose ranking here) and surfaced four items this inventory didn't capture cleanly. Each was resolved during seeding; recording them so the two artifacts agree:
+
+- **`scripts/gen_observability.py`** — not in this inventory at all. It is build-time codegen whose *output* is committed in-template and validated by `test_obs_completeness`. Classified **EXEMPT** ("build-time codegen, output validated elsewhere").
+- **`service:dev.yml:frontend`** — this inventory names the react gap (H6) at the Dockerfile/SPA level, not the dev-stack compose *service*. The service inherits the same gap → **KNOWN_GAP FWK21** by extension of H6.
+- **`services.yml` split** — H2/FWK19 lumps the whole staging/prod overlay, but the registry splits it: `mongo`/`redis` services → the FWK19 *validation* work; `worker`/`beat` → **FWK20** (live broker). The eager-Celery gap (H3) is the operative one for worker/beat regardless of overlay.
+- **`hook:coverage-threshold`** — classified **EXERCISED** because its entry-point (`scripts/coverage.sh`) is driven by `test_rendered_project_coverage_gate_passes`, even though pre-commit `SKIP`s the hook wrapper (it needs Docker/Postgres). The behaviour is exercised; only the wrapper is skipped.
+
+None reclassified a ranked gap as already-covered (no inflation found); they are refinements at finer granularity than the prose ranking. The registry is now the authoritative current view.
 
 ### Taxonomy outcome (the independent-completeness check the user asked for)
 

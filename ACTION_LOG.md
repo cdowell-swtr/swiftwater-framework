@@ -901,3 +901,63 @@ bring-up). **FWK19 re-scoped high→med**: staging/services.yml merge-validation
 live bring-up. Revised counts 4 high / 15 med / 7 low + 1 dropped. Standing highs unaffected:
 FWK20 (workers/beat live), FWK21 (battery Docker runtime). Inventory Correction section + inline
 entry markers + PLAN updated. Docs-only; branch `fwk19-22-deploy-rescope`; no release.
+
+#### #0085 · note · FWK29 · 2026-06-16
+Brainstormed the durable mechanism. Key reframe (user): a deterministic check is CLOSED-WORLD
+(only finds what it's wired for) — a good ratchet but NOT a reviewer, which was the original
+intention (open-world: find surfaces outside the scan's purview). So the mechanism is TWO
+complementary subsystems with a graduation loop: **FWK29 = deterministic completeness check +
+classification registry** (closed-world ratchet, gates CI, carries the re-rank) and **FWK30 =
+agentic framework-native coverage-gap reviewer** (open-world discovery, advisory, defers to
+FWK29's registry; recurring findings graduate into FWK29's rules). Decomposed foundation-first
+(reviewer needs the registry to defer to). FWK29 design: a `gate`-tier test renders all-batteries
+→ 6 enumeration rules (compose overlays/services, Dockerfile stages, scripts, workflow jobs,
+hooks; ~50–60 keys) → asserts each is classified EXERCISED|EXEMPT|KNOWN_GAP(FWK id) in a typed
+`tests/runtime_coverage/registry.py`; set-equality + reference-integrity, à la integrity/test_classes.
+THREE statuses (KNOWN_GAP lets it ship without blocking on FWK19–28; ratchet still stops NEW
+unclassified surfaces). In-app code paths explicitly OUT (FWK30's domain — the honest closed-world
+edge). Seeding = the rigorous re-rank + reconcile the FWK18 inventory. Spec written:
+`docs/superpowers/specs/2026-06-16-runtime-coverage-completeness-check-design.md`. Test-only →
+no release. Branch `fwk29-coverage-completeness-check`.
+
+#### #0086 · note · FWK29 · 2026-06-16
+Wrote the FWK29 plan: `docs/superpowers/plans/2026-06-16-runtime-coverage-completeness-check.md`.
+4 tasks: (1) the six enumeration rules (`tests/runtime_coverage/enumerate.py`) + unit tests
+against an all-batteries render; (2) the typed registry scaffold + the completeness test
+(`test_completeness.py`, 6 assertions: set-equality, no-stale, unique-keys, exercised-names-
+existing-test, known-gap-links-FWK, exempt-has-reason) → RED (empty registry); (3) seed the
+registry to GREEN = the rigorous re-rank (10 worked entries from the FWK18 inventory + a rubric
+for the rest); (4) reconcile the inventory + finalize. Grounded the code in real repo patterns
+(`render_project` + `resolve(battery_names())`, the `test_obs_completeness` yaml-parse shape).
+Two execution-time unknowns flagged with remedies: all-batteries co-render (fallback to the
+matrix `full` set) and rendered service/job-name drift (print + correct the representative).
+Test-only → no release.
+
+#### #0087 · completed · FWK29 · 2026-06-16
+Task 1 (subagent-driven): the six enumeration rules `tests/runtime_coverage/enumerate.py` +
+unit tests. All-batteries render co-renders cleanly → **91 surface keys** (more exhaustive than
+the ~50–60 estimate). One representative corrected: the rendered project's ci.yml lint job is
+`lint`, not `gate` (that's the framework's own job name). Spec review (Sonnet) ✓; code-quality
+(Opus) ✓ APPROVE — folded in its suggestion: an exact-set assertion pinning the 3 Dockerfile
+stages (multiplicity, not just presence). 3 tests pass. Controller commits (implementer staged).
+
+#### #0088 · completed · FWK29 · 2026-06-16
+Tasks 2+3 (subagent-driven, Opus implementer): the typed registry + completeness test, seeded.
+All 91 surfaces classified — **41 EXERCISED / 22 EXEMPT / 28 KNOWN_GAP**; all 6 completeness
+tests pass. Spec review (Sonnet) ✓. Code-quality + CLASSIFICATION-ACCURACY review (Opus) ✓
+APPROVE, no critical findings — spot-checked ~15 entries across all statuses against the real
+tests: exporter split correct (prometheus/loki/tempo EXERCISED, postgres/redis/celery/mongodb
+KNOWN_GAP FWK23 — the scrape test hard-filters job==app); worker/beat correctly KNOWN_GAP FWK20
+(the one test that ups them asserts only __pycache__/UID, never the live broker); builder
+EXERCISED-transitively (runtime serves /health through COPY --from=builder) vs frontend-build
+KNOWN_GAP (SPA built-not-served, H6). Implementer flagged 4 inventory disagreements/extensions
+for Task 4 reconciliation (gen_observability.py not in inventory→EXEMPT; dev.yml:frontend→FWK21
+by analogy to H6; services.yml split FWK19/FWK20; coverage-threshold EXERCISED-via-command nuance).
+
+#### #0089 · completed · FWK29 · 2026-06-16
+Task 4 (controller): reconciled the FWK18 inventory — added a "Correction (2026-06-16b):
+registry-seeding reconciliation" subsection capturing the 4 finer-grained items (none reclassified
+a ranked gap as covered — no inflation) + a successor-pointer naming `tests/runtime_coverage/registry.py`
+as the authoritative current view. Gate green: 9 runtime_coverage tests pass, ruff check + format
+clean, mypy src clean (unaffected — tests/-only). FWK29 → Done. Next: finish the branch (PR, no
+release) then FWK30 (the open-world reviewer) is unblocked — the registry it defers to now exists.
