@@ -1267,3 +1267,17 @@ Verified: `pytest tests/runtime_coverage/ tests/test_copier_runner.py::test_comp
 rendered compose.sh: CLEAN. ruff format --check + check: CLEAN.
 Files changed: tests/test_copier_runner.py, tests/runtime_coverage/registry.py,
 src/framework_cli/template/scripts/compose.sh.
+
+#### #0115 · completed · FWK31 · 2026-06-16
+Cut release **v0.2.11** for the FWK31 compose-isolation template payload (per
+release-cut-procedure, folded into PR #45 per the repo convention of shipping feature+release
+in one PR). Bumped pyproject `0.2.10 → 0.2.11`, `DOGFOOD_COMMIT v0.2.10 → v0.2.11`
+(src/framework_cli/dogfood.py), regenerated uv.lock (`framework-cli v0.2.10 → v0.2.11`).
+Meta-plan/CLAUDE.md untouched (frozen — matches the v0.2.10 release commit's file set). Moved
+FWK31 to PLAN Done. Pre-release gate green: ruff check + ruff format --check + mypy src clean;
+full non-acceptance suite 920 passed / 3 skipped / 0 failed; docker acceptance tier (ephemeral
+ports + two-stack co-run) green locally; render validation across baseline/all-batteries/
+workers+react (default `compose config` OK, PORT_OFFSET=100 shifts to 8100). render-matrix
+(`render-complete`) on the PR is the authoritative proof. Tag v0.2.11 → release.yml publishes
+the GitHub Release; consumers re-seed local dev on upgrade (per-project compose name orphans
+old `compose_*` volumes — documented in the generated README).
