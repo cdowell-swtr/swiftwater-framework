@@ -961,3 +961,123 @@ a ranked gap as covered — no inflation) + a successor-pointer naming `tests/ru
 as the authoritative current view. Gate green: 9 runtime_coverage tests pass, ruff check + format
 clean, mypy src clean (unaffected — tests/-only). FWK29 → Done. Next: finish the branch (PR, no
 release) then FWK30 (the open-world reviewer) is unblocked — the registry it defers to now exists.
+
+#### #0090 · completed · FWK30 · 2026-06-16
+Brainstorm → design spec for the open-world coverage-gap reviewer (FWK29 registry now exists,
+unblocking it). Decisions: **scope = both halves** (A new-kind/unclassified enumerable surface +
+B in-app code-path surfaces), prompt draws a hard coverage-lens boundary vs `architecture`
+(design soundness) and `observability*` (instrumentation); **B is diff-anchored (B-i)** not a
+whole-tree audit; **defers to `registry.py` by reading the source directly** (no generated
+manifest); **full repo diff seed** via a per-agent diff scope (resolves the target-scope wrinkle —
+the other 5 framework agents keep template-excluding `framework_diff()`); **glob-gated activation**
+(`template/**`, `tests/runtime_coverage/**`) — needs the framework-target dispatch to honor
+`active_when`/`trigger_globs`; **advisory** (`block_threshold=None`). Eval fixture pair (positive
+flag + negative defer-to-same-PR-registry) for calibration. Spec:
+`docs/superpowers/specs/2026-06-16-fwk30-coverage-gap-reviewer-design.md`. Next: writing-plans.
+
+#### #0091 · completed · FWK30 · 2026-06-16
+Implementation plan written (7 tasks, TDD/bite-sized). Planning surfaced one spec gap and
+resolved it with the user: the eval harness is generated-project-shaped (`realize_*` renders
+a project), but coverage-gap reviews framework SOURCE (template jinja + `tests/runtime_coverage/
+registry.py`) — none of which exists in a render → **E1: a framework-shaped realize** (copy the
+template + runtime_coverage subtrees into a temp git repo, apply patch, diff; production-faithful).
+Also pinned the per-agent diff mechanism: glob-gating already exists at `cli.py:1804`, but matches
+against template-EXCLUDING `framework_diff()` → coverage-gap would always skip; fix = a
+`reviews_template` AgentSpec flag → `pr_diff()` on the framework target. And `framework_only` flag
+→ excluded from `active_agents()` (the generated-project set) so it doesn't leak into the 15-agent
+PR matrix / break `test_full_active_sets`. Plan:
+`docs/superpowers/plans/2026-06-16-fwk30-coverage-gap-reviewer.md`. Next: execute (subagent-driven).
+
+#### #0092 · completed · FWK30 · 2026-06-16
+Task 1 (Sonnet impl, controller-verified): `AgentSpec` gains `framework_only` + `reviews_template`
+(both default False); `active_agents()` excludes `framework_only` agents from both push + PR base
+sets (battery_extra untouched). New `tests/review/test_coverage_gap.py` (2 tests). 41 review tests
+green, ruff+mypy clean. No agent registered framework_only yet → active sets unchanged.
+
+#### #0093 · completed · FWK30 · 2026-06-16
+Task 2 (Sonnet impl, controller-verified): authored `src/framework_cli/review/agents/coverage-gap.md`
+(76 lines) — coverage lens, hard boundaries vs review-architecture/observability/env-parity, strict
+"exercised" definition, two diff-anchored gaps (new-kind + in-app), defer-to-registry by reading
+registry.py/enumerate.py, JSON-only output. +2 prompt tests (4 total in test_coverage_gap.py). Green.
+
+#### #0094 · completed · FWK30 · 2026-06-16
+Task 3 (Sonnet impl, controller-verified): registered `coverage-gap` in `_SPECS` (review-coverage-gap,
+advisory/None, file-trigger, AGENTIC_MODEL/Opus, agentic, framework_only+reviews_template,
+trigger_globs template/** + runtime_coverage/**) + `FRAMEWORK_AGENTS` (alphabetical, 6→7) + context.py
+exception comment. Updated test_framework_target (7-tuple), test_context_policy (agentic set), +3 spec
+tests. Glob form `**` confirmed (fnmatch `*` spans `/`). 60 targeted tests green; test_full_active_sets
+still green (framework_only keeps it out of the 15-agent PR set). KNOWN TRANSIENT RED:
+test_evals::test_every_registered_agent_has_fixtures (coverage-gap has no fixtures yet) — restored
+green by Task 6.
+
+#### #0095 · completed · FWK30 · 2026-06-16
+Task 5 (Sonnet impl, controller-verified): framework-shaped eval realize. `realize_cached` branches
+on `fx.agent in _FRAMEWORK_SHAPED_AGENTS` ({coverage-gap}) → copies `src/framework_cli/template` +
+`tests/runtime_coverage` into a temp git repo (gc.auto=0 race guard), applies the patch, diffs —
+instead of rendering a project (coverage-gap reviews framework SOURCE, not generated output;
+production-faithful). `_framework_repo_root()` = evals.py parents[3]. Render path byte-unchanged for
+all other agents (28 harness tests green). Impl learning for Task 6: `git apply` needs >=3 context
+lines at file top → fixtures must be generated from real `git diff`, never hand-counted 1-context hunks.
+
+#### #0096 · completed · FWK30 · 2026-06-16
+Task 6 (Sonnet impl, controller-verified) + plan-design correction. Eval fixture pair:
+**bad/unexercised-k8s-manifest** — adds a k8s Deployment at `template/infra/k8s/deployment.yaml.jinja`
+(a NEW KIND: enumerate.py scans compose/docker/scripts/workflows/hooks, NOT infra/k8s) + a tracked
+README breadcrumb so the realized seed-diff is non-empty (agentic agent then globs the new file) →
+must FLAG; **good/classified-cache-overlay** — adds a compose overlay (ENUMERABLE → FWK29's job) +
+the matching registry.py SurfaceClass in the same diff → must DEFER (silent). CORRECTED the plan's
+original bad-fixture design (a new compose overlay) which was wrong — overlays are enumerable and
+coverage-gap defers them; the bad case must be a kind outside the six rules. Patches generated from
+real `git diff --staged` (validate_patch_hunks []). thresholds.yaml: coverage-gap 0.67/0.34. Full
+review suite GREEN (319 passed) — test_every_registered_agent_has_fixtures restored.
+
+#### #0097 · completed · FWK30 · 2026-06-16
+Task 4 (Sonnet impl, controller-verified): per-agent diff scope in the live `review` command. On the
+framework target a `reviews_template` agent (coverage-gap) now sources the template-INCLUSIVE
+`pr_diff()`; the five general framework agents keep template-excluding `framework_diff()`. Resolves
+the target-scope wrinkle so coverage-gap's template/registry trigger-globs match the gate at
+cli.py:1804 (else it always skipped) and it sees same-PR registry classification. `pr_diff` already
+imported; no new type-ignore. 17 targeted/framework-target tests green.
+
+#### #0098 · completed · FWK30 · 2026-06-16
+Branch-end reviews: spec-compliance (Sonnet) ✓ all 9 reqs met, no extra; code-quality (Opus) ✓
+APPROVE WITH NITS (gating only on the live eval). Applied 3 review fixes (Sonnet impl): (1) evals.py
+framework-shaped realize now `git add -A` + `git diff --cached` so NEW surface files appear in the
+seed diff — production-faithful (pr_diff shows committed new files), replacing the fragile
+breadcrumb-inference path; (2) regenerated the bad fixture to the k8s manifest ALONE (dropped the
+now-unneeded README breadcrumb); (3) defense-in-depth — `active_agents` battery_extra sets also filter
+framework_only (+ a battery-gated framework_only exclusion test). Seed now carries each surface
+directly (bad→k8s; good→overlay+registry). 69 review/eval tests green; ruff+mypy clean. Remaining:
+live eval calibration (Issue #1) — needs the eval key/backend.
+
+#### #0099 · completed · FWK30 · 2026-06-16
+Engine bugfix (FWK30-surfaced, controller TDD): the agentic tool-loop stored backend response
+blocks (`backend.TextBlock`/`ToolUseBlock` dataclasses) directly into `messages`; on a multi-turn
+(tool-using) call litellm serializes the replayed messages → `TypeError: TextBlock is not JSON
+serializable`. Latent because every other agentic agent is calibrated via the free subagent backend
+and the scripted unit-test client never serialized; coverage-gap is the framework's first ALWAYS-
+multi-turn agentic agent (must read registry.py/enumerate.py) run on the paid api backend. Fix:
+`_assistant_turn()` converts blocks to Anthropic wire-format dicts (`{"type":"text"...}` /
+`{"type":"tool_use"...}`, empty text dropped) at both append sites in agentic.py. Regression test
+adds a `_SerializingClient` that json.dumps messages each turn (the scripted client didn't). 322
+review tests green. Also fixes the same crash on the production review runtime path.
+
+#### #0100 · completed · FWK30 · 2026-06-16
+Live calibration (paid api backend, Opus, repeat 3): **recall 1.00 / fp 0.00 PASS**. First run scored
+fp 1.00 — the agent (correctly!) flagged the "good" fixture because my registry classification used
+the TEMPLATE key `overlay:cache.yml.jinja` while enumerate.py emits RENDERED keys (`overlay:cache.yml`
++ the service `service:cache.yml:cache`), so the classification wouldn't satisfy FWK29. Regenerated the
+good fixture with both correct rendered keys → agent defers (0 findings ×3). Bad fixture: flags the
+k8s manifest as NEW-KIND ×3 with accurate reasoning. Annotated thresholds.yaml (recall_min 0.90 /
+fp_max 0.10, observed 1.00/0.00 per the -0.10/+0.10 convention); wrote scorecard
+docs/superpowers/eval-scorecards/2026-06-16-coverage-gap.md. 95 review/eval tests green.
+
+#### #0101 · completed · FWK30 · 2026-06-16
+Final whole-branch Opus review = **APPROVE** (merge-ready). Applied its one Minor (optional,
+pre-existing) hardening: the agentic recovery path now replays the model's raw text with a
+non-empty fallback (`text or "(no parseable content)"`) instead of routing through `_assistant_turn`
+(which could yield an API-invalid empty content list when the sole block is empty) + a regression
+test. 323 review tests green, ruff/format/mypy clean. PLAN.md: FWK30 → Done. Full suite earlier =
+961 pass / 2 docker dev:lite acceptance failures (CI-ignored tier; pre-existing, template untouched
+by FWK30 — flagged separately for investigation, `serves_health` reproduces independent of branch).
+Next: finish the branch (PR; no release — review-infra only).

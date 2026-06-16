@@ -1,0 +1,25 @@
+diff --git a/src/framework_cli/template/infra/k8s/deployment.yaml.jinja b/src/framework_cli/template/infra/k8s/deployment.yaml.jinja
+new file mode 100644
+index 0000000..bfb0d06
+--- /dev/null
++++ b/src/framework_cli/template/infra/k8s/deployment.yaml.jinja
+@@ -0,0 +1,19 @@
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: {{ package_name }}
++spec:
++  replicas: 1
++  selector:
++    matchLabels:
++      app: {{ package_name }}
++  template:
++    metadata:
++      labels:
++        app: {{ package_name }}
++    spec:
++      containers:
++        - name: {{ package_name }}
++          image: ${APP_IMAGE}
++          ports:
++            - containerPort: 8000

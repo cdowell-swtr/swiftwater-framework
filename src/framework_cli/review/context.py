@@ -70,9 +70,15 @@ def generated_project_target(root: Path, active: tuple[str, ...]) -> ReviewTarge
 # exist in framework_cli. Enabling them would produce false negatives (CLI surface goes
 # unreviewed) and waste subagent quota. Proper coverage would need new CLI-scoped agent
 # prompts (e.g. `cli-api-design`), not membership in this tuple.
+# FWK30 adds the one deliberate exception: `coverage-gap` IS a framework agent that reviews
+# the template payload — but only through the runtime-coverage-completeness lens, never for
+# general quality (which stays the product's concern). It is `framework_only` so it never
+# joins the generated-project review set, and `reviews_template` so it gets the
+# template-inclusive diff.
 FRAMEWORK_AGENTS: tuple[str, ...] = (
     "application-logic",
     "architecture",
+    "coverage-gap",
     "dependency",
     "documentation",
     "security",

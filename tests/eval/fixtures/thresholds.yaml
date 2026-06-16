@@ -43,6 +43,9 @@ compliance:
 contracts:
   recall_min: 0.73  # observed 0.83
   fp_max: 0.10  # observed 0.00
+coverage-gap:
+  recall_min: 0.90  # observed 1.00 (api backend, repeat 3, 2026-06-16)
+  fp_max: 0.10  # observed 0.00 (good fixture: correct rendered-key classification → agent defers)
 data-integrity:
   recall_min: 0.90  # observed 1.00
   fp_max: 0.10  # observed 0.00

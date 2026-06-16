@@ -44,6 +44,12 @@ class AgentSpec:
     on_push: bool = False
     trigger_globs: tuple[str, ...] | None = None
     context: ContextPolicy = ContextPolicy("diff")
+    # framework_only: a self-review-only agent (e.g. coverage-gap reviews the framework's
+    # own template/registry). Excluded from active_agents() — the generated-project set.
+    framework_only: bool = False
+    # reviews_template: on the framework target, receive the template-INCLUSIVE diff
+    # (pr_diff) instead of framework_diff()'s template-excluding one.
+    reviews_template: bool = False
 
 
 def _prompt(name: str) -> str:
@@ -305,6 +311,25 @@ _SPECS: dict[str, AgentSpec] = {
             ),
         ),
     ),
+    # FWK30 — open-world coverage-gap reviewer. Framework-self-review only (reviews the
+    # template payload + the FWK29 registry, neither of which exists in a generated
+    # project). Advisory + agentic; reads registry.py/enumerate.py via its tools to defer
+    # to the closed-world ratchet. Gated to template/registry changes; fed the
+    # template-inclusive diff (reviews_template).
+    "coverage-gap": AgentSpec(
+        "review-coverage-gap",
+        _prompt("coverage-gap"),
+        None,  # advisory — surfaces, never blocks
+        "file-trigger",
+        AGENTIC_MODEL,
+        trigger_globs=(
+            "src/framework_cli/template/**",
+            "tests/runtime_coverage/**",
+        ),
+        context=ContextPolicy("agentic"),
+        framework_only=True,
+        reviews_template=True,
+    ),
 }
 
 
@@ -325,18 +350,27 @@ def active_agents(event: str, batteries: Sequence[str] = ()) -> list[str]:
     gated = {a for b in batteries for a in get_battery(b).gates_agents}
     if event == "push":
         base = {
-            k for k, s in _SPECS.items() if s.on_push and s.active_when != "battery"
+            k
+            for k, s in _SPECS.items()
+            if s.on_push and s.active_when != "battery" and not s.framework_only
         }
         battery_extra = {
             k
             for k, s in _SPECS.items()
-            if s.active_when == "battery" and s.on_push and k in gated
+            if s.active_when == "battery"
+            and s.on_push
+            and k in gated
+            and not s.framework_only
         }
     else:
         base = {
-            k for k, s in _SPECS.items() if s.active_when in ("always", "file-trigger")
+            k
+            for k, s in _SPECS.items()
+            if s.active_when in ("always", "file-trigger") and not s.framework_only
         }
         battery_extra = {
-            k for k, s in _SPECS.items() if s.active_when == "battery" and k in gated
+            k
+            for k, s in _SPECS.items()
+            if s.active_when == "battery" and k in gated and not s.framework_only
         }
     return sorted(base | battery_extra)

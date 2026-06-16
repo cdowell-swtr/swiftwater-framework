@@ -105,6 +105,39 @@ def score_agent(
     )
 
 
+# Agents whose review target is the framework SOURCE (template payload + the FWK29 registry),
+# not a rendered project. Their fixtures realize a framework-shaped base, not a render.
+_FRAMEWORK_SHAPED_AGENTS = frozenset({"coverage-gap"})
+
+# Repo subtrees a framework-shaped fixture needs (relative to the framework repo root).
+_FRAMEWORK_SUBTREES = ("src/framework_cli/template", "tests/runtime_coverage")
+
+
+def _framework_repo_root() -> Path:
+    # evals.py lives at <root>/src/framework_cli/review/evals.py
+    return Path(__file__).resolve().parents[3]
+
+
+def _framework_base(base: Path) -> None:
+    """Populate `base` with a minimal framework-shaped tree and an initial git commit."""
+    root = _framework_repo_root()
+    for sub in _FRAMEWORK_SUBTREES:
+        src = root / sub
+        dst = base / sub
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, dst)
+    subprocess.run(["git", "init", "-q"], cwd=base, check=True)
+    subprocess.run(
+        ["git", "config", "gc.auto", "0"], cwd=base, check=True
+    )  # GC race guard
+    subprocess.run(["git", "add", "-A"], cwd=base, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"],
+        cwd=base,
+        check=True,
+    )
+
+
 _FIXTURE_ANSWERS = {
     "project_name": "Demo",
     "project_slug": "demo",
@@ -142,7 +175,37 @@ def realize_cached(
     fx: Fixture, cache: dict[tuple[str, ...], Path], base_dir: Path
 ) -> tuple[Path, str]:
     """Realize `fx` reusing a per-combo rendered+committed base. `base_dir` is a
-    caller-owned tempdir; `cache` maps battery-combo → committed base path."""
+    caller-owned tempdir; `cache` maps battery-combo → committed base path.
+
+    For framework-shaped agents (e.g. coverage-gap), the base is a copy of the
+    framework's own source subtrees (template payload + FWK29 registry) rather than
+    a rendered project.
+    """
+    if fx.agent in _FRAMEWORK_SHAPED_AGENTS:
+        cache_key: tuple[str, ...] = ("__framework__",)
+        if cache_key not in cache:
+            base = base_dir / "framework-base"
+            base.mkdir(parents=True, exist_ok=True)
+            _framework_base(base)
+            cache[cache_key] = base
+        work = base_dir / f"fx-{fx.agent}-{fx.kind}-{fx.name}"
+        shutil.copytree(cache[cache_key], work)
+        subprocess.run(
+            ["git", "apply", "-"], cwd=work, input=fx.patch, text=True, check=True
+        )
+        # Stage so newly-added files (a new operational surface — exactly what coverage-gap
+        # hunts) appear in the seed diff, matching production pr_diff() which shows committed
+        # new files. A bare `git diff` would omit untracked additions.
+        subprocess.run(["git", "add", "-A"], cwd=work, check=True)
+        diff = subprocess.run(
+            ["git", "diff", "--cached"],
+            cwd=work,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        return work, diff
+
     if fx.batteries not in cache:
         base = base_dir / ("base-" + ("-".join(fx.batteries) or "none")) / "demo"
         render_project(base, {**_FIXTURE_ANSWERS, "batteries": list(fx.batteries)})

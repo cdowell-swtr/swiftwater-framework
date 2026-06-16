@@ -149,6 +149,28 @@ def _text_of(resp: Any) -> str:
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
 
 
+def _assistant_turn(content: list[Any]) -> list[dict[str, Any]]:
+    """The assistant turn as Anthropic wire-format dicts.
+
+    The loop replays each assistant turn to the backend on the next request. Backend
+    response blocks (backend.TextBlock / ToolUseBlock dataclasses) are NOT JSON-
+    serializable, so litellm chokes when it serializes the replayed messages on a
+    multi-turn (tool-using) call. Emit plain dicts instead. Empty text blocks are dropped
+    (the API rejects them); tool_use blocks are always preserved.
+    """
+    wire: list[dict[str, Any]] = []
+    for b in content:
+        if getattr(b, "type", None) == "tool_use":
+            wire.append(
+                {"type": "tool_use", "id": b.id, "name": b.name, "input": dict(b.input)}
+            )
+        else:
+            text = getattr(b, "text", "") or ""
+            if text:
+                wire.append({"type": "text", "text": text})
+    return wire
+
+
 def run_agent_agentic(
     diff: str,
     root: Path,
@@ -197,7 +219,15 @@ def run_agent_agentic(
                 # budget remains; only surface the parse error once recovery is exhausted.
                 if recoveries < _MAX_RECOVERIES:
                     recoveries += 1
-                    messages.append({"role": "assistant", "content": resp.content})
+                    messages.append(
+                        # No tool_use on this turn — replay the model's raw (unparseable)
+                        # text, with a non-empty fallback so the assistant turn is never an
+                        # API-rejected empty content list.
+                        {
+                            "role": "assistant",
+                            "content": text or "(no parseable content)",
+                        }
+                    )
                     messages.append({"role": "user", "content": _RECOVERY_INSTRUCTION})
                     continue
                 raise
@@ -211,7 +241,7 @@ def run_agent_agentic(
             return findings
         for tu in tool_uses:
             tool_calls.append({"turn": turns, "tool": tu.name, "input": dict(tu.input)})
-        messages.append({"role": "assistant", "content": resp.content})
+        messages.append({"role": "assistant", "content": _assistant_turn(resp.content)})
         results = [
             {
                 "type": "tool_result",

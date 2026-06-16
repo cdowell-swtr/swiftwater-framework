@@ -1,0 +1,35 @@
+diff --git a/src/framework_cli/template/infra/compose/cache.yml.jinja b/src/framework_cli/template/infra/compose/cache.yml.jinja
+new file mode 100644
+index 0000000..1b2c9e4
+--- /dev/null
++++ b/src/framework_cli/template/infra/compose/cache.yml.jinja
+@@ -0,0 +1,6 @@
++services:
++  cache:
++    image: redis:7
++    healthcheck:
++      test: ["CMD", "redis-cli", "ping"]
++      interval: 10s
+diff --git a/tests/runtime_coverage/registry.py b/tests/runtime_coverage/registry.py
+index 9278cb3..b29b347 100644
+--- a/tests/runtime_coverage/registry.py
++++ b/tests/runtime_coverage/registry.py
+@@ -35,6 +35,18 @@ _KG = Status.KNOWN_GAP
+ 
+ 
+ REGISTRY: tuple[SurfaceClass, ...] = (
++    SurfaceClass(
++        "overlay:cache.yml",
++        "infra/compose/cache.yml.jinja",
++        _EM,
++        "redis cache overlay — opt-in; classified in the same change (coverage-gap defers)",
++    ),
++    SurfaceClass(
++        "service:cache.yml:cache",
++        "infra/compose/cache.yml.jinja",
++        _EM,
++        "redis cache service — opt-in; classified in the same change (coverage-gap defers)",
++    ),
+     # ---- Dockerfile build stages -----------------------------------------------------
+     SurfaceClass(
+         "docker-stage:Dockerfile:builder",
