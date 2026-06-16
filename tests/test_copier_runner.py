@@ -1083,7 +1083,12 @@ def test_render_no_webhooks_secret_without_battery(tmp_path: Path):
 def test_render_with_workers_battery_adds_celery_dep(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["workers"]})
-    assert "celery[redis]" in (dest / "pyproject.toml").read_text()
+    pyproject = (dest / "pyproject.toml").read_text()
+    assert "celery[redis]" in pyproject
+    # FWK32: celery's beat scheduler imports tzlocal but no longer declares it as a hard
+    # dependency, so a fresh resolve dropped it and broke `import demo.tasks` in workers
+    # projects (render-matrix went red). Pin it explicitly so it can't drift away again.
+    assert "tzlocal" in pyproject
 
 
 def test_render_without_workers_battery_has_no_celery_dep(tmp_path: Path):

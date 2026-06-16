@@ -19,6 +19,10 @@ dependencies = [
 {% if "graphql" in batteries %}    "strawberry-graphql[fastapi]>=0.235",
 {% endif %}{% if "pgvector" in batteries %}    "pgvector>=0.3",
 {% endif %}{% if "workers" in batteries %}    "celery[redis]>=5.4",
+    # celery's beat scheduler imports tzlocal (get_localzone) but no longer declares it as a
+    # hard dependency, so a fresh resolve can omit it and break `import {{ package_name }}.tasks`.
+    # Declare it explicitly (FWK32: upstream transitive drift broke the render matrix).
+    "tzlocal>=5.2",
     "opentelemetry-instrumentation-celery>=0.48b0",
 {% endif %}{% if "mongodb" in batteries %}    "pymongo>=4.9",
     "opentelemetry-instrumentation-pymongo>=0.48b0",
