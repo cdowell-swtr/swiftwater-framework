@@ -1173,3 +1173,11 @@ call `./scripts/compose.sh` instead of `docker compose` directly; file-set, prof
 env (UID/GID), and preconditions unchanged. Offset proof: `PORT_OFFSET=100` produces
 `published: "8100"` (HTTP) + `published: "5532"` (postgres) in `docker compose config`.
 shellcheck clean. TDD: test red → green (1 passed). Full quality gate clean.
+
+#### #0110 · completed · FWK31 · 2026-06-16
+Follow-up fix to Task 4: `src/framework_cli/template/scripts/compose.sh` was stored in git as
+mode 100644 (not executable). Copier preserves the source git file mode, so every rendered
+project received a non-executable `scripts/compose.sh`, making `task dev` / `task dev:lite` fail
+with "permission denied". Fixed via `git update-index --chmod=+x`. Added regression guard to
+`tests/test_copier_runner.py::test_render_compose_wrapper_and_taskfile_use_offset`:
+`assert os.access(wrapper, os.X_OK)`. Rendered mode now `-rwxr-xr-x` (confirmed). Test green.

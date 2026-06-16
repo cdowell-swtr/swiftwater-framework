@@ -3418,6 +3418,9 @@ def test_render_compose_wrapper_and_taskfile_use_offset(tmp_path: Path):
     render_project(dest, DATA)
     wrapper = dest / "scripts" / "compose.sh"
     assert wrapper.is_file()
+    assert os.access(wrapper, os.X_OK), (
+        "rendered scripts/compose.sh must be executable (task dev calls ./scripts/compose.sh)"
+    )
     body = wrapper.read_text()
     # The wrapper derives host ports from PORT_OFFSET and defaults, then execs compose.
     assert (
