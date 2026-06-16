@@ -83,3 +83,34 @@ def test_coverage_gap_trigger_globs_match_template_and_registry_changes():
 def test_coverage_gap_is_in_framework_agents_only():
     assert "coverage-gap" in FRAMEWORK_AGENTS
     assert "coverage-gap" not in active_agents("pull_request")  # not a project agent
+
+
+def test_realize_cached_builds_framework_shaped_base_for_coverage_gap(tmp_path):
+    """coverage-gap fixtures realize a framework-shaped tree (template + runtime_coverage),
+    not a rendered project, so the patch applies and registry.py is readable."""
+    from framework_cli.review.evals import Fixture, realize_cached
+
+    patch = (
+        "--- a/tests/runtime_coverage/registry.py\n"
+        "+++ b/tests/runtime_coverage/registry.py\n"
+        "@@ -1,4 +1,5 @@\n"
+        ' """FWK29 classification registry — the closed-world ratchet\'s data.\n'
+        "+# seeded comment for the fixture\n"
+        " \n"
+        " Every operational surface that `enumerate.py` finds must appear here exactly once,\n"
+        " classified as EXERCISED (a test drives it — evidence names the test function), EXEMPT\n"
+    )
+    fx = Fixture(
+        agent="coverage-gap",
+        kind="bad",
+        name="seed",
+        batteries=(),
+        patch=patch,
+        seeded_file="tests/runtime_coverage/registry.py",
+    )
+    root, diff = realize_cached(fx, {}, tmp_path)
+    # The framework subtrees are present in the realized base.
+    assert (root / "tests" / "runtime_coverage" / "registry.py").is_file()
+    assert (root / "src" / "framework_cli" / "template").is_dir()
+    # The seeded change is in the diff (proves the patch applied to this base).
+    assert "seeded comment for the fixture" in diff

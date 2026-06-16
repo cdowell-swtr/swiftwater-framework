@@ -1009,3 +1009,12 @@ tests. Glob form `**` confirmed (fnmatch `*` spans `/`). 60 targeted tests green
 still green (framework_only keeps it out of the 15-agent PR set). KNOWN TRANSIENT RED:
 test_evals::test_every_registered_agent_has_fixtures (coverage-gap has no fixtures yet) — restored
 green by Task 6.
+
+#### #0095 · completed · FWK30 · 2026-06-16
+Task 5 (Sonnet impl, controller-verified): framework-shaped eval realize. `realize_cached` branches
+on `fx.agent in _FRAMEWORK_SHAPED_AGENTS` ({coverage-gap}) → copies `src/framework_cli/template` +
+`tests/runtime_coverage` into a temp git repo (gc.auto=0 race guard), applies the patch, diffs —
+instead of rendering a project (coverage-gap reviews framework SOURCE, not generated output;
+production-faithful). `_framework_repo_root()` = evals.py parents[3]. Render path byte-unchanged for
+all other agents (28 harness tests green). Impl learning for Task 6: `git apply` needs >=3 context
+lines at file top → fixtures must be generated from real `git diff`, never hand-counted 1-context hunks.
