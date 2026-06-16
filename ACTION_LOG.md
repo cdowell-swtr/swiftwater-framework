@@ -1161,3 +1161,15 @@ applicable), placed adjacent to the dev port vars within the framework region. `
 --profile dev config` validates cleanly; cross-file `depends_on` errors (pre-existing, caused by
 splitof battery services across overlay+dev files) still occur without `--profile`. TDD: test
 red → green (1 passed 1.57s). Full quality gate clean.
+
+#### #0109 · completed · FWK31 · 2026-06-16
+Task 4 of 7 complete: PORT_OFFSET wrapper (`scripts/compose.sh`) + Taskfile wiring.
+Created `src/framework_cli/template/scripts/compose.sh` (plain `.sh`, no Jinja interpolation —
+matches the `coverage.sh`/`load.sh` convention for static scripts). Wrapper exports all 16
+`*_HOST_PORT` vars as `default+PORT_OFFSET` unless already set in the environment, then
+`exec docker compose "$@"`. Unset `PORT_OFFSET` defaults to 0 (today's ports unchanged).
+Modified `src/framework_cli/template/Taskfile.yml.jinja`: `dev` and `dev:lite` cmds now
+call `./scripts/compose.sh` instead of `docker compose` directly; file-set, profiles, flags,
+env (UID/GID), and preconditions unchanged. Offset proof: `PORT_OFFSET=100` produces
+`published: "8100"` (HTTP) + `published: "5532"` (postgres) in `docker compose config`.
+shellcheck clean. TDD: test red → green (1 passed). Full quality gate clean.

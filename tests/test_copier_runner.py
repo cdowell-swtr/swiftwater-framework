@@ -3411,3 +3411,20 @@ def test_render_observability_parameterizes_host_ports(tmp_path: Path):
         ("REDIS_EXPORTER_HOST_PORT", "9121"),
     ]:
         assert f"${{{var}:-{default}}}:" in obs, f"{var} not parameterized"
+
+
+def test_render_compose_wrapper_and_taskfile_use_offset(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    wrapper = dest / "scripts" / "compose.sh"
+    assert wrapper.is_file()
+    body = wrapper.read_text()
+    # The wrapper derives host ports from PORT_OFFSET and defaults, then execs compose.
+    assert (
+        "PORT_OFFSET" in body
+        and "HTTP_HOST_PORT" in body
+        and "exec docker compose" in body
+    )
+    # Taskfile dev/dev:lite route through the wrapper (so the offset applies).
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "scripts/compose.sh" in taskfile
