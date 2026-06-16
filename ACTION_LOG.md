@@ -1230,3 +1230,17 @@ created project), so A and B are always cleaned up on every exit path.
 Verified by the real docker tier: `pytest ::test_two_dev_lite_stacks_corun_without_collision` →
 1 passed (54s); post-run `docker ps -a`/`volume ls --filter name=swfwacc-corun` both empty (no
 leaks). ruff format + check clean.
+
+#### #0113 · completed · FWK31 · 2026-06-16
+Task 7 Step 1: consumer-facing docs + upgrade re-seed note in generated README, with TDD guard.
+Verified the deploy claim by reading staging.yml.jinja and prod.yml.jinja — both are
+self-contained and do NOT reference infra/compose/base.yml (claim is accurate and safe).
+Added `test_render_readme_documents_compose_isolation_and_upgrade` to tests/test_copier_runner.py;
+confirmed RED (`PORT_OFFSET` not in rendered readme), then added two blocks to README.md.jinja:
+(1) "Running a second stack" note in the Local stack section (PORT_OFFSET usage, per-project name
+isolation, link to .env.example for full var list); (2) "Upgrading from an earlier release"
+subsection explaining the base.yml compose name change from `compose` → `{{ project_slug }}`,
+orphaned volumes, and re-seed steps (`task dev` + `task db:seed`). Confirmed GREEN (1 passed).
+Render sanity: `{{ project_slug }}` interpolated correctly to `demo`, markdown headings intact.
+ruff format --check + check clean. Files changed: src/framework_cli/template/README.md.jinja,
+tests/test_copier_runner.py.

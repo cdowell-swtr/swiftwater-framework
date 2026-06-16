@@ -3431,3 +3431,13 @@ def test_render_compose_wrapper_and_taskfile_use_offset(tmp_path: Path):
     # Taskfile dev/dev:lite route through the wrapper (so the offset applies).
     taskfile = (dest / "Taskfile.yml").read_text()
     assert "scripts/compose.sh" in taskfile
+
+
+def test_render_readme_documents_compose_isolation_and_upgrade(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    readme = (dest / "README.md").read_text()
+    # The PORT_OFFSET co-run capability is documented for consumers (FWK31).
+    assert "PORT_OFFSET" in readme
+    # The upgrade re-seed note explains the compose project-name change and recovery steps.
+    assert "db:seed" in readme and "base.yml" in readme
