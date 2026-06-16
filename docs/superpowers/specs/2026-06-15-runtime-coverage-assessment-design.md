@@ -1,10 +1,10 @@
-# Provisioned-but-Unexercised Coverage — Assessment (FWK18a) — Design
+# Provisioned-but-Unexercised Coverage — Assessment (FWK18) — Design
 
-> Design spec for **FWK18a**: a one-off multi-agent (`Workflow`) assessment that
+> Design spec for **FWK18**: a one-off multi-agent (`Workflow`) assessment that
 > finds places where the framework's **template provisions** a real-runtime/build
 > surface but **no test exercises** it — the class behind FWK17 (a git dep that
 > broke `docker build`, no git in the builder) and FWK8 (Traefik routing nothing
-> routed through). Status: approved (brainstorming, 2026-06-15). FWK18b (the
+> routed through). Status: approved (brainstorming, 2026-06-15). FWK29 (the
 > durable mechanism) is designed *from this assessment's evidence*, separately.
 
 ## Context & goal
@@ -16,9 +16,9 @@ The host-based tiers (unit, functional, `uv sync`) and even `compose up` (which
 starts a service without exercising it) miss the class.
 
 Recon already shows ≥1 concrete gap (**baseline `docker build` is never run** — the
-only Dockerfile build test is claudesubscriptioncli-gated). The goal of FWK18a is
+only Dockerfile build test is claudesubscriptioncli-gated). The goal of FWK18 is
 to find **all** such surfaces, ranked, so each confirmed gap becomes a candidate
-test PR (the way FWK8/FWK17 were), and so FWK18b can be designed on evidence.
+test PR (the way FWK8/FWK17 were), and so FWK29 can be designed on evidence.
 
 ## The "exercised" heuristic (shared, load-bearing)
 
@@ -83,11 +83,11 @@ get read/grep/glob over the repo (they reason over real files, not a diff).
 A committed report: `docs/superpowers/assessments/2026-06-15-runtime-coverage-gaps.md`
 — the ranked inventory. Each confirmed gap is a
 candidate follow-on **test task** (new `FWK` ids, sequenced by risk), mirroring how
-FWK8/FWK17 closed their instances. The report also feeds **FWK18b**.
+FWK8/FWK17 closed their instances. The report also feeds **FWK29**.
 
-## Out of scope (FWK18a)
+## Out of scope (FWK18)
 
-- **FWK18b — the durable mechanism.** Whether the recurring pattern warrants a
+- **FWK29 — the durable mechanism.** Whether the recurring pattern warrants a
   **framework-native agentic reviewer** (and how it resolves the target-scope
   wrinkle: the framework-target diff *excludes* the template payload, so a
   reviewer reasoning about `template/infra/...` vs `tests/...` needs a bespoke
@@ -95,10 +95,10 @@ FWK8/FWK17 closed their instances. The report also feeds **FWK18b**.
   obs-completeness / integrity reverse-scan) is decided from this report's
   evidence, in a separate brainstorm.
 - **Fixing the gaps.** Each confirmed gap is its own follow-on test PR, prioritized
-  off the inventory; FWK18a only *finds and ranks* them.
+  off the inventory; FWK18 only *finds and ranks* them.
 
 ## PLAN
 
-- **FWK18a** → this design: run the multi-agent assessment, commit the ranked
+- **FWK18** → this design: run the multi-agent assessment, commit the ranked
   inventory. No release (analysis + a docs artifact). The inventory spawns
-  follow-on test tasks + gates FWK18b.
+  follow-on test tasks + gates FWK29.

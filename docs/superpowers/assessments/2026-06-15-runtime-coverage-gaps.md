@@ -1,11 +1,11 @@
-# Runtime/Build Coverage-Gap Inventory (FWK18a)
+# Runtime/Build Coverage-Gap Inventory (FWK18)
 
 > Ranked inventory of swiftwater-framework **template-provisioned** real-runtime/build
 > surfaces that **no test exercises** (drives + asserts the effect of). Produced by the
-> FWK18a multi-agent `Workflow` assessment (2026-06-15). Spec:
+> FWK18 multi-agent `Workflow` assessment (2026-06-15). Spec:
 > `docs/superpowers/specs/2026-06-15-runtime-coverage-assessment-design.md`; plan:
 > `docs/superpowers/plans/2026-06-15-coverage-assessment.md`. Each gap is a candidate
-> follow-on test task; the recurring categories seed **FWK18b** (the durable mechanism).
+> follow-on test task; the recurring categories seed **FWK29** (the durable mechanism).
 
 ## Method & numbers
 
@@ -219,7 +219,7 @@ prioritization call is the maintainer's.)
   smoke, `load.sh` k6 gate, docs.yml `mike` publish trigger-assert. (Dependabot is
   already adequately covered — no action.)
 
-## Seeds for FWK18b (the durable mechanism)
+## Seeds for FWK29 (the durable mechanism)
 
 The surviving gaps collapse into a handful of **recurring shapes** — which is the
 real product of this assessment, because they are what a framework-native reviewer
@@ -243,8 +243,8 @@ or a deterministic completeness check could catch going forward:
    `.claude/hooks/*` surface asserted to *render* but never *run*. (notify, load, CD,
    gate hook.)
 
-The **target-scope wrinkle** stands for FWK18b: a framework-native reviewer reasoning
+The **target-scope wrinkle** stands for FWK29: a framework-native reviewer reasoning
 about `template/infra/**` provisioning vs `tests/**` coverage needs a bespoke scope —
-the standard framework-target diff *excludes* the template payload. FWK18b decides
+the standard framework-target diff *excludes* the template payload. FWK29 decides
 reviewer-vs-deterministic-check per shape (shapes 1–2 look deterministic; 3–4 look
 judgment-heavy) from this evidence.
