@@ -1181,3 +1181,28 @@ project received a non-executable `scripts/compose.sh`, making `task dev` / `tas
 with "permission denied". Fixed via `git update-index --chmod=+x`. Added regression guard to
 `tests/test_copier_runner.py::test_render_compose_wrapper_and_taskfile_use_offset`:
 `assert os.access(wrapper, os.X_OK)`. Rendered mode now `-rwxr-xr-x` (confirmed). Test green.
+
+#### #0111 · completed · FWK31 · 2026-06-16
+Task 5: the acceptance docker-up tier (`tests/acceptance/test_rendered_project.py`) now binds
+RANDOM host ports and discovers the assigned port at connect time, so a test stack never
+collides with a live UAT/`task dev` stack or another test. Extended the autouse
+`_isolate_compose_project` fixture to set all 16 `*_HOST_PORT=0` (docker → ephemeral) and
+refreshed its docstring (FWK31 is now IMPLEMENTED). Added a `_compose_host_port(dest, files,
+service, container_port)` helper that runs `docker compose <-f…> port <svc> <cport>` (under
+`_compose_env()`, so it resolves the SAME monkeypatched COMPOSE_PROJECT_NAME stack) and parses
+the trailing port from `0.0.0.0:NNNNN` / `[::]:NNNNN`.
+Deviation — plan under-enumerated the affected tests: it claimed only 4 connect and that the
+`*_leaves_no_root_owned_files` tests "do not connect." A grep audit found NINE connecting tests
+that needed the port-discovery rewire (the blanket `=0` breaks every fixed `localhost:<port>`):
+dev_lite_stack_serves_health (app:8000), dev_stack_routes_through_traefik (traefik:443 — only
+the port swapped; TLS chain-verify + Host header untouched), dev_stack_prometheus_scrapes_app
+(prometheus:9090), app_logs_reach_loki (app:8000 + loki:3100 — two discoveries),
+traces_reach_tempo (app:8000 + tempo:3200), smoke_and_sniff_against_lite (app:8000 →
+SMOKE/SNIFF/E2E_TARGET), dev_stack_serves_seeded_items (app:8000), dev_lite_stack_leaves_no_root
+(app:8000 /health readiness — DOES connect, contra the plan), frontend_dev_stack_leaves_no_root
+(frontend:5173 readiness — DOES connect). Only `test_rendered_workers_dev_stack_leaves_no_root`
+needed NO edit: it waits on a filesystem path (`__pycache__` appearing in the bind mount), never
+opens a socket. Verified by the real docker tier: `pytest -k "dev_lite_stack_serves_health or
+routes_through_traefik or prometheus_scrapes or serves_seeded or logs_reach_loki or
+traces_reach_tempo or smoke_and_sniff or leaves_no_root"` → 10 passed, 0 skipped (345s), all on
+random host ports. ruff format + check clean.
