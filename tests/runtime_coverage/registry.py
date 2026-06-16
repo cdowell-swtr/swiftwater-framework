@@ -387,6 +387,14 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "test_rendered_project_blocks_contract_migration",
     ),
     SurfaceClass(
+        "script:scripts/compose.sh",
+        "scripts/compose.sh",
+        _EX,
+        # Behavioral: shifts host ports by PORT_OFFSET and respects per-var overrides
+        # before exec-ing docker compose (FWK31).
+        "test_compose_wrapper_shifts_host_ports_by_offset",
+    ),
+    SurfaceClass(
         "script:scripts/coverage.sh",
         "scripts/coverage.sh",
         _EX,

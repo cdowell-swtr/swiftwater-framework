@@ -3441,3 +3441,43 @@ def test_render_readme_documents_compose_isolation_and_upgrade(tmp_path: Path):
     assert "PORT_OFFSET" in readme
     # The upgrade re-seed note explains the compose project-name change and recovery steps.
     assert "db:seed" in readme and "base.yml" in readme
+
+
+def test_compose_wrapper_shifts_host_ports_by_offset(tmp_path: Path):
+    """The rendered scripts/compose.sh shifts every host port by PORT_OFFSET and respects
+    an explicit per-var override, before exec-ing docker compose (FWK31)."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    capture = tmp_path / "captured-env.txt"
+    shim = bindir / "docker"
+    shim.write_text('#!/usr/bin/env bash\nenv > "$CAPTURE_FILE"\n')
+    shim.chmod(0o755)
+
+    def run_wrapper(extra_env: dict[str, str]) -> dict[str, str]:
+        env = {
+            **os.environ,
+            "PATH": f"{bindir}:{os.environ['PATH']}",
+            "CAPTURE_FILE": str(capture),
+            **extra_env,
+        }
+        result = subprocess.run(["./scripts/compose.sh", "up"], cwd=dest, env=env)
+        assert result.returncode == 0
+        return dict(
+            line.split("=", 1)
+            for line in capture.read_text().splitlines()
+            if "=" in line
+        )
+
+    # PORT_OFFSET shifts every default port by the offset.
+    shifted = run_wrapper({"PORT_OFFSET": "100"})
+    assert shifted["HTTP_HOST_PORT"] == "8100"
+    assert shifted["POSTGRES_HOST_PORT"] == "5532"
+    assert shifted["GRAFANA_HOST_PORT"] == "3100"
+    # An explicit per-var override is respected (not shifted).
+    overridden = run_wrapper({"PORT_OFFSET": "100", "HTTP_HOST_PORT": "9999"})
+    assert overridden["HTTP_HOST_PORT"] == "9999"
+    # No offset → today's defaults (single-stack DX preserved).
+    defaults = run_wrapper({})
+    assert defaults["HTTP_HOST_PORT"] == "8000"

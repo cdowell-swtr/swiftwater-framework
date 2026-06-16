@@ -5,6 +5,7 @@
 # command passed as arguments.
 set -euo pipefail
 off="${PORT_OFFSET:-0}"
+# Note: if PORT_OFFSET pushes any port past 65535 the bind will fail at runtime.
 _p() {  # _p VAR DEFAULT  -> export VAR=$((DEFAULT+off)) unless already set
   local var="$1" default="$2"
   if [ -z "${!var:-}" ]; then export "$var"="$((default + off))"; fi

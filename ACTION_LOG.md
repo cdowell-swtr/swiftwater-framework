@@ -1244,3 +1244,26 @@ orphaned volumes, and re-seed steps (`task dev` + `task db:seed`). Confirmed GRE
 Render sanity: `{{ project_slug }}` interpolated correctly to `demo`, markdown headings intact.
 ruff format --check + check clean. Files changed: src/framework_cli/template/README.md.jinja,
 tests/test_copier_runner.py.
+
+#### #0114 · completed · FWK31 · 2026-06-16
+Fix review finding C1 (gate failure) + I1 (coverage-honesty gap) for scripts/compose.sh.
+C1: `test_every_surface_is_classified` was failing because `script:scripts/compose.sh` was
+unclassified in the FWK29 registry. I1: the existing wrapper test only did static string
+checks, so the wrapper could not be classified EXERCISED.
+
+Three changes: (1) Added `test_compose_wrapper_shifts_host_ports_by_offset` to
+tests/test_copier_runner.py — renders the project, shims `docker` on PATH with a script that
+dumps `env` to a capture file, then drives `./scripts/compose.sh up` three ways: PORT_OFFSET=100
+(asserts HTTP_HOST_PORT=8100, POSTGRES_HOST_PORT=5532, GRAFANA_HOST_PORT=3100), PORT_OFFSET=100
+with HTTP_HOST_PORT=9999 override (asserts override respected), and no offset (asserts
+HTTP_HOST_PORT=8000). Test passes in 1.93s — the wrapper already worked. (2) Added
+`script:scripts/compose.sh` to tests/runtime_coverage/registry.py as EXERCISED, evidence
+= `test_compose_wrapper_shifts_host_ports_by_offset`, inserted before `script:scripts/coverage.sh`
+(alphabetical). (3) Added a one-line overflow note to `src/framework_cli/template/scripts/compose.sh`
+near the _p function noting that PORT_OFFSET pushing a port past 65535 will fail at bind time.
+
+Verified: `pytest tests/runtime_coverage/ tests/test_copier_runner.py::test_compose_wrapper_shifts_host_ports_by_offset -q`
+→ 10 passed (5.11s), EXIT=0; `test_every_surface_is_classified` now green. Shellcheck on the
+rendered compose.sh: CLEAN. ruff format --check + check: CLEAN.
+Files changed: tests/test_copier_runner.py, tests/runtime_coverage/registry.py,
+src/framework_cli/template/scripts/compose.sh.
