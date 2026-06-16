@@ -1107,3 +1107,14 @@ picked up by `up` (`_compose_env` spreads os.environ) AND the bare `down` calls 
 `down -v` is scoped to the test's own volume. Verified: serves_health now PASSES (32s, isolated
 `swfwacc-…` stack). Opened FWK31 for the template-side fix (per-slug project name + parameterized
 host port so two generated projects co-run; ships a release).
+
+#### #0104 · completed · FWK31 · 2026-06-16
+Brainstorm → design spec for the template-side compose isolation (scope confirmed: full
+concurrency, two+ live stacks at once — UAT-in-browser + tests). Design: (1) `name: {{ project_slug }}`
+in base.yml; (2) all 16 published host ports → `${<SERVICE>_HOST_PORT:-default}` (dev.yml 7 +
+observability.yml 9); (3) a single `PORT_OFFSET` applied by `task dev` to shift all ports (one-knob
+co-run); (4) acceptance tests set `*_HOST_PORT=0` + discover via `docker compose port` (ephemeral,
+collide with nothing); (5) upgrade re-seed accepted (small seed DB; documented not migrated).
+Constraint: NO `APP_` prefix on the port vars (app pydantic settings namespace). staging/prod deploy
+untouched. Ships a patch release. Spec:
+`docs/superpowers/specs/2026-06-16-fwk31-compose-isolation-design.md`. Next: writing-plans.
