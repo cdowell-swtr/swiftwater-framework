@@ -764,3 +764,9 @@ pre-commit. Updated [[pep508-git-dep-needs-hatch-allow-direct-references]] with 
 docker-builder-git + testing-gap lessons. Deferred (per user): Option 2 (PyPI-publish
 litellm-claude-cli) + private-dep BuildKit secret. Releasing v0.2.10; Meridian then re-runs
 `framework upgrade` + drops its `--allow-drift` (their MDN26).
+
+#### #0074 · completed · release · 2026-06-15
+Cut **v0.2.10** (bundled into the FWK17 PR). Bumped pyproject `0.2.9->0.2.10`, `uv lock`,
+dogfood tag pin -> `v0.2.10`; ruff+mypy(dogfood) clean, `uv lock --check` clean, `uv build`
+-> framework_cli-0.2.10.{whl,tar.gz}, 27 version-consistency tests green. Ships the
+Docker-builder git fix so claudesubscriptioncli consumers' `docker build` works.
