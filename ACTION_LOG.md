@@ -748,3 +748,19 @@ dogfood tag pin -> `v0.2.9`; ruff+mypy(dogfood) clean, `uv lock --check` clean, 
 -> framework_cli-0.2.9.{whl,tar.gz}, 27 version-consistency tests green. Ships the
 `--with agents` tool loop — the capstone of the agent arc (llm → claudesubscriptioncli →
 agents). Meridian can now run a tool-using agent on its subscription via `run(profile="sub")`.
+
+#### #0073 · completed · FWK17 · 2026-06-15
+Fixed a consumer-blocking Docker build bug surfaced by Meridian's brief
+(`meridian/_docs/.../2026-06-15-framework-llm-battery-dockerfile-git.md`): the
+`claudesubscriptioncli` git dep (`litellm-claude-cli @ git+…`) can't be cloned in the
+generated project's Docker builder stage because the uv image (`uv:python3.12-bookworm-slim`)
+has no `git` → `"Git executable not found"`. **Invisible to our acceptance tier** (it runs
+`uv sync` on the host, which has git; never `docker build`) — a Meridian-as-integration-test
+catch. TDD: wrote a `--target builder` docker-build regression test that reproduced the exact
+failure (red), then added a **battery-gated** `apt-get install git` to the builder stage of
+`infra/docker/Dockerfile.jinja` (non-subscription images stay lean) → green (65s). Guard
+isolation verified (llm-only Dockerfile unchanged). No Dockerfile lint hook in the template
+pre-commit. Updated [[pep508-git-dep-needs-hatch-allow-direct-references]] with the
+docker-builder-git + testing-gap lessons. Deferred (per user): Option 2 (PyPI-publish
+litellm-claude-cli) + private-dep BuildKit secret. Releasing v0.2.10; Meridian then re-runs
+`framework upgrade` + drops its `--allow-drift` (their MDN26).
