@@ -53,8 +53,14 @@ Grouped into clusters for the finder fan-out:
 
 ## The assessment — a `Workflow` multi-agent sweep
 
-1. **Enumerate (cheap):** the cluster list above is the fixed work-list (no
-   discovery agent needed — it's enumerated here).
+1. **Census (independent taxonomy check):** the cluster list above is a *seed*, not
+   a closed set — it's the author's enumeration and infra-centric, so two enumerator
+   agents **blind to the clusters** independently catalogue every provisioned
+   real-runtime/build surface over the *whole* template (orthogonal lenses: by
+   lifecycle, by directory sweep). A deterministic controller reconcile maps each to
+   a seed cluster; the **residual** (surfaces mapping to none) answers "do other
+   clusters exist?" and becomes an extra assessed cluster. (Without this, a forgotten
+   category is silently never assessed — the assessment's own blind spot.)
 2. **Find (fan-out, one agent per cluster):** each finder reads the relevant
    template files AND greps `tests/` (acceptance + `scripts/dogfood_e2e.py`),
    classifying every provisioned surface in its cluster as

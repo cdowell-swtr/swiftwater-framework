@@ -35,6 +35,16 @@ mocks it out.
 
 ---
 
+## The 7 clusters are a SEED, not a closed set
+
+The clusters below are my (the author's) enumeration — an un-audited assumption.
+The finders only assess *within* their cluster; nothing in Phases 1–3 independently
+checks whether the **taxonomy itself is complete** (a forgotten category → no finder
+ever surfaces it). The 7 are visibly infra-centric and barely reach provisioned
+execution surfaces *outside* `infra/` (`.github/workflows/*`, `.pre-commit-config.yaml`,
+`alembic/`, `seed.py`, frontend build tooling). **Phase 0 (below) independently
+challenges this taxonomy** before any finder runs.
+
 ## The 7 surface clusters (finder inputs — REVIEW THESE FILE LISTS)
 
 Every path is under `src/framework_cli/template/`. Brace-named files are Copier
@@ -116,7 +126,28 @@ conditionals (rendered only when the battery is selected). Finders read the
 
 `Workflow` script (authored at run time; persisted to the session dir). Structure:
 
-- **Phase 1 — Find (fan-out, 1 finder per cluster, 7 agents, `parallel`/`pipeline`).**
+- **Phase 0 — Independent surface census (2 enumerators, BLIND to the 7 clusters).**
+  Neither enumerator is shown my cluster taxonomy — they enumerate provisioned
+  real-runtime/build surfaces from scratch over the **whole** rendered template
+  (not just `infra/`), with orthogonal lenses so neither anchors on my framing:
+  - *Enumerator A — by lifecycle:* for each of image-build / container-boot /
+    request-serve / scheduled-background / CI-time / commit-time / deploy-time, list
+    every provisioned surface that executes then (`file:line` + one-line what-it-does).
+  - *Enumerator B — by directory sweep:* walk the entire tree top-to-bottom
+    (`.github/`, `scripts/`, `alembic/`, `src/`, frontend, root configs, `infra/`)
+    and list anything with a real runtime/build effect.
+
+  Then a **controller reconcile (deterministic, NOT an agent):** union A+B's
+  surfaces, map each onto one of the 7 clusters; the **residual** (surfaces mapping
+  to none) answers "do other clusters exist?". If non-empty → it becomes an **8th
+  "residual / cross-cutting" cluster** fed into Phase 1 (so the missed surfaces get
+  *assessed*, not just noted), and the taxonomy gap is reported to the user.
+
+  Enumerator schema (per surface): `{ surface, provisioned_at /*file:line*/,
+  lifecycle_phase, what_it_does, maps_to_cluster?: "C1".."C7"|"NONE" }` (A/B fill
+  what they can; the NONE/residual call is the controller's, not the agent's, so the
+  reconcile stays independent of agent self-classification).
+- **Phase 1 — Find (fan-out, 1 finder per cluster, 7 + any residual clusters, `parallel`/`pipeline`).**
   Each finder gets: the rubric (verbatim), its cluster's provisioned file-list, the
   test-side grep targets, and `read_file`/`grep`/`glob` over the repo. It returns a
   structured list of `{surface, provisioned_at (file:line), status, evidence,
@@ -161,9 +192,12 @@ slowly; **low** = cosmetic/redundantly-covered-elsewhere.
 ## Run + finalize steps
 
 - [ ] **Step 1 — Author the Workflow script** per the structure above (inline
-  `script`; it persists to the session dir for re-runs). Phase 1 `pipeline(clusters,
-  finder, gaps => parallel(skeptics))` so each cluster's gaps verify as it finishes;
-  Phase 3 synthesize from the flattened survivors.
+  `script`; it persists to the session dir for re-runs). Phase 0 `parallel([enumA,
+  enumB])` → controller reconcile (plain JS: union, map-to-cluster, residual) →
+  build the cluster list (7 + residual). Phase 1 `pipeline(clusters, finder, gaps =>
+  parallel(skeptics))` so each cluster's gaps verify as it finishes; Phase 3
+  synthesize from the flattened survivors. **Log the residual** so the taxonomy
+  outcome is visible even if empty.
 - [ ] **Step 2 — Run it.** `Workflow({script})`. On completion, read the returned
   inventory.
 - [ ] **Step 3 — Self-validate (controller, NOT an agent).** Before trusting it,
@@ -201,3 +235,7 @@ slowly; **low** = cosmetic/redundantly-covered-elsewhere.
   spot-check are the defense against over-claiming gaps. Both present.
 - **No placeholders:** schemas + prompts are concrete; the run is `Workflow`, the
   validation is a named manual check, the finalize is the standard no-release branch close.
+- **Taxonomy independence (added on user review):** Phase 0's two blind enumerators +
+  controller reconcile independently test whether clusters beyond the 7 exist —
+  closing the "no one audits the partition" gap. The reconcile's residual is the
+  answer; a non-empty residual becomes a real assessed cluster, not a footnote.

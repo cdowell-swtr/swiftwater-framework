@@ -844,3 +844,15 @@ surface as "covered". Recon showed the acceptance suite is LARGE (prometheus/lok
 deploy-e2e/root-owned all covered) → Phase-2 adversarial-verify + a controller manual
 spot-check (Step 3) are the over-claim defense. Awaiting user review of the cluster file-lists
 before running.
+
+#### #0081 · amended · FWK18a · 2026-06-15
+User caught a real design gap: the finders give independent analysis WITHIN each cluster, but
+nothing independently checks whether the 7-cluster TAXONOMY is complete (a forgotten category
+→ no finder surfaces it; the assessment's own blind spot). The 7 were infra-centric, missing
+provisioned execution surfaces outside `infra/` (`.github/workflows/*`, `.pre-commit-config`,
+`alembic/`, `seed.py`, frontend build). Added **Phase 0 — independent surface census**: 2
+enumerators BLIND to the clusters (orthogonal lenses: by-lifecycle, by-directory) catalogue
+all provisioned runtime/build surfaces over the whole template → controller reconcile (plain
+JS) maps each to a seed cluster → the residual answers "do other clusters exist?" and becomes
+an 8th assessed cluster if non-empty. Updated spec + plan; the spec's old "no discovery agent
+needed" line was exactly the flawed assumption.
