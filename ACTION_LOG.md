@@ -940,3 +940,16 @@ the ~50–60 estimate). One representative corrected: the rendered project's ci.
 `lint`, not `gate` (that's the framework's own job name). Spec review (Sonnet) ✓; code-quality
 (Opus) ✓ APPROVE — folded in its suggestion: an exact-set assertion pinning the 3 Dockerfile
 stages (multiplicity, not just presence). 3 tests pass. Controller commits (implementer staged).
+
+#### #0088 · completed · FWK29 · 2026-06-16
+Tasks 2+3 (subagent-driven, Opus implementer): the typed registry + completeness test, seeded.
+All 91 surfaces classified — **41 EXERCISED / 22 EXEMPT / 28 KNOWN_GAP**; all 6 completeness
+tests pass. Spec review (Sonnet) ✓. Code-quality + CLASSIFICATION-ACCURACY review (Opus) ✓
+APPROVE, no critical findings — spot-checked ~15 entries across all statuses against the real
+tests: exporter split correct (prometheus/loki/tempo EXERCISED, postgres/redis/celery/mongodb
+KNOWN_GAP FWK23 — the scrape test hard-filters job==app); worker/beat correctly KNOWN_GAP FWK20
+(the one test that ups them asserts only __pycache__/UID, never the live broker); builder
+EXERCISED-transitively (runtime serves /health through COPY --from=builder) vs frontend-build
+KNOWN_GAP (SPA built-not-served, H6). Implementer flagged 4 inventory disagreements/extensions
+for Task 4 reconciliation (gen_observability.py not in inventory→EXEMPT; dev.yml:frontend→FWK21
+by analogy to H6; services.yml split FWK19/FWK20; coverage-threshold EXERCISED-via-command nuance).
