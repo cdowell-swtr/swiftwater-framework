@@ -919,3 +919,16 @@ unclassified surfaces). In-app code paths explicitly OUT (FWK30's domain — the
 edge). Seeding = the rigorous re-rank + reconcile the FWK18 inventory. Spec written:
 `docs/superpowers/specs/2026-06-16-runtime-coverage-completeness-check-design.md`. Test-only →
 no release. Branch `fwk29-coverage-completeness-check`.
+
+#### #0086 · note · FWK29 · 2026-06-16
+Wrote the FWK29 plan: `docs/superpowers/plans/2026-06-16-runtime-coverage-completeness-check.md`.
+4 tasks: (1) the six enumeration rules (`tests/runtime_coverage/enumerate.py`) + unit tests
+against an all-batteries render; (2) the typed registry scaffold + the completeness test
+(`test_completeness.py`, 6 assertions: set-equality, no-stale, unique-keys, exercised-names-
+existing-test, known-gap-links-FWK, exempt-has-reason) → RED (empty registry); (3) seed the
+registry to GREEN = the rigorous re-rank (10 worked entries from the FWK18 inventory + a rubric
+for the rest); (4) reconcile the inventory + finalize. Grounded the code in real repo patterns
+(`render_project` + `resolve(battery_names())`, the `test_obs_completeness` yaml-parse shape).
+Two execution-time unknowns flagged with remedies: all-batteries co-render (fallback to the
+matrix `full` set) and rendered service/job-name drift (print + correct the representative).
+Test-only → no release.
