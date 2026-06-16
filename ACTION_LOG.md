@@ -783,3 +783,15 @@ provider-acceptance-design.md`. Test-only → NO release (not in the wheel). Use
 scope into the broader CLASS → spun off **FWK18** (agentic assessment of all
 provisioned-but-unexercised real-runtime surfaces → conditional framework-native
 coverage-gap reviewer); sequenced after FWK8.
+
+#### #0076 · amended · FWK8 · 2026-06-15
+Revised the FWK8 spec per user: the mkcert/`task certs` cert path is the incident's
+ORIGIN (a WSL/Windows cert inconsistency) — verify-off + Traefik's default cert left it
+uncovered. Found `task certs` issues a `*.localhost` mkcert cert that `dynamic/tls.yml`
+loads. Found `ci.yml` runs `pytest --ignore=tests/acceptance` → the docker dev-stack tier
+is LOCAL-ONLY (this box has docker+mkcert+go-task), so no mkcert-availability obstacle.
+Revised test: render → `task certs` → up dev → route `https://{slug}.localhost/health`
+with TLS verify ON against the mkcert root CA → 200. Verify-ON makes the cert path
+load-bearing (cert-gen/mount/tls.yml regression fails the handshake; docker-provider
+regression fails the route) — both surfaces, one assertion. Corrected the proof note
+(local execution, not render-matrix).
