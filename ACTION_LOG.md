@@ -832,3 +832,15 @@ Output: `docs/superpowers/assessments/2026-06-15-runtime-coverage-gaps.md`; each
 follow-on test task. Process note: FWK18a's "implementation" is RUNNING the Workflow, not a
 TDD code plan, so it skips writing-plans. NO release (analysis + docs). Branch
 `fwk18a-coverage-assessment`.
+
+#### #0080 · note · FWK18a · 2026-06-15
+On user pushback ("no need for a plan?"), wrote a plan after all — not a TDD code plan but
+the executable design of the Workflow: `docs/superpowers/plans/2026-06-15-coverage-assessment.md`.
+Mapped the 7 clusters to REAL template file-lists (cross-checked vs `find infra -type f`: all
+8 compose overlays, every Dockerfile stage, full observability tree, entrypoint, Taskfile,
+traefik) + the test-side grep targets + the finder/verifier/synthesizer schemas + prompts.
+Highest-leverage review point flagged = a finder pointed at an incomplete file-list reads a
+surface as "covered". Recon showed the acceptance suite is LARGE (prometheus/loki/tempo/
+deploy-e2e/root-owned all covered) → Phase-2 adversarial-verify + a controller manual
+spot-check (Step 3) are the over-claim defense. Awaiting user review of the cluster file-lists
+before running.
