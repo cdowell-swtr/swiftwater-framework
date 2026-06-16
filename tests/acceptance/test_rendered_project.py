@@ -37,6 +37,14 @@ def _compose_env() -> dict[str, str]:
     return {**os.environ, "UID": str(os.getuid()), "GID": str(os.getgid())}
 
 
+def _free_tcp_port() -> int:
+    """An OS-assigned free TCP port (bind :0, read it back, release). Used to give each
+    co-running stack distinct, non-colliding host ports without guessing fixed numbers."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return int(s.getsockname()[1])
+
+
 def _compose_host_port(
     dest: Path, compose_files: list[str], service: str, container_port: int
 ) -> int:
@@ -2171,3 +2179,84 @@ def test_rendered_frontend_dev_stack_leaves_no_root_owned_files(tmp_path: Path):
         "frontend dev server did not serve on :5173 within 240s — scan would be vacuous"
     )
     assert not bad, f"root/non-host-owned files left in frontend/: {bad[:5]}"
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="docker required: brings up two concurrent dev:lite stacks",
+)
+def test_two_dev_lite_stacks_corun_without_collision(tmp_path: Path):
+    """FWK31: two stacks of the same project run at once — distinct compose projects +
+    distinct host ports — and tearing one down leaves the other healthy (isolated volumes)."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    files = ["infra/compose/base.yml", "infra/compose/dev.yml"]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+
+    def up(project: str) -> int:
+        # OS-picked free ports per stack — never fixed 8000/5432, which a live consumer
+        # stack on this box may already hold (the very scenario FWK31 addresses).
+        http_port = _free_tcp_port()
+        pg_port = _free_tcp_port()
+        env = {
+            **_compose_env(),
+            "COMPOSE_PROJECT_NAME": project,
+            "HTTP_HOST_PORT": str(http_port),
+            "POSTGRES_HOST_PORT": str(pg_port),
+        }
+        assert (
+            subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    *fargs,
+                    "--profile",
+                    "lite",
+                    "up",
+                    "-d",
+                    "--build",
+                ],
+                cwd=dest,
+                env=env,
+            ).returncode
+            == 0
+        ), f"{project} up failed"
+        return http_port
+
+    def down(project: str) -> None:
+        subprocess.run(
+            ["docker", "compose", *fargs, "--profile", "lite", "down", "-v"],
+            cwd=dest,
+            env={**_compose_env(), "COMPOSE_PROJECT_NAME": project},
+        )
+
+    def healthy(port: int) -> bool:
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:{port}/health", timeout=3
+                ) as r:
+                    if r.status == 200:
+                        return True
+            except OSError:
+                time.sleep(2)
+        return False
+
+    # Both stacks are ALWAYS torn down (once each) on every exit path. `down -v` on an
+    # already-removed project is an idempotent no-op, so tearing A down inside the body
+    # and again here is harmless.
+    try:
+        p_a = up("swfwacc-corun-a")
+        p_b = up("swfwacc-corun-b")
+        assert healthy(p_a) and healthy(p_b), (
+            "both stacks must serve /health concurrently"
+        )
+        down("swfwacc-corun-a")  # tear A down...
+        assert healthy(p_b), "B stays healthy after A's down -v (isolated volumes)"
+    finally:
+        down("swfwacc-corun-a")
+        down("swfwacc-corun-b")

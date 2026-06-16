@@ -1206,3 +1206,27 @@ opens a socket. Verified by the real docker tier: `pytest -k "dev_lite_stack_ser
 routes_through_traefik or prometheus_scrapes or serves_seeded or logs_reach_loki or
 traces_reach_tempo or smoke_and_sniff or leaves_no_root"` → 10 passed, 0 skipped (345s), all on
 random host ports. ruff format + check clean.
+
+#### #0112 · completed · FWK31 · 2026-06-16
+Task 6: the end-to-end isolation proof. New acceptance test
+`test_two_dev_lite_stacks_corun_without_collision` brings up TWO `dev:lite` stacks of the SAME
+generated project concurrently under distinct compose project names (`swfwacc-corun-a`/`-b`),
+asserts both serve `/health` at once, tears A down with `down -v`, and asserts B stays healthy
+(isolated postgres volume). This is the definitive proof of the FWK31 claim: a per-slug compose
+`name:` + parameterized `${VAR:-default}` host ports let two stacks of one project co-run on one
+host without container/network/volume or port collision.
+Refinement vs the plan's draft — the plan used FIXED host ports (8000/8100, 5432/5532). On this
+dev box (and on a developer's box generally) a live consumer / `task dev` stack may already hold
+8000/5432 — the very scenario FWK31 exists to solve — so fixed ports would flake. Instead added a
+`_free_tcp_port()` helper (bind `:0`, read the OS-assigned port back, release) and gave each
+stack its own OS-picked free HTTP + postgres ports, polling those. Collision-proof on both the
+dev box and CI, and still proves the claim (distinct project names + distinct, non-colliding
+host ports). The `lite` profile publishes BOTH the app (`${HTTP_HOST_PORT:-8000}:8000`) and
+postgres (`${POSTGRES_HOST_PORT:-5432}:5432`), so both env overrides are live. The autouse
+`_isolate_compose_project` fixture's `*_HOST_PORT=0` + COMPOSE_PROJECT_NAME are overridden by the
+explicit per-stack `env=` dicts. Teardown is bulletproof: both `up` calls live inside the `try`
+and the `finally` tears down both projects (an idempotent no-op on an already-removed / never-
+created project), so A and B are always cleaned up on every exit path.
+Verified by the real docker tier: `pytest ::test_two_dev_lite_stacks_corun_without_collision` →
+1 passed (54s); post-run `docker ps -a`/`volume ls --filter name=swfwacc-corun` both empty (no
+leaks). ruff format + check clean.
