@@ -116,6 +116,37 @@ def test_realize_cached_builds_framework_shaped_base_for_coverage_gap(tmp_path):
     assert "seeded comment for the fixture" in diff
 
 
+def test_framework_base_is_packed_with_no_loose_objects(tmp_path):
+    """The cached framework-shaped base must have NO loose git objects.
+
+    `realize_cached` copytrees this base once per fixture; a loose object that git packs
+    or prunes mid-copy makes copytree fail intermittently with
+    `No such file or directory: .../.git/objects/XX` (the FWK30 coverage-gap fixture
+    flake, [[flaky-realize-cached-copytree-git-gc-race]]). Packing the base after
+    creation leaves only a stable packfile, removing the race surface.
+    """
+    import subprocess
+
+    from framework_cli.review.evals import _framework_base
+
+    base = tmp_path / "framework-base"
+    base.mkdir()
+    _framework_base(base)
+    out = subprocess.run(
+        ["git", "count-objects", "-v"],
+        cwd=base,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    counts = dict(line.split(": ", 1) for line in out.splitlines() if ": " in line)
+    # No loose objects (every object is in the pack) → copytree cannot race a vanishing one.
+    assert counts.get("count") == "0", (
+        f"cached base has loose objects (race surface):\n{out}"
+    )
+    assert int(counts.get("in-pack", "0")) > 0, f"cached base should be packed:\n{out}"
+
+
 def test_active_agents_excludes_battery_gated_framework_only_agent(monkeypatch):
     """Defense-in-depth: a battery-gated framework_only agent must also be excluded."""
     from framework_cli import batteries as bat
