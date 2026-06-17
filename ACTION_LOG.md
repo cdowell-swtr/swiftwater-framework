@@ -1539,3 +1539,11 @@ KNOWN_GAP), commits what's done, finishes the rest of the current item that does
 moves to the next. Generalizes the real-bug rule (now cross-references it); the sole intended
 permission gate is the terminal batch-PR-for-review. Morning report gains a dedicated "PARKED —
 needs my decision/permission" to-do list. PR #51 updated.
+
+#### #0135 · completed · coverage-batch · 2026-06-17
+Added a "Transient Claude API / safety-classifier unavailability — RETRY, never fail" rule to the
+shared policy (per user): a Claude API / auto-mode error ("auto mode cannot determine the safety of
+Bash … <model> temporarily unavailable") is transient infrastructure, NOT a decision point — the run
+does NOT fail/park/skip; it waits ~60s and retries the same action at 1-minute intervals
+indefinitely until it works, then resumes. No give-up timeout. Kept distinct from the escape hatch
+(human-decision park) and noted the separate full-quota-outage case (cron, not in-session sleep). PR #51 updated.

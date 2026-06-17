@@ -52,6 +52,24 @@ This generalizes the real-bug policy below — an ambiguous fix is just one kind
 The ONLY thing that waits for me is the **terminal step: opening the batch PR for review** (the merge
 is the single intended permission gate). Never leave the `gate` tier red.
 
+## Transient Claude API / safety-classifier unavailability — RETRY, never fail
+
+**Distinct from the escape hatch.** A Claude API / auto-mode error — e.g. *"auto mode cannot
+determine the safety of Bash right now … <model> is temporarily unavailable"* — is **transient
+infrastructure**, NOT a test result and NOT a decision point. Do **not** fail, park, skip, xfail, or
+abandon anything because of it.
+
+- **Wait ~60s and retry the exact same action. Keep retrying at 1-minute intervals, indefinitely,
+  until it succeeds**, then resume exactly where you left off.
+- A long or repeated outage is still just "wait longer" — **never** conclude an item or the run
+  failed merely because the classifier has been erroring for a while. There is no give-up timeout.
+- Applies to every such API/classifier error (Bash gating, tool dispatch, subagent spawn, etc.).
+  Read-only work that doesn't need the classifier may continue meanwhile, but the blocked action is
+  **not** skipped — come back and complete it once the classifier recovers.
+- (Different failure mode: a full multi-hour **quota** outage can kill the session itself. If the run
+  must survive that, drive it from a standing cron that self-heals at the next reset — not an
+  in-session sleep. For a transient classifier blip, the 1-minute retry above is the whole answer.)
+
 ## Operating environment (laptop)
 
 - Requires **docker acceptance parity** — buildx + dind-capable, host-UID-clean. See
