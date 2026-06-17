@@ -1316,4 +1316,12 @@ both-direction guard erroring in restore/integrity, `upgrade` assisted self-bump
 TTY → prompt → `uv tool install …@target` + re-exec; else refuse; `--bump-cli` forces),
 `framework --version`. CI unaffected (generated `ci.yml` already pins `…@${_commit}`). Ships
 v0.2.12. Spec committed: `docs/superpowers/specs/2026-06-16-fwk34-cli-version-sync-design.md`.
-Next: writing-plans → implementation. Branch `fwk34-cli-version-sync`.
+Branch `fwk34-cli-version-sync`.
+
+Plan-time refinement (spec updated): `integrity` runs from generated Taskfile preconditions
+(`task dev`/`task ci`) with the dev's GLOBAL CLI (only GitHub-CI pins `…@${_commit}`), so a
+hard skew-error there would newly block `task dev` on benign cross-project skew. Resolved:
+`restore` keeps the hard guard (it WRITES a wrong-version file), but `integrity` becomes
+skew-aware ADVISORY — warns + exits 0 (never blocks) on skew, unchanged + authoritative when
+in-sync/`--ci`. Implementation plan written (7 tasks, TDD, full code):
+`docs/superpowers/plans/2026-06-16-fwk34-cli-version-sync.md`. Next: subagent-driven execution.

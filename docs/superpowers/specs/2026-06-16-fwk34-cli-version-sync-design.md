@@ -82,25 +82,42 @@ def project_version_skew(project: Path) -> tuple[VersionSkew, str, str]:
 Pure and side-effect-free → unit-tested as a truth table. This is the single source of
 truth consumed by changes 3 and 4.
 
-### 3. B — skew guard in `restore` and `integrity`
+### 3. B — skew handling in `restore` (hard) and `integrity` (advisory)
 
-Both call `project_version_skew(project)` **before** rendering the bundled canonical and
-raise a typed `VersionSkewError` (surfaced as a non-zero `typer` exit) on a non-`IN_SYNC`
-result. No auto-bump here — an ahead-skew would require silently *downgrading* the global
-CLI, which we never do; the developer chooses bump-CLI vs upgrade-project.
+`restore` and `integrity` differ in how aggressively they react, because their cost
+differs: `restore` actively *writes* a wrong-version file, while `integrity` only
+*reports*. No auto-bump in either — an ahead-skew would require silently *downgrading* the
+global CLI, which we never do; the developer chooses bump-CLI vs upgrade-project. The
+directional remedy string is shared:
 
-- `CLI_BEHIND`: *"This project is pinned `<commit_tag>` but your framework CLI is
-  `<installed_tag>`. `restore`/`integrity` would render the wrong version. Upgrade the CLI:
-  `uv tool install git+https://github.com/cdowell-swtr/swiftwater-framework@<commit_tag>`,
-  then retry."*
-- `CLI_AHEAD`: *"This project is pinned `<commit_tag>` but your framework CLI is
-  `<installed_tag>`. Either upgrade the project (`framework upgrade`), or pin a matching CLI
-  (`uv tool install …@<commit_tag>`)."*
+- `CLI_BEHIND` remedy: *"Upgrade the CLI: `uv tool install
+  git+https://github.com/cdowell-swtr/swiftwater-framework@<commit_tag>`, then retry."*
+- `CLI_AHEAD` remedy: *"Either upgrade the project (`framework upgrade`), or pin a matching
+  CLI (`uv tool install …@<commit_tag>`)."*
 
-Call sites: `integrity/restore.py::restore_file` (before the `render_project` at the
-canonical-render step) and the `integrity` command in `cli.py` (before it renders/compares).
+**`restore` — hard guard.** `integrity/restore.py::restore_file` calls
+`require_version_sync(project)` *before* the canonical render and raises `VersionSkewError`
+(surfaced as a non-zero `typer` exit) on any non-`IN_SYNC` result. Refusing is correct:
+restoring under skew would overwrite the file with a wrong-version canonical.
+
+**`integrity` — skew-aware, non-blocking.** `integrity` runs from generated-project
+Taskfile preconditions (`task dev`, `task ci`) using the developer's **global** CLI (only
+GitHub-CI pins `…@${_commit}` via `--ci`), so cross-project devs are routinely skewed.
+Hard-failing there would block `task dev` on benign skew. Instead, the `integrity` command
+checks the skew first:
+
+- `IN_SYNC` (always true under `--ci`, since CI pins the CLI): unchanged — run
+  `check_integrity`, report drift, exit non-zero on fatal findings.
+- skew (either direction): drift computed against a wrong-version canonical is unreliable,
+  so **do not assert it as a failure**. Emit a single non-fatal warning naming the skew and
+  the directional remedy, and **exit 0** (never blocks `task dev`). The message notes that
+  `framework restore` is disabled until the versions match (so the dev isn't sent into the
+  restore trap). This *improves* today's behaviour, which already fails the precondition
+  with a misleading "run `framework restore`" suggestion under skew.
+
 `downskill` also renders via `render_project`, but it operates within a single CLI
-invocation that owns the version and is not a skew vector — left unchanged.
+invocation that owns the version and is not a skew vector — left unchanged. The
+`integrity --allow-drift` record path does not render, so it is left unguarded.
 
 ### 4. C — assisted CLI self-bump on `upgrade`
 
@@ -159,8 +176,11 @@ Framework-source pytest (runs in the framework venv; standard `gate`-tier):
 - Skew helper: truth table over (installed, `_commit`) → `IN_SYNC`/`CLI_BEHIND`/
   `CLI_AHEAD`, including equal, behind, ahead, and missing-`_commit`. Monkeypatch
   `installed_framework_version` + a fixture `.copier-answers.yml`.
-- B: `restore_file` and the `integrity` command raise `VersionSkewError` with the correct
-  directional message when skewed, and proceed (reach the render) when `IN_SYNC`.
+- B (`restore`, hard): `restore_file` raises `VersionSkewError` with the correct directional
+  remedy when skewed (both directions), and proceeds to the render when `IN_SYNC`.
+- B (`integrity`, advisory): the `integrity` command exits 0 with a non-fatal skew warning
+  (and does **not** assert drift) when skewed, in **both** directions; and behaves exactly
+  as today (runs `check_integrity`, fatal on drift) when `IN_SYNC` and under `--ci`.
   Monkeypatch the installed version and the project `_commit`.
 - C: the *decision* function (inputs: installed, target, is-uv-tool, is-tty, `--bump-cli`
   → outcome `bump` | `refuse` | `proceed`) as a truth table, with the installer/exec/TTY
