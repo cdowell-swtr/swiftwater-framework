@@ -1101,6 +1101,376 @@ def test_rendered_project_dev_stack_routes_through_traefik(tmp_path: Path):
 
 
 @pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: live dev stack for the Traefik :80 redirect + mongo health",
+)
+def test_rendered_dev_stack_http_redirect_and_mongo_health(tmp_path: Path) -> None:
+    # FWK26 (M1 + M2): the only through-Traefik test connects to :443; nothing connects to :80, so a
+    # removed/broken HTTP->HTTPS redirect ships silently. And the mongo COMPOSE service (mongosh-ping
+    # healthcheck quoting, mongodata volume, 27017) is never `compose up`-ed — only the testcontainers
+    # data-store round-trip is. Bring up ONE dev stack (with the mongodb battery so `mongo:` renders)
+    # and assert both: (M1) :80 -> 30x + Location: https://, (M2) mongo container reports healthy +
+    # a mongosh client pings. NOTE: no `task certs` / mkcert — the :80 probe is plaintext and we never
+    # hit :443.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": resolve(["mongodb"])})
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    compose = ["docker", "compose", *fargs, "--profile", "dev"]
+    up = [*compose, "up", "-d", "--build", "app", "postgres", "traefik", "mongo"]
+    down = [*compose, "down", "-v"]
+    env = _compose_env()
+    assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+    try:
+        # ---------- M1: HTTP (:80) redirects to HTTPS ----------
+        http_port = _compose_host_port(dest, files, "traefik", 80)
+        host = f"{DATA['project_slug']}.localhost"
+
+        # Raw plaintext HTTP/1.1 GET; Traefik's `web` entrypoint redirects (RedirectScheme) BEFORE any
+        # backend routing, so the Host header need not match a router — but send the real host anyway.
+        def _probe_redirect() -> tuple[int, str]:
+            raw = socket.create_connection(("127.0.0.1", http_port), timeout=5)
+            try:
+                raw.sendall(
+                    f"GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n".encode()
+                )
+                data = b""
+                while True:
+                    chunk = raw.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+            finally:
+                raw.close()
+            head = data.split(b"\r\n\r\n", 1)[0].decode(errors="replace")
+            status = int(head.split("\r\n", 1)[0].split()[1])
+            location = ""
+            for line in head.split("\r\n")[1:]:
+                if line.lower().startswith("location:"):
+                    location = line.split(":", 1)[1].strip()
+            return status, location
+
+        status, location = 0, ""
+        deadline = time.time() + 90
+        last = "no attempt"
+        while time.time() < deadline:
+            try:
+                status, location = _probe_redirect()
+                if status in (301, 302, 307, 308):
+                    break
+                last = f"HTTP {status} (no redirect)"
+            except OSError as exc:  # Traefik still settling
+                last = f"{type(exc).__name__}: {exc}"
+            time.sleep(3)
+        assert status in (301, 302, 307, 308), (
+            f"Traefik :80 did not redirect within 90s (last: {last}) — the web->websecure "
+            "RedirectScheme entrypoint (infra/traefik/traefik.yml) is broken/removed"
+        )
+        assert location.startswith("https://"), (
+            f"redirect Location is not https:// (got {location!r}) — wrong scheme on the "
+            "web entrypoint redirect"
+        )
+
+        # ---------- M2: mongo compose service reports healthy + a client connects ----------
+        cid = subprocess.run(
+            [*compose, "ps", "-q", "mongo"],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert cid, "mongo container id not found (the mongo service did not start)"
+
+        healthy = False
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            state = subprocess.run(
+                ["docker", "inspect", "--format", "{{.State.Health.Status}}", cid],
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            if state == "healthy":
+                healthy = True
+                break
+            time.sleep(3)
+        assert healthy, (
+            "mongo compose service never reported healthy within 90s — the mongosh-ping "
+            "healthcheck (quoting) or the mongodata volume mount is broken (dev.yml.jinja:83-95)"
+        )
+
+        # A client can actually connect+ping through the running service (compose exec, like the
+        # FWK20 DLQ/redis queries — no host-side pymongo driver needed).
+        ping = subprocess.run(
+            [
+                *compose,
+                "exec",
+                "-T",
+                "mongo",
+                "mongosh",
+                "--quiet",
+                "--eval",
+                "db.adminCommand('ping').ok",
+            ],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert ping.returncode == 0 and ping.stdout.strip().endswith("1"), (
+            "mongosh ping against the live mongo service did not return ok==1:\n"
+            + ping.stdout
+            + ping.stderr
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: dev:lite stack to exercise --reload on the bind mount",
+)
+def test_rendered_dev_lite_hot_reload_picks_up_edit(tmp_path: Path) -> None:
+    # FWK26 (M4): every dev/lite test runs uvicorn with --reload + WATCHFILES_FORCE_POLLING=true, but
+    # none edits a source file post-startup and asserts the worker reloaded. If polling-reload broke
+    # (env removed, inotify dead on the WSL bind mount), every test passes because none re-edits. Bring
+    # up dev:lite, GET /heartbeat (=="OK"), edit the rendered heartbeat() to return a sentinel, and
+    # poll /heartbeat until the NEW response appears — proving --reload + polling on the bind mount.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "up",
+        "-d",
+        "--build",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "down",
+        "-v",
+    ]
+    env = _compose_env()
+    sentinel = "FWK26-RELOADED-OK"
+    health_py = dest / "src" / "demo" / "routes" / "health.py"
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        port = _compose_host_port(dest, [base, dev], "app", 8000)
+        url = f"http://localhost:{port}/heartbeat"
+
+        def _get_body() -> str | None:
+            try:
+                with urllib.request.urlopen(url, timeout=3) as resp:
+                    if resp.status == 200:
+                        return resp.read().decode()
+            except OSError:
+                return None
+            return None
+
+        # 1) Wait for the ORIGINAL response so the edit is a true post-startup change.
+        deadline = time.time() + 90
+        original = None
+        while time.time() < deadline:
+            original = _get_body()
+            if original is not None:
+                break
+            time.sleep(2)
+        assert original == "OK", (
+            f"app did not serve the original /heartbeat 'OK' within 90s (got {original!r})"
+        )
+
+        # 2) Edit the rendered source on the host (bind-mounted into the container).
+        src = health_py.read_text()
+        assert '"OK"' in src, (
+            'the rendered heartbeat route no longer returns the literal "OK" — re-confirm the '
+            "mutation target in routes/health.py before relying on this reload test"
+        )
+        health_py.write_text(src.replace('"OK"', f'"{sentinel}"'))
+
+        # 3) Poll until --reload + WATCHFILES polling restart the worker and serve the sentinel.
+        deadline = time.time() + 90
+        reloaded = False
+        while time.time() < deadline:
+            if _get_body() == sentinel:
+                reloaded = True
+                break
+            time.sleep(2)
+        assert reloaded, (
+            "uvicorn --reload did not pick up the source edit within 90s — "
+            "WATCHFILES_FORCE_POLLING / --reload on the bind mount is broken (dev.yml.jinja:9,15)"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        # Defensive root-residue reclaim: the app runs as the host UID, so nothing root-owned is
+        # expected, but reclaim in case a future template change drops the `user:` line (otherwise
+        # pytest can't clean tmp_path). Mirrors the no-root tests' alpine chown.
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{dest}:/work",
+                "alpine",
+                "chown",
+                "-R",
+                f"{os.getuid()}:{os.getgid()}",
+                "/work",
+            ]
+        )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: drives the rendered module-level DB engine against a real Postgres",
+)
+def test_rendered_db_engine_pool_pre_ping_and_dispose(tmp_path: Path) -> None:
+    # FWK26 (M14): pool_pre_ping recovery of the REAL module-level engine and real pool disposal are
+    # asserted nowhere — conftest builds a SEPARATE test engine and the graceful-shutdown test
+    # monkeypatches dispose_engine. Drive the shipped demo.db.engine against a live compose Postgres:
+    # terminate the pooled connection's backend, prove the next checkout recovers via pre-ping, then
+    # prove dispose_engine() really disposes the pool. Runs inside the rendered project's venv so it
+    # imports the project's own module-level engine (not conftest's).
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert (
+        subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+    )  # need the project venv
+
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "up",
+        "-d",
+        "postgres",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "down",
+        "-v",
+    ]
+    env = _compose_env()
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        pg_port = _compose_host_port(dest, [base, dev], "postgres", 5432)
+        db_url = f"postgresql+psycopg://app:app@localhost:{pg_port}/app"
+
+        # Wait for postgres to accept connections (its healthcheck is pg_isready; poll a trivial
+        # query via the project's psycopg through a tiny driver).
+        ready_driver = (
+            "import sqlalchemy as sa;"
+            "e=sa.create_engine(__import__('os').environ['APP_DATABASE_URL']);"
+            "c=e.connect();c.execute(sa.text('SELECT 1'));c.close();print('READY')"
+        )
+        ready = False
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            r = subprocess.run(
+                ["uv", "run", "python", "-c", ready_driver],
+                cwd=dest,
+                env={**env, "APP_DATABASE_URL": db_url},
+                capture_output=True,
+                text=True,
+            )
+            if r.returncode == 0 and "READY" in r.stdout:
+                ready = True
+                break
+            time.sleep(2)
+        assert ready, "compose postgres never accepted a connection within 90s"
+
+        # The driver exercises the SHIPPED module-level engine:
+        #  1) check out connection c, capture its backend PID; keep c open so the pool can't
+        #     reuse it for the killer — if c were returned first, k would get the same PID and
+        #     pg_terminate_backend would kill itself (AdminShutdown on k.execute);
+        #  2) while c is still open, open a SECOND connection k; pg_terminate_backend(c's PID)
+        #     kills the server process behind c; call c.invalidate() to tell SQLAlchemy the
+        #     DBAPI connection is dead so the pool discards it on return (instead of trying to
+        #     auto-ROLLBACK on context exit and raising AdminShutdown itself);
+        #  3) next checkout: pool_pre_ping probes the dead slot, discards it, dials fresh;
+        #     SELECT 1 succeeds; new PID != killed PID;
+        #  4) dispose_engine(): pool identity changes (SQLAlchemy default close=True replaces pool).
+        driver = "\n".join(
+            [
+                "from sqlalchemy import text",
+                "from demo.db.engine import engine, dispose_engine",
+                "# 1) checkout c, capture backend PID",
+                "c = engine.connect()",
+                "pid = c.execute(text('SELECT pg_backend_pid()')).scalar()",
+                "# 2) while c is open, kill its backend from a separate connection",
+                "with engine.connect() as k:",
+                "    k.execute(text('SELECT pg_terminate_backend(:p)'), {'p': pid})",
+                "    k.commit()",
+                "# invalidate c so the pool discards it cleanly (no auto-ROLLBACK on dead conn)",
+                "c.invalidate()",
+                "c.close()",
+                "# 3) next checkout must transparently reconnect via pool_pre_ping",
+                "with engine.connect() as c2:",
+                "    assert c2.execute(text('SELECT 1')).scalar() == 1, 'pre-ping did not recover'",
+                "    new_pid = c2.execute(text('SELECT pg_backend_pid()')).scalar()",
+                "    assert new_pid != pid, 'reused the dead backend — pre-ping did not reconnect'",
+                "# 4) real disposal: capture the pool identity, dispose, assert a fresh pool",
+                "pool_before = engine.pool",
+                "dispose_engine()",
+                "assert engine.pool is not pool_before, 'dispose_engine did not recreate the pool'",
+                "assert engine.pool.checkedout() == 0, 'connections still checked out after dispose'",
+                "print('OK')",
+            ]
+        )
+        result = subprocess.run(
+            ["uv", "run", "python", "-c", driver],
+            cwd=dest,
+            env={**env, "APP_DATABASE_URL": db_url},
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0 and result.stdout.strip().endswith("OK"), (
+            "the module-level engine pre-ping/dispose driver failed:\n"
+            + result.stdout
+            + result.stderr
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+
+
+@pytest.mark.skipif(
     not _docker_available(), reason="uv and docker are required for the live-stack test"
 )
 def test_rendered_project_dev_stack_prometheus_scrapes_app(tmp_path: Path):

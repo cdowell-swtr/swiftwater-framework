@@ -512,10 +512,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:dev.yml:mongo",
         "infra/compose/dev.yml:83-95",
-        _KG,
-        # M2: the mongo compose service block (mongosh-ping healthcheck, mongodata volume) is
-        # never `compose up`-ed (the data-store round-trip is testcontainers, not this service).
-        "FWK26 mongo compose service never brought up live (healthcheck/volume unasserted)",
+        _EX,
+        # FWK26/M2: the mongo compose service is brought up live; the mongosh-ping healthcheck is
+        # polled to `healthy` and a mongosh client pings it through the running service.
+        "test_rendered_dev_stack_http_redirect_and_mongo_health",
     ),
     SurfaceClass(
         "service:dev.yml:postgres",

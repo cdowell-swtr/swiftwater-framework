@@ -1602,3 +1602,20 @@ datasource plugin doesn't implement the `/health` API (404 "Method not implement
 Tempo's own `/ready`; and `base+observability` without `dev.yml` fails compose dep-validation
 (postgres is dev.yml-profile-gated by design) → include `dev.yml --profile dev`. Subagent-driven
 (Sonnet; controller review + commit). No release.
+
+#### #0139 · completed · coverage-batch · 2026-06-17
+**FWK26** (item 3/7) — dev-loop / service-health. Three docker-gated acceptance tests in
+`test_rendered_project.py`, all GREEN + bite-proven, no template bugs:
+`test_rendered_dev_stack_http_redirect_and_mongo_health` (M1 Traefik :80 → https redirect; M2 mongo
+compose service polled to `healthy` + mongosh ping through the running service; bites: redirect
+`http://`→RED, `not healthy`→RED), `test_rendered_dev_lite_hot_reload_picks_up_edit` (M4 edit
+rendered `health.py` on the bind mount → `--reload`+WATCHFILES polling serves the sentinel within
+90s; bite: poll for an unwritten sentinel → timeout RED — the naive "still OK" bite was caught as a
+false-pass and replaced), `test_rendered_db_engine_pool_pre_ping_and_dispose` (M14 drives the
+shipped module-level `demo.db.engine` in the project venv: SELECT 1 → `pg_terminate_backend` the
+pooled backend → pre-ping recovers → `dispose_engine()` replaces the pool; kept the
+`engine.pool is not pool_before` assertion form — `dispose(close=True)` swaps in a fresh pool; bite:
+skip `dispose_engine()` → RED). Driver care: open the killer connection while the first is still
+checked out so the pool allocates a distinct backend (else it reuses the pid and kills itself).
+FWK29 registry: `service:dev.yml:mongo` → EXERCISED. M1/M4/M14 have no registry keys. Subagent-driven
+(Sonnet; controller review + commit). No release.
