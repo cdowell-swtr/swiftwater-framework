@@ -59,3 +59,11 @@ def test_parse_version():
     assert parse_version("0.2.11") == (0, 2, 11)
     with pytest.raises(ValueError):
         parse_version("v0+unknown")
+
+
+def test_non_tag_commit_raises_skew_error_not_valueerror(monkeypatch, tmp_path):
+    # A copier-native project can record a non-tag _commit (a SHA); it must surface as a
+    # VersionSkewError, never a raw ValueError, so `integrity` handles it without a traceback.
+    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.11")
+    with pytest.raises(VersionSkewError, match="not a vX.Y.Z release tag"):
+        vs.project_version_skew(_project(tmp_path, "abc1234"))

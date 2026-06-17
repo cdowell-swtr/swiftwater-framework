@@ -3349,3 +3349,35 @@ def test_integrity_runs_normally_when_in_sync(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert called == [False]  # the real check ran (no findings -> OK)
     assert "framework integrity: OK" in result.stdout
+
+
+def test_integrity_errors_cleanly_on_non_tag_commit(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.version_sync as vs
+    from framework_cli.cli import app
+
+    (tmp_path / ".copier-answers.yml").write_text("_commit: abc1234\n")  # non-tag SHA
+    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.11")
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["integrity"])
+    assert result.exit_code == 1
+    assert (
+        "is not a vX.Y.Z release tag" in result.output
+    )  # clean message, not a traceback
+
+
+def test_integrity_warns_on_cli_ahead_skew(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.version_sync as vs
+    from framework_cli.cli import app
+
+    (tmp_path / ".copier-answers.yml").write_text("_commit: v0.2.8\n")
+    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.11")
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["integrity"])
+    assert result.exit_code == 0  # non-fatal in both directions
+    assert "framework upgrade" in result.output  # CLI_AHEAD remedy

@@ -74,7 +74,9 @@ def is_uv_tool_install() -> bool:
         return False
     if not tool_dir:
         return False
-    exe = shutil.which("framework") or sys.argv[0]
+    # Prefer the actually-running console-script over PATH lookup: with two installs on PATH
+    # (a uv shim + a dev/pip install) `which` could resolve to a different one than is running.
+    exe = sys.argv[0] or shutil.which("framework") or ""
     try:
         Path(exe).resolve().relative_to(Path(tool_dir).resolve())
         return True

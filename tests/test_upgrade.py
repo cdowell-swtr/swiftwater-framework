@@ -240,3 +240,17 @@ def test_upgrade_proceeds_when_target_not_newer(monkeypatch, tmp_path):
     result = CliRunner().invoke(app, ["upgrade", str(project)])
     assert result.exit_code == 0
     assert called == ["v0.2.11"]  # resolved target passed through; no bump attempted
+
+
+def test_upgrade_errors_when_no_release_found(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    from framework_cli.cli import app
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    monkeypatch.setattr(cli, "latest_release", lambda: None)
+    result = CliRunner().invoke(app, ["upgrade", str(project)])
+    assert result.exit_code == 1
+    assert "no framework release" in result.output

@@ -42,10 +42,12 @@ def parse_version(tag: str) -> tuple[int, int, int]:
 def project_version_skew(project: Path) -> tuple[VersionSkew, str, str]:
     """Return ``(skew, installed_tag, commit_tag)`` for ``project``.
 
-    Raises ``VersionSkewError`` if the project has no `_commit`, or the installed CLI
-    version is unparseable (odd install state).
+    Raises ``VersionSkewError`` if the project has no `_commit`, the `_commit` is not a
+    release tag (e.g. a copier-native SHA), or the installed CLI version is unparseable.
+    Always ``VersionSkewError`` — never a raw ``ValueError`` — so callers like the
+    `integrity` command (a `task dev` precondition) can handle every case without a traceback.
     """
-    installed_tag = version_tag(installed_framework_version())
+    installed_tag = installed_version_tag()
     commit_tag = read_commit(project)
     if commit_tag is None:
         raise VersionSkewError(
@@ -58,7 +60,12 @@ def project_version_skew(project: Path) -> tuple[VersionSkew, str, str]:
         raise VersionSkewError(
             f"cannot determine the installed framework CLI version ({installed_tag})"
         ) from exc
-    commit_v = parse_version(commit_tag)
+    try:
+        commit_v = parse_version(commit_tag)
+    except ValueError as exc:
+        raise VersionSkewError(
+            f"the project's recorded _commit ({commit_tag}) is not a vX.Y.Z release tag"
+        ) from exc
     if installed_v == commit_v:
         return (VersionSkew.IN_SYNC, installed_tag, commit_tag)
     if installed_v < commit_v:

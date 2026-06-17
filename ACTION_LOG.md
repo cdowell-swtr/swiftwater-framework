@@ -1384,3 +1384,16 @@ Plan-vs-test reconciliations: the command reads the installed version THROUGH
 monkeypatch lands; error assertions use `result.output` (repo convention mixes stderr).
 3 new command tests (bump+reexec / refuse-non-uv / proceed-not-newer) + all 9 `test_upgrade.py`
 green; existing tests call `upgrade_project` directly so no regression; ruff + mypy clean.
+
+#### #0124 · completed · FWK34 · 2026-06-16
+Branch-end reviews: spec-compliance (Sonnet) = all 8 points met, 190 passed; code-quality
+(Opus) = APPROVE-WITH-NITS. Addressed the one Important finding + worthwhile nits:
+(1) `version_sync.project_version_skew` now wraps `parse_version(commit_tag)` in
+try/except→`VersionSkewError` — a non-tag `_commit` (copier-native SHA) previously raised a
+raw `ValueError` that `integrity` (a `task dev` precondition) didn't catch → traceback,
+violating "never blocks task dev"; (2) DRY: uses `installed_version_tag()`; (3)
+`is_uv_tool_install` prefers the running `sys.argv[0]` over `which` (correct install
+detection with two installs on PATH). + 4 regression tests (non-tag `_commit` → VersionSkewError;
+integrity exits 1 cleanly on SHA `_commit`; integrity warns on CLI_AHEAD; upgrade errors when
+`latest_release()` is None). FWK34 suites 194 passed; full non-acceptance suite (pre-fix) 941
+passed/3 skipped; ruff + format + mypy clean.
