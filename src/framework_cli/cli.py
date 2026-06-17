@@ -34,6 +34,7 @@ from framework_cli.source import (
 )
 from framework_cli.downskill import DownskillError, downskill_project
 from framework_cli.upskill import UpskillError, upskill_project
+from framework_cli.self_bump import BumpRefused, maybe_self_bump
 from framework_cli.upgrade import UpgradeError, upgrade_project
 from framework_cli.version_sync import VersionSkewError
 
@@ -399,14 +400,40 @@ def upgrade(
     to: str = typer.Option(
         None, "--to", help="Target release tag (default: the latest release)."
     ),
+    bump_cli: bool = typer.Option(
+        False,
+        "--bump-cli",
+        help="Bump the framework CLI to the target non-interactively before upgrading.",
+    ),
 ) -> None:
     """Move a project onto a newer framework release, then run its tests."""
     project = Path(name)
     if not project.is_dir():
         typer.echo(f"Error: {name} is not a directory", err=True)
         raise typer.Exit(1)
+
+    target = to if to is not None else latest_release()
+    if target is None:
+        typer.echo(
+            "Error: no framework release found (or the remote is unreachable); "
+            "cannot upgrade.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    # FWK34: restore/integrity render from the installed CLI, so it must be at least the
+    # target. Offer to self-bump (uv tool + TTY) and re-exec; otherwise refuse with guidance.
+    reexec_argv = [sys.argv[0], "upgrade", name]
+    if to is not None:
+        reexec_argv += ["--to", to]
     try:
-        outcome = upgrade_project(project, to=to)
+        maybe_self_bump(target_tag=target, bump_flag=bump_cli, argv=reexec_argv)
+    except BumpRefused as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    try:
+        outcome = upgrade_project(project, to=target)
     except UpgradeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

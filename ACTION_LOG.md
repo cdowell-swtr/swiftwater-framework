@@ -1371,3 +1371,16 @@ not newer / refuse non-uv-tool / bump on --flag / prompt on TTY / refuse non-int
 console-script under `uv tool dir`, fail-safe False on uncertainty), `run_uv_tool_install`,
 `reexec`. 5 truth-table tests. Red→green; ruff + mypy clean. (Orchestrator `maybe_self_bump`
 + `_interactive`/`_confirm` land in Task 6 with the upgrade wiring.)
+
+#### #0123 · completed · FWK34 · 2026-06-16
+Task 6 — wired assisted self-bump into the `upgrade` command. Added `maybe_self_bump` +
+`_interactive`/`_confirm` to `self_bump.py` (early-returns when target ≤ installed before any
+I/O seam; prompt→confirm→install→reexec) and `installed_version_tag()` to `version_sync.py`.
+The `upgrade` command gains `--bump-cli`, resolves the target up front (`to` or
+`latest_release()`), builds an explicit re-exec argv (`[sys.argv[0], "upgrade", name, …]` —
+CliRunner's sys.argv is pytest's), and calls `maybe_self_bump`; `BumpRefused` → exit 1.
+Plan-vs-test reconciliations: the command reads the installed version THROUGH
+`version_sync.installed_version_tag()` so the test's `vs.installed_framework_version`
+monkeypatch lands; error assertions use `result.output` (repo convention mixes stderr).
+3 new command tests (bump+reexec / refuse-non-uv / proceed-not-newer) + all 9 `test_upgrade.py`
+green; existing tests call `upgrade_project` directly so no regression; ruff + mypy clean.

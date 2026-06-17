@@ -90,3 +90,46 @@ def run_uv_tool_install(target_tag: str) -> None:
 
 def reexec(argv: list[str]) -> None:
     os.execvp(argv[0], argv)  # replaces the process image; returns only on failure
+
+
+def _interactive() -> bool:
+    return sys.stdin.isatty()
+
+
+def _confirm(message: str) -> bool:
+    import typer
+
+    return typer.confirm(message, default=True)
+
+
+def maybe_self_bump(*, target_tag: str, bump_flag: bool, argv: list[str]) -> None:
+    """If the target is newer than the installed CLI: self-bump+re-exec, or raise BumpRefused.
+
+    Returns normally only when the upgrade should proceed in *this* process (the target is not
+    newer than the installed CLI). On a bump it `reexec`s and never returns.
+    """
+    from framework_cli.version_sync import installed_version_tag
+
+    installed_tag = installed_version_tag()
+    if parse_version(target_tag) <= parse_version(installed_tag):
+        return  # target not newer than the installed CLI — proceed in this process
+
+    decision = decide_bump(
+        installed_tag=installed_tag,
+        target_tag=target_tag,
+        is_uv_tool=is_uv_tool_install(),
+        is_tty=_interactive(),
+        bump_flag=bump_flag,
+    )
+    if decision.action == "refuse":
+        raise BumpRefused(decision.message)
+    if decision.action == "prompt":
+        if not _confirm(
+            f"Your framework CLI is {installed_tag}; the target is {target_tag}. "
+            "Bump the CLI and continue the upgrade?"
+        ):
+            raise BumpRefused(
+                f"Upgrade the CLI when ready: uv tool install git+{REPO_URL}@{target_tag}"
+            )
+    run_uv_tool_install(target_tag)
+    reexec(argv)

@@ -24,6 +24,11 @@ class VersionSkew(enum.Enum):
     CLI_AHEAD = "cli_ahead"  # installed > _commit  (CLI newer than the project pin)
 
 
+def installed_version_tag() -> str:
+    """The installed framework CLI version as a ``vX.Y.Z`` tag."""
+    return version_tag(installed_framework_version())
+
+
 def parse_version(tag: str) -> tuple[int, int, int]:
     """Parse a ``vX.Y.Z`` (or ``X.Y.Z``) tag into a comparable tuple."""
     core = tag[1:] if tag.startswith("v") else tag
