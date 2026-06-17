@@ -1487,3 +1487,63 @@ serve_spa+_dist.exists, id="root" Vite-preserved) and all four registry decision
 the inner `assert resp.status == 200` lines are dead (urllib raises HTTPError on non-2xx first) —
 accepted as defensive/symmetry per the reviewer. Landed on branch `fwk21-battery-docker-runtime`.
 No release (test-only). PR next.
+
+#### #0132 · completed · FWK19/23/24/25/26/27/28 · 2026-06-17
+Authored the remaining coverage-batch plans (the med/low half of the FWK18 inventory) for an
+unattended overnight run on the laptop. A shared execution-policy doc
+(`2026-06-17-coverage-batch-execution-policy.md`) encodes the operating rules settled with the
+user: hardest-first order (FWK24→23→26→25→19→27→28); ONE batch branch `fwk-coverage-batch`,
+≥1 commit/item (commit-often for safety), controller skip-marker per commit + one branch-end
+Opus review; real-bug policy = root-cause → small+obvious+scoped fix inline (+CI guard) else
+`xfail(strict=True)` + keep registry KNOWN_GAP, and EVERY real bug also gets an ACTION_LOG entry
++ a NEW PLAN.md Next entry + a morning-report line; NO release (test-only; any forced template
+fix deferred — no consumers); laptop docker-parity + TMPDIR notes; no real API keys by default
+(fork 2A). Per-item plans (each a placeholder-free spec+plan matching the FWK21 doc shape,
+authored inline + via sequential subagents, controller-reviewed): FWK24 (per-battery live routes
+through Traefik via a new `_traefik_request`/`_traefik_ws_upgrade`; forks 1A combined-render +
+2A reachability+error+metric; `/ws`=101-upgrade, graphql=assert-dev-behavior, webhook-secret via
+merge-override), FWK23 (obs live: self-scrape/rules/grafana in one bring-up, battery-variant
+exporters, alertmanager→capture-server, worker OTEL→Tempo by span-name; 8 registry flips),
+FWK26 (M1 redirect+M2 mongo health one stack, M4 hot-reload via /heartbeat literal, M14
+framework-side engine pre-ping/dispose — no template change), FWK25 (gate-tier ci-graph assert +
+`task dev:lite`/`db:migrate`/`db:seed` live), FWK19 (CI-visible staging/services config-validation
++ test.yml live tmpfs-reset; ~11 registry flips), FWK27 (.claude gate hook via PATH-stub +
+PreToolUse payload, mirrors `_run_hook`), FWK28 (notify.sh smoke + load.sh graceful-degradation
++ docs.yml mike workflow-graph assert). Keys location recorded in native memory. Registry-key
+cross-check: the keys each plan flips all exist. Delivering as a planning PR for review; the
+laptop run executes from these. Stopped after the plans per the user.
+
+#### #0133 · completed · FWK19/23/24/25/26/27/28 · 2026-06-17
+Adversarial hands-free verification pass (7 parallel read-only agents, one per plan) cross-checking
+every plan against the actual code: registry keys exist + EXERCISED evidence names a test the plan
+defines; referenced helpers/anchors exist; no step needs an absent tool/key/interactive input. Found
+**3 BLOCKERS** (would have stalled the unattended run) + warns; all fixed in the plan docs:
+(1) **FWK24** Task-2 `skipif` only gated docker → on a non-parity laptop the `mkcert`/`task` calls
+ERROR (not skip) → added `shutil.which("mkcert")/("task") is None` guards (mirrors the existing
+Traefik test). (2) **FWK27** `render_project` does NOT git-init, so the hook's `git rev-parse
+--show-toplevel` resolves to the framework repo (vacuous pass) or `|| exit 0` fires (FAIL case never
+hits exit 2 → RED) → `_run_gate_hook` now `git init`+add+commit's `dest`; prose corrected. (3)
+**FWK28** webhook test's `.replace()` chain had 2 strings not matching `notify.sh` → produced a bash
+syntax error → replaced with a robust line-based uncommenter (strip leading `# ` across the block) +
+a sanity-assert. Warns fixed: FWK24 WS nonce → 16 bytes; FWK27 dropped redundant in-func `import os`;
+FWK25 port-poll `except` += `IndexError`; FWK26 corrected a misstated helper precondition; FWK28
+placement note + the false-alarm `load.js` anticipated-bug (verified present). Net: FWK23/25/26/19
+verifiers returned READY; FWK24/27/28 NEEDS-FIX → now fixed. Plans are hands-free-ready. PR #51 updated.
+
+#### #0134 · completed · coverage-batch · 2026-06-17
+Added an explicit "escape hatch — NEVER block on the human (park-and-continue)" section to the
+shared execution-policy doc (per user): if a step would need my *permission* (outward-facing /
+hard-to-reverse) or my *input* (an unresolvable design fork / ambiguous real-bug fix), the run does
+NOT ask or wait — it parks ONLY that unit (xfail(strict)/skip + reason "PARKED: …", registry stays
+KNOWN_GAP), commits what's done, finishes the rest of the current item that doesn't need me, and
+moves to the next. Generalizes the real-bug rule (now cross-references it); the sole intended
+permission gate is the terminal batch-PR-for-review. Morning report gains a dedicated "PARKED —
+needs my decision/permission" to-do list. PR #51 updated.
+
+#### #0135 · completed · coverage-batch · 2026-06-17
+Added a "Transient Claude API / safety-classifier unavailability — RETRY, never fail" rule to the
+shared policy (per user): a Claude API / auto-mode error ("auto mode cannot determine the safety of
+Bash … <model> temporarily unavailable") is transient infrastructure, NOT a decision point — the run
+does NOT fail/park/skip; it waits ~60s and retries the same action at 1-minute intervals
+indefinitely until it works, then resumes. No give-up timeout. Kept distinct from the escape hatch
+(human-decision park) and noted the separate full-quota-outage case (cron, not in-session sleep). PR #51 updated.
