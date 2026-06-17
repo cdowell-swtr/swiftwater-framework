@@ -957,6 +957,132 @@ def test_lint_hook_ignores_non_python(tmp_path: Path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def _run_gate_hook(
+    dest: Path,
+    payload: dict,
+    *,
+    stub_exit_code: int,
+    marker_verdict: str | None = None,
+) -> "subprocess.CompletedProcess[str]":
+    """Invoke .claude/hooks/reviewers-gate-check.sh with a synthetic PreToolUse payload.
+
+    Places a fake `framework` binary at the front of PATH that exits `stub_exit_code` so the
+    hook never touches a real backend. If `marker_verdict` is given, pre-writes
+    .framework/audit/marker.json with that verdict so the hook's summary-readback succeeds.
+    The hook does `git rev-parse --show-toplevel`; `render_project` does NOT git-init, so we
+    make `dest` its own repo here (else rev-parse resolves to the framework repo, or the hook's
+    `|| exit 0` short-circuits and the FAIL case never reaches exit 2).
+    """
+    import stat
+
+    # `dest` must be a git repo for the hook's `git rev-parse --show-toplevel` to resolve to it.
+    # A fresh `git init` installs no git hooks, so `git commit` here runs nothing extra.
+    subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
+        cwd=dest,
+        check=True,
+    )
+
+    # Build a fake `framework` binary that exits stub_exit_code.
+    fake_bin = dest / ".fwk27-bin"
+    fake_bin.mkdir(exist_ok=True)
+    fake_framework = fake_bin / "framework"
+    fake_framework.write_text(f"#!/usr/bin/env bash\nexit {stub_exit_code}\n")
+    fake_framework.chmod(
+        fake_framework.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
+    )
+
+    # Pre-write the marker.json if the FAIL branch will try to read it.
+    if marker_verdict is not None:
+        marker_dir = dest / ".framework" / "audit"
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        (marker_dir / "marker.json").write_text(
+            json.dumps({"verdict": marker_verdict, "summary": "FWK27 test finding"})
+        )
+
+    # Prepend the fake bin dir to PATH so `uv run framework gate` calls our stub, not the
+    # real CLI.  uv itself is still found at its normal location.
+    env = {**os.environ, "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}"}
+
+    return subprocess.run(
+        ["bash", ".claude/hooks/reviewers-gate-check.sh"],
+        cwd=dest,
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("bash") is None,
+    reason="uv + bash required: renders the project and invokes the gate hook shell script",
+)
+def test_rendered_gate_hook_blocks_on_fail_marker(tmp_path: Path):
+    # M15/FWK27: the hook's FAIL path (exit 2) is never exercised — only render-text-checked.
+    # Pipe a `git commit` PreToolUse payload; the fake `framework` binary exits 1 (gate FAIL);
+    # the hook reads .framework/audit/marker.json and exits 2.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    # uv sync not required: we don't call the rendered project's venv — only bash + the fake stub.
+
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "git commit -m 'test commit'"},
+    }
+    result = _run_gate_hook(dest, payload, stub_exit_code=1, marker_verdict="FAIL")
+    assert result.returncode == 2, (
+        "gate hook did not exit 2 on a FAIL verdict — FAIL->exit-2 translation broken\n"
+        + result.stdout
+        + result.stderr
+    )
+    assert "FAILED" in result.stderr, (
+        "expected 'FAILED' in hook stderr on a FAIL verdict\n" + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("bash") is None,
+    reason="uv + bash required: renders the project and invokes the gate hook shell script",
+)
+def test_rendered_gate_hook_passes_on_pass_marker(tmp_path: Path):
+    # M15/FWK27: the hook's PASS path (exit 0 after framework gate succeeds) must also be
+    # asserted — the fake `framework` binary exits 0 (gate PASS); the hook exits 0.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "git commit -m 'test commit'"},
+    }
+    result = _run_gate_hook(dest, payload, stub_exit_code=0, marker_verdict="PASS")
+    assert result.returncode == 0, (
+        "gate hook did not exit 0 on a PASS verdict\n" + result.stdout + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("bash") is None,
+    reason="uv + bash required: renders the project and invokes the gate hook shell script",
+)
+def test_rendered_gate_hook_skips_non_commit(tmp_path: Path):
+    # M15/FWK27: the grep guard (line 8 of the hook) must exit 0 for non-commit Bash payloads
+    # without reaching the `framework gate` call at all. Use stub_exit_code=1 so if the grep
+    # guard breaks and the hook proceeds, it would exit 2 — making the skip a detectable failure.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    payload = {"tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+    result = _run_gate_hook(dest, payload, stub_exit_code=1)
+    assert result.returncode == 0, (
+        "gate hook did not skip (exit 0) on a non-commit Bash payload — grep guard broken\n"
+        + result.stdout
+        + result.stderr
+    )
+
+
 @pytest.mark.skipif(
     not _docker_available(),
     reason="uv and docker are required for the live-stack test",

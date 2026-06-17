@@ -71,10 +71,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "hook:.claude:reviewers-gate-check.sh",
         ".claude/hooks/reviewers-gate-check.sh",
-        _KG,
-        # M15: only render-text-checked; no test pipes a PreToolUse git-commit payload and
-        # asserts FAIL->exit 2 (unlike lint_changed.py which IS driven).
-        "FWK27 reviewers-gate-check.sh PreToolUse hook only render-checked, never invoked with a payload",
+        _EX,
+        # FWK27/M15: driven via _run_gate_hook with a PreToolUse Bash/git-commit payload;
+        # stub gate exits 1 → asserts FAIL->exit 2; PASS->exit 0; non-commit->exit 0 (grep guard).
+        "test_rendered_gate_hook_blocks_on_fail_marker",
     ),
     # ---- pre-commit hooks ------------------------------------------------------------
     # All lint/format/hygiene/static hooks below are fired by `pre-commit run --all-files`

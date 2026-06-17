@@ -1651,3 +1651,17 @@ staging,test}.yml; services.yml:{beat,mongo,redis,worker}; staging.yml:{app,post
 test.yml:{app,postgres-test}); completeness guard green. Confirmed celery-exporter present,
 staging `${POSTGRES_PASSWORD:?}` + services battery-conditional YAML well-formed. Subagent-driven
 (Sonnet; controller review + Half-A re-run + commit). No release.
+
+#### #0142 · completed · coverage-batch · 2026-06-17
+**FWK27** (item 6/7) — generated-project `.claude` review-gate hook. Three acceptance tests in
+`test_rendered_project.py` (no docker / no uv-sync / no API key — PATH-stubs the `framework` binary,
+pipes PreToolUse JSON into the hook), all GREEN + bite-proven, via a `_run_gate_hook(dest, payload,
+stub_exit_code, marker_verdict=None)` helper that git-inits `dest` first (mandatory — the hook's
+toplevel resolution must point at `dest` for marker.json):
+`test_rendered_gate_hook_blocks_on_fail_marker` (M15 — commit-payload + FAIL stub → hook exits 2;
+bite: `==2`→`==0` RED), `test_rendered_gate_hook_passes_on_pass_marker` (PASS stub → exit 0),
+`test_rendered_gate_hook_skips_non_commit` (`ls` payload → grep guard short-circuits → exit 0; bite:
+`==0`→`==2` RED). The plan's flagged candidate bug (grep guard vs the JSON-embedded payload on stdin)
+is NOT a bug — the guard matches the `"`-preceded token correctly. FWK29 registry:
+`hook:.claude:reviewers-gate-check.sh` → EXERCISED. Subagent-driven (Sonnet; controller re-ran all
+3 + finished). No release.
