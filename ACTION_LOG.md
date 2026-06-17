@@ -1681,3 +1681,18 @@ degradation ONLY, NOT full SLO pass; bite: `\!=0`→`==0` RED). FWK29 registry: 
 notify.sh` → EXERCISED; `script:scripts/load.sh` stays KNOWN_GAP with honest evidence (full k6 SLO
 pass/fail needs a live app stack); `job:docs.yml:publish` untouched (exempt). Subagent-driven
 (Sonnet; controller review + gate-tier re-run + finish). No release.
+
+#### #0144 · completed · coverage-batch · 2026-06-17
+**Branch-end review + PR** for `fwk-coverage-batch`. One Opus whole-branch code-quality +
+spec-compliance review (review-model policy): verdict **APPROVE-WITH-NITS**, no blocking findings —
+confirmed no false-EXERCISED flips (all 21 KNOWN_GAP→EXERCISED name a real test that genuinely
+exercises the surface live; load.sh correctly stays KNOWN_GAP; docs.yml:publish untouched), tests
+non-vacuous, teardown sound, the websockets fix + CI guard correct, and the two FWK23 test-design
+adjustments legitimately not masking template bugs (M13 datasource provisioning still asserted).
+Applied nit #1: hardened `test_load_sh_fails_gracefully_without_docker_target` to assert a k6 run
+marker (`connection refused`/`http_req` in output) so a docker-pull failure can't pass for the
+wrong reason. Nits #2 (cosmetic conjunction assertion) and #3 (inherent first-boot timeout flake)
+accepted as-is. Full verification: gate-tier pytest 954 passed / 3 env-skips; all new batch tests
+run together = 25 passed + 1 transient ghcr.io TLS-handshake pull flake on
+`test_rendered_worker_span_reaches_tempo` (re-ran → GREEN; [[render-matrix-dockerhub-flake-triage]]);
+ruff/format/mypy clean. No release (test-only; the websockets template fix is deferred → FWK36).

@@ -4238,9 +4238,11 @@ def test_load_sh_fails_gracefully_without_docker_target(tmp_path: Path) -> None:
 
     K6_TARGET is set to a port that is guaranteed not to be listening (free TCP port chosen at
     test time). K6_DURATION is set to "1s" and K6_VUS to "1" to fail fast. The Docker pull of
-    grafana/k6:latest is required; if it is unavailable (registry outage / no pull credentials),
-    this test is also expected to fail non-zero — that is acceptable, as it still exercises the
-    propagation path.
+    grafana/k6:latest is required; the test asserts a k6-emitted marker in the output so that a
+    non-zero exit caused by k6 *actually running and failing to reach the target* (the graceful-
+    degradation path under test) is distinguishable from one caused by k6 never starting (image
+    pull failure / registry outage) — the latter fails the test with a clear message rather than
+    passing for the wrong reason.
     """
     dest = tmp_path / "demo"
     render_project(dest, DATA)
@@ -4262,7 +4264,16 @@ def test_load_sh_fails_gracefully_without_docker_target(tmp_path: Path) -> None:
         },
         timeout=120,
     )
+    combined = result.stdout + result.stderr
     assert result.returncode != 0, (
         "load.sh exited 0 on an unreachable target — threshold-propagation broken or "
-        "k6 did not actually run\n" + result.stdout + result.stderr
+        "k6 did not actually run\n" + combined
+    )
+    # Prove k6 genuinely launched and dialed the target (so this is real graceful degradation,
+    # not an image-pull failure that never reached the propagation path). k6 logs the dial error
+    # on a refused connection and always prints its http_req metric summary.
+    assert "connection refused" in combined.lower() or "http_req" in combined, (
+        "k6 produced no run output — the image likely failed to pull, so the graceful-degradation "
+        "path was never exercised (this test cannot pass on an image-pull failure)\n"
+        + combined
     )
