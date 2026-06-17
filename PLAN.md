@@ -5,8 +5,8 @@
 > Maintained per `pi-convention.md` (PI-convention: v2).
 
 ## Next
+- [ ] FWK6 — **← NEXT UP** — Plan 29: data-store runtime parity (services.yml/dev.yml; unblock the hardcoded co-located-container assumption)
 - [ ] FWK4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
-- [ ] FWK6 — Plan 29: data-store runtime parity (services.yml/dev.yml; unblock the hardcoded co-located-container assumption)
 - [ ] FWK7 — Plan 30: full reverse integrity-coverage check + 23-file battery-infra classification  deps: consumes INTENTIONALLY_UNLOCKED (shipped v0.2.4)
 - [ ] FWK36 — **Release the websockets `/ws` fix** (real bug found by FWK24, FIXED in the coverage batch, release deferred). The `websockets` battery's `@router.websocket("/ws")` 404s on a live stack because the template installs `uvicorn>=0.32` without a WebSocket library — uvicorn logs `No supported WebSocket library detected` and rejects all upgrades. Fix is on `master` (merged via #53): conditional `websockets>=14` dep in `pyproject.toml.jinja` + CI-visible render guard (`test_render_with_websockets_battery`). Template-payload change, not yet released → fold into the next batched release; any existing websockets consumer needs it.  → log:#0137
 - [ ] FWK9 — Propagate the PI + MEMORY conventions into generated projects (template payload)  deps: FWK1, FWK2
