@@ -1776,3 +1776,21 @@ the trade-secret-in-transit path); **(D)** resolve `services.yml` → `INTENTION
 token auth, per-tenant routing, Redis Sentinel/cluster-seed. Driven by an ambitious-but-early
 consumer (Meridian: DR/failover/BC, confidential data) — design principle = optionality, not
 premature capability. Next: writing-plans. Template payload → release-deferred (batches w/ FWK36/37).
+
+#### #0150 · note · FWK6 · 2026-06-17
+Wrote the FWK6 implementation plan `docs/superpowers/plans/2026-06-17-datastore-runtime-parity.md`
+(8 TDD tasks, subagent-driven). **Empirically de-risked the three load-bearing compose mechanisms
+at plan-time via throwaway `docker compose config` probes** (caught a real gotcha the spec's
+verify-first clause anticipated): (1) `depends_on` long-form maps **merge additively** across `-f`
+overlays — `base+services` → `app.depends_on.postgres` present, `base` alone → none; so omitting
+`services.yml` cleanly drops the container AND the dependency edge (no render-time fallback needed);
+(2) compose **eagerly** interpolates the `:-` default branch, so a nested
+`${APP_DATABASE_URL:-…${POSTGRES_PASSWORD:?msg}…}` **errors in the managed case even when the override
+is set** → fix = plain `${POSTGRES_PASSWORD}` in the inline default, `:?` guard lives on the postgres
+service (self-hosted only); (3) confirmed the no-`:?` variant succeeds managed + builds the default
+DSN self-hosted. Amended the spec with both findings. Plan structure: T1 dev URL seam, T2 prod/
+staging/services URL seam, T3 relocate postgres+depends_on prod/staging→services.yml (section B
+core), T4 services.yml→INTENTIONALLY_UNLOCKED, T5 opt-in tls-ca.yml CA overlay, T6 docs
+(settings precedence + .env.example + deploy README), T7 live acceptance (managed app boots vs
+out-of-stack DB), T8 FWK29 classification + branch-end Opus review. Next: dispatch execution
+(subagent-driven per review-model policy).

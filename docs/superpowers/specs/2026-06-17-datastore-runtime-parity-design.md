@@ -103,7 +103,17 @@ APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:app@postgres:543
   is documented in `settings.py` and `.env.example`.
 
 Surfaces: `APP_DATABASE_URL`, `APP_REDIS_URL`, `APP_MONGO_URL`, `APP_CELERY_BROKER_URL`,
-`APP_CELERY_RESULT_BACKEND` across `dev.yml`, `prod.yml`, `services.yml`.
+`APP_CELERY_RESULT_BACKEND` — every `APP_*_URL` **literal** in a compose `environment:`
+block (dev.yml app/worker/beat; prod.yml & staging.yml app; services.yml worker/beat).
+(Where the app reads a default from `Settings` and the compose file sets no literal — e.g.
+the dev app's `redis_url`/`mongo_url` — there is no foreclosure already, so no change.)
+
+**Verified gotcha (2026-06-17, `docker compose config`):** compose **eagerly** interpolates
+the `:-` default branch, so a nested required-guard `${APP_DATABASE_URL:-…${POSTGRES_PASSWORD:?msg}…}`
+*errors in the managed case even when the override is set*. Fix: the inline default uses
+plain `${POSTGRES_PASSWORD}` (no `:?`); the `:?` required-guard lives on the **postgres
+service** definition (which exists only self-hosted — see §B), so self-hosted still fails
+loudly on a missing password while managed (no postgres service) is unaffected.
 
 ### B. Conditional container + `depends_on` (the load-bearing decision)
 
@@ -127,13 +137,17 @@ Because each store has its own `APP_*_URL` and its own overlay membership, store
 **independently** (e.g. postgres → managed RDS for DR while redis/graph stay
 containerized) with no `mode` enum and no per-store ergonomics surface.
 
-**Compose-semantics caveat (verify first, do not assume).** This relies on (1)
-`depends_on` long-form maps **merging additively** across overlay files, and (2) profiles
-**not** silently re-activating a depended-on service. Compose's behavior here is exactly
-the class the project's working agreement says to verify empirically. The implementation
-plan's **first** step pins it with a `docker compose config` assertion before anything is
-built on it. **Fallback if merge-additive does not hold:** render-time omission via a
-per-store Copier answer (more invasive); this is why B is the design's decision point.
+**Compose-semantics caveat — VERIFIED (2026-06-17, `docker compose config`).** The design
+relies on `depends_on` long-form maps **merging additively** across overlay files. This was
+verified empirically before plan-writing:
+- `base.yml + services.yml` merged → `app.depends_on.postgres` present **and** the
+  `postgres` service present.
+- `base.yml` alone (managed) → **no** `depends_on`, **no** `postgres` — app carries only the
+  env-overridable URL.
+
+So omitting `services.yml` cleanly drops both the container and the dependency edge; no
+render-time fallback (per-store Copier answer) is needed. The plan still re-pins this as a
+committed regression test (`docker compose config`), since it is the load-bearing seam.
 
 ### C. CA-bundle mount (the pulled-forward TLS item)
 
