@@ -1803,3 +1803,16 @@ Render guard `test_dev_compose_urls_are_env_overridable` (TDD red→green); regr
 render` 183 passed. Spec review ✅; Opus quality review caught a `ruff format` miss in the new test
 (over-length asserts + dead inner `import re` — the [[ruff-format-check-after-inline-edits]] class CI's
 `gate` catches but `ruff check` misses) → fixed (format + drop import), re-verified clean.
+
+#### #0152 · completed · FWK6 · 2026-06-17
+T2 (subagent-driven, Sonnet impl): env-overridable `APP_*_URL` in the production compose files —
+`prod.yml`/`staging.yml` app `APP_DATABASE_URL` + `services.yml` worker (4) / beat (3). Inline DSN
+default uses plain `${POSTGRES_PASSWORD}` (NO `:?`) — the empirically-verified fix for compose's eager
+`:-` interpolation (a nested `:?` errors in the managed case even when the override is set); the `:?`
+guard stays on the postgres service. Render guard `test_production_compose_urls_are_env_overridable`
+(TDD red→green); `-k compose/staging_prod/services/render` 184 passed; test file ruff-clean.
+Spec review ✅ + Opus quality review APPROVE-with-minor → hardened the test (assert the worker
+`APP_DATABASE_URL` in services.yml + a no-bare-literal sweep over prod/staging/services, symmetric
+with the dev guard). NOTE for T3: `test_staging_standalone_merges` (and the prod standalone merge
+test) assert `postgres` is defined in staging.yml/prod.yml — they must be updated when T3 relocates
+postgres to services.yml.

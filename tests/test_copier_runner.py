@@ -3867,3 +3867,41 @@ def test_dev_compose_urls_are_env_overridable(tmp_path: Path):
         assert m.group(2).startswith("${"), (
             f"{m.group(1)} still a bare literal: {m.group(2)}"
         )
+
+
+def test_production_compose_urls_are_env_overridable(tmp_path: Path):
+    """prod/staging app DATABASE_URL and services.yml worker/beat URLs are env-overridable.
+    The inline default drops the :? password guard (compose eagerly interpolates the :- branch,
+    so a nested :? would break the managed override) — the guard lives on the postgres service."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    comp = dest / "infra" / "compose"
+    for env in ("prod", "staging"):
+        text = (comp / f"{env}.yml").read_text()
+        assert (
+            'APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:${POSTGRES_PASSWORD}@postgres:5432/app}"'
+            in text
+        ), f"{env}.yml APP_DATABASE_URL not env-overridable / still uses :? in default"
+    svc = (comp / "services.yml").read_text()
+    # worker DB URL carries the same :?-removal subtlety as prod/staging — assert it too
+    assert (
+        'APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:${POSTGRES_PASSWORD}@postgres:5432/app}"'
+        in svc
+    ), (
+        "services.yml worker APP_DATABASE_URL not env-overridable / still uses :? in default"
+    )
+    for var, default in (
+        ("APP_REDIS_URL", "redis://redis:6379/0"),
+        ("APP_CELERY_BROKER_URL", "redis://redis:6379/0"),
+        ("APP_CELERY_RESULT_BACKEND", "redis://redis:6379/1"),
+    ):
+        assert f'{var}: "${{{var}:-{default}}}"' in svc, (
+            f"{var} not env-overridable in services.yml"
+        )
+    # symmetry with the dev guard: no bare literal APP_*_URL remains in the production files
+    for fname in ("prod.yml", "staging.yml", "services.yml"):
+        text = (comp / fname).read_text()
+        for m in re.finditer(r'^\s*(APP_\w*_URL):\s*"([^"]*)"', text, re.MULTILINE):
+            assert m.group(2).startswith("${"), (
+                f"{fname}: {m.group(1)} still a bare literal: {m.group(2)}"
+            )

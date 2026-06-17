@@ -8,7 +8,7 @@ services:
     environment:
       TZ: UTC
       APP_ENVIRONMENT: staging
-      APP_DATABASE_URL: "postgresql+psycopg://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/app"
+      APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:${POSTGRES_PASSWORD}@postgres:5432/app}"
     ports:
       - "8000:8000"
     # Liveness so `restart: unless-stopped` can recover a wedged app. start_period covers

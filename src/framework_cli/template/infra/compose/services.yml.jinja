@@ -38,10 +38,10 @@ services:
     command: ["celery", "-A", "{{ package_name }}.tasks.app", "worker", "--loglevel=info"]
     environment:
       APP_RUN_MIGRATIONS: "false"
-      APP_DATABASE_URL: "postgresql+psycopg://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/app"
-      APP_REDIS_URL: "redis://redis:6379/0"
-      APP_CELERY_BROKER_URL: "redis://redis:6379/0"
-      APP_CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+      APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:${POSTGRES_PASSWORD}@postgres:5432/app}"
+      APP_REDIS_URL: "${APP_REDIS_URL:-redis://redis:6379/0}"
+      APP_CELERY_BROKER_URL: "${APP_CELERY_BROKER_URL:-redis://redis:6379/0}"
+      APP_CELERY_RESULT_BACKEND: "${APP_CELERY_RESULT_BACKEND:-redis://redis:6379/1}"
       APP_OTEL_ENABLED: "true"
       APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
     healthcheck:
@@ -62,9 +62,9 @@ services:
     command: ["celery", "-A", "{{ package_name }}.tasks.app", "beat", "--loglevel=info"]
     environment:
       APP_RUN_MIGRATIONS: "false"
-      APP_REDIS_URL: "redis://redis:6379/0"
-      APP_CELERY_BROKER_URL: "redis://redis:6379/0"
-      APP_CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+      APP_REDIS_URL: "${APP_REDIS_URL:-redis://redis:6379/0}"
+      APP_CELERY_BROKER_URL: "${APP_CELERY_BROKER_URL:-redis://redis:6379/0}"
+      APP_CELERY_RESULT_BACKEND: "${APP_CELERY_RESULT_BACKEND:-redis://redis:6379/1}"
       APP_OTEL_ENABLED: "true"
       APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
     depends_on:
