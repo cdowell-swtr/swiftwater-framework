@@ -1341,3 +1341,14 @@ to the project's `_commit`. 8 tests (truth table + missing-`_commit` + direction
 parse). Red→green; ruff + mypy clean. (API overloaded for subagent dispatch — 529s — so the
 controller implemented this fully-specified module directly per the plan; branch-end Opus
 review still covers it.)
+
+#### #0120 · completed · FWK34 · 2026-06-16
+Task 3 — `restore` hard-guards on skew. `restore_file` calls `require_version_sync(project)`
+right AFTER the integrity.lock existence check (so "not a framework project" keeps precedence)
+and before any render; `cli.restore` adds `VersionSkewError` to its except. New test
+`tests/integrity/test_restore_version_guard.py` (refuses + no render on CLI_BEHIND). Plan's
+deferred verification resolved: the existing `_new_project` fixture renders from the LOCAL
+template (Copier records no `_commit`), so the guard raised "no _commit"; fixed `_new_project`
+to also `record_portable_source(dest, installed_framework_version())` (what `framework new`
+does), making the fixtures in-sync. `tests/integrity/` + `tests/test_cli.py` = 166 passed;
+ruff + mypy clean.

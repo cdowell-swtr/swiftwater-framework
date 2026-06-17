@@ -35,6 +35,7 @@ from framework_cli.source import (
 from framework_cli.downskill import DownskillError, downskill_project
 from framework_cli.upskill import UpskillError, upskill_project
 from framework_cli.upgrade import UpgradeError, upgrade_project
+from framework_cli.version_sync import VersionSkewError
 
 app = typer.Typer(
     help="Framework CLI — scaffold solid, observable, testable Python projects.",
@@ -270,7 +271,7 @@ def restore(
     """Re-fetch a canonical framework file, discarding local edits to it."""
     try:
         restore_file(Path.cwd(), file)
-    except (ValueError, FileNotFoundError) as exc:
+    except (ValueError, FileNotFoundError, VersionSkewError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"Restored {file} to the canonical framework version.")
