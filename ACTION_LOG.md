@@ -1755,3 +1755,24 @@ source of truth" line (FWK3). Branch hygiene: local + remote already clean — o
 `gh-pages` remain (all feature branches auto-deleted on their squash-merges). Native memories
 recorded (unattended coverage-batch run pattern; pre-run adversarial plan verification). Docs/state
 only → no release.
+
+#### #0149 · note · FWK6 · 2026-06-17
+Brainstormed FWK6 (data-store runtime parity) → approved design spec
+`docs/superpowers/specs/2026-06-17-datastore-runtime-parity-design.md`. Mapped the full landscape of
+store-connection topologies and found the **locality** spectrum collapses (managed/native/tunneled/
+proxied all = "an opaque external URL + no co-located container"); the variation that survives lives
+in cardinality/auth/TLS, most of which a single opaque DSN already expresses. Scope locked at **#1
+foreclosure-removal** (not the rejected #3 "runtime modes", which would gold-plate the cheap axis):
+**(A)** make every `APP_*_URL` env-overridable in compose (FWK31 `${VAR:-default}` pattern lifted to
+URLs; the literal in `environment:` is the actual lie that shadows the documented managed escape
+hatch — the Python `Settings` layer already binds `APP_*_URL`, so it's not the problem); **(B)**
+per-(store×env) conditional container + `depends_on` — dev unchanged, prod/staging move the store +
+its dependency edge into the includable self-hosted overlay so managed = omit-overlay + set-URL
+(load-bearing caveat: relies on `depends_on` map merging additively across overlays — plan verifies
+empirically via `docker compose config` FIRST, render-time per-store omission is the fallback);
+**(C)** pull forward an off-by-default CA-bundle mount slot (the one infra-painful TLS retrofit on
+the trade-secret-in-transit path); **(D)** resolve `services.yml` → `INTENTIONALLY_UNLOCKED`
+(operators edit it; locking re-creates the foreclosure). Explicitly deferred-but-not-foreclosed: IAM/
+token auth, per-tenant routing, Redis Sentinel/cluster-seed. Driven by an ambitious-but-early
+consumer (Meridian: DR/failover/BC, confidential data) — design principle = optionality, not
+premature capability. Next: writing-plans. Template payload → release-deferred (batches w/ FWK36/37).
