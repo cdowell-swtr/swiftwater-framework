@@ -1745,3 +1745,13 @@ enumerable-surface kinds" → "surfaces of a kind `enumerate.py` doesn't recogni
 the open-world half flags NON-enumerated kinds); regenerated the doc, guard 3 passed, ruff/format
 clean. Left the privacy/application-logic "defers to" framing as-is (reviewer: accurate effective-
 scope, not a fabrication). Ready for PR.
+
+#### #0148 · completed · housekeeping · 2026-06-17
+Session wrap. PLAN.md: FWK6 (data-store runtime parity, Plan 29) marked **← NEXT UP** and moved to
+the top of `Next` (release is not near, so FWK36 stays parked lower). CLAUDE.md: added the new
+generated/guarded per-agent reviewer reference (`documentation/reference/review-agents.md` via
+`gen_reviewer_reference.py`, guarded by `test_reviewer_reference.py`) to the "Reviewer system =
+source of truth" line (FWK3). Branch hygiene: local + remote already clean — only `master` +
+`gh-pages` remain (all feature branches auto-deleted on their squash-merges). Native memories
+recorded (unattended coverage-batch run pattern; pre-run adversarial plan verification). Docs/state
+only → no release.
