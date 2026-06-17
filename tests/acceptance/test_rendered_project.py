@@ -1018,6 +1018,281 @@ def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
 
 
 @pytest.mark.skipif(
+    not _docker_available() or shutil.which("task") is None,
+    reason="uv + docker + go-task required: task dev:lite precondition fast-fail",
+)
+def test_rendered_taskfile_dev_lite_precondition_rejects_missing_lock(
+    tmp_path: Path,
+) -> None:
+    # M5/FWK25 (negative): the dev:lite precondition `test -f uv.lock` should fail fast
+    # (non-zero, without starting any containers) when uv.lock is absent. This covers the
+    # precondition machinery that the raw-compose dev:lite test never exercises.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    # Do NOT run uv lock — leave uv.lock absent so the precondition fires.
+    result = subprocess.run(
+        ["task", "dev:lite"],
+        cwd=dest,
+        env=_compose_env(),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode != 0, (
+        "task dev:lite should have failed fast with a missing uv.lock precondition, "
+        f"but exited 0.\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    # The precondition message (Taskfile.yml.jinja:35) says "Run `uv sync` first".
+    combined = result.stdout + result.stderr
+    assert "uv sync" in combined or "uv.lock" in combined, (
+        "task dev:lite failed (non-zero) but did not emit the expected precondition "
+        f"message about uv.lock/uv sync:\n{combined}"
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available() or shutil.which("task") is None,
+    reason="uv + docker + go-task required: task dev:lite live-stack exercise",
+)
+def test_rendered_taskfile_dev_lite_target_drives_stack(tmp_path: Path) -> None:
+    # M5/FWK25: the existing dev:lite test calls raw `docker compose … up` directly, bypassing
+    # `task`. Running `task dev:lite` exercises the preconditions (docker + uv.lock), the
+    # -f merge order, and the UID/GID env shell-outs. The target calls ./scripts/compose.sh
+    # (FWK31 PORT_OFFSET wrapper) in attached mode — run it as a background subprocess, poll
+    # /health over the ephemeral host port, assert up, then tear down.
+    import json as _json
+
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    base = "infra/compose/base.yml"
+    dev = "infra/compose/dev.yml"
+    env = _compose_env()
+    # task dev:lite runs compose attached; background it so the test can poll.
+    proc = subprocess.Popen(
+        ["task", "dev:lite"],
+        cwd=dest,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        # discover the ephemeral host port the isolate-fixture bound to 0.
+        # give docker a moment to bind before querying the port mapping.
+        port = None
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            try:
+                port = _compose_host_port(dest, [base, dev], "app", 8000)
+                break
+            except (subprocess.CalledProcessError, ValueError, IndexError):
+                time.sleep(3)
+        assert port is not None, (
+            "could not resolve the app ephemeral host port within 120s — "
+            "task dev:lite may not have started docker compose"
+        )
+
+        # poll /health until 200 (proves the whole task entrypoint: preconditions passed,
+        # compose.sh invoked correctly, stack came up with the right -f merge order,
+        # UID/GID env reached the container so the bind mount is host-owned).
+        body = None
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:{port}/health", timeout=3
+                ) as resp:
+                    if resp.status == 200:
+                        body = _json.loads(resp.read())
+                        break
+            except OSError:
+                time.sleep(3)
+        assert body is not None, (
+            f"app did not serve /health 200 within 120s after `task dev:lite` "
+            f"(port={port}) — precondition, merge order, or UID/GID env regression"
+        )
+        assert body["status"] in {"ok", "degraded"}
+        assert "request_latency_p99_ms" in body["slos"]
+    finally:
+        proc.terminate()
+        # Tear down via raw compose with the same -f list + isolation env.
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "-f",
+                base,
+                "-f",
+                dev,
+                "--profile",
+                "lite",
+                "down",
+                "-v",
+            ],
+            cwd=dest,
+            env=env,
+        )
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+@pytest.mark.skipif(
+    not _docker_available() or shutil.which("task") is None,
+    reason="uv + docker + go-task required: task db:migrate + db:seed live exercise",
+)
+def test_rendered_taskfile_db_targets_seed_rows(tmp_path: Path) -> None:
+    # M6/FWK25 (live half): no pytest tier calls `task db:migrate` or `task db:seed` — the
+    # acceptance tier calls `bash scripts/coverage.sh` (which runs alembic via conftest) and
+    # scripts/seed.py is invoked only via entrypoint.sh in the full dev stack. Run the db:
+    # targets via `task` against a live compose Postgres, asserting seed rows land. This catches
+    # a broken db:seed cwd-from-root (scripts/seed.py path not resolved from dest) or a
+    # mis-wired alembic invocation.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+
+    base = "infra/compose/base.yml"
+    dev = "infra/compose/dev.yml"
+    env = _compose_env()
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "up",
+        "-d",
+        "postgres",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "down",
+        "-v",
+    ]
+    assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+    try:
+        pg_port = _compose_host_port(dest, [base, dev], "postgres", 5432)
+        db_url = f"postgresql+psycopg://app:app@localhost:{pg_port}/app"
+        task_env = {**env, "APP_DATABASE_URL": db_url}
+
+        # Wait for postgres to be ready (healthcheck is pg_isready; poll via psql).
+        ready = False
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            r = subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    "-f",
+                    base,
+                    "-f",
+                    dev,
+                    "--profile",
+                    "lite",
+                    "exec",
+                    "-T",
+                    "postgres",
+                    "psql",
+                    "-U",
+                    "app",
+                    "-d",
+                    "app",
+                    "-c",
+                    "SELECT 1",
+                ],
+                cwd=dest,
+                env=env,
+                capture_output=True,
+            )
+            if r.returncode == 0:
+                ready = True
+                break
+            time.sleep(3)
+        assert ready, "compose postgres never accepted a psql connection within 90s"
+
+        # task db:migrate — runs `uv run alembic upgrade head` in dest.
+        migrate = subprocess.run(
+            ["task", "db:migrate"],
+            cwd=dest,
+            env=task_env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert migrate.returncode == 0, (
+            "task db:migrate failed:\n" + migrate.stdout + migrate.stderr
+        )
+
+        # task db:seed — runs `uv run python scripts/seed.py` in dest.
+        # The M6 risk: if go-task resolves scripts/seed.py from a wrong cwd, it fails here.
+        seed = subprocess.run(
+            ["task", "db:seed"],
+            cwd=dest,
+            env=task_env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert seed.returncode == 0, (
+            "task db:seed failed (cwd-from-root regression: scripts/seed.py not found, "
+            "or alembic migrations not applied first):\n" + seed.stdout + seed.stderr
+        )
+
+        # Assert seed rows actually landed in the DB (not just exit 0 from a no-op).
+        count_result = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "-f",
+                base,
+                "-f",
+                dev,
+                "--profile",
+                "lite",
+                "exec",
+                "-T",
+                "postgres",
+                "psql",
+                "-U",
+                "app",
+                "-d",
+                "app",
+                "-t",
+                "-c",
+                "SELECT COUNT(*) FROM items;",
+            ],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert count_result.returncode == 0, (
+            "psql row count query failed:\n" + count_result.stdout + count_result.stderr
+        )
+        row_count = int(count_result.stdout.strip())
+        assert row_count > 0, (
+            f"task db:seed exited 0 but left {row_count} rows in the items table — "
+            "seed.py ran in the wrong cwd (scripts/seed.py not found relative to dest) "
+            "or is silently idempotent-but-empty on a fresh DB"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+
+
+@pytest.mark.skipif(
     not _docker_available()
     or shutil.which("mkcert") is None
     or shutil.which("task") is None,

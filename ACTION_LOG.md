@@ -1619,3 +1619,19 @@ skip `dispose_engine()` → RED). Driver care: open the killer connection while 
 checked out so the pool allocates a distinct backend (else it reuses the pid and kills itself).
 FWK29 registry: `service:dev.yml:mongo` → EXERCISED. M1/M4/M14 have no registry keys. Subagent-driven
 (Sonnet; controller review + commit). No release.
+
+#### #0140 · completed · coverage-batch · 2026-06-17
+**FWK25** (item 4/7) — Taskfile targets through the `task` runner. Four tests, all GREEN +
+bite-proven, no template bugs. Gate-tier (`test_copier_runner.py`):
+`test_render_ci_task_chain_and_85_percent_gate` — YAML-parses the rendered Taskfile, asserts
+`ci.cmds` order (lint → test:cov:ci → audit → openapi:export) + the 85 coverage threshold + the
+`framework integrity` precondition (bite: `85`→`99` RED). Docker-gated (`test_rendered_project.py`):
+`test_rendered_taskfile_dev_lite_precondition_rejects_missing_lock` (M5 negative — no uv.lock →
+`task dev:lite` exits non-zero with the uv-sync message; this IS the positive test's bite-proof),
+`test_rendered_taskfile_dev_lite_target_drives_stack` (M5 positive — `task dev:lite` Popen → poll
+/health 200 on the ephemeral port → `docker compose down -v`),
+`test_rendered_taskfile_db_targets_seed_rows` (M6 — postgres up, `task db:migrate` rc0, `task db:seed`
+rc0 with `APP_DATABASE_URL` injected via env, `items` row count > 0 via `compose exec psql`; bite:
+`>0`→`==0` RED). Neither fork bit: `_compose_host_port` resolved the dev:lite port promptly, and
+pydantic-settings env-precedence carried `APP_DATABASE_URL` into `db:seed`. No registry flips (Taskfile
+targets are out of FWK29 scope). Subagent-driven (Sonnet; controller review + commit). No release.

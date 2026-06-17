@@ -3257,6 +3257,62 @@ def test_render_docs_battery_adds_taskfile_tasks(tmp_path: Path):
     assert "docs:build" in ci_section
 
 
+def test_render_ci_task_chain_and_85_percent_gate(tmp_path: Path):
+    # M6/FWK25 (gate-tier, no Docker): the existing "ci: in taskfile" assertion (line 753)
+    # passes even if all sub-tasks are stripped. Assert that:
+    # (a) ci.cmds contains lint / test:cov:ci / audit / openapi:export in that order;
+    # (b) test:cov:ci's cmd carries the "85" threshold arg (the CI gate is 85%, not 70%).
+    # Also asserts the framework-integrity precondition renders in the ci: block.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    tf = yaml.safe_load((dest / "Taskfile.yml").read_text())
+
+    ci_cmds = tf["tasks"]["ci"]["cmds"]
+    # Each element is {"task": "<name>"} in go-task v3 YAML.
+    ci_task_names = [
+        item["task"] if isinstance(item, dict) else item for item in ci_cmds
+    ]
+    expected_order = ["lint", "test:cov:ci", "audit", "openapi:export"]
+    # Assert each sub-task is present and in the correct relative order
+    # (extra entries — e.g. docs:build with the docs battery — are allowed after openapi:export).
+    indices = {}
+    for name in expected_order:
+        assert name in ci_task_names, (
+            f"ci: task chain is missing '{name}' — dropped/mis-named sub-task "
+            f"(ci.cmds = {ci_task_names})"
+        )
+        indices[name] = ci_task_names.index(name)
+    for i in range(len(expected_order) - 1):
+        assert indices[expected_order[i]] < indices[expected_order[i + 1]], (
+            f"ci: sub-task order wrong: '{expected_order[i]}' must precede "
+            f"'{expected_order[i + 1]}' (found indices {indices})"
+        )
+
+    # test:cov:ci must carry the 85% threshold (not the 70% pre-commit gate).
+    cov_ci_cmds = tf["tasks"]["test:cov:ci"]["cmds"]
+    cov_ci_text = " ".join(
+        item if isinstance(item, str) else str(item) for item in cov_ci_cmds
+    )
+    assert "85" in cov_ci_text, (
+        f"test:cov:ci cmd does not carry the 85% threshold (got {cov_ci_text!r})"
+    )
+    assert "scripts/coverage.sh" in cov_ci_text, (
+        f"test:cov:ci cmd does not invoke scripts/coverage.sh (got {cov_ci_text!r})"
+    )
+
+    # The ci: block must have the framework-integrity precondition (soft check — only fires
+    # when the framework CLI is installed; a missing precondition silently skips integrity).
+    ci_preconditions = tf["tasks"]["ci"].get("preconditions", [])
+    precond_text = " ".join(
+        item.get("sh", "") if isinstance(item, dict) else str(item)
+        for item in ci_preconditions
+    )
+    assert "framework integrity" in precond_text, (
+        "ci: task is missing the framework-integrity precondition "
+        f"(preconditions = {ci_preconditions})"
+    )
+
+
 def test_render_without_docs_battery_has_no_docs_tasks(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
