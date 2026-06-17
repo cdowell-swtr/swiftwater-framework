@@ -1363,3 +1363,11 @@ CLI). A missing `_commit` surfaces as an error (exit 1). Two new tests in `tests
 Verified no regression across integrity-command callers: test_cli + integrity_workers +
 integrity/ = 170 passed; dogfood + downskill + review registry/framework_target = 75 passed;
 ruff + mypy clean.
+
+#### #0122 · completed · FWK34 · 2026-06-16
+Task 5 — `src/framework_cli/self_bump.py`: the pure `decide_bump` policy (proceed when target
+not newer / refuse non-uv-tool / bump on --flag / prompt on TTY / refuse non-interactive) +
+`BumpDecision` + `BumpRefused`, and the I/O seams `is_uv_tool_install` (resolves the running
+console-script under `uv tool dir`, fail-safe False on uncertainty), `run_uv_tool_install`,
+`reexec`. 5 truth-table tests. Red→green; ruff + mypy clean. (Orchestrator `maybe_self_bump`
++ `_interactive`/`_confirm` land in Task 6 with the upgrade wiring.)
