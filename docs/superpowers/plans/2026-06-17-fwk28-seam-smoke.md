@@ -47,7 +47,9 @@ red, follow the shared real-bug policy.
   cluster (~line 2955); place L3 immediately after the existing
   `test_render_docs_battery_adds_publish_workflow` (~line 3284).
 - **Modify** `tests/acceptance/test_rendered_project.py` — add one L2 test
-  (`test_load_sh_fails_gracefully_without_docker_target`). Place after the FWK27 gate-hook block.
+  (`test_load_sh_fails_gracefully_without_docker_target`). Placement is free (a new function) —
+  append it at the end of the file (the FWK27 gate-hook tests live in `test_copier_runner.py`,
+  not here).
 - **Modify** `tests/runtime_coverage/registry.py` — flip `script:infra/deploy/notify.sh` from
   `_KG` to `_EX` naming `test_notify_seam_exits_zero_and_echoes`; leave
   `script:scripts/load.sh` as `_KG` (graceful-degradation only, not full SLO gate — honest
@@ -184,24 +186,28 @@ def test_notify_seam_posts_to_webhook(tmp_path: Path) -> None:
     dest = tmp_path / "demo"
     render_project(dest, DATA)
 
-    # Uncomment the webhook block in the rendered copy.
+    # Uncomment the shipped webhook example (the block from `# if [ -n "${SLACK_WEBHOOK_URL`
+    # through `# fi`) by stripping each line's leading "# ". Line-based so it's robust to the
+    # block's exact spacing — every block line is "# "-prefixed (verified via `cat -A notify.sh`),
+    # unlike a brittle exact-string `.replace()` chain.
     script_path = dest / "infra" / "deploy" / "notify.sh"
-    original = script_path.read_text()
-    activated = original.replace(
-        "# if [ -n \"${SLACK_WEBHOOK_URL:-}\"]",
-        "if [ -n \"${SLACK_WEBHOOK_URL:-}\"]",
-    ).replace(
-        "#   curl -sf -X POST -H 'Content-Type: application/json' \\",
-        "  curl -sf -X POST -H 'Content-Type: application/json' \\",
-    ).replace(
-        "#     --data \"{\\\"text\\\": \\\"${message}\\\"}\" \"${SLACK_WEBHOOK_URL}\" || true",
-        "    --data \"{\\\"text\\\": \\\"${message}\\\"}\" \"${SLACK_WEBHOOK_URL}\" || true",
-    ).replace(
-        "# fi",
-        "fi",
-        1,  # only the first occurrence (the webhook fi)
+    out: list[str] = []
+    in_block = False
+    for line in script_path.read_text().splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith('# if [ -n "${SLACK_WEBHOOK_URL'):
+            in_block = True
+        if in_block and stripped.startswith("# "):
+            line = line.replace("# ", "", 1)
+        out.append(line)
+        if stripped == "# fi":
+            in_block = False
+    script_path.write_text("\n".join(out) + "\n")
+    # Sanity: the activation must have actually uncommented something (guards against a
+    # template reword silently no-opping this and the test passing vacuously).
+    assert "\nif [ -n " in script_path.read_text(), (
+        "webhook block not uncommented — notify.sh example format changed; update the activation"
     )
-    script_path.write_text(activated)
 
     srv = _serve_fake_notify()
     try:
@@ -399,14 +405,12 @@ def test_load_sh_fails_gracefully_without_docker_target(tmp_path: Path) -> None:
     )
 ```
 
-  > **Implementation note — `tests/non_functional/load.js`:** `load.sh` reads
-  > `tests/non_functional/load.js` from the rendered project cwd
-  > (`< tests/non_functional/load.js` at line 18). This file must exist in the rendered project
-  > for the `docker run ... run - < tests/non_functional/load.js` to succeed. If it does NOT
-  > exist, `docker run` exits non-zero immediately (stdin redirect fails). The test's
-  > `returncode != 0` assertion still passes — but for a different reason than intended. If this
-  > occurs, treat it as a real bug in the template (missing `tests/non_functional/load.js`) and
-  > apply the real-bug policy.
+  > **Implementation note — `tests/non_functional/load.js`:** VERIFIED to exist in the template
+  > (renders to `tests/non_functional/load.js`), so `load.sh`'s `< tests/non_functional/load.js`
+  > redirect has a real file. This L2 test asserts graceful degradation (k6 absent / no docker
+  > target → non-zero exit), so it does NOT depend on load.js content. If `load.js` ever goes
+  > missing the redirect fails for a different reason — but that's a template regression, so
+  > apply the real-bug policy then.
 
 - [ ] **Step 2: Lint.**
 
@@ -688,12 +692,10 @@ def test_docs_workflow_mike_flags(tmp_path: Path) -> None:
 
 ### Anticipated real bugs these tests may surface
 
-1. **`tests/non_functional/load.js` missing from the rendered project (L2).** `load.sh` reads
-   `< tests/non_functional/load.js` from the cwd. If this file does not exist in the rendered
-   project, `docker run ... run - < ...` fails immediately (shell redirect error before Docker even
-   starts), the script exits non-zero, and the `returncode != 0` assertion passes — but for the
-   wrong reason. Check `result.stderr` for "No such file" when diagnosing. If it is missing from
-   the template, apply the real-bug policy.
+1. **(LOW — `load.js` verified present)** `load.sh` reads `< tests/non_functional/load.js`; that
+   file was confirmed to render, so this is not an expected failure. Only if a future template
+   change drops it would the redirect fail for the wrong reason (check `result.stderr` for "No such
+   file" when diagnosing) → real-bug policy. Listed for completeness, not anticipated.
 
 2. **`notify.sh` webhook uncomment silent no-op (L1).** If the template's comment prefix or
    indentation differs from what the string replacements expect, `script_path.write_text(activated)`

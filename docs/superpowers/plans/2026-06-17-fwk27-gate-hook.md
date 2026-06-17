@@ -114,11 +114,21 @@ def _run_gate_hook(
     Places a fake `framework` binary at the front of PATH that exits `stub_exit_code` so the
     hook never touches a real backend. If `marker_verdict` is given, pre-writes
     .framework/audit/marker.json with that verdict so the hook's summary-readback succeeds.
-    The rendered project already has a `git init` + initial commit (copier does this), so
-    `git rev-parse --show-toplevel` resolves cleanly.
+    The hook does `git rev-parse --show-toplevel`; `render_project` does NOT git-init, so we
+    make `dest` its own repo here (else rev-parse resolves to the framework repo, or the hook's
+    `|| exit 0` short-circuits and the FAIL case never reaches exit 2).
     """
-    import os
     import stat
+
+    # `dest` must be a git repo for the hook's `git rev-parse --show-toplevel` to resolve to it.
+    # A fresh `git init` installs no git hooks, so `git commit` here runs nothing extra.
+    subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
+        cwd=dest,
+        check=True,
+    )
 
     # Build a fake `framework` binary that exits stub_exit_code.
     fake_bin = dest / ".fwk27-bin"
@@ -324,8 +334,9 @@ def test_rendered_gate_hook_skips_non_commit(tmp_path: Path):
   .claude/hooks/lint_changed.py`. The `json.dumps(payload)` / `input=` shape is identical. ✓
 - **No docker, no API key, no uv sync:** the hook is a shell script; it only needs `bash`, `uv`
   (for the `uv run framework` shim — replaced by our stub), and `git` (for
-  `git rev-parse --show-toplevel`). The rendered project's `copier copy` runs `git init` + an
-  initial commit, so `git rev-parse` resolves. ✓
+  `git rev-parse --show-toplevel`). `render_project` does NOT git-init, so `_run_gate_hook`
+  runs `git init`+add+commit in `dest` (above) — otherwise rev-parse resolves to the framework
+  repo (wrong cwd → vacuous pass) or `|| exit 0` fires (FAIL case never reaches exit 2). ✓
 - **Non-vacuity (bite-proven):** Task 1 Step 4: flip FAIL case to assert `== 0` → RED (the hook
   genuinely exits 2); flip skip case to assert `== 2` → RED (the `ls` payload genuinely skips).
   Both prove the test detects the regression it claims to detect. ✓
@@ -378,16 +389,10 @@ def test_rendered_gate_hook_skips_non_commit(tmp_path: Path):
   uv run framework gate` conditional is inverted or the `set -e` on the surrounding script absorbs
   the non-zero before the `if`, the hook exits 0 or crashes instead of exiting 2. Test 1
   (`test_rendered_gate_hook_blocks_on_fail_marker`) catches this.
-- **Marker path mismatch.** The hook reads `.framework/audit/marker.json` relative to the git
-  root (`cd "$root"` on line 10). If the `_run_gate_hook` helper writes the marker relative to
-  `dest` (the rendered project root) but the hook resolves the git root to a different directory,
-  the `python3 -c ...json.load(open('.framework/audit/marker.json'))...` fails silently (`||
-  true`), the summary is empty, but the hook still exits 2. This is only a summary-readback bug,
-  not a functional bug; Test 1 still passes. However, if `git rev-parse --show-toplevel` resolves
-  to a PARENT of `dest` (because `tmp_path` is inside the framework repo's git tree), the `cd
-  "$root"` would change to the framework repo root, not `dest`, and the marker path would be wrong
-  — but the hook would still exit 2 (the `summary` readback uses `|| true`). Mitigation: confirm
-  on the first run that `dest` is a git root (Copier inits a git repo at `dest`, so
-  `git rev-parse --show-toplevel` from `dest` returns `dest`). If it somehow returns the framework
-  repo root, the test still exits 2 (FAIL path), but the marker is not read. The non-commit test
-  (exit 0) would still pass. Not a blocking concern, but worth noting.
+- **Marker path / git root (RESOLVED).** The hook does `root=$(git rev-parse --show-toplevel)`
+  then `cd "$root"` and reads `.framework/audit/marker.json` relative to it. `render_project`
+  does NOT git-init `dest`, so without intervention rev-parse would resolve to the FRAMEWORK
+  repo (when `tmp_path` is inside its tree → wrong cwd, marker not found, vacuous pass) or fail
+  and `|| exit 0` (FAIL case never reaches exit 2 → RED). The fix: `_run_gate_hook` runs `git
+  init`+add+commit in `dest`, so `git rev-parse --show-toplevel` returns `dest` and the marker
+  resolves correctly. This is why the git-init step is mandatory, not optional.

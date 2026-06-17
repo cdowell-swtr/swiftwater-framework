@@ -79,7 +79,7 @@ def _traefik_ws_upgrade(https_port: int, host: str, ctx: "ssl.SSLContext") -> in
     handshake only (frame echo is covered in-process by the websockets battery's own test)."""
     import base64
 
-    key = base64.b64encode(b"fwk24-ws-test-key").decode()
+    key = base64.b64encode(b"fwk24-ws-testkey").decode()  # 16-byte nonce (RFC 6455)
     req = (
         f"GET /ws HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\n"
         f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
@@ -104,8 +104,10 @@ def _traefik_ws_upgrade(https_port: int, host: str, ctx: "ssl.SSLContext") -> in
 
 ```python
 @pytest.mark.skipif(
-    not _docker_available(),
-    reason="uv + docker + mkcert: live per-battery routes through Traefik",
+    not _docker_available()
+    or shutil.which("mkcert") is None
+    or shutil.which("task") is None,
+    reason="uv + docker + mkcert + task: live per-battery routes through Traefik",
 )
 def test_rendered_per_battery_routes_through_traefik(tmp_path: Path):
     # M8/FWK24: every _passes test asserts routes at ~100% IN-PROCESS (TestClient, LLM mocked) —

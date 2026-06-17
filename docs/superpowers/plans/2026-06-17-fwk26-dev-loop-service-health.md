@@ -3,11 +3,11 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: `superpowers:executing-plans`. Read the shared
 > policy first: `docs/superpowers/plans/2026-06-17-coverage-batch-execution-policy.md` (branch
 > `fwk-coverage-batch`, commit cadence + skip-marker gate, real-bug rule, **no release**,
-> laptop/`TMPDIR=/var/tmp`, non-vacuity). This is item **#3** of the batch and lands **after FWK24
-> and FWK23**. FWK24 already added the shared helpers `_traefik_request`, `_traefik_ws_upgrade`,
-> `_mkcert_ssl_context`; FWK23 already added `_poll_json` — **this plan assumes all four exist and
-> does NOT redefine them** (M1 reuses `_mkcert_ssl_context` only for the host name; the :80 probe is
-> raw plaintext and needs no TLS helper). Steps use `- [ ]`.
+> laptop/`TMPDIR=/var/tmp`, non-vacuity). This is item **#3** of the batch and lands after FWK24
+> and FWK23. NOTE: this plan's own tests do NOT call the FWK24/FWK23 helpers
+> (`_traefik_request`/`_traefik_ws_upgrade`/`_mkcert_ssl_context`/`_poll_json`) — M1 uses a raw
+> plaintext socket on :80, M2 uses `docker inspect`/`compose exec`, M4 uses `urlopen`, M14 uses
+> `subprocess`. So FWK26 is self-contained even if run out of order. Steps use `- [ ]`.
 
 **Goal:** Close the four dev-loop / service-health med gaps that ship to a consumer unexercised:
 
@@ -89,8 +89,8 @@ fixture, the FWK20 `compose exec -T` query pattern).
   (`test_rendered_dev_stack_http_redirect_and_mongo_health` [M1+M2],
   `test_rendered_dev_lite_hot_reload_picks_up_edit` [M4],
   `test_rendered_db_engine_pool_pre_ping_and_dispose` [M14]). **No new shared helper is required** —
-  M1/M2/M4 reuse `_compose_host_port` + a raw socket + the FWK23 `_poll_json` (M4 polls plaintext, so
-  it uses a small inline `urlopen` loop, not `_poll_json`, which JSON-parses); M14 uses `subprocess`.
+  M1 uses `_compose_host_port` + a raw plaintext socket, M2 uses `docker inspect`/`compose exec`,
+  M4 uses a small inline `urlopen` poll loop, M14 uses `subprocess` — no FWK24/FWK23 helper needed.
 - **Modify** `tests/runtime_coverage/registry.py` — flip the **single** FWK26 KNOWN_GAP entry
   `service:dev.yml:mongo` → EXERCISED (M2), naming the new test. **No other registry change** — M1,
   M4, and M14 are in-app / behavioral surfaces with **no enumerated registry key** (verified below).

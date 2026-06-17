@@ -322,7 +322,7 @@ def test_rendered_taskfile_dev_lite_target_drives_stack(tmp_path: Path):
             try:
                 port = _compose_host_port(dest, [base, dev], "app", 8000)
                 break
-            except (subprocess.CalledProcessError, ValueError):
+            except (subprocess.CalledProcessError, ValueError, IndexError):
                 time.sleep(3)
         assert port is not None, (
             "could not resolve the app ephemeral host port within 120s — "

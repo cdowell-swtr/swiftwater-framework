@@ -1512,3 +1512,20 @@ PreToolUse payload, mirrors `_run_hook`), FWK28 (notify.sh smoke + load.sh grace
 + docs.yml mike workflow-graph assert). Keys location recorded in native memory. Registry-key
 cross-check: the keys each plan flips all exist. Delivering as a planning PR for review; the
 laptop run executes from these. Stopped after the plans per the user.
+
+#### #0133 · completed · FWK19/23/24/25/26/27/28 · 2026-06-17
+Adversarial hands-free verification pass (7 parallel read-only agents, one per plan) cross-checking
+every plan against the actual code: registry keys exist + EXERCISED evidence names a test the plan
+defines; referenced helpers/anchors exist; no step needs an absent tool/key/interactive input. Found
+**3 BLOCKERS** (would have stalled the unattended run) + warns; all fixed in the plan docs:
+(1) **FWK24** Task-2 `skipif` only gated docker → on a non-parity laptop the `mkcert`/`task` calls
+ERROR (not skip) → added `shutil.which("mkcert")/("task") is None` guards (mirrors the existing
+Traefik test). (2) **FWK27** `render_project` does NOT git-init, so the hook's `git rev-parse
+--show-toplevel` resolves to the framework repo (vacuous pass) or `|| exit 0` fires (FAIL case never
+hits exit 2 → RED) → `_run_gate_hook` now `git init`+add+commit's `dest`; prose corrected. (3)
+**FWK28** webhook test's `.replace()` chain had 2 strings not matching `notify.sh` → produced a bash
+syntax error → replaced with a robust line-based uncommenter (strip leading `# ` across the block) +
+a sanity-assert. Warns fixed: FWK24 WS nonce → 16 bytes; FWK27 dropped redundant in-func `import os`;
+FWK25 port-poll `except` += `IndexError`; FWK26 corrected a misstated helper precondition; FWK28
+placement note + the false-alarm `load.js` anticipated-bug (verified present). Net: FWK23/25/26/19
+verifiers returned READY; FWK24/27/28 NEEDS-FIX → now fixed. Plans are hands-free-ready. PR #51 updated.
