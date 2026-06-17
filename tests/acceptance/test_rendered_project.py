@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -113,6 +115,87 @@ def _run_image_serving(
         yield base
     finally:
         subprocess.run(["docker", "rm", "-f", cid], capture_output=True)
+
+
+def _poll_json(url: str, *, timeout: float, predicate) -> dict | None:
+    """Poll an HTTP endpoint returning JSON until `predicate(parsed)` is truthy or `timeout`
+    elapses. Returns the parsed JSON that satisfied the predicate, else None. Tolerates the
+    not-yet-up window (connection refused / 5xx / partial JSON) by swallowing OSError + JSON
+    errors between polls — the obs stack's scrape/ingest/provisioning all have a boot lag."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                parsed = json.loads(resp.read())
+            if predicate(parsed):
+                return parsed
+        except (OSError, ValueError):
+            pass
+        time.sleep(3)
+    return None
+
+
+def _mkcert_ssl_context() -> ssl.SSLContext:
+    """An SSL context that trusts ONLY the mkcert CA (chain-verify), with hostname check off
+    (the cert's *.localhost wildcard SAN is browser-valid but OpenSSL won't match it)."""
+    caroot = subprocess.run(
+        ["mkcert", "-CAROOT"], capture_output=True, text=True
+    ).stdout.strip()
+    ctx = ssl.create_default_context(cafile=str(Path(caroot) / "rootCA.pem"))
+    ctx.check_hostname = False
+    return ctx
+
+
+def _traefik_request(
+    https_port: int,
+    host: str,
+    ctx: ssl.SSLContext,
+    method: str,
+    path: str,
+    *,
+    headers: dict[str, str] | None = None,
+    body: bytes | None = None,
+) -> tuple[int, str]:
+    """One HTTP/1.1 request THROUGH Traefik over TLS (connect 127.0.0.1:<port>, SNI+Host=<host>,
+    Connection: close so we read to EOF). Returns (status, body_text). Mirrors the recipe in
+    test_rendered_project_dev_stack_routes_through_traefik."""
+    lines = [f"{method} {path} HTTP/1.1", f"Host: {host}", "Connection: close"]
+    for k, v in (headers or {}).items():
+        lines.append(f"{k}: {v}")
+    if body is not None:
+        lines.append(f"Content-Length: {len(body)}")
+    req = ("\r\n".join(lines) + "\r\n\r\n").encode() + (body or b"")
+    raw = socket.create_connection(("127.0.0.1", https_port), timeout=5)
+    with ctx.wrap_socket(raw, server_hostname=host) as ssock:
+        ssock.sendall(req)
+        data = b""
+        while True:
+            chunk = ssock.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+    head, _, payload = data.partition(b"\r\n\r\n")
+    status = int(head.split(b"\r\n", 1)[0].split()[1])
+    return status, payload.decode(errors="replace")
+
+
+def _traefik_ws_upgrade(https_port: int, host: str, ctx: ssl.SSLContext) -> int:
+    """Open a WebSocket upgrade to /ws THROUGH Traefik; return the HTTP status (expect 101
+    Switching Protocols — proves the proxy negotiates the WS upgrade, the M8 risk). We assert the
+    handshake only (frame echo is covered in-process by the websockets battery's own test)."""
+    import base64
+
+    key = base64.b64encode(b"fwk24-ws-testkey").decode()  # 16-byte nonce (RFC 6455)
+    req = (
+        f"GET /ws HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\n"
+        f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
+        f"Sec-WebSocket-Version: 13\r\n\r\n"
+    ).encode()
+    raw = socket.create_connection(("127.0.0.1", https_port), timeout=5)
+    with ctx.wrap_socket(raw, server_hostname=host) as ssock:
+        ssock.sendall(req)
+        head = ssock.recv(4096)
+    return int(head.split(b"\r\n", 1)[0].split()[1])
 
 
 @pytest.fixture(autouse=True)
@@ -874,6 +957,132 @@ def test_lint_hook_ignores_non_python(tmp_path: Path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def _run_gate_hook(
+    dest: Path,
+    payload: dict,
+    *,
+    stub_exit_code: int,
+    marker_verdict: str | None = None,
+) -> "subprocess.CompletedProcess[str]":
+    """Invoke .claude/hooks/reviewers-gate-check.sh with a synthetic PreToolUse payload.
+
+    Places a fake `framework` binary at the front of PATH that exits `stub_exit_code` so the
+    hook never touches a real backend. If `marker_verdict` is given, pre-writes
+    .framework/audit/marker.json with that verdict so the hook's summary-readback succeeds.
+    The hook does `git rev-parse --show-toplevel`; `render_project` does NOT git-init, so we
+    make `dest` its own repo here (else rev-parse resolves to the framework repo, or the hook's
+    `|| exit 0` short-circuits and the FAIL case never reaches exit 2).
+    """
+    import stat
+
+    # `dest` must be a git repo for the hook's `git rev-parse --show-toplevel` to resolve to it.
+    # A fresh `git init` installs no git hooks, so `git commit` here runs nothing extra.
+    subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
+        cwd=dest,
+        check=True,
+    )
+
+    # Build a fake `framework` binary that exits stub_exit_code.
+    fake_bin = dest / ".fwk27-bin"
+    fake_bin.mkdir(exist_ok=True)
+    fake_framework = fake_bin / "framework"
+    fake_framework.write_text(f"#!/usr/bin/env bash\nexit {stub_exit_code}\n")
+    fake_framework.chmod(
+        fake_framework.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
+    )
+
+    # Pre-write the marker.json if the FAIL branch will try to read it.
+    if marker_verdict is not None:
+        marker_dir = dest / ".framework" / "audit"
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        (marker_dir / "marker.json").write_text(
+            json.dumps({"verdict": marker_verdict, "summary": "FWK27 test finding"})
+        )
+
+    # Prepend the fake bin dir to PATH so `uv run framework gate` calls our stub, not the
+    # real CLI.  uv itself is still found at its normal location.
+    env = {**os.environ, "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}"}
+
+    return subprocess.run(
+        ["bash", ".claude/hooks/reviewers-gate-check.sh"],
+        cwd=dest,
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("bash") is None,
+    reason="uv + bash required: renders the project and invokes the gate hook shell script",
+)
+def test_rendered_gate_hook_blocks_on_fail_marker(tmp_path: Path):
+    # M15/FWK27: the hook's FAIL path (exit 2) is never exercised — only render-text-checked.
+    # Pipe a `git commit` PreToolUse payload; the fake `framework` binary exits 1 (gate FAIL);
+    # the hook reads .framework/audit/marker.json and exits 2.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    # uv sync not required: we don't call the rendered project's venv — only bash + the fake stub.
+
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "git commit -m 'test commit'"},
+    }
+    result = _run_gate_hook(dest, payload, stub_exit_code=1, marker_verdict="FAIL")
+    assert result.returncode == 2, (
+        "gate hook did not exit 2 on a FAIL verdict — FAIL->exit-2 translation broken\n"
+        + result.stdout
+        + result.stderr
+    )
+    assert "FAILED" in result.stderr, (
+        "expected 'FAILED' in hook stderr on a FAIL verdict\n" + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("bash") is None,
+    reason="uv + bash required: renders the project and invokes the gate hook shell script",
+)
+def test_rendered_gate_hook_passes_on_pass_marker(tmp_path: Path):
+    # M15/FWK27: the hook's PASS path (exit 0 after framework gate succeeds) must also be
+    # asserted — the fake `framework` binary exits 0 (gate PASS); the hook exits 0.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "git commit -m 'test commit'"},
+    }
+    result = _run_gate_hook(dest, payload, stub_exit_code=0, marker_verdict="PASS")
+    assert result.returncode == 0, (
+        "gate hook did not exit 0 on a PASS verdict\n" + result.stdout + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("bash") is None,
+    reason="uv + bash required: renders the project and invokes the gate hook shell script",
+)
+def test_rendered_gate_hook_skips_non_commit(tmp_path: Path):
+    # M15/FWK27: the grep guard (line 8 of the hook) must exit 0 for non-commit Bash payloads
+    # without reaching the `framework gate` call at all. Use stub_exit_code=1 so if the grep
+    # guard breaks and the hook proceeds, it would exit 2 — making the skip a detectable failure.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    payload = {"tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+    result = _run_gate_hook(dest, payload, stub_exit_code=1)
+    assert result.returncode == 0, (
+        "gate hook did not skip (exit 0) on a non-commit Bash payload — grep guard broken\n"
+        + result.stdout
+        + result.stderr
+    )
+
+
 @pytest.mark.skipif(
     not _docker_available(),
     reason="uv and docker are required for the live-stack test",
@@ -932,6 +1141,411 @@ def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
         assert "request_latency_p99_ms" in body["slos"]
     finally:
         subprocess.run(down, cwd=dest)
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: test-profile stack + tmpfs ephemeral-DB reset",
+)
+def test_rendered_test_profile_stack_serves_and_resets_db(tmp_path: Path) -> None:
+    # FWK19 (M3): test.yml is shipped and documented (`task test:stack`), but the acceptance
+    # tier never uses --profile test — the tmpfs ephemeral-DB reset is undriven. Bring the
+    # stack up twice and assert: (a) the app serves /health on the first up, and (b) the
+    # postgres-test container has a DIFFERENT container ID on the second up, proving the tmpfs
+    # was torn down and recreated (ephemeral reset, not a persistent volume re-mount).
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    # test.yml + base.yml: base.yml defines the app build+healthcheck; test.yml adds the test
+    # profile + postgres-test. Neither publishes a host port for `app`; add one via an inline
+    # ephemeral override so _compose_host_port can discover the assigned ephemeral port.
+    # The _isolate_compose_project autouse fixture sets HTTP_HOST_PORT=0, so docker assigns
+    # a free ephemeral port automatically.
+    (dest / "infra" / "compose" / "fwk19.override.yml").write_text(
+        'services:\n  app:\n    ports:\n      - "${HTTP_HOST_PORT:-8000}:8000"\n'
+    )
+
+    base = "infra/compose/base.yml"
+    test_overlay = "infra/compose/test.yml"
+    override = "infra/compose/fwk19.override.yml"
+    files = [base, test_overlay, override]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+
+    compose = ["docker", "compose", *fargs, "--profile", "test"]
+    up = [*compose, "up", "-d", "--build"]
+    up_no_rebuild = [*compose, "up", "-d", "--no-build"]
+    down = [*compose, "down", "-v"]
+    env = _compose_env()
+
+    try:
+        # --- First boot ---
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0, (
+            "test-profile stack first `up --build` failed"
+        )
+        port = _compose_host_port(dest, files, "app", 8000)
+
+        # Poll /health until 200 (app runs alembic upgrade head before uvicorn serves).
+        deadline = time.time() + 120
+        body = None
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:{port}/health", timeout=3
+                ) as resp:
+                    if resp.status == 200:
+                        body = json.loads(resp.read())
+                        break
+            except OSError:
+                time.sleep(2)
+        assert body is not None, (
+            "test-profile app did not serve /health 200 within 120s on first boot"
+        )
+        assert body["status"] in {"ok", "degraded"}, (
+            f"unexpected /health status on first boot: {body}"
+        )
+
+        # Capture the postgres-test container ID on the first boot.
+        cid1 = subprocess.run(
+            [*compose, "ps", "-q", "postgres-test"],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert cid1, "postgres-test container not found after first up"
+
+        # --- Teardown (with -v: drop named volumes — there are none for postgres-test since
+        # it uses tmpfs, but -v is consistent with the other acceptance tests) ---
+        assert subprocess.run(down, cwd=dest, env=env).returncode == 0, (
+            "test-profile stack `down -v` failed"
+        )
+
+        # --- Second boot (no rebuild — image is already built) ---
+        assert subprocess.run(up_no_rebuild, cwd=dest, env=env).returncode == 0, (
+            "test-profile stack second `up --no-build` failed"
+        )
+        # Re-discover the port (ephemeral; may differ after a new up).
+        port2 = _compose_host_port(dest, files, "app", 8000)
+
+        # Poll /health on the second boot.
+        deadline2 = time.time() + 120
+        body2 = None
+        while time.time() < deadline2:
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:{port2}/health", timeout=3
+                ) as resp:
+                    if resp.status == 200:
+                        body2 = json.loads(resp.read())
+                        break
+            except OSError:
+                time.sleep(2)
+        assert body2 is not None, (
+            "test-profile app did not serve /health 200 within 120s on second boot — "
+            "the tmpfs reset may have left postgres-test in an inconsistent state, or the "
+            "app failed to re-run alembic upgrade head against the fresh DB"
+        )
+
+        # The tmpfs reset proof: postgres-test was torn down and recreated — its container ID
+        # must differ between the first and second boot (a persistent volume would allow the
+        # same container to be restarted, but `down` removes containers, so this mainly proves
+        # the second `up` created a brand-new postgres-test rather than re-attaching to a
+        # lingering one from a stale project namespace).
+        cid2 = subprocess.run(
+            [*compose, "ps", "-q", "postgres-test"],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert cid2, "postgres-test container not found after second up"
+        assert cid2 != cid1, (
+            "postgres-test container ID did not change between first and second boot — "
+            "the tmpfs ephemeral-DB reset did not produce a fresh container "
+            f"(first={cid1!r}, second={cid2!r})"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+
+
+@pytest.mark.skipif(
+    not _docker_available() or shutil.which("task") is None,
+    reason="uv + docker + go-task required: task dev:lite precondition fast-fail",
+)
+def test_rendered_taskfile_dev_lite_precondition_rejects_missing_lock(
+    tmp_path: Path,
+) -> None:
+    # M5/FWK25 (negative): the dev:lite precondition `test -f uv.lock` should fail fast
+    # (non-zero, without starting any containers) when uv.lock is absent. This covers the
+    # precondition machinery that the raw-compose dev:lite test never exercises.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    # Do NOT run uv lock — leave uv.lock absent so the precondition fires.
+    result = subprocess.run(
+        ["task", "dev:lite"],
+        cwd=dest,
+        env=_compose_env(),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode != 0, (
+        "task dev:lite should have failed fast with a missing uv.lock precondition, "
+        f"but exited 0.\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    # The precondition message (Taskfile.yml.jinja:35) says "Run `uv sync` first".
+    combined = result.stdout + result.stderr
+    assert "uv sync" in combined or "uv.lock" in combined, (
+        "task dev:lite failed (non-zero) but did not emit the expected precondition "
+        f"message about uv.lock/uv sync:\n{combined}"
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available() or shutil.which("task") is None,
+    reason="uv + docker + go-task required: task dev:lite live-stack exercise",
+)
+def test_rendered_taskfile_dev_lite_target_drives_stack(tmp_path: Path) -> None:
+    # M5/FWK25: the existing dev:lite test calls raw `docker compose … up` directly, bypassing
+    # `task`. Running `task dev:lite` exercises the preconditions (docker + uv.lock), the
+    # -f merge order, and the UID/GID env shell-outs. The target calls ./scripts/compose.sh
+    # (FWK31 PORT_OFFSET wrapper) in attached mode — run it as a background subprocess, poll
+    # /health over the ephemeral host port, assert up, then tear down.
+    import json as _json
+
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    base = "infra/compose/base.yml"
+    dev = "infra/compose/dev.yml"
+    env = _compose_env()
+    # task dev:lite runs compose attached; background it so the test can poll.
+    proc = subprocess.Popen(
+        ["task", "dev:lite"],
+        cwd=dest,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        # discover the ephemeral host port the isolate-fixture bound to 0.
+        # give docker a moment to bind before querying the port mapping.
+        port = None
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            try:
+                port = _compose_host_port(dest, [base, dev], "app", 8000)
+                break
+            except (subprocess.CalledProcessError, ValueError, IndexError):
+                time.sleep(3)
+        assert port is not None, (
+            "could not resolve the app ephemeral host port within 120s — "
+            "task dev:lite may not have started docker compose"
+        )
+
+        # poll /health until 200 (proves the whole task entrypoint: preconditions passed,
+        # compose.sh invoked correctly, stack came up with the right -f merge order,
+        # UID/GID env reached the container so the bind mount is host-owned).
+        body = None
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:{port}/health", timeout=3
+                ) as resp:
+                    if resp.status == 200:
+                        body = _json.loads(resp.read())
+                        break
+            except OSError:
+                time.sleep(3)
+        assert body is not None, (
+            f"app did not serve /health 200 within 120s after `task dev:lite` "
+            f"(port={port}) — precondition, merge order, or UID/GID env regression"
+        )
+        assert body["status"] in {"ok", "degraded"}
+        assert "request_latency_p99_ms" in body["slos"]
+    finally:
+        proc.terminate()
+        # Tear down via raw compose with the same -f list + isolation env.
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "-f",
+                base,
+                "-f",
+                dev,
+                "--profile",
+                "lite",
+                "down",
+                "-v",
+            ],
+            cwd=dest,
+            env=env,
+        )
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+@pytest.mark.skipif(
+    not _docker_available() or shutil.which("task") is None,
+    reason="uv + docker + go-task required: task db:migrate + db:seed live exercise",
+)
+def test_rendered_taskfile_db_targets_seed_rows(tmp_path: Path) -> None:
+    # M6/FWK25 (live half): no pytest tier calls `task db:migrate` or `task db:seed` — the
+    # acceptance tier calls `bash scripts/coverage.sh` (which runs alembic via conftest) and
+    # scripts/seed.py is invoked only via entrypoint.sh in the full dev stack. Run the db:
+    # targets via `task` against a live compose Postgres, asserting seed rows land. This catches
+    # a broken db:seed cwd-from-root (scripts/seed.py path not resolved from dest) or a
+    # mis-wired alembic invocation.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+
+    base = "infra/compose/base.yml"
+    dev = "infra/compose/dev.yml"
+    env = _compose_env()
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "up",
+        "-d",
+        "postgres",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "down",
+        "-v",
+    ]
+    assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+    try:
+        pg_port = _compose_host_port(dest, [base, dev], "postgres", 5432)
+        db_url = f"postgresql+psycopg://app:app@localhost:{pg_port}/app"
+        task_env = {**env, "APP_DATABASE_URL": db_url}
+
+        # Wait for postgres to be ready (healthcheck is pg_isready; poll via psql).
+        ready = False
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            r = subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    "-f",
+                    base,
+                    "-f",
+                    dev,
+                    "--profile",
+                    "lite",
+                    "exec",
+                    "-T",
+                    "postgres",
+                    "psql",
+                    "-U",
+                    "app",
+                    "-d",
+                    "app",
+                    "-c",
+                    "SELECT 1",
+                ],
+                cwd=dest,
+                env=env,
+                capture_output=True,
+            )
+            if r.returncode == 0:
+                ready = True
+                break
+            time.sleep(3)
+        assert ready, "compose postgres never accepted a psql connection within 90s"
+
+        # task db:migrate — runs `uv run alembic upgrade head` in dest.
+        migrate = subprocess.run(
+            ["task", "db:migrate"],
+            cwd=dest,
+            env=task_env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert migrate.returncode == 0, (
+            "task db:migrate failed:\n" + migrate.stdout + migrate.stderr
+        )
+
+        # task db:seed — runs `uv run python scripts/seed.py` in dest.
+        # The M6 risk: if go-task resolves scripts/seed.py from a wrong cwd, it fails here.
+        seed = subprocess.run(
+            ["task", "db:seed"],
+            cwd=dest,
+            env=task_env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert seed.returncode == 0, (
+            "task db:seed failed (cwd-from-root regression: scripts/seed.py not found, "
+            "or alembic migrations not applied first):\n" + seed.stdout + seed.stderr
+        )
+
+        # Assert seed rows actually landed in the DB (not just exit 0 from a no-op).
+        count_result = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "-f",
+                base,
+                "-f",
+                dev,
+                "--profile",
+                "lite",
+                "exec",
+                "-T",
+                "postgres",
+                "psql",
+                "-U",
+                "app",
+                "-d",
+                "app",
+                "-t",
+                "-c",
+                "SELECT COUNT(*) FROM items;",
+            ],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert count_result.returncode == 0, (
+            "psql row count query failed:\n" + count_result.stdout + count_result.stderr
+        )
+        row_count = int(count_result.stdout.strip())
+        assert row_count > 0, (
+            f"task db:seed exited 0 but left {row_count} rows in the items table — "
+            "seed.py ran in the wrong cwd (scripts/seed.py not found relative to dest) "
+            "or is silently idempotent-but-empty on a fresh DB"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
 
 
 @pytest.mark.skipif(
@@ -1015,6 +1629,376 @@ def test_rendered_project_dev_stack_routes_through_traefik(tmp_path: Path):
         assert "request_latency_p99_ms" in body["slos"]
     finally:
         subprocess.run(down, cwd=dest, env=_compose_env())
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: live dev stack for the Traefik :80 redirect + mongo health",
+)
+def test_rendered_dev_stack_http_redirect_and_mongo_health(tmp_path: Path) -> None:
+    # FWK26 (M1 + M2): the only through-Traefik test connects to :443; nothing connects to :80, so a
+    # removed/broken HTTP->HTTPS redirect ships silently. And the mongo COMPOSE service (mongosh-ping
+    # healthcheck quoting, mongodata volume, 27017) is never `compose up`-ed — only the testcontainers
+    # data-store round-trip is. Bring up ONE dev stack (with the mongodb battery so `mongo:` renders)
+    # and assert both: (M1) :80 -> 30x + Location: https://, (M2) mongo container reports healthy +
+    # a mongosh client pings. NOTE: no `task certs` / mkcert — the :80 probe is plaintext and we never
+    # hit :443.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": resolve(["mongodb"])})
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    compose = ["docker", "compose", *fargs, "--profile", "dev"]
+    up = [*compose, "up", "-d", "--build", "app", "postgres", "traefik", "mongo"]
+    down = [*compose, "down", "-v"]
+    env = _compose_env()
+    assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+    try:
+        # ---------- M1: HTTP (:80) redirects to HTTPS ----------
+        http_port = _compose_host_port(dest, files, "traefik", 80)
+        host = f"{DATA['project_slug']}.localhost"
+
+        # Raw plaintext HTTP/1.1 GET; Traefik's `web` entrypoint redirects (RedirectScheme) BEFORE any
+        # backend routing, so the Host header need not match a router — but send the real host anyway.
+        def _probe_redirect() -> tuple[int, str]:
+            raw = socket.create_connection(("127.0.0.1", http_port), timeout=5)
+            try:
+                raw.sendall(
+                    f"GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n".encode()
+                )
+                data = b""
+                while True:
+                    chunk = raw.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+            finally:
+                raw.close()
+            head = data.split(b"\r\n\r\n", 1)[0].decode(errors="replace")
+            status = int(head.split("\r\n", 1)[0].split()[1])
+            location = ""
+            for line in head.split("\r\n")[1:]:
+                if line.lower().startswith("location:"):
+                    location = line.split(":", 1)[1].strip()
+            return status, location
+
+        status, location = 0, ""
+        deadline = time.time() + 90
+        last = "no attempt"
+        while time.time() < deadline:
+            try:
+                status, location = _probe_redirect()
+                if status in (301, 302, 307, 308):
+                    break
+                last = f"HTTP {status} (no redirect)"
+            except OSError as exc:  # Traefik still settling
+                last = f"{type(exc).__name__}: {exc}"
+            time.sleep(3)
+        assert status in (301, 302, 307, 308), (
+            f"Traefik :80 did not redirect within 90s (last: {last}) — the web->websecure "
+            "RedirectScheme entrypoint (infra/traefik/traefik.yml) is broken/removed"
+        )
+        assert location.startswith("https://"), (
+            f"redirect Location is not https:// (got {location!r}) — wrong scheme on the "
+            "web entrypoint redirect"
+        )
+
+        # ---------- M2: mongo compose service reports healthy + a client connects ----------
+        cid = subprocess.run(
+            [*compose, "ps", "-q", "mongo"],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert cid, "mongo container id not found (the mongo service did not start)"
+
+        healthy = False
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            state = subprocess.run(
+                ["docker", "inspect", "--format", "{{.State.Health.Status}}", cid],
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            if state == "healthy":
+                healthy = True
+                break
+            time.sleep(3)
+        assert healthy, (
+            "mongo compose service never reported healthy within 90s — the mongosh-ping "
+            "healthcheck (quoting) or the mongodata volume mount is broken (dev.yml.jinja:83-95)"
+        )
+
+        # A client can actually connect+ping through the running service (compose exec, like the
+        # FWK20 DLQ/redis queries — no host-side pymongo driver needed).
+        ping = subprocess.run(
+            [
+                *compose,
+                "exec",
+                "-T",
+                "mongo",
+                "mongosh",
+                "--quiet",
+                "--eval",
+                "db.adminCommand('ping').ok",
+            ],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert ping.returncode == 0 and ping.stdout.strip().endswith("1"), (
+            "mongosh ping against the live mongo service did not return ok==1:\n"
+            + ping.stdout
+            + ping.stderr
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: dev:lite stack to exercise --reload on the bind mount",
+)
+def test_rendered_dev_lite_hot_reload_picks_up_edit(tmp_path: Path) -> None:
+    # FWK26 (M4): every dev/lite test runs uvicorn with --reload + WATCHFILES_FORCE_POLLING=true, but
+    # none edits a source file post-startup and asserts the worker reloaded. If polling-reload broke
+    # (env removed, inotify dead on the WSL bind mount), every test passes because none re-edits. Bring
+    # up dev:lite, GET /heartbeat (=="OK"), edit the rendered heartbeat() to return a sentinel, and
+    # poll /heartbeat until the NEW response appears — proving --reload + polling on the bind mount.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "up",
+        "-d",
+        "--build",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "down",
+        "-v",
+    ]
+    env = _compose_env()
+    sentinel = "FWK26-RELOADED-OK"
+    health_py = dest / "src" / "demo" / "routes" / "health.py"
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        port = _compose_host_port(dest, [base, dev], "app", 8000)
+        url = f"http://localhost:{port}/heartbeat"
+
+        def _get_body() -> str | None:
+            try:
+                with urllib.request.urlopen(url, timeout=3) as resp:
+                    if resp.status == 200:
+                        return resp.read().decode()
+            except OSError:
+                return None
+            return None
+
+        # 1) Wait for the ORIGINAL response so the edit is a true post-startup change.
+        deadline = time.time() + 90
+        original = None
+        while time.time() < deadline:
+            original = _get_body()
+            if original is not None:
+                break
+            time.sleep(2)
+        assert original == "OK", (
+            f"app did not serve the original /heartbeat 'OK' within 90s (got {original!r})"
+        )
+
+        # 2) Edit the rendered source on the host (bind-mounted into the container).
+        src = health_py.read_text()
+        assert '"OK"' in src, (
+            'the rendered heartbeat route no longer returns the literal "OK" — re-confirm the '
+            "mutation target in routes/health.py before relying on this reload test"
+        )
+        health_py.write_text(src.replace('"OK"', f'"{sentinel}"'))
+
+        # 3) Poll until --reload + WATCHFILES polling restart the worker and serve the sentinel.
+        deadline = time.time() + 90
+        reloaded = False
+        while time.time() < deadline:
+            if _get_body() == sentinel:
+                reloaded = True
+                break
+            time.sleep(2)
+        assert reloaded, (
+            "uvicorn --reload did not pick up the source edit within 90s — "
+            "WATCHFILES_FORCE_POLLING / --reload on the bind mount is broken (dev.yml.jinja:9,15)"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        # Defensive root-residue reclaim: the app runs as the host UID, so nothing root-owned is
+        # expected, but reclaim in case a future template change drops the `user:` line (otherwise
+        # pytest can't clean tmp_path). Mirrors the no-root tests' alpine chown.
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{dest}:/work",
+                "alpine",
+                "chown",
+                "-R",
+                f"{os.getuid()}:{os.getgid()}",
+                "/work",
+            ]
+        )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: drives the rendered module-level DB engine against a real Postgres",
+)
+def test_rendered_db_engine_pool_pre_ping_and_dispose(tmp_path: Path) -> None:
+    # FWK26 (M14): pool_pre_ping recovery of the REAL module-level engine and real pool disposal are
+    # asserted nowhere — conftest builds a SEPARATE test engine and the graceful-shutdown test
+    # monkeypatches dispose_engine. Drive the shipped demo.db.engine against a live compose Postgres:
+    # terminate the pooled connection's backend, prove the next checkout recovers via pre-ping, then
+    # prove dispose_engine() really disposes the pool. Runs inside the rendered project's venv so it
+    # imports the project's own module-level engine (not conftest's).
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert (
+        subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+    )  # need the project venv
+
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
+    up = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "up",
+        "-d",
+        "postgres",
+    ]
+    down = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        dev,
+        "--profile",
+        "lite",
+        "down",
+        "-v",
+    ]
+    env = _compose_env()
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        pg_port = _compose_host_port(dest, [base, dev], "postgres", 5432)
+        db_url = f"postgresql+psycopg://app:app@localhost:{pg_port}/app"
+
+        # Wait for postgres to accept connections (its healthcheck is pg_isready; poll a trivial
+        # query via the project's psycopg through a tiny driver).
+        ready_driver = (
+            "import sqlalchemy as sa;"
+            "e=sa.create_engine(__import__('os').environ['APP_DATABASE_URL']);"
+            "c=e.connect();c.execute(sa.text('SELECT 1'));c.close();print('READY')"
+        )
+        ready = False
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            r = subprocess.run(
+                ["uv", "run", "python", "-c", ready_driver],
+                cwd=dest,
+                env={**env, "APP_DATABASE_URL": db_url},
+                capture_output=True,
+                text=True,
+            )
+            if r.returncode == 0 and "READY" in r.stdout:
+                ready = True
+                break
+            time.sleep(2)
+        assert ready, "compose postgres never accepted a connection within 90s"
+
+        # The driver exercises the SHIPPED module-level engine:
+        #  1) check out connection c, capture its backend PID; keep c open so the pool can't
+        #     reuse it for the killer — if c were returned first, k would get the same PID and
+        #     pg_terminate_backend would kill itself (AdminShutdown on k.execute);
+        #  2) while c is still open, open a SECOND connection k; pg_terminate_backend(c's PID)
+        #     kills the server process behind c; call c.invalidate() to tell SQLAlchemy the
+        #     DBAPI connection is dead so the pool discards it on return (instead of trying to
+        #     auto-ROLLBACK on context exit and raising AdminShutdown itself);
+        #  3) next checkout: pool_pre_ping probes the dead slot, discards it, dials fresh;
+        #     SELECT 1 succeeds; new PID != killed PID;
+        #  4) dispose_engine(): pool identity changes (SQLAlchemy default close=True replaces pool).
+        driver = "\n".join(
+            [
+                "from sqlalchemy import text",
+                "from demo.db.engine import engine, dispose_engine",
+                "# 1) checkout c, capture backend PID",
+                "c = engine.connect()",
+                "pid = c.execute(text('SELECT pg_backend_pid()')).scalar()",
+                "# 2) while c is open, kill its backend from a separate connection",
+                "with engine.connect() as k:",
+                "    k.execute(text('SELECT pg_terminate_backend(:p)'), {'p': pid})",
+                "    k.commit()",
+                "# invalidate c so the pool discards it cleanly (no auto-ROLLBACK on dead conn)",
+                "c.invalidate()",
+                "c.close()",
+                "# 3) next checkout must transparently reconnect via pool_pre_ping",
+                "with engine.connect() as c2:",
+                "    assert c2.execute(text('SELECT 1')).scalar() == 1, 'pre-ping did not recover'",
+                "    new_pid = c2.execute(text('SELECT pg_backend_pid()')).scalar()",
+                "    assert new_pid != pid, 'reused the dead backend — pre-ping did not reconnect'",
+                "# 4) real disposal: capture the pool identity, dispose, assert a fresh pool",
+                "pool_before = engine.pool",
+                "dispose_engine()",
+                "assert engine.pool is not pool_before, 'dispose_engine did not recreate the pool'",
+                "assert engine.pool.checkedout() == 0, 'connections still checked out after dispose'",
+                "print('OK')",
+            ]
+        )
+        result = subprocess.run(
+            ["uv", "run", "python", "-c", driver],
+            cwd=dest,
+            env={**env, "APP_DATABASE_URL": db_url},
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0 and result.stdout.strip().endswith("OK"), (
+            "the module-level engine pre-ping/dispose driver failed:\n"
+            + result.stdout
+            + result.stderr
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
 
 
 @pytest.mark.skipif(
@@ -1255,6 +2239,480 @@ def test_rendered_project_traces_reach_tempo(tmp_path: Path):
         assert found, "no app traces reached Tempo within the timeout"
     finally:
         subprocess.run(down, cwd=dest)
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv and docker are required for the live obs-stack test",
+)
+def test_rendered_obs_stack_self_scrape_rules_and_grafana(tmp_path: Path):
+    # FWK23 (M10-baseline + M11 + M13): the only live obs test today asserts the `app` scrape
+    # target healthy and nothing else — the prometheus/otel-collector self-scrape targets, the
+    # alert-rule groups, and the entire Grafana provisioning (datasources/dashboards/anon-auth)
+    # are present-but-unasserted. Bring the FULL obs stack up ONCE and assert all three.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    # No service allowlist: bring the whole --profile dev obs stack up (grafana included). dev.yml
+    # re-applies grafana's anonymous-admin override (GF_AUTH_ANONYMOUS_*), so M13 anon-auth is live.
+    up = ["docker", "compose", *fargs, "--profile", "dev", "up", "-d", "--build"]
+    down = ["docker", "compose", *fargs, "--profile", "dev", "down", "-v"]
+    env = _compose_env()
+    assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+    try:
+        prom_port = _compose_host_port(dest, files, "prometheus", 9090)
+        graf_port = _compose_host_port(dest, files, "grafana", 3000)
+
+        # --- M10-baseline: prometheus + otel-collector self-scrape targets up==1 ---
+        # (The app target is already covered by the existing test; here assert the self-scrape ones.)
+        def _baseline_targets_up(parsed: dict) -> bool:
+            actives = parsed.get("data", {}).get("activeTargets", [])
+            by_job = {t.get("labels", {}).get("job"): t.get("health") for t in actives}
+            return (
+                by_job.get("prometheus") == "up"
+                and by_job.get("otel-collector") == "up"
+            )
+
+        targets = _poll_json(
+            f"http://localhost:{prom_port}/api/v1/targets?state=active",
+            timeout=120,
+            predicate=_baseline_targets_up,
+        )
+        assert targets is not None, (
+            "prometheus/otel-collector self-scrape targets never both reported up==1 within 120s"
+        )
+
+        # --- M11: alert rule groups loaded/parsed (no rule-group load error) ---
+        # Baseline (no batteries) renders: slo, postgres, otel-collector, prometheus, alertmanager.
+        expected_groups = {
+            "slo",
+            "postgres",
+            "otel-collector",
+            "prometheus",
+            "alertmanager",
+        }
+
+        def _rules_loaded(parsed: dict) -> bool:
+            groups = parsed.get("data", {}).get("groups", [])
+            names = {g.get("name") for g in groups}
+            return expected_groups.issubset(names)
+
+        rules = _poll_json(
+            f"http://localhost:{prom_port}/api/v1/rules",
+            timeout=90,
+            predicate=_rules_loaded,
+        )
+        assert rules is not None, (
+            "prometheus did not load all baseline rule groups "
+            f"{sorted(expected_groups)} within 90s (a malformed PromQL expr fails the group load)"
+        )
+
+        # --- M13: Grafana health (anon), datasources resolve, dashboards provisioned ---
+        # anon-admin is on (dev.yml override), so no auth header is needed.
+        health = _poll_json(
+            f"http://localhost:{graf_port}/api/health",
+            timeout=90,
+            predicate=lambda p: p.get("database") == "ok",
+        )
+        assert health is not None, (
+            "grafana /api/health never reported database==ok within 90s"
+        )
+
+        ds = _poll_json(
+            f"http://localhost:{graf_port}/api/datasources",
+            timeout=30,
+            predicate=lambda p: (
+                {d.get("uid") for d in p} >= {"prometheus", "loki", "tempo"}
+            ),
+        )
+        assert ds is not None, (
+            "grafana did not provision the prometheus/loki/tempo datasources "
+            "(wrong uid or a malformed provisioning yaml)"
+        )
+        # Datasource upstream health probes — Prometheus and Loki implement /health (returns
+        # {"status": "OK"}). The Grafana 11.3.0 Tempo plugin does NOT implement the health
+        # endpoint (returns 404 "Method not implemented" regardless of Tempo's status), so we
+        # probe Tempo's own /-/ready instead (the otel-collector forwards to it).
+        for uid in ("prometheus", "loki"):
+            h = _poll_json(
+                f"http://localhost:{graf_port}/api/datasources/uid/{uid}/health",
+                timeout=60,
+                predicate=lambda p: p.get("status") == "OK",
+            )
+            assert h is not None, (
+                f"grafana datasource {uid!r} health probe never returned OK "
+                "(the datasource url in provisioning/datasources/*.yml is unreachable/wrong)"
+            )
+        # Tempo: probe its own /ready endpoint (Grafana 11.3.0 Tempo plugin does not implement
+        # the datasource /health API — verified empirically: 404 "Method not implemented").
+        tempo_port = _compose_host_port(dest, files, "tempo", 3200)
+        # /ready returns plain text "ready", not JSON; use a direct urllib probe.
+        tempo_deadline = time.time() + 60
+        tempo_ok = False
+        while time.time() < tempo_deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:{tempo_port}/ready", timeout=5
+                ) as r:
+                    if b"ready" in r.read():
+                        tempo_ok = True
+                        break
+            except OSError:
+                pass
+            time.sleep(3)
+        assert tempo_ok, (
+            "Tempo /ready never returned 'ready' within 60s "
+            "(Grafana's Tempo datasource url is http://tempo:3200 — Tempo unreachable)"
+        )
+
+        # dashboards: the SLO provider loads the provisioned dashboards from /var/lib/grafana/dashboards.
+        search = _poll_json(
+            f"http://localhost:{graf_port}/api/search?type=dash-db",
+            timeout=60,
+            predicate=lambda p: len(p) >= 1,
+        )
+        assert search is not None, (
+            "grafana provisioned no dashboards (the dashboards provider.yml path or the dashboard "
+            "JSON failed to load)"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv and docker are required for the live obs-stack test",
+)
+def test_rendered_obs_exporter_targets_up(tmp_path: Path):
+    # FWK23 (M10-batteries): the postgres/redis/celery/mongodb exporter scrape targets are
+    # battery-gated AND present-but-unasserted (the baseline live-targets test hard-filters to
+    # job=='app'). Render workers+redis+mongodb so ALL FOUR exporters render in one stack, up the
+    # obs overlay + the exporters' data deps, and assert each exporter target reports up==1.
+    dest = tmp_path / "demo"
+    render_project(
+        dest, {**DATA, "batteries": resolve(["workers", "redis", "mongodb"])}
+    )
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    # Up the scrape source (prometheus) + every exporter + each exporter's data dep. The exporters
+    # depend_on their data store HEALTHY (postgres/redis/mongo), so naming the exporters pulls the
+    # deps; name them explicitly too for clarity. The app is needed so prometheus's depends_on
+    # (service_healthy) is satisfied and the scrape loop runs.
+    services = [
+        "app",
+        "postgres",
+        "redis",
+        "mongo",
+        "prometheus",
+        "postgres-exporter",
+        "redis-exporter",
+        "celery-exporter",
+        "mongodb-exporter",
+    ]
+    up = [
+        "docker",
+        "compose",
+        *fargs,
+        "--profile",
+        "dev",
+        "up",
+        "-d",
+        "--build",
+        *services,
+    ]
+    down = ["docker", "compose", *fargs, "--profile", "dev", "down", "-v"]
+    env = _compose_env()
+    assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+    try:
+        prom_port = _compose_host_port(dest, files, "prometheus", 9090)
+        # The exporter scrape JOB names in prometheus.yml are: postgres, redis, celery, mongodb.
+        expected_jobs = {"postgres", "redis", "celery", "mongodb"}
+
+        def _exporters_up(parsed: dict) -> bool:
+            actives = parsed.get("data", {}).get("activeTargets", [])
+            up_jobs = {
+                t.get("labels", {}).get("job")
+                for t in actives
+                if t.get("health") == "up"
+            }
+            return expected_jobs.issubset(up_jobs)
+
+        targets = _poll_json(
+            f"http://localhost:{prom_port}/api/v1/targets?state=active",
+            timeout=180,
+            predicate=_exporters_up,
+        )
+        assert targets is not None, (
+            "not all exporter scrape targets reported up==1 within 180s "
+            f"(expected jobs {sorted(expected_jobs)} — a wrong DATA_SOURCE_NAME, a down exporter, "
+            "or a wrong telemetry address would leave one down)"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        # mongo/postgres/redis run as their image users; nothing root-owned is written to the bind
+        # mount here (only named volumes), so no chown-reclaim is needed (cf. the worker test, which
+        # does need it because worker/beat write the bind-mounted /app). Down -v drops the volumes.
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv and docker are required for the live alertmanager test",
+)
+def test_rendered_alertmanager_routes_webhook(tmp_path: Path):
+    # FWK23 (M12): amtool check-config validates SYNTAX only — no test fires an alert through the
+    # real alertmanager.yml and asserts the route/group/receiver actually delivers. Bring up
+    # alertmanager with its webhook receiver pointed at a local capture server, POST a firing alert,
+    # and assert the capture server received the routed/grouped notification.
+    import http.server
+    import json as _json
+    import threading
+    from datetime import datetime, timezone
+
+    dest = tmp_path / "demo"
+    render_project(
+        dest, DATA
+    )  # alert_channels defaults to ["webhook"] -> webhook_configs receiver
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    captured: list[dict] = []
+
+    class _Receiver(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                captured.append(_json.loads(body))
+            except ValueError:
+                captured.append({"_raw": body.decode(errors="replace")})
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):  # silence the default stderr logging
+            pass
+
+    recv_port = _free_tcp_port()
+    server = http.server.HTTPServer(("0.0.0.0", recv_port), _Receiver)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    # Mount the webhook_url file (the rendered alertmanager.yml reads `url_file`) and give the
+    # container a route back to the host's capture server via host.docker.internal.
+    url_file = dest / "infra" / "observability" / "alertmanager" / "webhook_url"
+    url_file.write_text(f"http://host.docker.internal:{recv_port}/")
+    (dest / "infra" / "compose" / "fwk23.override.yml").write_text(
+        "services:\n"
+        "  alertmanager:\n"
+        "    extra_hosts:\n"
+        '      - "host.docker.internal:host-gateway"\n'
+        "    volumes:\n"
+        '      - "../observability/alertmanager/webhook_url:/etc/alertmanager/webhook_url:ro"\n'
+    )
+    # Include dev.yml so the services it defines (postgres, redis, traefik …) satisfy the
+    # depends_on references inside observability.yml (postgres-exporter depends on postgres,
+    # which lives in dev.yml, not base.yml). Only `alertmanager` is actually started.
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+        "infra/compose/fwk23.override.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    # --profile dev activates the profile-gated services (postgres, redis …) so that
+    # observability.yml's depends_on graph resolves cleanly. Only `alertmanager` is actually
+    # started (no deps of its own in observability.yml).
+    up = ["docker", "compose", *fargs, "--profile", "dev", "up", "-d", "alertmanager"]
+    down = ["docker", "compose", *fargs, "--profile", "dev", "down", "-v"]
+    env = _compose_env()
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        am_port = _compose_host_port(dest, files, "alertmanager", 9093)
+
+        # Wait for alertmanager to be ready (its own /-/ready endpoint).
+        ready = _poll_json(
+            f"http://localhost:{am_port}/api/v2/status",
+            timeout=60,
+            predicate=lambda p: bool(p.get("cluster") or p.get("versionInfo")),
+        )
+        assert ready is not None, "alertmanager never became ready within 60s"
+
+        # POST a firing alert. /api/v2/alerts accepts a JSON array of alerts.
+        now = datetime.now(timezone.utc).isoformat()
+        alert = [
+            {
+                "labels": {"alertname": "FWK23ProbeAlert", "severity": "warning"},
+                "annotations": {"summary": "fwk23 routing probe"},
+                "startsAt": now,
+            }
+        ]
+        req = urllib.request.Request(
+            f"http://localhost:{am_port}/api/v2/alerts",
+            data=_json.dumps(alert).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            assert resp.status in (200, 202), (
+                f"alertmanager rejected the alert POST: {resp.status}"
+            )
+
+        # The route's group_wait is 10s; poll the capture server for the routed notification.
+        deadline = time.time() + 60
+        routed = None
+        while time.time() < deadline:
+            for note in captured:
+                alerts = note.get("alerts", []) if isinstance(note, dict) else []
+                if any(
+                    a.get("labels", {}).get("alertname") == "FWK23ProbeAlert"
+                    for a in alerts
+                ):
+                    routed = note
+                    break
+            if routed is not None:
+                break
+            time.sleep(2)
+        assert routed is not None, (
+            "alertmanager never routed the firing alert to the webhook receiver within 60s "
+            "(a route/group/receiver-wiring regression that stays amtool-valid would do this)"
+        )
+        # The grouped notification carries the receiver name from the route.
+        assert routed.get("receiver") == "default", (
+            f"webhook notification routed to an unexpected receiver: {routed.get('receiver')!r}"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        server.shutdown()
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv and docker are required for the live worker-tracing test",
+)
+def test_rendered_worker_span_reaches_tempo(tmp_path: Path):
+    # FWK23 (M7): the Tempo test is app-only and queries service.name='demo' (shared by app+worker),
+    # so a worker-span regression passes silently. Bring up worker + otel-collector + tempo with OTEL
+    # enabled, run a Celery task through the LIVE broker, and assert a WORKER/TASK span (the
+    # CeleryInstrumentor 'run/<task>' span) reaches Tempo — not just service.name.
+    import urllib.parse
+
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": resolve(["workers"])})
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    base, obs, dev = (
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    )
+    # The dev worker service already sets APP_OTEL_ENABLED=true + the OTLP endpoint (verified in
+    # dev.yml.jinja), so OTEL is on with no override.
+    files = [base, obs, dev]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    compose = ["docker", "compose", *fargs, "--profile", "dev"]
+    # otel-collector forwards to tempo; bring up the worker's data deps + the trace pipeline.
+    up = [
+        *compose,
+        "up",
+        "-d",
+        "--build",
+        "postgres",
+        "redis",
+        "worker",
+        "otel-collector",
+        "tempo",
+    ]
+    down = [*compose, "down", "-v"]
+    env = _compose_env()
+
+    def _exec(*argv: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [*compose, "exec", "-T", *argv],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=check,
+        )
+
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        # worker depends_on postgres+redis healthy; create the schema by hand (the app service,
+        # which would migrate, is not started). Mirrors the FWK20 worker bootstrap.
+        migrated = False
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            if (
+                _exec("worker", "alembic", "upgrade", "head", check=False).returncode
+                == 0
+            ):
+                migrated = True
+                break
+            time.sleep(3)
+        assert migrated, "alembic upgrade head never succeeded in the worker container"
+
+        # Enqueue the shipped heartbeat task through the live redis broker; the worker runs it under
+        # CeleryInstrumentor, emitting a 'run/demo.tasks.tasks.heartbeat' span exported to tempo.
+        _exec(
+            "worker",
+            "python",
+            "-c",
+            "from demo.tasks.tasks import heartbeat; heartbeat.delay()",
+        )
+
+        tempo_port = _compose_host_port(dest, files, "tempo", 3200)
+        # TraceQL: match a span by name (the celery task span), NOT service.name. URL-encode the
+        # query `{ name =~ "run/.*heartbeat.*" }`. (If the worker's celery span name differs,
+        # broaden to `{ span.celery.task_name != "" }` — confirm the attribute via a one-off tempo
+        # search during the GREEN run.)
+        traceql = '{ name =~ "run/.*heartbeat.*" }'
+        q = urllib.parse.urlencode({"q": traceql, "limit": "1"})
+
+        found = _poll_json(
+            f"http://localhost:{tempo_port}/api/search?{q}",
+            timeout=120,
+            predicate=lambda p: bool(p.get("traces")),
+        )
+        assert found is not None, (
+            "no WORKER/TASK span reached Tempo within 120s — the celery task span "
+            "'run/<task>' is missing (worker OTEL tracing is the M7 surface; an app span alone "
+            "would NOT satisfy this name filter)"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{dest}:/work",
+                "alpine",
+                "chown",
+                "-R",
+                f"{os.getuid()}:{os.getgid()}",
+                "/work",
+            ]
+        )
 
 
 @pytest.mark.skipif(
@@ -2511,3 +3969,311 @@ def test_two_dev_lite_stacks_corun_without_collision(tmp_path: Path):
     finally:
         down("swfwacc-corun-a")
         down("swfwacc-corun-b")
+
+
+@pytest.mark.skipif(
+    not _docker_available()
+    or shutil.which("mkcert") is None
+    or shutil.which("task") is None,
+    reason="uv + docker + mkcert + task: live per-battery routes through Traefik",
+)
+def test_rendered_per_battery_routes_through_traefik(tmp_path: Path) -> None:
+    # M8/FWK24: every _passes test asserts routes at ~100% IN-PROCESS (TestClient, LLM mocked) —
+    # never on a live compose stack served through Traefik. Render the route-batteries together
+    # (fork 1A), bring up app+postgres+traefik, and exercise each route through 127.0.0.1:<traefik
+    # 443 ephemeral port> with Host: demo.localhost.
+    dest = tmp_path / "demo"
+    render_project(
+        dest,
+        {
+            **DATA,
+            "batteries": resolve(
+                ["websockets", "webhooks", "llm", "graphql", "agents", "react"]
+            ),
+        },
+    )
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    certs = subprocess.run(["task", "certs"], cwd=dest, capture_output=True, text=True)
+    assert certs.returncode == 0, "task certs failed:\n" + certs.stdout + certs.stderr
+
+    # Inject a known webhook signing secret via a merge overlay (base.yml hardcodes the app
+    # environment; compose merges `environment` maps additively, so this adds without replacing).
+    secret = "fwk24-test-secret"
+    (dest / "infra" / "compose" / "fwk24.override.yml").write_text(
+        "services:\n  app:\n    environment:\n"
+        f'      APP_WEBHOOK_SIGNING_SECRET: "{secret}"\n'
+    )
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+        "infra/compose/fwk24.override.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    up = [
+        "docker",
+        "compose",
+        *fargs,
+        "--profile",
+        "dev",
+        "up",
+        "-d",
+        "--build",
+        "app",
+        "postgres",
+        "traefik",
+    ]
+    down = ["docker", "compose", *fargs, "--profile", "dev", "down", "-v"]
+    env = _compose_env()
+    assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+    try:
+        https_port = _compose_host_port(dest, files, "traefik", 443)
+        host = f"{DATA['project_slug']}.localhost"
+        ctx = _mkcert_ssl_context()
+        # Readiness: poll /health through Traefik until 200 (proves the chain + app up).
+        deadline = time.time() + 120
+        ready = False
+        while time.time() < deadline:
+            try:
+                st, _ = _traefik_request(https_port, host, ctx, "GET", "/health")
+                if st == 200:
+                    ready = True
+                    break
+            except OSError:
+                pass
+            time.sleep(3)
+        assert ready, "app never served /health 200 through Traefik within 120s"
+
+        # websockets: the upgrade negotiates through the proxy (101).
+        assert _traefik_ws_upgrade(https_port, host, ctx) == 101, (
+            "WS /ws upgrade did not return 101 through Traefik"
+        )
+
+        # webhooks: valid HMAC-SHA256(secret, raw body) -> 200; tampered sig -> 401.
+        payload = b'{"id": "fwk24-1", "type": "ping"}'
+        good = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+        st, _ = _traefik_request(
+            https_port,
+            host,
+            ctx,
+            "POST",
+            "/webhooks",
+            headers={"X-Webhook-Signature": good, "Content-Type": "application/json"},
+            body=payload,
+        )
+        assert st == 200, f"signed /webhooks did not return 200 (got {st})"
+        st, _ = _traefik_request(
+            https_port,
+            host,
+            ctx,
+            "POST",
+            "/webhooks",
+            headers={
+                "X-Webhook-Signature": "deadbeef",
+                "Content-Type": "application/json",
+            },
+            body=payload,
+        )
+        assert st == 401, f"bad-signature /webhooks did not return 401 (got {st})"
+
+        # graphql: a basic query succeeds (introspection is ON in dev — assert dev behavior; the
+        # prod fail-closed off-path is env-derived + unit-covered, not re-tested on this dev stack).
+        st, gql = _traefik_request(
+            https_port,
+            host,
+            ctx,
+            "POST",
+            "/graphql",
+            headers={"Content-Type": "application/json"},
+            body=b'{"query": "{ __typename }"}',
+        )
+        assert st == 200 and '"data"' in gql, f"/graphql query failed: {st} {gql[:200]}"
+
+        # llm (fork 2A): no API key -> service raises LLMError -> route 502; the attempt records
+        # app_llm_calls_total{outcome="error"} -> assert the series appears on /metrics.
+        st, _ = _traefik_request(
+            https_port,
+            host,
+            ctx,
+            "POST",
+            "/llm/complete",
+            headers={"Content-Type": "application/json"},
+            body=b'{"prompt": "hi"}',
+        )
+        assert st == 502, f"/llm/complete (no key) did not return 502 (got {st})"
+        st, metrics = _traefik_request(https_port, host, ctx, "GET", "/metrics")
+        assert st == 200 and "app_llm_calls_total" in metrics, (
+            "app_llm_* series missing from /metrics after a live /llm/complete attempt"
+        )
+
+        # agents (fork 2A): LLM-backed (AgentRunner -> LLMService.respond) -> 502/503 with no key,
+        # proving the route is mounted + reached on the live ASGI/Traefik path.
+        st, _ = _traefik_request(
+            https_port,
+            host,
+            ctx,
+            "POST",
+            "/agents/run",
+            headers={"Content-Type": "application/json"},
+            body=b'{"prompt": "hi"}',
+        )
+        assert st in {502, 503}, f"/agents/run (no key) returned {st}, expected 502/503"
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker: runs the rendered react project's RUM functional test",
+)
+def test_rendered_react_rum_round_trip(tmp_path: Path) -> None:
+    # M9/FWK24: the rendered react project SHIPS tests/functional/test_frontend_rum.py
+    # (test_frontend_metrics_round_trip_through_metrics_endpoint: POST /internal/rum -> app_frontend_*
+    # on /metrics), but no framework tier runs the react project's python pytest. Run that one test.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    assert subprocess.run(["uv", "sync"], cwd=dest).returncode == 0
+    result = subprocess.run(
+        ["uv", "run", "pytest", "tests/functional/test_frontend_rum.py", "-q"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "the rendered react RUM round-trip test failed:\n"
+        + result.stdout
+        + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker (+ npm network): the dev Vite server serves the SPA live",
+)
+def test_rendered_frontend_dev_server_serves_spa(tmp_path: Path) -> None:
+    # FWK24 (re-pointed from H6/FWK21): the dev `frontend` service runs the Vite dev server
+    # (`npm ci && npm run dev -- --host`) — brought up by the no-root test but never asserted to
+    # SERVE. Up it and GET the Vite port, asserting the SPA shell (id="root").
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    up = [
+        "docker",
+        "compose",
+        *fargs,
+        "--profile",
+        "dev",
+        "up",
+        "-d",
+        "--build",
+        "frontend",
+    ]
+    down = ["docker", "compose", *fargs, "--profile", "dev", "down", "-v"]
+    env = _compose_env()
+    served = ""
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        port = _compose_host_port(dest, files, "frontend", 5173)
+        # Vite + `npm ci` take time on first boot; poll for the served shell.
+        deadline = time.time() + 180
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/", timeout=3
+                ) as resp:
+                    if resp.status == 200:
+                        served = resp.read().decode()
+                        if 'id="root"' in served:
+                            break
+            except Exception:
+                pass
+            time.sleep(3)
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{dest}:/work",
+                "alpine",
+                "chown",
+                "-R",
+                f"{os.getuid()}:{os.getgid()}",
+                "/work",
+            ]
+        )
+    assert 'id="root"' in served, (
+        f"the Vite dev server never served the SPA shell within 180s:\n{served[:300]}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# L2/FWK28 — load.sh graceful-degradation smoke
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="docker required: load.sh wraps grafana/k6 in a Docker container",
+)
+def test_load_sh_fails_gracefully_without_docker_target(tmp_path: Path) -> None:
+    """L2/FWK28 (graceful degradation): load.sh exits non-zero when K6_TARGET is unreachable.
+
+    Scope: this test confirms the script runs (syntax, invocation path) and propagates a
+    non-zero exit when k6 cannot reach the target. It does NOT assert the SLO-threshold
+    pass/fail with a live app stack — that requires grafana/k6:latest + a running service and
+    is logged as an ongoing KNOWN_GAP in the registry (script:scripts/load.sh).
+
+    K6_TARGET is set to a port that is guaranteed not to be listening (free TCP port chosen at
+    test time). K6_DURATION is set to "1s" and K6_VUS to "1" to fail fast. The Docker pull of
+    grafana/k6:latest is required; the test asserts a k6-emitted marker in the output so that a
+    non-zero exit caused by k6 *actually running and failing to reach the target* (the graceful-
+    degradation path under test) is distinguishable from one caused by k6 never starting (image
+    pull failure / registry outage) — the latter fails the test with a clear message rather than
+    passing for the wrong reason.
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    # Pick a port that is not listening.
+    unreachable_port = _free_tcp_port()
+    target = f"http://127.0.0.1:{unreachable_port}"
+
+    result = subprocess.run(
+        ["bash", "scripts/load.sh"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+        env={
+            **_compose_env(),
+            "K6_TARGET": target,
+            "K6_DURATION": "1s",
+            "K6_VUS": "1",
+        },
+        timeout=120,
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode != 0, (
+        "load.sh exited 0 on an unreachable target — threshold-propagation broken or "
+        "k6 did not actually run\n" + combined
+    )
+    # Prove k6 genuinely launched and dialed the target (so this is real graceful degradation,
+    # not an image-pull failure that never reached the propagation path). k6 logs the dial error
+    # on a refused connection and always prints its http_req metric summary.
+    assert "connection refused" in combined.lower() or "http_req" in combined, (
+        "k6 produced no run output — the image likely failed to pull, so the graceful-degradation "
+        "path was never exercised (this test cannot pass on an image-pull failure)\n"
+        + combined
+    )

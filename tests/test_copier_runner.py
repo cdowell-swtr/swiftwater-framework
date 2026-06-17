@@ -1015,6 +1015,16 @@ def test_render_with_websockets_battery(tmp_path: Path):
     assert (dest / "src" / "demo" / "websockets" / "connection_manager.py").is_file()
     assert (dest / "tests" / "functional" / "test_websockets.py").is_file()
     assert "router" in (dest / "src" / "demo" / "routes" / "websockets.py").read_text()
+    # FWK24: uvicorn ships without a WebSocket library, so the /ws route 404s live unless the
+    # websockets package is an explicit dep. CI-visible guard for the fix the docker-gated
+    # acceptance test (test_rendered_per_battery_routes_through_traefik) caught.
+    assert "websockets>=" in (dest / "pyproject.toml").read_text()
+
+
+def test_render_without_websockets_battery_has_no_websockets_dep(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # no batteries
+    assert "websockets>=" not in (dest / "pyproject.toml").read_text()
 
 
 def test_render_frontend_obs_artifacts(tmp_path: Path):
@@ -2219,6 +2229,150 @@ def test_prod_plus_services_plus_obs_merges(tmp_path: Path):
     assert r2.returncode == 0 and "redis" in r2.stdout and "worker" not in r2.stdout
 
 
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_staging_standalone_merges(tmp_path: Path) -> None:
+    """compose config merge-validation: staging.yml standalone is a valid topology.
+
+    Mirrors the prod.yml guard: staging.yml is self-contained (no base.yml merge needed —
+    it defines both `app` and `postgres` directly). Asserts the two named services are
+    present, the image slot resolves, and the POSTGRES_PASSWORD env var is threaded through
+    the postgres service. Two scenarios:
+    1. Baseline (no extensions) — image: postgres:17.
+    2. Extension battery (timescaledb) — conditional command + POSTGRES_IMAGE var.
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    comp = dest / "infra" / "compose"
+    env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
+
+    # --- Scenario 1: baseline staging.yml (no extension) ---
+    r = subprocess.run(
+        ["docker", "compose", "-f", str(comp / "staging.yml"), "config"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r.returncode == 0, f"staging.yml config failed:\n{r.stderr}"
+    for svc in ("app", "postgres"):
+        assert svc in r.stdout, f"service '{svc}' missing from staging.yml config"
+    assert "APP_ENVIRONMENT: staging" in r.stdout, (
+        "APP_ENVIRONMENT not set to 'staging' in staging.yml config"
+    )
+    assert "unless-stopped" in r.stdout, (
+        "restart: unless-stopped missing from staging.yml config (staging services must restart)"
+    )
+
+    # --- Scenario 2: timescaledb extension — conditional command key ---
+    dest2 = tmp_path / "demo_ts"
+    render_project(dest2, {**DATA, "batteries": ["timescaledb"]})
+    comp2 = dest2 / "infra" / "compose"
+    env_ts = {
+        **os.environ,
+        "APP_IMAGE": "demo:ci",
+        "POSTGRES_PASSWORD": "x",
+        "POSTGRES_IMAGE": "demo-postgres:ci",
+    }
+    r2 = subprocess.run(
+        ["docker", "compose", "-f", str(comp2 / "staging.yml"), "config"],
+        capture_output=True,
+        text=True,
+        env=env_ts,
+    )
+    assert r2.returncode == 0, f"staging.yml (timescaledb) config failed:\n{r2.stderr}"
+    assert "shared_preload_libraries=timescaledb" in r2.stdout, (
+        "timescaledb preload command missing from staging.yml (timescaledb battery) config"
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_staging_plus_services_overlay_merges(tmp_path: Path) -> None:
+    """compose config merge-validation: staging.yml + services.yml + observability.yml
+    is a valid merged topology (the canonical staging deploy merge: strategy.sh uses
+    `-f staging.yml -f services.yml -f observability.yml`).
+
+    Asserts: all battery services (worker/beat/redis/mongo) + app/postgres + both battery
+    exporters appear; worker/beat carry APP_RUN_MIGRATIONS=false + the promoted image.
+    Mirrors test_prod_plus_services_plus_obs_merges (line 2159) for staging.yml.
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb", "workers"]})
+    comp = dest / "infra" / "compose"
+    env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
+
+    r = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp / "staging.yml"),
+            "-f",
+            str(comp / "services.yml"),
+            "-f",
+            str(comp / "observability.yml"),
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r.returncode == 0, (
+        f"staging.yml + services.yml + observability.yml config failed:\n{r.stderr}"
+    )
+    for svc in (
+        "worker",
+        "beat",
+        "redis",
+        "mongo",
+        "app",
+        "postgres",
+        "mongodb-exporter",
+        "celery-exporter",
+        "prometheus",
+    ):
+        assert svc in r.stdout, (
+            f"service '{svc}' missing from staging+services+obs merge"
+        )
+    # worker/beat run the promoted image with APP_RUN_MIGRATIONS=false (services.yml:40,64)
+    assert "APP_RUN_MIGRATIONS" in r.stdout and "demo:ci" in r.stdout, (
+        "worker/beat APP_RUN_MIGRATIONS=false or APP_IMAGE not in staging+services merge"
+    )
+    # staging app carries APP_ENVIRONMENT: staging (not dev — the merge order must not
+    # let dev.yml's default win; staging.yml is the base, no dev.yml in this merge)
+    assert "APP_ENVIRONMENT: staging" in r.stdout, (
+        "APP_ENVIRONMENT is not 'staging' in the staging+services merge — wrong merge order"
+    )
+
+    # services.yml without batteries → no worker/beat/redis/mongo (no phantom services)
+    dest2 = tmp_path / "demo_bare"
+    render_project(dest2, {**DATA})  # no batteries
+    comp2 = dest2 / "infra" / "compose"
+    r2 = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp2 / "staging.yml"),
+            "-f",
+            str(comp2 / "services.yml"),
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r2.returncode == 0, (
+        f"staging.yml + services.yml (no batteries) config failed:\n{r2.stderr}"
+    )
+    assert "worker" not in r2.stdout and "redis" not in r2.stdout, (
+        "worker or redis appeared in staging+services (no batteries) merge — "
+        "services.yml battery guard is broken"
+    )
+
+
 def test_timescaledb_migration_ordering():
     from framework_cli.migrations import migration_down_revisions
 
@@ -2991,6 +3145,120 @@ def _run_smoke(dest: Path, am_url: str) -> subprocess.CompletedProcess:
     )
 
 
+# ---------------------------------------------------------------------------
+# L1/FWK28 — notify.sh seam smoke
+# ---------------------------------------------------------------------------
+
+
+class _FakeNotify(http.server.BaseHTTPRequestHandler):
+    """Capture server for notify.sh webhook POST assertions."""
+
+    posts: list[bytes] = []  # accumulated POST bodies; reset per test
+
+    def log_message(self, *a: object) -> None:  # silence
+        pass
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", 0))
+        _FakeNotify.posts.append(self.rfile.read(length))
+        self.send_response(200)
+        self.end_headers()
+
+
+def _serve_fake_notify() -> http.server.HTTPServer:
+    _FakeNotify.posts = []
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _FakeNotify)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def _run_notify(
+    dest: Path,
+    message: str,
+    *,
+    extra_env: dict[str, str] | None = None,
+) -> "subprocess.CompletedProcess[str]":
+    """Invoke infra/deploy/notify.sh with `message` in the rendered project at `dest`."""
+    env: dict[str, str] = {"PATH": os.environ["PATH"]}
+    if extra_env:
+        env.update(extra_env)
+    return subprocess.run(
+        ["bash", str(dest / "infra" / "deploy" / "notify.sh"), message],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def test_notify_seam_exits_zero_and_echoes(tmp_path: Path) -> None:
+    """L1/FWK28: notify.sh must exit 0 and echo [deploy notify] on the happy path."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    result = _run_notify(dest, "deploy succeeded")
+    assert result.returncode == 0, (
+        "notify.sh exited non-zero on the basic echo path\n"
+        + result.stdout
+        + result.stderr
+    )
+    assert "[deploy notify] deploy succeeded" in result.stdout, (
+        "expected '[deploy notify] deploy succeeded' in stdout\n" + result.stdout
+    )
+
+
+def test_notify_seam_posts_to_webhook(tmp_path: Path) -> None:
+    """L1/FWK28 (webhook path): when SLACK_WEBHOOK_URL is set, notify.sh POSTs the message.
+
+    The template ships the curl block commented out (safe-by-default); this test uncomments it
+    in a tmp_path copy to assert the seam wiring is correct. The template source is NOT modified.
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    # Uncomment the shipped webhook example (the block from `# if [ -n "${SLACK_WEBHOOK_URL`
+    # through `# fi`) by stripping each line's leading "# ". Line-based so it's robust to the
+    # block's exact spacing — every block line is "# "-prefixed (verified via `cat -A notify.sh`),
+    # unlike a brittle exact-string `.replace()` chain.
+    script_path = dest / "infra" / "deploy" / "notify.sh"
+    out: list[str] = []
+    in_block = False
+    for line in script_path.read_text().splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith('# if [ -n "${SLACK_WEBHOOK_URL'):
+            in_block = True
+        if in_block and stripped.startswith("# "):
+            line = line.replace("# ", "", 1)
+        out.append(line)
+        if stripped == "# fi":
+            in_block = False
+    script_path.write_text("\n".join(out) + "\n")
+    # Sanity: the activation must have actually uncommented something (guards against a
+    # template reword silently no-opping this and the test passing vacuously).
+    assert "\nif [ -n " in script_path.read_text(), (
+        "webhook block not uncommented — notify.sh example format changed; update the activation"
+    )
+
+    srv = _serve_fake_notify()
+    try:
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        result = _run_notify(dest, "webhook test", extra_env={"SLACK_WEBHOOK_URL": url})
+    finally:
+        srv.shutdown()
+
+    assert result.returncode == 0, (
+        "notify.sh exited non-zero with SLACK_WEBHOOK_URL set\n"
+        + result.stdout
+        + result.stderr
+    )
+    assert _FakeNotify.posts, (
+        "expected a POST to the capture server but none arrived; "
+        "the webhook branch may not have been activated by the string replacement"
+    )
+    body = _FakeNotify.posts[0].decode()
+    assert "webhook test" in body, (
+        f"expected 'webhook test' in the POST body, got: {body!r}"
+    )
+
+
 def test_alert_smoke_reports_failure_but_exits_zero(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
@@ -3247,6 +3515,62 @@ def test_render_docs_battery_adds_taskfile_tasks(tmp_path: Path):
     assert "docs:build" in ci_section
 
 
+def test_render_ci_task_chain_and_85_percent_gate(tmp_path: Path):
+    # M6/FWK25 (gate-tier, no Docker): the existing "ci: in taskfile" assertion (line 753)
+    # passes even if all sub-tasks are stripped. Assert that:
+    # (a) ci.cmds contains lint / test:cov:ci / audit / openapi:export in that order;
+    # (b) test:cov:ci's cmd carries the "85" threshold arg (the CI gate is 85%, not 70%).
+    # Also asserts the framework-integrity precondition renders in the ci: block.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    tf = yaml.safe_load((dest / "Taskfile.yml").read_text())
+
+    ci_cmds = tf["tasks"]["ci"]["cmds"]
+    # Each element is {"task": "<name>"} in go-task v3 YAML.
+    ci_task_names = [
+        item["task"] if isinstance(item, dict) else item for item in ci_cmds
+    ]
+    expected_order = ["lint", "test:cov:ci", "audit", "openapi:export"]
+    # Assert each sub-task is present and in the correct relative order
+    # (extra entries — e.g. docs:build with the docs battery — are allowed after openapi:export).
+    indices = {}
+    for name in expected_order:
+        assert name in ci_task_names, (
+            f"ci: task chain is missing '{name}' — dropped/mis-named sub-task "
+            f"(ci.cmds = {ci_task_names})"
+        )
+        indices[name] = ci_task_names.index(name)
+    for i in range(len(expected_order) - 1):
+        assert indices[expected_order[i]] < indices[expected_order[i + 1]], (
+            f"ci: sub-task order wrong: '{expected_order[i]}' must precede "
+            f"'{expected_order[i + 1]}' (found indices {indices})"
+        )
+
+    # test:cov:ci must carry the 85% threshold (not the 70% pre-commit gate).
+    cov_ci_cmds = tf["tasks"]["test:cov:ci"]["cmds"]
+    cov_ci_text = " ".join(
+        item if isinstance(item, str) else str(item) for item in cov_ci_cmds
+    )
+    assert "85" in cov_ci_text, (
+        f"test:cov:ci cmd does not carry the 85% threshold (got {cov_ci_text!r})"
+    )
+    assert "scripts/coverage.sh" in cov_ci_text, (
+        f"test:cov:ci cmd does not invoke scripts/coverage.sh (got {cov_ci_text!r})"
+    )
+
+    # The ci: block must have the framework-integrity precondition (soft check — only fires
+    # when the framework CLI is installed; a missing precondition silently skips integrity).
+    ci_preconditions = tf["tasks"]["ci"].get("preconditions", [])
+    precond_text = " ".join(
+        item.get("sh", "") if isinstance(item, dict) else str(item)
+        for item in ci_preconditions
+    )
+    assert "framework integrity" in precond_text, (
+        "ci: task is missing the framework-integrity precondition "
+        f"(preconditions = {ci_preconditions})"
+    )
+
+
 def test_render_without_docs_battery_has_no_docs_tasks(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
@@ -3282,6 +3606,36 @@ def test_render_docs_battery_adds_publish_workflow(tmp_path: Path):
     body = path.read_text()
     assert "mike deploy" in body
     assert "contents: write" in body  # needed to push the gh-pages branch
+
+
+def test_docs_workflow_mike_flags(tmp_path: Path) -> None:
+    """L3/FWK28: docs.yml must use --push --update-aliases and mike set-default.
+
+    The existing test_render_docs_battery_adds_publish_workflow asserts 'mike deploy' appears
+    in the body but does not pin the flags. This test adds the missing flag assertions and
+    verifies the set-default step is present — both are required for correct versioned gh-pages
+    publishing (without --push the deploy stays local; without set-default the 'latest' alias
+    is never updated).
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    body = (dest / ".github" / "workflows" / "docs.yml").read_text()
+
+    assert "mike deploy --push --update-aliases" in body, (
+        "docs.yml must call 'mike deploy --push --update-aliases'; "
+        "without --push the versioned docs are never pushed to gh-pages"
+    )
+    assert "mike set-default" in body, (
+        "docs.yml must call 'mike set-default'; "
+        "without it the 'latest' alias is never set after a version deploy"
+    )
+    # Also assert the trigger is exactly `push: tags: v*` (not broader)
+    wf = yaml.safe_load(body)
+    triggers = wf[True]  # PyYAML parses bare `on:` key as bool True
+    tag_patterns = triggers.get("push", {}).get("tags", [])
+    assert any(p.startswith("v") for p in tag_patterns), (
+        f"docs.yml push trigger must include a 'v*' tag pattern; got: {tag_patterns!r}"
+    )
 
 
 def test_render_without_docs_battery_has_no_publish_workflow(tmp_path: Path):

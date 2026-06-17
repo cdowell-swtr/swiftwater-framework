@@ -16,7 +16,8 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "tenacity>=9.0",
     "pybreaker>=1.2",
-{% if "graphql" in batteries %}    "strawberry-graphql[fastapi]>=0.235",
+{% if "websockets" in batteries %}    "websockets>=14",
+{% endif %}{% if "graphql" in batteries %}    "strawberry-graphql[fastapi]>=0.235",
 {% endif %}{% if "pgvector" in batteries %}    "pgvector>=0.3",
 {% endif %}{% if "workers" in batteries %}    "celery[redis]>=5.4",
     # celery's beat scheduler imports tzlocal (get_localzone) but no longer declares it as a

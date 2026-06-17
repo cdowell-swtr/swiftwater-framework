@@ -71,10 +71,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "hook:.claude:reviewers-gate-check.sh",
         ".claude/hooks/reviewers-gate-check.sh",
-        _KG,
-        # M15: only render-text-checked; no test pipes a PreToolUse git-commit payload and
-        # asserts FAIL->exit 2 (unlike lint_changed.py which IS driven).
-        "FWK27 reviewers-gate-check.sh PreToolUse hook only render-checked, never invoked with a payload",
+        _EX,
+        # FWK27/M15: driven via _run_gate_hook with a PreToolUse Bash/git-commit payload;
+        # stub gate exits 1 → asserts FAIL->exit 2; PASS->exit 0; non-commit->exit 0 (grep guard).
+        "test_rendered_gate_hook_blocks_on_fail_marker",
     ),
     # ---- pre-commit hooks ------------------------------------------------------------
     # All lint/format/hygiene/static hooks below are fired by `pre-commit run --all-files`
@@ -319,26 +319,26 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "overlay:services.yml",
         "infra/compose/services.yml",
-        _KG,
-        # Correction: staging/prod battery overlay, only consumed by a consumer-written
-        # target; never instantiated with batteries. FWK19 adds batteries-on config merge-validation.
-        "FWK19 services.yml battery overlay lacks batteries-on compose-config merge-validation",
+        _EX,
+        # FWK19: batteries-on compose-config merge-validation (staging+services+obs) proves
+        # the battery-conditional rendering is syntactically correct and the overlay merges.
+        "test_staging_plus_services_overlay_merges",
     ),
     SurfaceClass(
         "overlay:staging.yml",
         "infra/compose/staging.yml",
-        _KG,
-        # Correction: staging.yml is only .read_text() substring-checked — it gets NO compose
-        # config merge-validation (unlike prod.yml). FWK19 adds the parity merge-validation.
-        "FWK19 staging.yml lacks compose-config merge-validation (only substring-checked)",
+        _EX,
+        # FWK19: standalone compose-config merge-validation proves staging.yml is valid YAML
+        # with the required env vars (APP_IMAGE, POSTGRES_PASSWORD) threading through correctly.
+        "test_staging_standalone_merges",
     ),
     SurfaceClass(
         "overlay:test.yml",
         "infra/compose/test.yml",
-        _KG,
-        # M3: IS shipped + used by `task test:stack` but the acceptance tier never uses
-        # --profile test; the tmpfs ephemeral-DB reset is undriven.
-        "FWK19 test.yml never brought up --profile test (tmpfs ephemeral-DB reset undriven)",
+        _EX,
+        # FWK19/M3: --profile test stack brought up live; app serves /health; the tmpfs
+        # ephemeral-DB reset is proven by the differing postgres-test container ID.
+        "test_rendered_test_profile_stack_serves_and_resets_db",
     ),
     # ---- deploy scripts --------------------------------------------------------------
     SurfaceClass(
@@ -359,10 +359,9 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "script:infra/deploy/notify.sh",
         "infra/deploy/notify.sh",
-        _KG,
-        # L1: called only by the CD workflows (never strategy.sh); deploy_e2e never runs it.
-        # Intentionally non-fatal seam.
-        "FWK28 notify.sh non-fatal seam invoked only by CD workflows, never run by a test",
+        _EX,
+        # FWK28/L1: driven via _run_notify; echo path + webhook POST to capture server.
+        "test_notify_seam_exits_zero_and_echoes",
     ),
     SurfaceClass(
         "script:infra/deploy/strategy.sh",
@@ -445,9 +444,11 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "script:scripts/load.sh",
         "scripts/load.sh",
         _KG,
-        # L2: only render-checked; runs only inside the unexercised CD validation phase
-        # (k6 SLO gate).
-        "FWK28 load.sh k6 SLO gate runs only in the unexercised CD validation phase",
+        # FWK28/L2: graceful-degradation path exercised by
+        # test_load_sh_fails_gracefully_without_docker_target (acceptance, docker-gated); the full
+        # k6 SLO-threshold pass/fail with a live app stack is NOT exercised — no live stack in
+        # this tier. The threshold propagation remains an open gap.
+        "FWK28 load.sh full k6 SLO-threshold pass/fail requires a live app stack (not in this tier)",
     ),
     SurfaceClass(
         "script:scripts/pact-publish.sh",
@@ -497,27 +498,25 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:dev.yml:frontend",
         "infra/compose/dev.yml",
-        _KG,
-        # H6/FWK21 closed the runtime-image SPA serve (test_rendered_react_battery_passes runs the
-        # image and GETs /). The residual is the dev Vite dev-server compose service serving the
-        # SPA live over HTTP — lower value, folded into the react live-frontend work.
-        "FWK24 dev Vite frontend service never asserted to serve the SPA live over HTTP",
+        _EX,
+        # FWK24: the dev Vite server is brought up and GET / asserts the served SPA shell (id="root").
+        "test_rendered_frontend_dev_server_serves_spa",
     ),
     SurfaceClass(
         "service:dev.yml:grafana",
         "infra/compose/dev.yml:74-79",
-        _KG,
-        # M13: grafana is merged only so --profile dev config-validation passes ('the obs
-        # containers never start'); datasources/dashboards/anon-auth never queried live.
-        "FWK23 grafana never brought up live (datasources/dashboards/anon-auth unqueried)",
+        _EX,
+        # FWK23/M13: the test ups --profile dev (merging dev.yml's anon-admin override), so the
+        # dev-specific grafana surface is exercised: health, datasources, dashboards all asserted.
+        "test_rendered_obs_stack_self_scrape_rules_and_grafana",
     ),
     SurfaceClass(
         "service:dev.yml:mongo",
         "infra/compose/dev.yml:83-95",
-        _KG,
-        # M2: the mongo compose service block (mongosh-ping healthcheck, mongodata volume) is
-        # never `compose up`-ed (the data-store round-trip is testcontainers, not this service).
-        "FWK26 mongo compose service never brought up live (healthcheck/volume unasserted)",
+        _EX,
+        # FWK26/M2: the mongo compose service is brought up live; the mongosh-ping healthcheck is
+        # polled to `healthy` and a mongosh client pings it through the running service.
+        "test_rendered_dev_stack_http_redirect_and_mongo_health",
     ),
     SurfaceClass(
         "service:dev.yml:postgres",
@@ -552,10 +551,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:observability.yml:alertmanager",
         "infra/compose/observability.yml",
-        _KG,
-        # M12: amtool check-config (syntax) only; no test fires an alert through alertmanager
-        # and asserts routing/delivery.
-        "FWK23 alertmanager never routes a live notification (only amtool syntax-checked)",
+        _EX,
+        # FWK23/M12: alertmanager brought up live with a webhook receiver; a firing alert is POSTed
+        # and the routed/grouped notification is asserted at the capture server.
+        "test_rendered_alertmanager_routes_webhook",
     ),
     SurfaceClass(
         "service:observability.yml:app",
@@ -567,18 +566,18 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:observability.yml:celery-exporter",
         "infra/compose/observability.yml:106",
-        _KG,
-        # M10: present-but-unasserted scrape target (the only live targets test hard-filters
-        # to job=='app').
-        "FWK23 celery-exporter scrape target present but never asserted up==1",
+        _EX,
+        # FWK23/M10: celery-exporter scrape target asserted up==1 in the workers+redis+mongodb
+        # variant render (all four battery-gated exporters asserted in one bring-up).
+        "test_rendered_obs_exporter_targets_up",
     ),
     SurfaceClass(
         "service:observability.yml:grafana",
         "infra/compose/observability.yml",
-        _KG,
-        # M13: grafana under the obs overlay is never started live; datasources/dashboards
-        # unqueried.
-        "FWK23 grafana (obs overlay) never brought up live (datasources/dashboards unqueried)",
+        _EX,
+        # FWK23/M13: grafana brought up live (full --profile dev obs stack); datasources
+        # (prometheus/loki/tempo) and dashboards provisioned + asserted.
+        "test_rendered_obs_stack_self_scrape_rules_and_grafana",
     ),
     SurfaceClass(
         "service:observability.yml:loki",
@@ -590,25 +589,26 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:observability.yml:mongodb-exporter",
         "infra/compose/observability.yml:117",
-        _KG,
-        # M10: battery-gated exporter scrape target, present-but-unasserted (and not rendered
-        # in baseline DATA).
-        "FWK23 mongodb-exporter scrape target present but never asserted up==1",
+        _EX,
+        # FWK23/M10: mongodb-exporter scrape target asserted up==1 in the workers+redis+mongodb
+        # variant render (all four battery-gated exporters asserted in one bring-up).
+        "test_rendered_obs_exporter_targets_up",
     ),
     SurfaceClass(
         "service:observability.yml:otel-collector",
         "infra/compose/observability.yml",
-        _KG,
-        # M10: the otel-collector self-scrape target (:8888) is present but unasserted; the
-        # live targets test only checks job=='app'.
-        "FWK23 otel-collector self-scrape target present but never asserted up==1",
+        _EX,
+        # FWK23/M10: the otel-collector self-scrape target (:8888) asserted up==1 on the live
+        # baseline obs stack (alongside the prometheus self-scrape).
+        "test_rendered_obs_stack_self_scrape_rules_and_grafana",
     ),
     SurfaceClass(
         "service:observability.yml:postgres-exporter",
         "infra/compose/observability.yml:84",
-        _KG,
-        # M10: postgres-exporter scrape target present-but-unasserted.
-        "FWK23 postgres-exporter scrape target present but never asserted up==1",
+        _EX,
+        # FWK23/M10: postgres-exporter scrape target asserted up==1 in the workers+redis+mongodb
+        # variant render (all four battery-gated exporters asserted in one bring-up).
+        "test_rendered_obs_exporter_targets_up",
     ),
     SurfaceClass(
         "service:observability.yml:prometheus",
@@ -627,9 +627,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:observability.yml:redis-exporter",
         "infra/compose/observability.yml:95",
-        _KG,
-        # M10: redis-exporter scrape target present-but-unasserted.
-        "FWK23 redis-exporter scrape target present but never asserted up==1",
+        _EX,
+        # FWK23/M10: redis-exporter scrape target asserted up==1 in the workers+redis+mongodb
+        # variant render (all four battery-gated exporters asserted in one bring-up).
+        "test_rendered_obs_exporter_targets_up",
     ),
     SurfaceClass(
         "service:observability.yml:tempo",
@@ -657,60 +658,63 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:services.yml:beat",
         "infra/compose/services.yml:59-72",
-        _KG,
-        # Correction (2026-06-16): no shipped target brings services.yml up (compose-ssh uses
-        # app-host.yml), so the staging/prod overlay is consumer-target scaffolding. FWK20 closed
-        # the live beat path on the *dev* stack; services.yml's guard is FWK19 config-validation.
-        "FWK19 services.yml beat battery service lacks batteries-on compose-config validation",
+        _EX,
+        # FWK19: the batteries-on staging+services+obs config merge validates beat appears
+        # with APP_RUN_MIGRATIONS=false and the promoted image.
+        "test_staging_plus_services_overlay_merges",
     ),
     SurfaceClass(
         "service:services.yml:mongo",
         "infra/compose/services.yml:9-19",
-        _KG,
-        "FWK19 services.yml mongo battery service lacks batteries-on compose-config validation",
+        _EX,
+        # FWK19: the batteries-on staging+services+obs config merge validates mongo appears.
+        "test_staging_plus_services_overlay_merges",
     ),
     SurfaceClass(
         "service:services.yml:redis",
         "infra/compose/services.yml",
-        _KG,
-        "FWK19 services.yml redis battery service lacks batteries-on compose-config validation",
+        _EX,
+        # FWK19: the batteries-on staging+services+obs config merge validates redis appears.
+        "test_staging_plus_services_overlay_merges",
     ),
     SurfaceClass(
         "service:services.yml:worker",
         "infra/compose/services.yml:35-57",
-        _KG,
-        # Correction (2026-06-16): no shipped target brings services.yml up (compose-ssh uses
-        # app-host.yml), so the staging/prod overlay is consumer-target scaffolding. FWK20 closed
-        # the live broker->worker->DLQ path on the *dev* stack; services.yml's guard is FWK19.
-        "FWK19 services.yml worker battery service lacks batteries-on compose-config validation",
+        _EX,
+        # FWK19: the batteries-on staging+services+obs config merge validates worker appears
+        # with APP_RUN_MIGRATIONS=false and the promoted image.
+        "test_staging_plus_services_overlay_merges",
     ),
     SurfaceClass(
         "service:staging.yml:app",
         "infra/compose/staging.yml:4-53",
-        _KG,
-        # Correction (H7 demoted): staging.yml is only substring-checked — no compose-config
-        # merge-validation. FWK19 adds the parity guard.
-        "FWK19 staging.yml app service lacks compose-config merge-validation (only substring-checked)",
+        _EX,
+        # FWK19: staging.yml standalone config-validation proves the app service resolves
+        # correctly (APP_IMAGE, APP_ENVIRONMENT: staging, healthcheck, depends_on).
+        "test_staging_standalone_merges",
     ),
     SurfaceClass(
         "service:staging.yml:postgres",
         "infra/compose/staging.yml:4-53",
-        _KG,
-        "FWK19 staging.yml postgres service lacks compose-config merge-validation (only substring-checked)",
+        _EX,
+        # FWK19: staging.yml standalone config-validation proves postgres resolves correctly
+        # (POSTGRES_PASSWORD env var, healthcheck, pgdata volume).
+        "test_staging_standalone_merges",
     ),
     SurfaceClass(
         "service:test.yml:app",
         "infra/compose/test.yml:5-41",
-        _KG,
-        # M3: shipped + used by `task test:stack` but never brought up --profile test.
-        "FWK19 test.yml app never brought up --profile test",
+        _EX,
+        # FWK19/M3: the test-profile app is brought up live and serves /health 200.
+        "test_rendered_test_profile_stack_serves_and_resets_db",
     ),
     SurfaceClass(
         "service:test.yml:postgres-test",
         "infra/compose/test.yml:5-41",
-        _KG,
-        # M3: the tmpfs ephemeral-DB reset is undriven (acceptance tier never uses --profile test).
-        "FWK19 test.yml postgres-test (tmpfs ephemeral-DB reset) never brought up --profile test",
+        _EX,
+        # FWK19/M3: postgres-test (tmpfs: /var/lib/postgresql/data) is brought up live;
+        # the ephemeral reset is proven by the differing container ID across two boot cycles.
+        "test_rendered_test_profile_stack_serves_and_resets_db",
     ),
 )
 

@@ -1564,3 +1564,135 @@ the full acceptance/coverage-batch run needs the whole set). Regression test
 Verified: `shellcheck scripts/doctor.sh` clean, `task doctor` 10/10 green on this box, test 2
 passed, ruff clean. Framework dev tooling only → no release, no template payload, no FWK29 surface
 (enumerate runs on a rendered project, not the framework's own scripts/). Branch fwk35-framework-doctor.
+
+#### #0137 · completed · coverage-batch · 2026-06-17
+**FWK24** (item 1/7 of `fwk-coverage-batch`) — per-battery live routes through Traefik +
+react RUM. Three docker-gated acceptance tests in `test_rendered_project.py`, all GREEN +
+bite-proven: `test_rendered_per_battery_routes_through_traefik` (M8 — all-6-battery render up on
+`--profile dev`, asserts WS /ws 101, webhook HMAC 200/401, graphql 200, llm/agents 502 + metric
+series through Traefik; bite: flip bad-sig→200 RED), `test_rendered_react_rum_round_trip` (M9 —
+runs the shipped `test_frontend_rum.py`; bite: bogus path→exit4 RED), and
+`test_rendered_frontend_dev_server_serves_spa` (Vite dev server serves `id="root"`; bite:
+impossible marker RED). Added shared Traefik helpers `_mkcert_ssl_context`/`_traefik_request`/
+`_traefik_ws_upgrade` (FWK8 TLS recipe) reused by later items. FWK29 registry:
+`service:dev.yml:frontend` → EXERCISED.
+**Real bug found + FIXED (defer release → FWK36):** the `websockets` battery `/ws` route 404s
+live — `uvicorn` installed without a WebSocket lib (`No supported WebSocket library detected`).
+Fix: conditional `websockets>=14` in `pyproject.toml.jinja` + a CI-visible render guard
+(`test_render_with_websockets_battery` asserts the dep; new negative guard for the no-battery
+case). Bite-proven RED→GREEN by stashing the template fix. Small/obvious/scoped → applied per the
+real-bug policy; release deferred (no consumers gated in this run). Subagent-driven (Sonnet
+implementer; controller review + commit). No release.
+
+#### #0138 · completed · coverage-batch · 2026-06-17
+**FWK23** (item 2/7) — observability live exercise. Four docker-gated acceptance tests in
+`test_rendered_project.py`, all GREEN + bite-proven, + a `_poll_json(url,*,timeout,predicate)`
+helper: `test_rendered_obs_stack_self_scrape_rules_and_grafana` (M10-baseline prometheus +
+otel-collector self-scrape up==1, M11 5 rule groups loaded, M13 Grafana health + datasources
+{prometheus,loki,tempo} provisioned + dashboards; bite: phantom job → poll timeout RED),
+`test_rendered_obs_exporter_targets_up` (M10 postgres/redis/celery/mongodb exporters up==1 in one
+workers+redis+mongodb bring-up; bite: phantom job RED), `test_rendered_alertmanager_routes_webhook`
+(M12 firing alert → in-process webhook receiver; bite: wrong receiver RED),
+`test_rendered_worker_span_reaches_tempo` (M7 CeleryInstrumentor span `run/demo.tasks.tasks.heartbeat`
+reaches Tempo via TraceQL `{ name =~ "run/.*heartbeat.*" }`, strictly narrower than the app
+service.name; bite: nonexistent-route filter → poll timeout RED). FWK29 registry: 8 KNOWN_GAP →
+EXERCISED (otel-collector, postgres/redis/celery/mongodb-exporter, alertmanager, grafana ×2).
+Two **test-design adjustments** (NOT template bugs, no fix/release): Grafana 11.3.0's Tempo
+datasource plugin doesn't implement the `/health` API (404 "Method not implemented") → probe
+Tempo's own `/ready`; and `base+observability` without `dev.yml` fails compose dep-validation
+(postgres is dev.yml-profile-gated by design) → include `dev.yml --profile dev`. Subagent-driven
+(Sonnet; controller review + commit). No release.
+
+#### #0139 · completed · coverage-batch · 2026-06-17
+**FWK26** (item 3/7) — dev-loop / service-health. Three docker-gated acceptance tests in
+`test_rendered_project.py`, all GREEN + bite-proven, no template bugs:
+`test_rendered_dev_stack_http_redirect_and_mongo_health` (M1 Traefik :80 → https redirect; M2 mongo
+compose service polled to `healthy` + mongosh ping through the running service; bites: redirect
+`http://`→RED, `not healthy`→RED), `test_rendered_dev_lite_hot_reload_picks_up_edit` (M4 edit
+rendered `health.py` on the bind mount → `--reload`+WATCHFILES polling serves the sentinel within
+90s; bite: poll for an unwritten sentinel → timeout RED — the naive "still OK" bite was caught as a
+false-pass and replaced), `test_rendered_db_engine_pool_pre_ping_and_dispose` (M14 drives the
+shipped module-level `demo.db.engine` in the project venv: SELECT 1 → `pg_terminate_backend` the
+pooled backend → pre-ping recovers → `dispose_engine()` replaces the pool; kept the
+`engine.pool is not pool_before` assertion form — `dispose(close=True)` swaps in a fresh pool; bite:
+skip `dispose_engine()` → RED). Driver care: open the killer connection while the first is still
+checked out so the pool allocates a distinct backend (else it reuses the pid and kills itself).
+FWK29 registry: `service:dev.yml:mongo` → EXERCISED. M1/M4/M14 have no registry keys. Subagent-driven
+(Sonnet; controller review + commit). No release.
+
+#### #0140 · completed · coverage-batch · 2026-06-17
+**FWK25** (item 4/7) — Taskfile targets through the `task` runner. Four tests, all GREEN +
+bite-proven, no template bugs. Gate-tier (`test_copier_runner.py`):
+`test_render_ci_task_chain_and_85_percent_gate` — YAML-parses the rendered Taskfile, asserts
+`ci.cmds` order (lint → test:cov:ci → audit → openapi:export) + the 85 coverage threshold + the
+`framework integrity` precondition (bite: `85`→`99` RED). Docker-gated (`test_rendered_project.py`):
+`test_rendered_taskfile_dev_lite_precondition_rejects_missing_lock` (M5 negative — no uv.lock →
+`task dev:lite` exits non-zero with the uv-sync message; this IS the positive test's bite-proof),
+`test_rendered_taskfile_dev_lite_target_drives_stack` (M5 positive — `task dev:lite` Popen → poll
+/health 200 on the ephemeral port → `docker compose down -v`),
+`test_rendered_taskfile_db_targets_seed_rows` (M6 — postgres up, `task db:migrate` rc0, `task db:seed`
+rc0 with `APP_DATABASE_URL` injected via env, `items` row count > 0 via `compose exec psql`; bite:
+`>0`→`==0` RED). Neither fork bit: `_compose_host_port` resolved the dev:lite port promptly, and
+pydantic-settings env-precedence carried `APP_DATABASE_URL` into `db:seed`. No registry flips (Taskfile
+targets are out of FWK29 scope). Subagent-driven (Sonnet; controller review + commit). No release.
+
+#### #0141 · completed · coverage-batch · 2026-06-17
+**FWK19** (item 5/7) — non-dev compose overlays config-validated + test.yml live. Three tests, all
+GREEN + bite-proven, no template bugs. Gate-tier (`test_copier_runner.py`, CI-visible,
+`skipif docker absent`): `test_staging_standalone_merges` (H7 — staging.yml `docker compose config`
+for baseline + timescaledb; bite: assert a nonexistent service → RED) and
+`test_staging_plus_services_overlay_merges` (H2 — staging+services batteries-on merge validates;
+bite: `worker in` the bare no-battery merge → RED). Acceptance (`test_rendered_project.py`):
+`test_rendered_test_profile_stack_serves_and_resets_db` (M3 — test.yml `--profile test` up→/health,
+capture postgres-test container ID; `down -v`; re-up → assert a NEW container ID proves the tmpfs
+ephemeral DB reset; PICKED forks: ephemeral `fwk19.override.yml` port file + container-ID-delta
+proof; bite: `cid2\!=cid1`→`==`→RED). FWK29 registry: 11 KNOWN_GAP → EXERCISED (overlay:{services,
+staging,test}.yml; services.yml:{beat,mongo,redis,worker}; staging.yml:{app,postgres};
+test.yml:{app,postgres-test}); completeness guard green. Confirmed celery-exporter present,
+staging `${POSTGRES_PASSWORD:?}` + services battery-conditional YAML well-formed. Subagent-driven
+(Sonnet; controller review + Half-A re-run + commit). No release.
+
+#### #0142 · completed · coverage-batch · 2026-06-17
+**FWK27** (item 6/7) — generated-project `.claude` review-gate hook. Three acceptance tests in
+`test_rendered_project.py` (no docker / no uv-sync / no API key — PATH-stubs the `framework` binary,
+pipes PreToolUse JSON into the hook), all GREEN + bite-proven, via a `_run_gate_hook(dest, payload,
+stub_exit_code, marker_verdict=None)` helper that git-inits `dest` first (mandatory — the hook's
+toplevel resolution must point at `dest` for marker.json):
+`test_rendered_gate_hook_blocks_on_fail_marker` (M15 — commit-payload + FAIL stub → hook exits 2;
+bite: `==2`→`==0` RED), `test_rendered_gate_hook_passes_on_pass_marker` (PASS stub → exit 0),
+`test_rendered_gate_hook_skips_non_commit` (`ls` payload → grep guard short-circuits → exit 0; bite:
+`==0`→`==2` RED). The plan's flagged candidate bug (grep guard vs the JSON-embedded payload on stdin)
+is NOT a bug — the guard matches the `"`-preceded token correctly. FWK29 registry:
+`hook:.claude:reviewers-gate-check.sh` → EXERCISED. Subagent-driven (Sonnet; controller re-ran all
+3 + finished). No release.
+
+#### #0143 · completed · coverage-batch · 2026-06-17
+**FWK28** (item 7/7) — seam/script smoke + workflow-graph asserts. Four tests, all GREEN +
+bite-proven, no template bugs. Gate-tier (`test_copier_runner.py`, no docker):
+`test_notify_seam_exits_zero_and_echoes` (L1 — `notify.sh` exits 0 + echoes `[deploy notify]…`;
+bite: wrong string RED), `test_notify_seam_posts_to_webhook` (L1 — string-replace-uncomment
+approach A activates the webhook block, POSTs to an in-process capture server; `assert
+_FakeNotify.posts` guards a silent no-op), `test_docs_workflow_mike_flags` (L3 — `yaml.safe_load`
+docs.yml asserts `mike deploy --push --update-aliases` + `mike set-default` + the `v`-prefixed tag
+trigger; bite: nonexistent flag RED). Acceptance (`test_rendered_project.py`, docker + grafana/k6
+image): `test_load_sh_fails_gracefully_without_docker_target` (L2 — unreachable `K6_TARGET` on a free
+port, `K6_DURATION=1s`/`K6_VUS=1`; asserts non-zero exit via `set -euo pipefail` — graceful
+degradation ONLY, NOT full SLO pass; bite: `\!=0`→`==0` RED). FWK29 registry: `script:infra/deploy/
+notify.sh` → EXERCISED; `script:scripts/load.sh` stays KNOWN_GAP with honest evidence (full k6 SLO
+pass/fail needs a live app stack); `job:docs.yml:publish` untouched (exempt). Subagent-driven
+(Sonnet; controller review + gate-tier re-run + finish). No release.
+
+#### #0144 · completed · coverage-batch · 2026-06-17
+**Branch-end review + PR** for `fwk-coverage-batch`. One Opus whole-branch code-quality +
+spec-compliance review (review-model policy): verdict **APPROVE-WITH-NITS**, no blocking findings —
+confirmed no false-EXERCISED flips (all 21 KNOWN_GAP→EXERCISED name a real test that genuinely
+exercises the surface live; load.sh correctly stays KNOWN_GAP; docs.yml:publish untouched), tests
+non-vacuous, teardown sound, the websockets fix + CI guard correct, and the two FWK23 test-design
+adjustments legitimately not masking template bugs (M13 datasource provisioning still asserted).
+Applied nit #1: hardened `test_load_sh_fails_gracefully_without_docker_target` to assert a k6 run
+marker (`connection refused`/`http_req` in output) so a docker-pull failure can't pass for the
+wrong reason. Nits #2 (cosmetic conjunction assertion) and #3 (inherent first-boot timeout flake)
+accepted as-is. Full verification: gate-tier pytest 954 passed / 3 env-skips; all new batch tests
+run together = 25 passed + 1 transient ghcr.io TLS-handshake pull flake on
+`test_rendered_worker_span_reaches_tempo` (re-ran → GREEN; [[render-matrix-dockerhub-flake-triage]]);
+ruff/format/mypy clean. No release (test-only; the websockets template fix is deferred → FWK36).
