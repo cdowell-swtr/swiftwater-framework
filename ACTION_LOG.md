@@ -1706,3 +1706,12 @@ buildx, node 22/npm, mkcert + libnss3-tools, shellcheck) plus go-task 3.51.1 to 
 Corrected: distro Ubuntu 26.04/WSL2/systemd; no host k6 (grafana/k6 image); docker-group needs a
 fresh login; `/tmp` is a ~4 GB tmpfs → `TMPDIR=/var/tmp`; sandbox must be disabled for
 docker/acceptance; `task doctor` is the preflight; ghcr.io/Hub pull timeouts are flakes. Doc-only.
+
+#### #0145 · completed · housekeeping · 2026-06-17
+Post-batch tidy. PLAN.md: removed the now-complete `FWK19–FWK28` umbrella line from `Next` and
+added a consolidated `Done` entry for the coverage batch (all 7 items GREEN, 21 registry flips,
+the websockets bug → FWK36, Opus APPROVE-WITH-NITS, merged #53 `f1ac8b9`); re-pointed FWK36's
+"shipped on fwk-coverage-batch" → "on master (merged #53)" since the branch is gone. Pruned the
+two stale remote branches (`fwk-coverage-batch`, `fwk20-workers-live-broker-dlq-beat`) — both
+PRs confirmed MERGED (squash, so not literal ancestors) before deleting; origin now has only
+`master` + `gh-pages`. Docs/state only → no release.
