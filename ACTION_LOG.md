@@ -1715,3 +1715,33 @@ the websockets bug → FWK36, Opus APPROVE-WITH-NITS, merged #53 `f1ac8b9`); re-
 two stale remote branches (`fwk-coverage-batch`, `fwk20-workers-live-broker-dlq-beat`) — both
 PRs confirmed MERGED (squash, so not literal ancestors) before deleting; origin now has only
 `master` + `gh-pages`. Docs/state only → no release.
+
+#### #0146 · completed · FWK3 · 2026-06-17
+Per-agent reviewer reference docs (Plan 22c). Brainstormed → Fork A (registry-driven + guarded,
+mirroring gen_observability.py) → plan → inline executing-plans. New `review/reference_doc.py`
+(`render_reference()` emits an at-a-glance table from the live registry + a `_BLURBS` prose map;
+raises on any agent missing a blurb or any orphan blurb), thin `scripts/gen_reviewer_reference.py`,
+committed `documentation/reference/review-agents.md` (21-row table + 21 prose subsections), and
+`tests/test_reviewer_reference.py` (3 asserts: doc-is-current, every-agent-blurbed, no-orphans).
+Blurbs authored by 5 grouped Sonnet summarizers reading the actual prompts (caught the misleading
+names: api-design=GraphQL/Strawberry, contracts=Pact, performance=query-cost-on-changed-lines, the
+obs 4-way split, coverage-gap=framework-native-defers-to-FWK29-registry); controller fact-checked
+every scope/blocking claim against `registry.py` and STRIPPED the blocking/advisory editorializing
+from prose (the table's Blocks column is the source of truth — dependency/usability/documentation/
+coverage-gap/observability-db are block=None; application-logic is block=info). Retired BOTH
+promissory notes in `working/review-system.md` → links to the reference; added the mkdocs nav entry.
+Bite-proven (append a stale line → test_reference_doc_is_current RED → regenerate → green). Gates:
+guard 3 passed, tests/review/ 327 passed/3 skipped, ruff + format + mypy(48 files) clean. Docs/dev-
+tooling only → no template payload, no release, no FWK29 surface. Branch fwk3-reviewer-reference-docs.
+
+#### #0147 · completed · FWK3 · 2026-06-17
+Branch-end Opus review (code-quality + accuracy): **APPROVE-WITH-NITS**, no critical/important.
+Reviewer read all 21 prompts + the registry and confirmed every blurb faithfully represents its
+prompt (incl. the misleading-named api-design=GraphQL / contracts=Pact / performance=query-cost,
+the 4-way obs split, coverage-gap's FWK29 deferral, and the compliance/privacy/data-integrity/
+data-lineage boundaries), the table cells match the registry, render/guard/links are sound, and no
+prose re-states blocking/advisory. Applied the one worthwhile nit: coverage-gap blurb "new
+enumerable-surface kinds" → "surfaces of a kind `enumerate.py` doesn't recognize" (precision —
+the open-world half flags NON-enumerated kinds); regenerated the doc, guard 3 passed, ruff/format
+clean. Left the privacy/application-logic "defers to" framing as-is (reviewer: accurate effective-
+scope, not a fabrication). Ready for PR.

@@ -59,4 +59,5 @@ nav:
   - Reference:
       - CLI: reference/cli.md
       - Python API: reference/api.md
+      - Review agents: reference/review-agents.md
   - Contributing: contributing/index.md

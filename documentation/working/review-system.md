@@ -1,6 +1,6 @@
 # The review system
 
-This page explains what the review system *is* and *why* it exists. It is intentionally conceptual: the detailed per-agent reference — which agents exist, what each one checks, and the thresholds they apply — will be published once the ongoing reviewer re-tuning lands. Here we cover the architecture and the reasoning behind it.
+This page explains what the review system *is* and *why* it exists. It is intentionally conceptual: the detailed per-agent reference — which agents exist, what each one checks, and the thresholds they apply — is in [Review agents](../reference/review-agents.md). Here we cover the architecture and the reasoning behind it.
 
 ## What it is
 
@@ -32,4 +32,4 @@ The agents are themselves software, and software is tested. Because LLM output i
 
 ## In short
 
-The review system is a panel of single-concern AI review agents that gate changes at commit and in CI, backed by one engine that can drive a paid API or a free local subagent interchangeably — so the free local review and the paid CI review are the *same* review. An eval harness scores the agents against golden fixtures so their quality is measured, not assumed. It exists to add the intent-level judgement the deterministic gates can't, with separation of concerns built in. The full per-agent reference will follow once the reviewer re-tuning is complete.
+The review system is a panel of single-concern AI review agents that gate changes at commit and in CI, backed by one engine that can drive a paid API or a free local subagent interchangeably — so the free local review and the paid CI review are the *same* review. An eval harness scores the agents against golden fixtures so their quality is measured, not assumed. It exists to add the intent-level judgement the deterministic gates can't, with separation of concerns built in. See [Review agents](../reference/review-agents.md) for the full per-agent reference.
