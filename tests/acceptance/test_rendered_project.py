@@ -7,6 +7,8 @@ import ssl
 import subprocess
 import time
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -62,6 +64,55 @@ def _compose_host_port(
     ).stdout.strip()
     # docker prints "0.0.0.0:NNNNN" (or "[::]:NNNNN"); take the trailing port.
     return int(out.rsplit(":", 1)[1])
+
+
+@contextmanager
+def _run_image_serving(
+    image: str,
+    *,
+    extra_env: dict[str, str] | None = None,
+    ready_path: str = "/heartbeat",
+) -> Iterator[str]:
+    """`docker run -d` the built image on a free host port with migrations disabled, poll
+    <ready_path> until 200, and yield the base URL. DB-less: APP_RUN_MIGRATIONS=false makes the
+    entrypoint skip alembic/seed and exec uvicorn; every Settings field has a default and the
+    app's lifespan does not require the DB. Removes the container on exit; on not-ready it raises
+    with `docker logs` attached so a boot crash is diagnosable."""
+    port = _free_tcp_port()
+    env_args = ["-e", "APP_RUN_MIGRATIONS=false"]
+    for k, v in (extra_env or {}).items():
+        env_args += ["-e", f"{k}={v}"]
+    run = subprocess.run(
+        ["docker", "run", "-d", "-p", f"{port}:8000", *env_args, image],
+        capture_output=True,
+        text=True,
+    )
+    assert run.returncode == 0, f"docker run failed for {image}:\n{run.stderr}"
+    cid = run.stdout.strip()
+    base = f"http://127.0.0.1:{port}"
+    try:
+        deadline = time.time() + 60
+        ready = False
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(f"{base}{ready_path}", timeout=3) as resp:
+                    if resp.status == 200:
+                        ready = True
+                        break
+            except Exception:
+                pass
+            time.sleep(2)
+        if not ready:
+            logs = subprocess.run(
+                ["docker", "logs", cid], capture_output=True, text=True
+            )
+            raise AssertionError(
+                f"{image} did not serve {ready_path} within 60s\n"
+                f"--- docker logs ---\n{logs.stdout}\n{logs.stderr}"
+            )
+        yield base
+    finally:
+        subprocess.run(["docker", "rm", "-f", cid], capture_output=True)
 
 
 @pytest.fixture(autouse=True)
@@ -426,6 +477,43 @@ def test_rendered_claudesubscriptioncli_docker_builder_stage_builds(tmp_path: Pa
         "the Docker builder stage failed for a claudesubscriptioncli render — git missing "
         "for the litellm-claude-cli git dep?\n" + result.stdout + result.stderr
     )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="docker required: builds + runs the claudesubscriptioncli FULL runtime image",
+)
+def test_rendered_claudesubscriptioncli_docker_runtime_serves_heartbeat(tmp_path: Path):
+    # H5/FWK21: the builder-stage test above builds only `--target builder`; nothing builds the
+    # FULL runtime image or runs it, so a runtime-only break in the litellm-claude-cli git dep
+    # (a COPY --from=builder interaction, or a runtime import) ships green. Build the default
+    # (runtime) target and run it: create_app calls register_claude_cli(), so a 200 on /heartbeat
+    # proves the dep is importable in the runtime image (the app booted past create_app).
+    data = {**DATA, "batteries": resolve(["claudesubscriptioncli"])}
+    dest = tmp_path / "demo"
+    render_project(dest, data)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+    image = "fwk-claudesub-runtime-test"
+    build = subprocess.run(
+        ["docker", "build", "-f", "infra/docker/Dockerfile", "-t", image, "."],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "DOCKER_BUILDKIT": "1"},
+    )
+    try:
+        assert build.returncode == 0, (
+            "claudesubscriptioncli runtime image build failed:\n"
+            + build.stdout
+            + build.stderr
+        )
+        with _run_image_serving(image) as base:
+            with urllib.request.urlopen(f"{base}/heartbeat", timeout=5) as resp:
+                assert resp.status == 200, (
+                    f"runtime image did not serve /heartbeat 200 (got {resp.status})"
+                )
+    finally:
+        subprocess.run(["docker", "rmi", "-f", image], capture_output=True)
 
 
 @pytest.mark.skipif(
@@ -1834,6 +1922,17 @@ def test_rendered_react_battery_passes(tmp_path: Path):
     assert build.returncode == 0, (
         "react app image build failed:\n" + build.stdout + build.stderr
     )
+    # H6/FWK21: COPY succeeds whenever the source exists, so a wrong dist path or empty build
+    # still builds green. Run the built image and request the served SPA to prove
+    # /app/frontend/dist landed and is served by the StaticFiles mount (main.py), not merely
+    # that the build exited 0.
+    with _run_image_serving("demo-react:ci") as base:
+        with urllib.request.urlopen(f"{base}/", timeout=5) as resp:
+            body = resp.read().decode()
+            assert resp.status == 200, f"served SPA returned {resp.status}, not 200"
+            assert 'id="root"' in body, (
+                f"served / is not the SPA shell (no root div):\n{body[:500]}"
+            )
 
 
 @pytest.mark.skipif(

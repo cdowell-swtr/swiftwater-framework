@@ -47,10 +47,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "docker-stage:Dockerfile:frontend-build",
         "infra/docker/Dockerfile:13-22",
-        _KG,
-        # H6: react runtime image is built (returncode==0) but the SPA artifact COPYd from
-        # frontend-build is never served/requested — a wrong dist path builds green.
-        "FWK21 react frontend-build stage built but the served SPA artifact is never run/requested",
+        _EX,
+        # H6/FWK21: the react runtime image is built AND run; GET / asserts the SPA shell
+        # (id="root") served from the COPYd /app/frontend/dist, not just returncode==0.
+        "test_rendered_react_battery_passes",
     ),
     SurfaceClass(
         "docker-stage:Dockerfile:runtime",
@@ -498,9 +498,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "service:dev.yml:frontend",
         "infra/compose/dev.yml",
         _KG,
-        # The frontend compose service (react battery) is never brought up live and served;
-        # the react test builds the image (returncode==0) but never runs the served SPA (H6).
-        "FWK21 dev frontend service never brought up live / SPA never served (paired with H6)",
+        # H6/FWK21 closed the runtime-image SPA serve (test_rendered_react_battery_passes runs the
+        # image and GETs /). The residual is the dev Vite dev-server compose service serving the
+        # SPA live over HTTP — lower value, folded into the react live-frontend work.
+        "FWK24 dev Vite frontend service never asserted to serve the SPA live over HTTP",
     ),
     SurfaceClass(
         "service:dev.yml:grafana",
