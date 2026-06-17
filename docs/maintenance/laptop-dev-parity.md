@@ -14,6 +14,13 @@ You do **not** need docker / buildx / node / shellcheck — those are for the do
 tier and CI-action tests, which the reviewer eval/audit path never touches. (Add them later
 only if you want to run the full test suite; see `CLAUDE.md` "Env parity (this box)".)
 
+> **For the FULL acceptance suite (e.g. the coverage-test batch run):** you DO need the whole
+> host tool set — docker + buildx, mkcert, task, node/npm, shellcheck (a superset of the above).
+> Verify it in one shot with **`task doctor`** in the framework repo: it presence-checks every
+> tool and exits non-zero on any miss. Run it before an unattended run so a missing `mkcert`/`task`
+> can't turn a docker test into an *error* (it would otherwise skip cleanly only when the guard
+> sees the tool absent).
+
 ## 1. Windows — install WSL2 (one-time)
 
 PowerShell as Administrator:
