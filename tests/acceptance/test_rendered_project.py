@@ -117,6 +117,24 @@ def _run_image_serving(
         subprocess.run(["docker", "rm", "-f", cid], capture_output=True)
 
 
+def _poll_json(url: str, *, timeout: float, predicate) -> dict | None:
+    """Poll an HTTP endpoint returning JSON until `predicate(parsed)` is truthy or `timeout`
+    elapses. Returns the parsed JSON that satisfied the predicate, else None. Tolerates the
+    not-yet-up window (connection refused / 5xx / partial JSON) by swallowing OSError + JSON
+    errors between polls — the obs stack's scrape/ingest/provisioning all have a boot lag."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                parsed = json.loads(resp.read())
+            if predicate(parsed):
+                return parsed
+        except (OSError, ValueError):
+            pass
+        time.sleep(3)
+    return None
+
+
 def _mkcert_ssl_context() -> ssl.SSLContext:
     """An SSL context that trusts ONLY the mkcert CA (chain-verify), with hostname check off
     (the cert's *.localhost wildcard SAN is browser-valid but OpenSSL won't match it)."""
@@ -1320,6 +1338,480 @@ def test_rendered_project_traces_reach_tempo(tmp_path: Path):
         assert found, "no app traces reached Tempo within the timeout"
     finally:
         subprocess.run(down, cwd=dest)
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv and docker are required for the live obs-stack test",
+)
+def test_rendered_obs_stack_self_scrape_rules_and_grafana(tmp_path: Path):
+    # FWK23 (M10-baseline + M11 + M13): the only live obs test today asserts the `app` scrape
+    # target healthy and nothing else — the prometheus/otel-collector self-scrape targets, the
+    # alert-rule groups, and the entire Grafana provisioning (datasources/dashboards/anon-auth)
+    # are present-but-unasserted. Bring the FULL obs stack up ONCE and assert all three.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    # No service allowlist: bring the whole --profile dev obs stack up (grafana included). dev.yml
+    # re-applies grafana's anonymous-admin override (GF_AUTH_ANONYMOUS_*), so M13 anon-auth is live.
+    up = ["docker", "compose", *fargs, "--profile", "dev", "up", "-d", "--build"]
+    down = ["docker", "compose", *fargs, "--profile", "dev", "down", "-v"]
+    env = _compose_env()
+    assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+    try:
+        prom_port = _compose_host_port(dest, files, "prometheus", 9090)
+        graf_port = _compose_host_port(dest, files, "grafana", 3000)
+
+        # --- M10-baseline: prometheus + otel-collector self-scrape targets up==1 ---
+        # (The app target is already covered by the existing test; here assert the self-scrape ones.)
+        def _baseline_targets_up(parsed: dict) -> bool:
+            actives = parsed.get("data", {}).get("activeTargets", [])
+            by_job = {t.get("labels", {}).get("job"): t.get("health") for t in actives}
+            return (
+                by_job.get("prometheus") == "up"
+                and by_job.get("otel-collector") == "up"
+            )
+
+        targets = _poll_json(
+            f"http://localhost:{prom_port}/api/v1/targets?state=active",
+            timeout=120,
+            predicate=_baseline_targets_up,
+        )
+        assert targets is not None, (
+            "prometheus/otel-collector self-scrape targets never both reported up==1 within 120s"
+        )
+
+        # --- M11: alert rule groups loaded/parsed (no rule-group load error) ---
+        # Baseline (no batteries) renders: slo, postgres, otel-collector, prometheus, alertmanager.
+        expected_groups = {
+            "slo",
+            "postgres",
+            "otel-collector",
+            "prometheus",
+            "alertmanager",
+        }
+
+        def _rules_loaded(parsed: dict) -> bool:
+            groups = parsed.get("data", {}).get("groups", [])
+            names = {g.get("name") for g in groups}
+            return expected_groups.issubset(names)
+
+        rules = _poll_json(
+            f"http://localhost:{prom_port}/api/v1/rules",
+            timeout=90,
+            predicate=_rules_loaded,
+        )
+        assert rules is not None, (
+            "prometheus did not load all baseline rule groups "
+            f"{sorted(expected_groups)} within 90s (a malformed PromQL expr fails the group load)"
+        )
+
+        # --- M13: Grafana health (anon), datasources resolve, dashboards provisioned ---
+        # anon-admin is on (dev.yml override), so no auth header is needed.
+        health = _poll_json(
+            f"http://localhost:{graf_port}/api/health",
+            timeout=90,
+            predicate=lambda p: p.get("database") == "ok",
+        )
+        assert health is not None, (
+            "grafana /api/health never reported database==ok within 90s"
+        )
+
+        ds = _poll_json(
+            f"http://localhost:{graf_port}/api/datasources",
+            timeout=30,
+            predicate=lambda p: (
+                {d.get("uid") for d in p} >= {"prometheus", "loki", "tempo"}
+            ),
+        )
+        assert ds is not None, (
+            "grafana did not provision the prometheus/loki/tempo datasources "
+            "(wrong uid or a malformed provisioning yaml)"
+        )
+        # Datasource upstream health probes — Prometheus and Loki implement /health (returns
+        # {"status": "OK"}). The Grafana 11.3.0 Tempo plugin does NOT implement the health
+        # endpoint (returns 404 "Method not implemented" regardless of Tempo's status), so we
+        # probe Tempo's own /-/ready instead (the otel-collector forwards to it).
+        for uid in ("prometheus", "loki"):
+            h = _poll_json(
+                f"http://localhost:{graf_port}/api/datasources/uid/{uid}/health",
+                timeout=60,
+                predicate=lambda p: p.get("status") == "OK",
+            )
+            assert h is not None, (
+                f"grafana datasource {uid!r} health probe never returned OK "
+                "(the datasource url in provisioning/datasources/*.yml is unreachable/wrong)"
+            )
+        # Tempo: probe its own /ready endpoint (Grafana 11.3.0 Tempo plugin does not implement
+        # the datasource /health API — verified empirically: 404 "Method not implemented").
+        tempo_port = _compose_host_port(dest, files, "tempo", 3200)
+        # /ready returns plain text "ready", not JSON; use a direct urllib probe.
+        tempo_deadline = time.time() + 60
+        tempo_ok = False
+        while time.time() < tempo_deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:{tempo_port}/ready", timeout=5
+                ) as r:
+                    if b"ready" in r.read():
+                        tempo_ok = True
+                        break
+            except OSError:
+                pass
+            time.sleep(3)
+        assert tempo_ok, (
+            "Tempo /ready never returned 'ready' within 60s "
+            "(Grafana's Tempo datasource url is http://tempo:3200 — Tempo unreachable)"
+        )
+
+        # dashboards: the SLO provider loads the provisioned dashboards from /var/lib/grafana/dashboards.
+        search = _poll_json(
+            f"http://localhost:{graf_port}/api/search?type=dash-db",
+            timeout=60,
+            predicate=lambda p: len(p) >= 1,
+        )
+        assert search is not None, (
+            "grafana provisioned no dashboards (the dashboards provider.yml path or the dashboard "
+            "JSON failed to load)"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv and docker are required for the live obs-stack test",
+)
+def test_rendered_obs_exporter_targets_up(tmp_path: Path):
+    # FWK23 (M10-batteries): the postgres/redis/celery/mongodb exporter scrape targets are
+    # battery-gated AND present-but-unasserted (the baseline live-targets test hard-filters to
+    # job=='app'). Render workers+redis+mongodb so ALL FOUR exporters render in one stack, up the
+    # obs overlay + the exporters' data deps, and assert each exporter target reports up==1.
+    dest = tmp_path / "demo"
+    render_project(
+        dest, {**DATA, "batteries": resolve(["workers", "redis", "mongodb"])}
+    )
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    # Up the scrape source (prometheus) + every exporter + each exporter's data dep. The exporters
+    # depend_on their data store HEALTHY (postgres/redis/mongo), so naming the exporters pulls the
+    # deps; name them explicitly too for clarity. The app is needed so prometheus's depends_on
+    # (service_healthy) is satisfied and the scrape loop runs.
+    services = [
+        "app",
+        "postgres",
+        "redis",
+        "mongo",
+        "prometheus",
+        "postgres-exporter",
+        "redis-exporter",
+        "celery-exporter",
+        "mongodb-exporter",
+    ]
+    up = [
+        "docker",
+        "compose",
+        *fargs,
+        "--profile",
+        "dev",
+        "up",
+        "-d",
+        "--build",
+        *services,
+    ]
+    down = ["docker", "compose", *fargs, "--profile", "dev", "down", "-v"]
+    env = _compose_env()
+    assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+    try:
+        prom_port = _compose_host_port(dest, files, "prometheus", 9090)
+        # The exporter scrape JOB names in prometheus.yml are: postgres, redis, celery, mongodb.
+        expected_jobs = {"postgres", "redis", "celery", "mongodb"}
+
+        def _exporters_up(parsed: dict) -> bool:
+            actives = parsed.get("data", {}).get("activeTargets", [])
+            up_jobs = {
+                t.get("labels", {}).get("job")
+                for t in actives
+                if t.get("health") == "up"
+            }
+            return expected_jobs.issubset(up_jobs)
+
+        targets = _poll_json(
+            f"http://localhost:{prom_port}/api/v1/targets?state=active",
+            timeout=180,
+            predicate=_exporters_up,
+        )
+        assert targets is not None, (
+            "not all exporter scrape targets reported up==1 within 180s "
+            f"(expected jobs {sorted(expected_jobs)} — a wrong DATA_SOURCE_NAME, a down exporter, "
+            "or a wrong telemetry address would leave one down)"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        # mongo/postgres/redis run as their image users; nothing root-owned is written to the bind
+        # mount here (only named volumes), so no chown-reclaim is needed (cf. the worker test, which
+        # does need it because worker/beat write the bind-mounted /app). Down -v drops the volumes.
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv and docker are required for the live alertmanager test",
+)
+def test_rendered_alertmanager_routes_webhook(tmp_path: Path):
+    # FWK23 (M12): amtool check-config validates SYNTAX only — no test fires an alert through the
+    # real alertmanager.yml and asserts the route/group/receiver actually delivers. Bring up
+    # alertmanager with its webhook receiver pointed at a local capture server, POST a firing alert,
+    # and assert the capture server received the routed/grouped notification.
+    import http.server
+    import json as _json
+    import threading
+    from datetime import datetime, timezone
+
+    dest = tmp_path / "demo"
+    render_project(
+        dest, DATA
+    )  # alert_channels defaults to ["webhook"] -> webhook_configs receiver
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    captured: list[dict] = []
+
+    class _Receiver(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                captured.append(_json.loads(body))
+            except ValueError:
+                captured.append({"_raw": body.decode(errors="replace")})
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):  # silence the default stderr logging
+            pass
+
+    recv_port = _free_tcp_port()
+    server = http.server.HTTPServer(("0.0.0.0", recv_port), _Receiver)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    # Mount the webhook_url file (the rendered alertmanager.yml reads `url_file`) and give the
+    # container a route back to the host's capture server via host.docker.internal.
+    url_file = dest / "infra" / "observability" / "alertmanager" / "webhook_url"
+    url_file.write_text(f"http://host.docker.internal:{recv_port}/")
+    (dest / "infra" / "compose" / "fwk23.override.yml").write_text(
+        "services:\n"
+        "  alertmanager:\n"
+        "    extra_hosts:\n"
+        '      - "host.docker.internal:host-gateway"\n'
+        "    volumes:\n"
+        '      - "../observability/alertmanager/webhook_url:/etc/alertmanager/webhook_url:ro"\n'
+    )
+    # Include dev.yml so the services it defines (postgres, redis, traefik …) satisfy the
+    # depends_on references inside observability.yml (postgres-exporter depends on postgres,
+    # which lives in dev.yml, not base.yml). Only `alertmanager` is actually started.
+    files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+        "infra/compose/fwk23.override.yml",
+    ]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    # --profile dev activates the profile-gated services (postgres, redis …) so that
+    # observability.yml's depends_on graph resolves cleanly. Only `alertmanager` is actually
+    # started (no deps of its own in observability.yml).
+    up = ["docker", "compose", *fargs, "--profile", "dev", "up", "-d", "alertmanager"]
+    down = ["docker", "compose", *fargs, "--profile", "dev", "down", "-v"]
+    env = _compose_env()
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        am_port = _compose_host_port(dest, files, "alertmanager", 9093)
+
+        # Wait for alertmanager to be ready (its own /-/ready endpoint).
+        ready = _poll_json(
+            f"http://localhost:{am_port}/api/v2/status",
+            timeout=60,
+            predicate=lambda p: bool(p.get("cluster") or p.get("versionInfo")),
+        )
+        assert ready is not None, "alertmanager never became ready within 60s"
+
+        # POST a firing alert. /api/v2/alerts accepts a JSON array of alerts.
+        now = datetime.now(timezone.utc).isoformat()
+        alert = [
+            {
+                "labels": {"alertname": "FWK23ProbeAlert", "severity": "warning"},
+                "annotations": {"summary": "fwk23 routing probe"},
+                "startsAt": now,
+            }
+        ]
+        req = urllib.request.Request(
+            f"http://localhost:{am_port}/api/v2/alerts",
+            data=_json.dumps(alert).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            assert resp.status in (200, 202), (
+                f"alertmanager rejected the alert POST: {resp.status}"
+            )
+
+        # The route's group_wait is 10s; poll the capture server for the routed notification.
+        deadline = time.time() + 60
+        routed = None
+        while time.time() < deadline:
+            for note in captured:
+                alerts = note.get("alerts", []) if isinstance(note, dict) else []
+                if any(
+                    a.get("labels", {}).get("alertname") == "FWK23ProbeAlert"
+                    for a in alerts
+                ):
+                    routed = note
+                    break
+            if routed is not None:
+                break
+            time.sleep(2)
+        assert routed is not None, (
+            "alertmanager never routed the firing alert to the webhook receiver within 60s "
+            "(a route/group/receiver-wiring regression that stays amtool-valid would do this)"
+        )
+        # The grouped notification carries the receiver name from the route.
+        assert routed.get("receiver") == "default", (
+            f"webhook notification routed to an unexpected receiver: {routed.get('receiver')!r}"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        server.shutdown()
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv and docker are required for the live worker-tracing test",
+)
+def test_rendered_worker_span_reaches_tempo(tmp_path: Path):
+    # FWK23 (M7): the Tempo test is app-only and queries service.name='demo' (shared by app+worker),
+    # so a worker-span regression passes silently. Bring up worker + otel-collector + tempo with OTEL
+    # enabled, run a Celery task through the LIVE broker, and assert a WORKER/TASK span (the
+    # CeleryInstrumentor 'run/<task>' span) reaches Tempo — not just service.name.
+    import urllib.parse
+
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": resolve(["workers"])})
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    base, obs, dev = (
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    )
+    # The dev worker service already sets APP_OTEL_ENABLED=true + the OTLP endpoint (verified in
+    # dev.yml.jinja), so OTEL is on with no override.
+    files = [base, obs, dev]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+    compose = ["docker", "compose", *fargs, "--profile", "dev"]
+    # otel-collector forwards to tempo; bring up the worker's data deps + the trace pipeline.
+    up = [
+        *compose,
+        "up",
+        "-d",
+        "--build",
+        "postgres",
+        "redis",
+        "worker",
+        "otel-collector",
+        "tempo",
+    ]
+    down = [*compose, "down", "-v"]
+    env = _compose_env()
+
+    def _exec(*argv: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [*compose, "exec", "-T", *argv],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=check,
+        )
+
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        # worker depends_on postgres+redis healthy; create the schema by hand (the app service,
+        # which would migrate, is not started). Mirrors the FWK20 worker bootstrap.
+        migrated = False
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            if (
+                _exec("worker", "alembic", "upgrade", "head", check=False).returncode
+                == 0
+            ):
+                migrated = True
+                break
+            time.sleep(3)
+        assert migrated, "alembic upgrade head never succeeded in the worker container"
+
+        # Enqueue the shipped heartbeat task through the live redis broker; the worker runs it under
+        # CeleryInstrumentor, emitting a 'run/demo.tasks.tasks.heartbeat' span exported to tempo.
+        _exec(
+            "worker",
+            "python",
+            "-c",
+            "from demo.tasks.tasks import heartbeat; heartbeat.delay()",
+        )
+
+        tempo_port = _compose_host_port(dest, files, "tempo", 3200)
+        # TraceQL: match a span by name (the celery task span), NOT service.name. URL-encode the
+        # query `{ name =~ "run/.*heartbeat.*" }`. (If the worker's celery span name differs,
+        # broaden to `{ span.celery.task_name != "" }` — confirm the attribute via a one-off tempo
+        # search during the GREEN run.)
+        traceql = '{ name =~ "run/.*heartbeat.*" }'
+        q = urllib.parse.urlencode({"q": traceql, "limit": "1"})
+
+        found = _poll_json(
+            f"http://localhost:{tempo_port}/api/search?{q}",
+            timeout=120,
+            predicate=lambda p: bool(p.get("traces")),
+        )
+        assert found is not None, (
+            "no WORKER/TASK span reached Tempo within 120s — the celery task span "
+            "'run/<task>' is missing (worker OTEL tracing is the M7 surface; an app span alone "
+            "would NOT satisfy this name filter)"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{dest}:/work",
+                "alpine",
+                "chown",
+                "-R",
+                f"{os.getuid()}:{os.getgid()}",
+                "/work",
+            ]
+        )
 
 
 @pytest.mark.skipif(

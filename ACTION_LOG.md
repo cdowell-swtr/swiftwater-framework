@@ -1583,3 +1583,22 @@ Fix: conditional `websockets>=14` in `pyproject.toml.jinja` + a CI-visible rende
 case). Bite-proven RED→GREEN by stashing the template fix. Small/obvious/scoped → applied per the
 real-bug policy; release deferred (no consumers gated in this run). Subagent-driven (Sonnet
 implementer; controller review + commit). No release.
+
+#### #0138 · completed · coverage-batch · 2026-06-17
+**FWK23** (item 2/7) — observability live exercise. Four docker-gated acceptance tests in
+`test_rendered_project.py`, all GREEN + bite-proven, + a `_poll_json(url,*,timeout,predicate)`
+helper: `test_rendered_obs_stack_self_scrape_rules_and_grafana` (M10-baseline prometheus +
+otel-collector self-scrape up==1, M11 5 rule groups loaded, M13 Grafana health + datasources
+{prometheus,loki,tempo} provisioned + dashboards; bite: phantom job → poll timeout RED),
+`test_rendered_obs_exporter_targets_up` (M10 postgres/redis/celery/mongodb exporters up==1 in one
+workers+redis+mongodb bring-up; bite: phantom job RED), `test_rendered_alertmanager_routes_webhook`
+(M12 firing alert → in-process webhook receiver; bite: wrong receiver RED),
+`test_rendered_worker_span_reaches_tempo` (M7 CeleryInstrumentor span `run/demo.tasks.tasks.heartbeat`
+reaches Tempo via TraceQL `{ name =~ "run/.*heartbeat.*" }`, strictly narrower than the app
+service.name; bite: nonexistent-route filter → poll timeout RED). FWK29 registry: 8 KNOWN_GAP →
+EXERCISED (otel-collector, postgres/redis/celery/mongodb-exporter, alertmanager, grafana ×2).
+Two **test-design adjustments** (NOT template bugs, no fix/release): Grafana 11.3.0's Tempo
+datasource plugin doesn't implement the `/health` API (404 "Method not implemented") → probe
+Tempo's own `/ready`; and `base+observability` without `dev.yml` fails compose dep-validation
+(postgres is dev.yml-profile-gated by design) → include `dev.yml --profile dev`. Subagent-driven
+(Sonnet; controller review + commit). No release.

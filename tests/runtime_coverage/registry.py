@@ -504,10 +504,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:dev.yml:grafana",
         "infra/compose/dev.yml:74-79",
-        _KG,
-        # M13: grafana is merged only so --profile dev config-validation passes ('the obs
-        # containers never start'); datasources/dashboards/anon-auth never queried live.
-        "FWK23 grafana never brought up live (datasources/dashboards/anon-auth unqueried)",
+        _EX,
+        # FWK23/M13: the test ups --profile dev (merging dev.yml's anon-admin override), so the
+        # dev-specific grafana surface is exercised: health, datasources, dashboards all asserted.
+        "test_rendered_obs_stack_self_scrape_rules_and_grafana",
     ),
     SurfaceClass(
         "service:dev.yml:mongo",
@@ -550,10 +550,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:observability.yml:alertmanager",
         "infra/compose/observability.yml",
-        _KG,
-        # M12: amtool check-config (syntax) only; no test fires an alert through alertmanager
-        # and asserts routing/delivery.
-        "FWK23 alertmanager never routes a live notification (only amtool syntax-checked)",
+        _EX,
+        # FWK23/M12: alertmanager brought up live with a webhook receiver; a firing alert is POSTed
+        # and the routed/grouped notification is asserted at the capture server.
+        "test_rendered_alertmanager_routes_webhook",
     ),
     SurfaceClass(
         "service:observability.yml:app",
@@ -565,18 +565,18 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:observability.yml:celery-exporter",
         "infra/compose/observability.yml:106",
-        _KG,
-        # M10: present-but-unasserted scrape target (the only live targets test hard-filters
-        # to job=='app').
-        "FWK23 celery-exporter scrape target present but never asserted up==1",
+        _EX,
+        # FWK23/M10: celery-exporter scrape target asserted up==1 in the workers+redis+mongodb
+        # variant render (all four battery-gated exporters asserted in one bring-up).
+        "test_rendered_obs_exporter_targets_up",
     ),
     SurfaceClass(
         "service:observability.yml:grafana",
         "infra/compose/observability.yml",
-        _KG,
-        # M13: grafana under the obs overlay is never started live; datasources/dashboards
-        # unqueried.
-        "FWK23 grafana (obs overlay) never brought up live (datasources/dashboards unqueried)",
+        _EX,
+        # FWK23/M13: grafana brought up live (full --profile dev obs stack); datasources
+        # (prometheus/loki/tempo) and dashboards provisioned + asserted.
+        "test_rendered_obs_stack_self_scrape_rules_and_grafana",
     ),
     SurfaceClass(
         "service:observability.yml:loki",
@@ -588,25 +588,26 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:observability.yml:mongodb-exporter",
         "infra/compose/observability.yml:117",
-        _KG,
-        # M10: battery-gated exporter scrape target, present-but-unasserted (and not rendered
-        # in baseline DATA).
-        "FWK23 mongodb-exporter scrape target present but never asserted up==1",
+        _EX,
+        # FWK23/M10: mongodb-exporter scrape target asserted up==1 in the workers+redis+mongodb
+        # variant render (all four battery-gated exporters asserted in one bring-up).
+        "test_rendered_obs_exporter_targets_up",
     ),
     SurfaceClass(
         "service:observability.yml:otel-collector",
         "infra/compose/observability.yml",
-        _KG,
-        # M10: the otel-collector self-scrape target (:8888) is present but unasserted; the
-        # live targets test only checks job=='app'.
-        "FWK23 otel-collector self-scrape target present but never asserted up==1",
+        _EX,
+        # FWK23/M10: the otel-collector self-scrape target (:8888) asserted up==1 on the live
+        # baseline obs stack (alongside the prometheus self-scrape).
+        "test_rendered_obs_stack_self_scrape_rules_and_grafana",
     ),
     SurfaceClass(
         "service:observability.yml:postgres-exporter",
         "infra/compose/observability.yml:84",
-        _KG,
-        # M10: postgres-exporter scrape target present-but-unasserted.
-        "FWK23 postgres-exporter scrape target present but never asserted up==1",
+        _EX,
+        # FWK23/M10: postgres-exporter scrape target asserted up==1 in the workers+redis+mongodb
+        # variant render (all four battery-gated exporters asserted in one bring-up).
+        "test_rendered_obs_exporter_targets_up",
     ),
     SurfaceClass(
         "service:observability.yml:prometheus",
@@ -625,9 +626,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:observability.yml:redis-exporter",
         "infra/compose/observability.yml:95",
-        _KG,
-        # M10: redis-exporter scrape target present-but-unasserted.
-        "FWK23 redis-exporter scrape target present but never asserted up==1",
+        _EX,
+        # FWK23/M10: redis-exporter scrape target asserted up==1 in the workers+redis+mongodb
+        # variant render (all four battery-gated exporters asserted in one bring-up).
+        "test_rendered_obs_exporter_targets_up",
     ),
     SurfaceClass(
         "service:observability.yml:tempo",
