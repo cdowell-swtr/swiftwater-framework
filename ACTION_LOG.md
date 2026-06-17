@@ -1487,3 +1487,28 @@ serve_spa+_dist.exists, id="root" Vite-preserved) and all four registry decision
 the inner `assert resp.status == 200` lines are dead (urllib raises HTTPError on non-2xx first) —
 accepted as defensive/symmetry per the reviewer. Landed on branch `fwk21-battery-docker-runtime`.
 No release (test-only). PR next.
+
+#### #0132 · completed · FWK19/23/24/25/26/27/28 · 2026-06-17
+Authored the remaining coverage-batch plans (the med/low half of the FWK18 inventory) for an
+unattended overnight run on the laptop. A shared execution-policy doc
+(`2026-06-17-coverage-batch-execution-policy.md`) encodes the operating rules settled with the
+user: hardest-first order (FWK24→23→26→25→19→27→28); ONE batch branch `fwk-coverage-batch`,
+≥1 commit/item (commit-often for safety), controller skip-marker per commit + one branch-end
+Opus review; real-bug policy = root-cause → small+obvious+scoped fix inline (+CI guard) else
+`xfail(strict=True)` + keep registry KNOWN_GAP, and EVERY real bug also gets an ACTION_LOG entry
++ a NEW PLAN.md Next entry + a morning-report line; NO release (test-only; any forced template
+fix deferred — no consumers); laptop docker-parity + TMPDIR notes; no real API keys by default
+(fork 2A). Per-item plans (each a placeholder-free spec+plan matching the FWK21 doc shape,
+authored inline + via sequential subagents, controller-reviewed): FWK24 (per-battery live routes
+through Traefik via a new `_traefik_request`/`_traefik_ws_upgrade`; forks 1A combined-render +
+2A reachability+error+metric; `/ws`=101-upgrade, graphql=assert-dev-behavior, webhook-secret via
+merge-override), FWK23 (obs live: self-scrape/rules/grafana in one bring-up, battery-variant
+exporters, alertmanager→capture-server, worker OTEL→Tempo by span-name; 8 registry flips),
+FWK26 (M1 redirect+M2 mongo health one stack, M4 hot-reload via /heartbeat literal, M14
+framework-side engine pre-ping/dispose — no template change), FWK25 (gate-tier ci-graph assert +
+`task dev:lite`/`db:migrate`/`db:seed` live), FWK19 (CI-visible staging/services config-validation
++ test.yml live tmpfs-reset; ~11 registry flips), FWK27 (.claude gate hook via PATH-stub +
+PreToolUse payload, mirrors `_run_hook`), FWK28 (notify.sh smoke + load.sh graceful-degradation
++ docs.yml mike workflow-graph assert). Keys location recorded in native memory. Registry-key
+cross-check: the keys each plan flips all exist. Delivering as a planning PR for review; the
+laptop run executes from these. Stopped after the plans per the user.
