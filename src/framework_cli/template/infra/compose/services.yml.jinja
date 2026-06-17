@@ -1,10 +1,49 @@
-# Battery-service overlay for staging/prod — merged by the deploy (infra/deploy/strategy.sh)
-# alongside observability.yml: `-f $DEPLOY_ENV.yml -f services.yml -f observability.yml`. Defines
-# the battery data stores + worker/beat for prod/staging (dev keeps its own build-based, profiled
-# copies in dev.yml). Managed alternative: point APP_MONGO_URL / APP_REDIS_URL / APP_CELERY_* at a
-# managed instance and omit the data-store services here (worker/beat stay self-hosted).
-{%- if "mongodb" in batteries or "workers" in batteries or "redis" in batteries %}
+# Self-hosted data-store + worker overlay for staging/prod, merged by the deploy
+# (infra/deploy/strategy.sh) alongside observability.yml:
+#   -f $DEPLOY_ENV.yml -f services.yml -f observability.yml
+# This file is a COMPOSITION SEAM (intentionally unlocked) — edit it for your topology:
+#   * Self-hosted stores: keep the services below (the default).
+#   * Managed stores (RDS / ElastiCache / Atlas / native / tunneled): delete the store
+#     service block(s) you are externalising and set the matching APP_*_URL in the target
+#     env; each store's depends_on edges are grouped with it, so they go away too. The DSN
+#     is opaque — put multi-host failover strings or ?sslmode=verify-full&sslrootcert=… in it.
+#   * TLS verify-full to a managed store: also merge -f tls-ca.yml and drop your CA bundle
+#     in infra/tls/ca/ (see that file).
 services:
+  # Always-on relational store (self-hosted). Remove this block + set APP_DATABASE_URL for managed PG.
+  postgres:
+{%- if uses_postgres_extension %}
+    image: ${POSTGRES_IMAGE:?set POSTGRES_IMAGE to the built+pushed custom Postgres tag (extensions baked in)}
+{%- else %}
+    image: postgres:17
+{%- endif %}
+{%- set _preloads = [] %}
+{%- if "timescaledb" in batteries %}{% set _ = _preloads.append("timescaledb") %}{% endif %}
+{%- if "age" in batteries %}{% set _ = _preloads.append("age") %}{% endif %}
+{%- if _preloads %}
+    command: ["postgres", "-c", "shared_preload_libraries={{ _preloads | join(',') }}"]
+{%- endif %}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the target environment}
+      POSTGRES_DB: app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - "pgdata:/var/lib/postgresql/data"
+
+  # depends_on fragment: merged onto prod.yml/staging.yml's app so it waits for the
+  # co-located postgres. Dropped automatically in the managed case (this file omitted).
+  app:
+    depends_on:
+      postgres:
+        condition: service_healthy
+{%- if "mongodb" in batteries or "workers" in batteries or "redis" in batteries %}
 {%- if "mongodb" in batteries %}
   mongo:
     image: mongo:7
@@ -71,12 +110,13 @@ services:
       redis:
         condition: service_healthy
 {%- endif %}
+{%- endif %}
 
 volumes:
+  pgdata: {}
 {%- if "mongodb" in batteries %}
   mongodata: {}
 {%- endif %}
 {%- if "workers" in batteries or "redis" in batteries %}
   redisdata: {}
-{%- endif %}
 {%- endif %}

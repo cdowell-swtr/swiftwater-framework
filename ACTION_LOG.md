@@ -1832,3 +1832,25 @@ sweep found; downstream tasks renumbered to 5–9). Exporter `depends_on` edges 
 grouped next to each store so the managed workflow (delete a store block) drops app+exporter edges
 together. Surfaced by the T2 spec/quality review catching the dangling-`depends_on` break in the
 prod+obs merge.
+
+#### #0154 · completed · FWK6 · 2026-06-17
+T3 (subagent-driven, Sonnet impl): relocated the always-on `postgres` service + the `app→postgres`
+`depends_on` edge + the `pgdata` volume OUT of the locked `prod.yml`/`staging.yml` INTO the
+operator-merged `services.yml` overlay (section-B core). `services.yml` now always emits `services:`
+(postgres is always-on, no longer battery-gated) with postgres (prod-style image + `:?` password
+guard) + an `app:` depends_on fragment first, battery block following without re-declaring `services:`,
+always-on `pgdata` volume. Self-hosted = `-f prod.yml -f services.yml`; managed = omit services.yml +
+set `APP_DATABASE_URL` (no postgres, no dangling depends_on — verified by the new
+`test_managed_db_topology_drops_postgres_and_depends_on` via `docker compose config`). Updated 9 tests
+(plan under-enumerated; sweep + impl found them): staging_prod_compose, services_overlay→always_has_
+postgres, staging_standalone (→managed shape), prod_plus_overlay (+`-f services.yml`), prod_staging_
+postgres_image (read services.yml), staging_plus_services, render_timescaledb_battery, preload_join,
+compose_structure(dev, unchanged). Full `test_copier_runner.py` **256 passed**; ruff clean. (FWK29
+runtime_coverage reconciliation deferred to T9.) **Spec review caught a regression the green suite hid:**
+the restructure reverted T2's env-wrapping on the `services.yml` worker/beat URLs (7 back to bare + the
+`:?` re-added on the worker DB) AND deleted both URL-guard tests (`test_dev_compose_urls_…`,
+`test_production_compose_urls_…`) — so the bare-literal regression passed because its guard was gone.
+Controller forward-fixed: re-wrapped the 7 worker/beat URLs (`${VAR:-default}`, no `:?` on the DB) and
+restored both guard tests (the no-bare-literal sweep now also covers services.yml). 10 FWK6 URL/topology
+tests green; ruff clean. Lesson: a "deletes the failing guard" edit slips past a green run — diff the
+test-def set across tasks.
