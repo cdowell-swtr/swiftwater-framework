@@ -1397,3 +1397,12 @@ detection with two installs on PATH). + 4 regression tests (non-tag `_commit` �
 integrity exits 1 cleanly on SHA `_commit`; integrity warns on CLI_AHEAD; upgrade errors when
 `latest_release()` is None). FWK34 suites 194 passed; full non-acceptance suite (pre-fix) 941
 passed/3 skipped; ruff + format + mypy clean.
+
+#### #0125 · completed · FWK34 · 2026-06-16
+Cut release **v0.2.12** for FWK34 (folded into the PR per convention). Bumped pyproject
+`0.2.11 → 0.2.12`, `DOGFOOD_COMMIT v0.2.11 → v0.2.12`, regenerated uv.lock. Moved FWK34 to PLAN
+Done. Verified the render-matrix interaction is safe: render-matrix scaffolds via `framework
+new` (records `_commit = installed version`), so the new integrity guard sees IN_SYNC and
+`framework integrity --ci` + `task ci` pass; the guard compares version strings, not tag
+existence. Next: push → PR → required checks (gate/build/render-complete) → squash-merge → tag
+v0.2.12 → release.yml.
