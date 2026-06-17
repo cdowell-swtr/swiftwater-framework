@@ -1018,6 +1018,136 @@ def test_rendered_project_dev_lite_stack_serves_health(tmp_path: Path):
 
 
 @pytest.mark.skipif(
+    not _docker_available(),
+    reason="uv + docker required: test-profile stack + tmpfs ephemeral-DB reset",
+)
+def test_rendered_test_profile_stack_serves_and_resets_db(tmp_path: Path) -> None:
+    # FWK19 (M3): test.yml is shipped and documented (`task test:stack`), but the acceptance
+    # tier never uses --profile test — the tmpfs ephemeral-DB reset is undriven. Bring the
+    # stack up twice and assert: (a) the app serves /health on the first up, and (b) the
+    # postgres-test container has a DIFFERENT container ID on the second up, proving the tmpfs
+    # was torn down and recreated (ephemeral reset, not a persistent volume re-mount).
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    # test.yml + base.yml: base.yml defines the app build+healthcheck; test.yml adds the test
+    # profile + postgres-test. Neither publishes a host port for `app`; add one via an inline
+    # ephemeral override so _compose_host_port can discover the assigned ephemeral port.
+    # The _isolate_compose_project autouse fixture sets HTTP_HOST_PORT=0, so docker assigns
+    # a free ephemeral port automatically.
+    (dest / "infra" / "compose" / "fwk19.override.yml").write_text(
+        'services:\n  app:\n    ports:\n      - "${HTTP_HOST_PORT:-8000}:8000"\n'
+    )
+
+    base = "infra/compose/base.yml"
+    test_overlay = "infra/compose/test.yml"
+    override = "infra/compose/fwk19.override.yml"
+    files = [base, test_overlay, override]
+    fargs: list[str] = []
+    for f in files:
+        fargs += ["-f", f]
+
+    compose = ["docker", "compose", *fargs, "--profile", "test"]
+    up = [*compose, "up", "-d", "--build"]
+    up_no_rebuild = [*compose, "up", "-d", "--no-build"]
+    down = [*compose, "down", "-v"]
+    env = _compose_env()
+
+    try:
+        # --- First boot ---
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0, (
+            "test-profile stack first `up --build` failed"
+        )
+        port = _compose_host_port(dest, files, "app", 8000)
+
+        # Poll /health until 200 (app runs alembic upgrade head before uvicorn serves).
+        deadline = time.time() + 120
+        body = None
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:{port}/health", timeout=3
+                ) as resp:
+                    if resp.status == 200:
+                        body = json.loads(resp.read())
+                        break
+            except OSError:
+                time.sleep(2)
+        assert body is not None, (
+            "test-profile app did not serve /health 200 within 120s on first boot"
+        )
+        assert body["status"] in {"ok", "degraded"}, (
+            f"unexpected /health status on first boot: {body}"
+        )
+
+        # Capture the postgres-test container ID on the first boot.
+        cid1 = subprocess.run(
+            [*compose, "ps", "-q", "postgres-test"],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert cid1, "postgres-test container not found after first up"
+
+        # --- Teardown (with -v: drop named volumes — there are none for postgres-test since
+        # it uses tmpfs, but -v is consistent with the other acceptance tests) ---
+        assert subprocess.run(down, cwd=dest, env=env).returncode == 0, (
+            "test-profile stack `down -v` failed"
+        )
+
+        # --- Second boot (no rebuild — image is already built) ---
+        assert subprocess.run(up_no_rebuild, cwd=dest, env=env).returncode == 0, (
+            "test-profile stack second `up --no-build` failed"
+        )
+        # Re-discover the port (ephemeral; may differ after a new up).
+        port2 = _compose_host_port(dest, files, "app", 8000)
+
+        # Poll /health on the second boot.
+        deadline2 = time.time() + 120
+        body2 = None
+        while time.time() < deadline2:
+            try:
+                with urllib.request.urlopen(
+                    f"http://localhost:{port2}/health", timeout=3
+                ) as resp:
+                    if resp.status == 200:
+                        body2 = json.loads(resp.read())
+                        break
+            except OSError:
+                time.sleep(2)
+        assert body2 is not None, (
+            "test-profile app did not serve /health 200 within 120s on second boot — "
+            "the tmpfs reset may have left postgres-test in an inconsistent state, or the "
+            "app failed to re-run alembic upgrade head against the fresh DB"
+        )
+
+        # The tmpfs reset proof: postgres-test was torn down and recreated — its container ID
+        # must differ between the first and second boot (a persistent volume would allow the
+        # same container to be restarted, but `down` removes containers, so this mainly proves
+        # the second `up` created a brand-new postgres-test rather than re-attaching to a
+        # lingering one from a stale project namespace).
+        cid2 = subprocess.run(
+            [*compose, "ps", "-q", "postgres-test"],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert cid2, "postgres-test container not found after second up"
+        assert cid2 != cid1, (
+            "postgres-test container ID did not change between first and second boot — "
+            "the tmpfs ephemeral-DB reset did not produce a fresh container "
+            f"(first={cid1!r}, second={cid2!r})"
+        )
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+
+
+@pytest.mark.skipif(
     not _docker_available() or shutil.which("task") is None,
     reason="uv + docker + go-task required: task dev:lite precondition fast-fail",
 )

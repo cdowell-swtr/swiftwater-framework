@@ -1635,3 +1635,19 @@ rc0 with `APP_DATABASE_URL` injected via env, `items` row count > 0 via `compose
 `>0`→`==0` RED). Neither fork bit: `_compose_host_port` resolved the dev:lite port promptly, and
 pydantic-settings env-precedence carried `APP_DATABASE_URL` into `db:seed`. No registry flips (Taskfile
 targets are out of FWK29 scope). Subagent-driven (Sonnet; controller review + commit). No release.
+
+#### #0141 · completed · coverage-batch · 2026-06-17
+**FWK19** (item 5/7) — non-dev compose overlays config-validated + test.yml live. Three tests, all
+GREEN + bite-proven, no template bugs. Gate-tier (`test_copier_runner.py`, CI-visible,
+`skipif docker absent`): `test_staging_standalone_merges` (H7 — staging.yml `docker compose config`
+for baseline + timescaledb; bite: assert a nonexistent service → RED) and
+`test_staging_plus_services_overlay_merges` (H2 — staging+services batteries-on merge validates;
+bite: `worker in` the bare no-battery merge → RED). Acceptance (`test_rendered_project.py`):
+`test_rendered_test_profile_stack_serves_and_resets_db` (M3 — test.yml `--profile test` up→/health,
+capture postgres-test container ID; `down -v`; re-up → assert a NEW container ID proves the tmpfs
+ephemeral DB reset; PICKED forks: ephemeral `fwk19.override.yml` port file + container-ID-delta
+proof; bite: `cid2\!=cid1`→`==`→RED). FWK29 registry: 11 KNOWN_GAP → EXERCISED (overlay:{services,
+staging,test}.yml; services.yml:{beat,mongo,redis,worker}; staging.yml:{app,postgres};
+test.yml:{app,postgres-test}); completeness guard green. Confirmed celery-exporter present,
+staging `${POSTGRES_PASSWORD:?}` + services battery-conditional YAML well-formed. Subagent-driven
+(Sonnet; controller review + Half-A re-run + commit). No release.

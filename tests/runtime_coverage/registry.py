@@ -319,26 +319,26 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "overlay:services.yml",
         "infra/compose/services.yml",
-        _KG,
-        # Correction: staging/prod battery overlay, only consumed by a consumer-written
-        # target; never instantiated with batteries. FWK19 adds batteries-on config merge-validation.
-        "FWK19 services.yml battery overlay lacks batteries-on compose-config merge-validation",
+        _EX,
+        # FWK19: batteries-on compose-config merge-validation (staging+services+obs) proves
+        # the battery-conditional rendering is syntactically correct and the overlay merges.
+        "test_staging_plus_services_overlay_merges",
     ),
     SurfaceClass(
         "overlay:staging.yml",
         "infra/compose/staging.yml",
-        _KG,
-        # Correction: staging.yml is only .read_text() substring-checked — it gets NO compose
-        # config merge-validation (unlike prod.yml). FWK19 adds the parity merge-validation.
-        "FWK19 staging.yml lacks compose-config merge-validation (only substring-checked)",
+        _EX,
+        # FWK19: standalone compose-config merge-validation proves staging.yml is valid YAML
+        # with the required env vars (APP_IMAGE, POSTGRES_PASSWORD) threading through correctly.
+        "test_staging_standalone_merges",
     ),
     SurfaceClass(
         "overlay:test.yml",
         "infra/compose/test.yml",
-        _KG,
-        # M3: IS shipped + used by `task test:stack` but the acceptance tier never uses
-        # --profile test; the tmpfs ephemeral-DB reset is undriven.
-        "FWK19 test.yml never brought up --profile test (tmpfs ephemeral-DB reset undriven)",
+        _EX,
+        # FWK19/M3: --profile test stack brought up live; app serves /health; the tmpfs
+        # ephemeral-DB reset is proven by the differing postgres-test container ID.
+        "test_rendered_test_profile_stack_serves_and_resets_db",
     ),
     # ---- deploy scripts --------------------------------------------------------------
     SurfaceClass(
@@ -657,60 +657,63 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:services.yml:beat",
         "infra/compose/services.yml:59-72",
-        _KG,
-        # Correction (2026-06-16): no shipped target brings services.yml up (compose-ssh uses
-        # app-host.yml), so the staging/prod overlay is consumer-target scaffolding. FWK20 closed
-        # the live beat path on the *dev* stack; services.yml's guard is FWK19 config-validation.
-        "FWK19 services.yml beat battery service lacks batteries-on compose-config validation",
+        _EX,
+        # FWK19: the batteries-on staging+services+obs config merge validates beat appears
+        # with APP_RUN_MIGRATIONS=false and the promoted image.
+        "test_staging_plus_services_overlay_merges",
     ),
     SurfaceClass(
         "service:services.yml:mongo",
         "infra/compose/services.yml:9-19",
-        _KG,
-        "FWK19 services.yml mongo battery service lacks batteries-on compose-config validation",
+        _EX,
+        # FWK19: the batteries-on staging+services+obs config merge validates mongo appears.
+        "test_staging_plus_services_overlay_merges",
     ),
     SurfaceClass(
         "service:services.yml:redis",
         "infra/compose/services.yml",
-        _KG,
-        "FWK19 services.yml redis battery service lacks batteries-on compose-config validation",
+        _EX,
+        # FWK19: the batteries-on staging+services+obs config merge validates redis appears.
+        "test_staging_plus_services_overlay_merges",
     ),
     SurfaceClass(
         "service:services.yml:worker",
         "infra/compose/services.yml:35-57",
-        _KG,
-        # Correction (2026-06-16): no shipped target brings services.yml up (compose-ssh uses
-        # app-host.yml), so the staging/prod overlay is consumer-target scaffolding. FWK20 closed
-        # the live broker->worker->DLQ path on the *dev* stack; services.yml's guard is FWK19.
-        "FWK19 services.yml worker battery service lacks batteries-on compose-config validation",
+        _EX,
+        # FWK19: the batteries-on staging+services+obs config merge validates worker appears
+        # with APP_RUN_MIGRATIONS=false and the promoted image.
+        "test_staging_plus_services_overlay_merges",
     ),
     SurfaceClass(
         "service:staging.yml:app",
         "infra/compose/staging.yml:4-53",
-        _KG,
-        # Correction (H7 demoted): staging.yml is only substring-checked — no compose-config
-        # merge-validation. FWK19 adds the parity guard.
-        "FWK19 staging.yml app service lacks compose-config merge-validation (only substring-checked)",
+        _EX,
+        # FWK19: staging.yml standalone config-validation proves the app service resolves
+        # correctly (APP_IMAGE, APP_ENVIRONMENT: staging, healthcheck, depends_on).
+        "test_staging_standalone_merges",
     ),
     SurfaceClass(
         "service:staging.yml:postgres",
         "infra/compose/staging.yml:4-53",
-        _KG,
-        "FWK19 staging.yml postgres service lacks compose-config merge-validation (only substring-checked)",
+        _EX,
+        # FWK19: staging.yml standalone config-validation proves postgres resolves correctly
+        # (POSTGRES_PASSWORD env var, healthcheck, pgdata volume).
+        "test_staging_standalone_merges",
     ),
     SurfaceClass(
         "service:test.yml:app",
         "infra/compose/test.yml:5-41",
-        _KG,
-        # M3: shipped + used by `task test:stack` but never brought up --profile test.
-        "FWK19 test.yml app never brought up --profile test",
+        _EX,
+        # FWK19/M3: the test-profile app is brought up live and serves /health 200.
+        "test_rendered_test_profile_stack_serves_and_resets_db",
     ),
     SurfaceClass(
         "service:test.yml:postgres-test",
         "infra/compose/test.yml:5-41",
-        _KG,
-        # M3: the tmpfs ephemeral-DB reset is undriven (acceptance tier never uses --profile test).
-        "FWK19 test.yml postgres-test (tmpfs ephemeral-DB reset) never brought up --profile test",
+        _EX,
+        # FWK19/M3: postgres-test (tmpfs: /var/lib/postgresql/data) is brought up live;
+        # the ephemeral reset is proven by the differing container ID across two boot cycles.
+        "test_rendered_test_profile_stack_serves_and_resets_db",
     ),
 )
 

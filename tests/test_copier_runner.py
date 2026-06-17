@@ -2229,6 +2229,150 @@ def test_prod_plus_services_plus_obs_merges(tmp_path: Path):
     assert r2.returncode == 0 and "redis" in r2.stdout and "worker" not in r2.stdout
 
 
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_staging_standalone_merges(tmp_path: Path) -> None:
+    """compose config merge-validation: staging.yml standalone is a valid topology.
+
+    Mirrors the prod.yml guard: staging.yml is self-contained (no base.yml merge needed —
+    it defines both `app` and `postgres` directly). Asserts the two named services are
+    present, the image slot resolves, and the POSTGRES_PASSWORD env var is threaded through
+    the postgres service. Two scenarios:
+    1. Baseline (no extensions) — image: postgres:17.
+    2. Extension battery (timescaledb) — conditional command + POSTGRES_IMAGE var.
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    comp = dest / "infra" / "compose"
+    env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
+
+    # --- Scenario 1: baseline staging.yml (no extension) ---
+    r = subprocess.run(
+        ["docker", "compose", "-f", str(comp / "staging.yml"), "config"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r.returncode == 0, f"staging.yml config failed:\n{r.stderr}"
+    for svc in ("app", "postgres"):
+        assert svc in r.stdout, f"service '{svc}' missing from staging.yml config"
+    assert "APP_ENVIRONMENT: staging" in r.stdout, (
+        "APP_ENVIRONMENT not set to 'staging' in staging.yml config"
+    )
+    assert "unless-stopped" in r.stdout, (
+        "restart: unless-stopped missing from staging.yml config (staging services must restart)"
+    )
+
+    # --- Scenario 2: timescaledb extension — conditional command key ---
+    dest2 = tmp_path / "demo_ts"
+    render_project(dest2, {**DATA, "batteries": ["timescaledb"]})
+    comp2 = dest2 / "infra" / "compose"
+    env_ts = {
+        **os.environ,
+        "APP_IMAGE": "demo:ci",
+        "POSTGRES_PASSWORD": "x",
+        "POSTGRES_IMAGE": "demo-postgres:ci",
+    }
+    r2 = subprocess.run(
+        ["docker", "compose", "-f", str(comp2 / "staging.yml"), "config"],
+        capture_output=True,
+        text=True,
+        env=env_ts,
+    )
+    assert r2.returncode == 0, f"staging.yml (timescaledb) config failed:\n{r2.stderr}"
+    assert "shared_preload_libraries=timescaledb" in r2.stdout, (
+        "timescaledb preload command missing from staging.yml (timescaledb battery) config"
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_staging_plus_services_overlay_merges(tmp_path: Path) -> None:
+    """compose config merge-validation: staging.yml + services.yml + observability.yml
+    is a valid merged topology (the canonical staging deploy merge: strategy.sh uses
+    `-f staging.yml -f services.yml -f observability.yml`).
+
+    Asserts: all battery services (worker/beat/redis/mongo) + app/postgres + both battery
+    exporters appear; worker/beat carry APP_RUN_MIGRATIONS=false + the promoted image.
+    Mirrors test_prod_plus_services_plus_obs_merges (line 2159) for staging.yml.
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb", "workers"]})
+    comp = dest / "infra" / "compose"
+    env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
+
+    r = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp / "staging.yml"),
+            "-f",
+            str(comp / "services.yml"),
+            "-f",
+            str(comp / "observability.yml"),
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r.returncode == 0, (
+        f"staging.yml + services.yml + observability.yml config failed:\n{r.stderr}"
+    )
+    for svc in (
+        "worker",
+        "beat",
+        "redis",
+        "mongo",
+        "app",
+        "postgres",
+        "mongodb-exporter",
+        "celery-exporter",
+        "prometheus",
+    ):
+        assert svc in r.stdout, (
+            f"service '{svc}' missing from staging+services+obs merge"
+        )
+    # worker/beat run the promoted image with APP_RUN_MIGRATIONS=false (services.yml:40,64)
+    assert "APP_RUN_MIGRATIONS" in r.stdout and "demo:ci" in r.stdout, (
+        "worker/beat APP_RUN_MIGRATIONS=false or APP_IMAGE not in staging+services merge"
+    )
+    # staging app carries APP_ENVIRONMENT: staging (not dev — the merge order must not
+    # let dev.yml's default win; staging.yml is the base, no dev.yml in this merge)
+    assert "APP_ENVIRONMENT: staging" in r.stdout, (
+        "APP_ENVIRONMENT is not 'staging' in the staging+services merge — wrong merge order"
+    )
+
+    # services.yml without batteries → no worker/beat/redis/mongo (no phantom services)
+    dest2 = tmp_path / "demo_bare"
+    render_project(dest2, {**DATA})  # no batteries
+    comp2 = dest2 / "infra" / "compose"
+    r2 = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp2 / "staging.yml"),
+            "-f",
+            str(comp2 / "services.yml"),
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r2.returncode == 0, (
+        f"staging.yml + services.yml (no batteries) config failed:\n{r2.stderr}"
+    )
+    assert "worker" not in r2.stdout and "redis" not in r2.stdout, (
+        "worker or redis appeared in staging+services (no batteries) merge — "
+        "services.yml battery guard is broken"
+    )
+
+
 def test_timescaledb_migration_ordering():
     from framework_cli.migrations import migration_down_revisions
 
