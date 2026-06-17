@@ -34,7 +34,9 @@ from framework_cli.source import (
 )
 from framework_cli.downskill import DownskillError, downskill_project
 from framework_cli.upskill import UpskillError, upskill_project
+from framework_cli.self_bump import BumpRefused, maybe_self_bump
 from framework_cli.upgrade import UpgradeError, upgrade_project
+from framework_cli.version_sync import VersionSkewError
 
 app = typer.Typer(
     help="Framework CLI — scaffold solid, observable, testable Python projects.",
@@ -47,8 +49,22 @@ review_config_app = typer.Typer(
 app.add_typer(review_config_app, name="review-config")
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(installed_framework_version())
+        raise typer.Exit()
+
+
 @app.callback()
-def _main() -> None:
+def _main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the installed framework CLI version and exit.",
+    ),
+) -> None:
     """Framework CLI — scaffold solid, observable, testable Python projects."""
 
 
@@ -126,6 +142,30 @@ def integrity(
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(1) from exc
         typer.echo(f"Recorded intentional drift: {', '.join(allow_drift)}")
+        raise typer.Exit(0)
+
+    # FWK34: integrity renders the canonical from the bundled (installed-CLI) template, so a
+    # CLI/_commit skew makes drift unreliable. This command runs from generated-project
+    # Taskfile preconditions with the dev's GLOBAL CLI (CI pins it via --ci), so do NOT
+    # hard-fail on skew — warn and exit 0 so `task dev` is never blocked on benign skew.
+    from framework_cli.version_sync import (
+        VersionSkew,
+        project_version_skew,
+        skew_remedy,
+    )
+
+    try:
+        skew, installed_tag, commit_tag = project_version_skew(project)
+    except VersionSkewError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    if skew is not VersionSkew.IN_SYNC:
+        typer.echo(
+            f"framework integrity: skipped — your framework CLI is {installed_tag} but this "
+            f"project is pinned {commit_tag}, so integrity cannot verify against the matching "
+            f"template version (and `framework restore` is disabled until they match). "
+            + skew_remedy(skew, installed_tag, commit_tag)
+        )
         raise typer.Exit(0)
 
     findings = check_integrity(project, ci=ci)
@@ -256,7 +296,7 @@ def restore(
     """Re-fetch a canonical framework file, discarding local edits to it."""
     try:
         restore_file(Path.cwd(), file)
-    except (ValueError, FileNotFoundError) as exc:
+    except (ValueError, FileNotFoundError, VersionSkewError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"Restored {file} to the canonical framework version.")
@@ -360,14 +400,40 @@ def upgrade(
     to: str = typer.Option(
         None, "--to", help="Target release tag (default: the latest release)."
     ),
+    bump_cli: bool = typer.Option(
+        False,
+        "--bump-cli",
+        help="Bump the framework CLI to the target non-interactively before upgrading.",
+    ),
 ) -> None:
     """Move a project onto a newer framework release, then run its tests."""
     project = Path(name)
     if not project.is_dir():
         typer.echo(f"Error: {name} is not a directory", err=True)
         raise typer.Exit(1)
+
+    target = to if to is not None else latest_release()
+    if target is None:
+        typer.echo(
+            "Error: no framework release found (or the remote is unreachable); "
+            "cannot upgrade.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    # FWK34: restore/integrity render from the installed CLI, so it must be at least the
+    # target. Offer to self-bump (uv tool + TTY) and re-exec; otherwise refuse with guidance.
+    reexec_argv = [sys.argv[0], "upgrade", name]
+    if to is not None:
+        reexec_argv += ["--to", to]
     try:
-        outcome = upgrade_project(project, to=to)
+        maybe_self_bump(target_tag=target, bump_flag=bump_cli, argv=reexec_argv)
+    except BumpRefused as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    try:
+        outcome = upgrade_project(project, to=target)
     except UpgradeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

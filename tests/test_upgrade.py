@@ -166,3 +166,91 @@ def test_upgrade_defaults_to_latest_release(tmp_path: Path, monkeypatch):
     assert outcome.status == "green"
     assert outcome.target == "v2"
     assert "_commit: v2" in (proj / ".copier-answers.yml").read_text()
+
+
+def test_upgrade_bumps_cli_then_reexecs_when_target_newer(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    import framework_cli.self_bump as sb
+    import framework_cli.version_sync as vs
+    from framework_cli.cli import app
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.8")
+    monkeypatch.setattr(cli, "latest_release", lambda: "v0.2.11")
+    monkeypatch.setattr(sb, "is_uv_tool_install", lambda: True)
+    monkeypatch.setattr(sb, "_interactive", lambda: True)
+    monkeypatch.setattr(sb, "_confirm", lambda msg: True)
+
+    installed, reexeced = [], []
+    monkeypatch.setattr(sb, "run_uv_tool_install", lambda tag: installed.append(tag))
+    monkeypatch.setattr(sb, "reexec", lambda argv: reexeced.append(argv))
+    # upgrade_project must NOT run in this process (the re-exec'd one does it)
+    monkeypatch.setattr(
+        cli, "upgrade_project", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+
+    CliRunner().invoke(app, ["upgrade", str(project)])
+    assert installed == ["v0.2.11"]
+    assert reexeced and reexeced[0][1:3] == ["upgrade", str(project)]
+
+
+def test_upgrade_refuses_when_non_uv_tool(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    import framework_cli.self_bump as sb
+    import framework_cli.version_sync as vs
+    from framework_cli.cli import app
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.8")
+    monkeypatch.setattr(cli, "latest_release", lambda: "v0.2.11")
+    monkeypatch.setattr(sb, "is_uv_tool_install", lambda: False)
+
+    result = CliRunner().invoke(app, ["upgrade", str(project)])
+    assert result.exit_code == 1
+    assert "uv tool install" in result.output and "@v0.2.11" in result.output
+
+
+def test_upgrade_proceeds_when_target_not_newer(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    import framework_cli.version_sync as vs
+    from framework_cli.cli import app
+    from framework_cli.upgrade import UpgradeOutcome
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.11")
+    monkeypatch.setattr(cli, "latest_release", lambda: "v0.2.11")
+    called = []
+    monkeypatch.setattr(
+        cli,
+        "upgrade_project",
+        lambda p, to: (
+            called.append(to) or UpgradeOutcome(status="already-current", target=to)
+        ),
+    )
+
+    result = CliRunner().invoke(app, ["upgrade", str(project)])
+    assert result.exit_code == 0
+    assert called == ["v0.2.11"]  # resolved target passed through; no bump attempted
+
+
+def test_upgrade_errors_when_no_release_found(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    from framework_cli.cli import app
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    monkeypatch.setattr(cli, "latest_release", lambda: None)
+    result = CliRunner().invoke(app, ["upgrade", str(project)])
+    assert result.exit_code == 1
+    assert "no framework release" in result.output

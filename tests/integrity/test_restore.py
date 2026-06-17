@@ -8,6 +8,7 @@ from framework_cli.integrity.generate import write_manifest
 from framework_cli.integrity.manifest import installed_framework_version
 from framework_cli.integrity.restore import _answers, restore_file
 from framework_cli.integrity.sections import section_content, section_span
+from framework_cli.source import record_portable_source
 
 
 def _new_project(tmp_path: Path) -> Path:
@@ -22,6 +23,9 @@ def _new_project(tmp_path: Path) -> Path:
         },
     )
     write_manifest(dest, installed_framework_version())
+    # Record _commit == the installed version, as `framework new` does — so restore's FWK34
+    # version-sync guard sees an in-sync project (the realistic state for these tests).
+    record_portable_source(dest, installed_framework_version())
     return dest
 
 

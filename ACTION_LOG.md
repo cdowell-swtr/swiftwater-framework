@@ -1302,3 +1302,107 @@ Verified: flaky test looped 15x then all green; `tests/review/` 324 passed; ruff
 → PR #47. Also updated the committed memory `_memory/flaky-realize-cached-copytree-git-gc-race.md`
 (+ its MEMORY.md pointer): the earlier `gc.auto 0`-only guess was insufficient; record the
 durable pack-the-base fix. See [[flaky-realize-cached-copytree-git-gc-race]].
+
+#### #0117 · in-progress · FWK34 · 2026-06-16
+Design spec for CLI/project version-sync, surfaced by Meridian (MDN26). Root cause traced this
+session: `restore`/`integrity` render the canonical from the BUNDLED installed-CLI template
+(`copier_runner.render_project`→`template_path()`), while `upgrade` renders from the git TAG
+(`run_update(vcs_ref=…)`); correct only when `version_tag(installed)==project _commit`. Meridian
+hit it (CLI v0.2.8, project upgraded to v0.2.11, git-Dockerfile fix shipped v0.2.10 → restore
+renders no-git `bc8d37` ≠ lock `856fec`). Empirically disproved the initial "battery-unaware"
+framing (`_answers` carries batteries; restore-equiv render reproduces the git Dockerfile
+byte-for-byte). Brainstormed design (A out — rejected; C+B+`--version`): shared skew helper,
+both-direction guard erroring in restore/integrity, `upgrade` assisted self-bump (uv-tool +
+TTY → prompt → `uv tool install …@target` + re-exec; else refuse; `--bump-cli` forces),
+`framework --version`. CI unaffected (generated `ci.yml` already pins `…@${_commit}`). Ships
+v0.2.12. Spec committed: `docs/superpowers/specs/2026-06-16-fwk34-cli-version-sync-design.md`.
+Branch `fwk34-cli-version-sync`.
+
+Plan-time refinement (spec updated): `integrity` runs from generated Taskfile preconditions
+(`task dev`/`task ci`) with the dev's GLOBAL CLI (only GitHub-CI pins `…@${_commit}`), so a
+hard skew-error there would newly block `task dev` on benign cross-project skew. Resolved:
+`restore` keeps the hard guard (it WRITES a wrong-version file), but `integrity` becomes
+skew-aware ADVISORY — warns + exits 0 (never blocks) on skew, unchanged + authoritative when
+in-sync/`--ci`. Implementation plan written (7 tasks, TDD, full code):
+`docs/superpowers/plans/2026-06-16-fwk34-cli-version-sync.md`. Next: subagent-driven execution.
+
+#### #0118 · completed · FWK34 · 2026-06-16
+Task 1 — `framework --version`. Added an eager `--version` option on the Typer app callback
+(`cli.py` `_version_callback` → `installed_framework_version()` + exit) + test
+`test_version_flag_prints_installed_version`. Red→green; full `tests/test_cli.py` 121 passed;
+ruff + mypy clean. (Implementer subagent hit a transient 529 after the edits but before the
+commit; controller verified the work and finished the commit.)
+
+#### #0119 · completed · FWK34 · 2026-06-16
+Task 2 — `src/framework_cli/version_sync.py`: the pure skew helper (`VersionSkew`
+IN_SYNC/CLI_BEHIND/CLI_AHEAD, `VersionSkewError`, `parse_version`, `project_version_skew`,
+`skew_remedy`, `require_version_sync`) comparing `version_tag(installed_framework_version())`
+to the project's `_commit`. 8 tests (truth table + missing-`_commit` + directional remedies +
+parse). Red→green; ruff + mypy clean. (API overloaded for subagent dispatch — 529s — so the
+controller implemented this fully-specified module directly per the plan; branch-end Opus
+review still covers it.)
+
+#### #0120 · completed · FWK34 · 2026-06-16
+Task 3 — `restore` hard-guards on skew. `restore_file` calls `require_version_sync(project)`
+right AFTER the integrity.lock existence check (so "not a framework project" keeps precedence)
+and before any render; `cli.restore` adds `VersionSkewError` to its except. New test
+`tests/integrity/test_restore_version_guard.py` (refuses + no render on CLI_BEHIND). Plan's
+deferred verification resolved: the existing `_new_project` fixture renders from the LOCAL
+template (Copier records no `_commit`), so the guard raised "no _commit"; fixed `_new_project`
+to also `record_portable_source(dest, installed_framework_version())` (what `framework new`
+does), making the fixtures in-sync. `tests/integrity/` + `tests/test_cli.py` = 166 passed;
+ruff + mypy clean.
+
+#### #0121 · completed · FWK34 · 2026-06-16
+Task 4 — `integrity` is skew-aware ADVISORY (non-blocking). The `integrity` command computes
+`project_version_skew` after the allow-drift path; on a skew (either direction) it prints a
+warning naming the CLI/_commit mismatch + directional remedy and exits 0 (never blocks
+`task dev`/`task ci`); unchanged + authoritative when in-sync and under `--ci` (CI pins the
+CLI). A missing `_commit` surfaces as an error (exit 1). Two new tests in `tests/test_cli.py`
+(non-fatal warning + `check_integrity` not run under skew; in-sync still runs the real check).
+Verified no regression across integrity-command callers: test_cli + integrity_workers +
+integrity/ = 170 passed; dogfood + downskill + review registry/framework_target = 75 passed;
+ruff + mypy clean.
+
+#### #0122 · completed · FWK34 · 2026-06-16
+Task 5 — `src/framework_cli/self_bump.py`: the pure `decide_bump` policy (proceed when target
+not newer / refuse non-uv-tool / bump on --flag / prompt on TTY / refuse non-interactive) +
+`BumpDecision` + `BumpRefused`, and the I/O seams `is_uv_tool_install` (resolves the running
+console-script under `uv tool dir`, fail-safe False on uncertainty), `run_uv_tool_install`,
+`reexec`. 5 truth-table tests. Red→green; ruff + mypy clean. (Orchestrator `maybe_self_bump`
++ `_interactive`/`_confirm` land in Task 6 with the upgrade wiring.)
+
+#### #0123 · completed · FWK34 · 2026-06-16
+Task 6 — wired assisted self-bump into the `upgrade` command. Added `maybe_self_bump` +
+`_interactive`/`_confirm` to `self_bump.py` (early-returns when target ≤ installed before any
+I/O seam; prompt→confirm→install→reexec) and `installed_version_tag()` to `version_sync.py`.
+The `upgrade` command gains `--bump-cli`, resolves the target up front (`to` or
+`latest_release()`), builds an explicit re-exec argv (`[sys.argv[0], "upgrade", name, …]` —
+CliRunner's sys.argv is pytest's), and calls `maybe_self_bump`; `BumpRefused` → exit 1.
+Plan-vs-test reconciliations: the command reads the installed version THROUGH
+`version_sync.installed_version_tag()` so the test's `vs.installed_framework_version`
+monkeypatch lands; error assertions use `result.output` (repo convention mixes stderr).
+3 new command tests (bump+reexec / refuse-non-uv / proceed-not-newer) + all 9 `test_upgrade.py`
+green; existing tests call `upgrade_project` directly so no regression; ruff + mypy clean.
+
+#### #0124 · completed · FWK34 · 2026-06-16
+Branch-end reviews: spec-compliance (Sonnet) = all 8 points met, 190 passed; code-quality
+(Opus) = APPROVE-WITH-NITS. Addressed the one Important finding + worthwhile nits:
+(1) `version_sync.project_version_skew` now wraps `parse_version(commit_tag)` in
+try/except→`VersionSkewError` — a non-tag `_commit` (copier-native SHA) previously raised a
+raw `ValueError` that `integrity` (a `task dev` precondition) didn't catch → traceback,
+violating "never blocks task dev"; (2) DRY: uses `installed_version_tag()`; (3)
+`is_uv_tool_install` prefers the running `sys.argv[0]` over `which` (correct install
+detection with two installs on PATH). + 4 regression tests (non-tag `_commit` → VersionSkewError;
+integrity exits 1 cleanly on SHA `_commit`; integrity warns on CLI_AHEAD; upgrade errors when
+`latest_release()` is None). FWK34 suites 194 passed; full non-acceptance suite (pre-fix) 941
+passed/3 skipped; ruff + format + mypy clean.
+
+#### #0125 · completed · FWK34 · 2026-06-16
+Cut release **v0.2.12** for FWK34 (folded into the PR per convention). Bumped pyproject
+`0.2.11 → 0.2.12`, `DOGFOOD_COMMIT v0.2.11 → v0.2.12`, regenerated uv.lock. Moved FWK34 to PLAN
+Done. Verified the render-matrix interaction is safe: render-matrix scaffolds via `framework
+new` (records `_commit = installed version`), so the new integrity guard sees IN_SYNC and
+`framework integrity --ci` + `task ci` pass; the guard compares version strings, not tag
+existence. Next: push → PR → required checks (gate/build/render-complete) → squash-merge → tag
+v0.2.12 → release.yml.

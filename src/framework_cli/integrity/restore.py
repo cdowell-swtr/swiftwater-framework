@@ -10,6 +10,7 @@ from framework_cli.copier_runner import render_project
 from framework_cli.integrity.hashing import sha256_file
 from framework_cli.integrity.manifest import Manifest
 from framework_cli.integrity.sections import section_sha256, section_span
+from framework_cli.version_sync import require_version_sync
 
 _LOCK_REL = ".framework/integrity.lock"
 _ANSWERS_REL = ".copier-answers.yml"
@@ -61,6 +62,9 @@ def restore_file(project: Path, rel: str) -> None:
         raise ValueError(
             "not a framework project (no .framework/integrity.lock) — run from a project root"
         )
+    # FWK34: once we know it's a framework project, refuse rather than render a
+    # wrong-version canonical when the installed CLI ≠ the project's recorded _commit.
+    require_version_sync(project)
     manifest = Manifest.loads(lock.read_text())
     entry = next((e for e in manifest.entries if e.path == rel), None)
     if entry is None or entry.tier != "tracked":
