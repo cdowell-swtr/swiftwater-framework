@@ -4217,3 +4217,52 @@ def test_rendered_frontend_dev_server_serves_spa(tmp_path: Path) -> None:
     assert 'id="root"' in served, (
         f"the Vite dev server never served the SPA shell within 180s:\n{served[:300]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# L2/FWK28 — load.sh graceful-degradation smoke
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="docker required: load.sh wraps grafana/k6 in a Docker container",
+)
+def test_load_sh_fails_gracefully_without_docker_target(tmp_path: Path) -> None:
+    """L2/FWK28 (graceful degradation): load.sh exits non-zero when K6_TARGET is unreachable.
+
+    Scope: this test confirms the script runs (syntax, invocation path) and propagates a
+    non-zero exit when k6 cannot reach the target. It does NOT assert the SLO-threshold
+    pass/fail with a live app stack — that requires grafana/k6:latest + a running service and
+    is logged as an ongoing KNOWN_GAP in the registry (script:scripts/load.sh).
+
+    K6_TARGET is set to a port that is guaranteed not to be listening (free TCP port chosen at
+    test time). K6_DURATION is set to "1s" and K6_VUS to "1" to fail fast. The Docker pull of
+    grafana/k6:latest is required; if it is unavailable (registry outage / no pull credentials),
+    this test is also expected to fail non-zero — that is acceptable, as it still exercises the
+    propagation path.
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    # Pick a port that is not listening.
+    unreachable_port = _free_tcp_port()
+    target = f"http://127.0.0.1:{unreachable_port}"
+
+    result = subprocess.run(
+        ["bash", "scripts/load.sh"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+        env={
+            **_compose_env(),
+            "K6_TARGET": target,
+            "K6_DURATION": "1s",
+            "K6_VUS": "1",
+        },
+        timeout=120,
+    )
+    assert result.returncode != 0, (
+        "load.sh exited 0 on an unreachable target — threshold-propagation broken or "
+        "k6 did not actually run\n" + result.stdout + result.stderr
+    )

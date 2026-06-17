@@ -359,10 +359,9 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "script:infra/deploy/notify.sh",
         "infra/deploy/notify.sh",
-        _KG,
-        # L1: called only by the CD workflows (never strategy.sh); deploy_e2e never runs it.
-        # Intentionally non-fatal seam.
-        "FWK28 notify.sh non-fatal seam invoked only by CD workflows, never run by a test",
+        _EX,
+        # FWK28/L1: driven via _run_notify; echo path + webhook POST to capture server.
+        "test_notify_seam_exits_zero_and_echoes",
     ),
     SurfaceClass(
         "script:infra/deploy/strategy.sh",
@@ -445,9 +444,11 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "script:scripts/load.sh",
         "scripts/load.sh",
         _KG,
-        # L2: only render-checked; runs only inside the unexercised CD validation phase
-        # (k6 SLO gate).
-        "FWK28 load.sh k6 SLO gate runs only in the unexercised CD validation phase",
+        # FWK28/L2: graceful-degradation path exercised by
+        # test_load_sh_fails_gracefully_without_docker_target (acceptance, docker-gated); the full
+        # k6 SLO-threshold pass/fail with a live app stack is NOT exercised — no live stack in
+        # this tier. The threshold propagation remains an open gap.
+        "FWK28 load.sh full k6 SLO-threshold pass/fail requires a live app stack (not in this tier)",
     ),
     SurfaceClass(
         "script:scripts/pact-publish.sh",

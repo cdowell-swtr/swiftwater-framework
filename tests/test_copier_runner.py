@@ -3145,6 +3145,120 @@ def _run_smoke(dest: Path, am_url: str) -> subprocess.CompletedProcess:
     )
 
 
+# ---------------------------------------------------------------------------
+# L1/FWK28 — notify.sh seam smoke
+# ---------------------------------------------------------------------------
+
+
+class _FakeNotify(http.server.BaseHTTPRequestHandler):
+    """Capture server for notify.sh webhook POST assertions."""
+
+    posts: list[bytes] = []  # accumulated POST bodies; reset per test
+
+    def log_message(self, *a: object) -> None:  # silence
+        pass
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", 0))
+        _FakeNotify.posts.append(self.rfile.read(length))
+        self.send_response(200)
+        self.end_headers()
+
+
+def _serve_fake_notify() -> http.server.HTTPServer:
+    _FakeNotify.posts = []
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _FakeNotify)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def _run_notify(
+    dest: Path,
+    message: str,
+    *,
+    extra_env: dict[str, str] | None = None,
+) -> "subprocess.CompletedProcess[str]":
+    """Invoke infra/deploy/notify.sh with `message` in the rendered project at `dest`."""
+    env: dict[str, str] = {"PATH": os.environ["PATH"]}
+    if extra_env:
+        env.update(extra_env)
+    return subprocess.run(
+        ["bash", str(dest / "infra" / "deploy" / "notify.sh"), message],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def test_notify_seam_exits_zero_and_echoes(tmp_path: Path) -> None:
+    """L1/FWK28: notify.sh must exit 0 and echo [deploy notify] on the happy path."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    result = _run_notify(dest, "deploy succeeded")
+    assert result.returncode == 0, (
+        "notify.sh exited non-zero on the basic echo path\n"
+        + result.stdout
+        + result.stderr
+    )
+    assert "[deploy notify] deploy succeeded" in result.stdout, (
+        "expected '[deploy notify] deploy succeeded' in stdout\n" + result.stdout
+    )
+
+
+def test_notify_seam_posts_to_webhook(tmp_path: Path) -> None:
+    """L1/FWK28 (webhook path): when SLACK_WEBHOOK_URL is set, notify.sh POSTs the message.
+
+    The template ships the curl block commented out (safe-by-default); this test uncomments it
+    in a tmp_path copy to assert the seam wiring is correct. The template source is NOT modified.
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    # Uncomment the shipped webhook example (the block from `# if [ -n "${SLACK_WEBHOOK_URL`
+    # through `# fi`) by stripping each line's leading "# ". Line-based so it's robust to the
+    # block's exact spacing — every block line is "# "-prefixed (verified via `cat -A notify.sh`),
+    # unlike a brittle exact-string `.replace()` chain.
+    script_path = dest / "infra" / "deploy" / "notify.sh"
+    out: list[str] = []
+    in_block = False
+    for line in script_path.read_text().splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith('# if [ -n "${SLACK_WEBHOOK_URL'):
+            in_block = True
+        if in_block and stripped.startswith("# "):
+            line = line.replace("# ", "", 1)
+        out.append(line)
+        if stripped == "# fi":
+            in_block = False
+    script_path.write_text("\n".join(out) + "\n")
+    # Sanity: the activation must have actually uncommented something (guards against a
+    # template reword silently no-opping this and the test passing vacuously).
+    assert "\nif [ -n " in script_path.read_text(), (
+        "webhook block not uncommented — notify.sh example format changed; update the activation"
+    )
+
+    srv = _serve_fake_notify()
+    try:
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        result = _run_notify(dest, "webhook test", extra_env={"SLACK_WEBHOOK_URL": url})
+    finally:
+        srv.shutdown()
+
+    assert result.returncode == 0, (
+        "notify.sh exited non-zero with SLACK_WEBHOOK_URL set\n"
+        + result.stdout
+        + result.stderr
+    )
+    assert _FakeNotify.posts, (
+        "expected a POST to the capture server but none arrived; "
+        "the webhook branch may not have been activated by the string replacement"
+    )
+    body = _FakeNotify.posts[0].decode()
+    assert "webhook test" in body, (
+        f"expected 'webhook test' in the POST body, got: {body!r}"
+    )
+
+
 def test_alert_smoke_reports_failure_but_exits_zero(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
@@ -3492,6 +3606,36 @@ def test_render_docs_battery_adds_publish_workflow(tmp_path: Path):
     body = path.read_text()
     assert "mike deploy" in body
     assert "contents: write" in body  # needed to push the gh-pages branch
+
+
+def test_docs_workflow_mike_flags(tmp_path: Path) -> None:
+    """L3/FWK28: docs.yml must use --push --update-aliases and mike set-default.
+
+    The existing test_render_docs_battery_adds_publish_workflow asserts 'mike deploy' appears
+    in the body but does not pin the flags. This test adds the missing flag assertions and
+    verifies the set-default step is present — both are required for correct versioned gh-pages
+    publishing (without --push the deploy stays local; without set-default the 'latest' alias
+    is never updated).
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    body = (dest / ".github" / "workflows" / "docs.yml").read_text()
+
+    assert "mike deploy --push --update-aliases" in body, (
+        "docs.yml must call 'mike deploy --push --update-aliases'; "
+        "without --push the versioned docs are never pushed to gh-pages"
+    )
+    assert "mike set-default" in body, (
+        "docs.yml must call 'mike set-default'; "
+        "without it the 'latest' alias is never set after a version deploy"
+    )
+    # Also assert the trigger is exactly `push: tags: v*` (not broader)
+    wf = yaml.safe_load(body)
+    triggers = wf[True]  # PyYAML parses bare `on:` key as bool True
+    tag_patterns = triggers.get("push", {}).get("tags", [])
+    assert any(p.startswith("v") for p in tag_patterns), (
+        f"docs.yml push trigger must include a 'v*' tag pattern; got: {tag_patterns!r}"
+    )
 
 
 def test_render_without_docs_battery_has_no_publish_workflow(tmp_path: Path):

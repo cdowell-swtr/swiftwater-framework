@@ -1665,3 +1665,19 @@ bite: `==2`→`==0` RED), `test_rendered_gate_hook_passes_on_pass_marker` (PASS 
 is NOT a bug — the guard matches the `"`-preceded token correctly. FWK29 registry:
 `hook:.claude:reviewers-gate-check.sh` → EXERCISED. Subagent-driven (Sonnet; controller re-ran all
 3 + finished). No release.
+
+#### #0143 · completed · coverage-batch · 2026-06-17
+**FWK28** (item 7/7) — seam/script smoke + workflow-graph asserts. Four tests, all GREEN +
+bite-proven, no template bugs. Gate-tier (`test_copier_runner.py`, no docker):
+`test_notify_seam_exits_zero_and_echoes` (L1 — `notify.sh` exits 0 + echoes `[deploy notify]…`;
+bite: wrong string RED), `test_notify_seam_posts_to_webhook` (L1 — string-replace-uncomment
+approach A activates the webhook block, POSTs to an in-process capture server; `assert
+_FakeNotify.posts` guards a silent no-op), `test_docs_workflow_mike_flags` (L3 — `yaml.safe_load`
+docs.yml asserts `mike deploy --push --update-aliases` + `mike set-default` + the `v`-prefixed tag
+trigger; bite: nonexistent flag RED). Acceptance (`test_rendered_project.py`, docker + grafana/k6
+image): `test_load_sh_fails_gracefully_without_docker_target` (L2 — unreachable `K6_TARGET` on a free
+port, `K6_DURATION=1s`/`K6_VUS=1`; asserts non-zero exit via `set -euo pipefail` — graceful
+degradation ONLY, NOT full SLO pass; bite: `\!=0`→`==0` RED). FWK29 registry: `script:infra/deploy/
+notify.sh` → EXERCISED; `script:scripts/load.sh` stays KNOWN_GAP with honest evidence (full k6 SLO
+pass/fail needs a live app stack); `job:docs.yml:publish` untouched (exempt). Subagent-driven
+(Sonnet; controller review + gate-tier re-run + finish). No release.
