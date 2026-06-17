@@ -488,11 +488,11 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     ),
     SurfaceClass(
         "service:dev.yml:beat",
-        "infra/compose/dev.yml:164-184",
-        _KG,
-        # H4: beat is profile/battery-gated; the dev-stack tests render baseline DATA so beat
-        # is absent; the live broker-connect/scheduler-start path is undriven.
-        "FWK20 beat scheduler never brought up live (broker-connect/schedule-start undriven)",
+        "infra/compose/dev.yml:164-189",
+        _EX,
+        # FWK20 (H4): beat brought up live; it schedules the heartbeat task through the real
+        # broker and the worker runs it, asserted via the redis liveness marker.
+        "test_rendered_workers_live_broker_dlq_and_beat",
     ),
     SurfaceClass(
         "service:dev.yml:frontend",
@@ -528,10 +528,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:dev.yml:redis",
         "infra/compose/dev.yml",
-        _KG,
-        # The redis compose service is never brought up live; the redis battery tests run the
-        # unit+functional gate, not a `compose up redis` (cf. H3/M-tier).
-        "FWK20 redis compose service never brought up live (broker/cache path untested)",
+        _EX,
+        # FWK20: redis brought up live as the Celery broker; the worker consumes a real enqueued
+        # task through it (the live broker->worker->DLQ round-trip) and beat schedules through it.
+        "test_rendered_workers_live_broker_dlq_and_beat",
     ),
     SurfaceClass(
         "service:dev.yml:traefik",
@@ -543,10 +543,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:dev.yml:worker",
         "infra/compose/dev.yml:131-162",
-        _KG,
-        # H3: the workers acceptance tests run Celery EAGER; the live broker->worker->DLQ path
-        # is exercised by no test. The one test that ups worker asserts only __pycache__/host-UID.
-        "FWK20 worker never exercised live through a real broker (Celery runs eager; DLQ path untested)",
+        _EX,
+        # FWK20 (H3): the worker is brought up live and a deterministically-failing task is
+        # enqueued through the real broker; on_failure writes a dead_letter_tasks row (asserted).
+        "test_rendered_workers_live_broker_dlq_and_beat",
     ),
     SurfaceClass(
         "service:observability.yml:alertmanager",
@@ -657,9 +657,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "service:services.yml:beat",
         "infra/compose/services.yml:59-72",
         _KG,
-        # H4 + Correction: the staging/prod battery beat overlay is never instantiated; FWK20
-        # owns the live beat path, FWK19 owns the services.yml batteries-on config validation.
-        "FWK20 services.yml beat never brought up live (staging/prod battery overlay uninstantiated)",
+        # Correction (2026-06-16): no shipped target brings services.yml up (compose-ssh uses
+        # app-host.yml), so the staging/prod overlay is consumer-target scaffolding. FWK20 closed
+        # the live beat path on the *dev* stack; services.yml's guard is FWK19 config-validation.
+        "FWK19 services.yml beat battery service lacks batteries-on compose-config validation",
     ),
     SurfaceClass(
         "service:services.yml:mongo",
@@ -677,9 +678,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "service:services.yml:worker",
         "infra/compose/services.yml:35-57",
         _KG,
-        # H3 + Correction: staging/prod battery worker overlay never instantiated; the live
-        # broker->worker->DLQ path is FWK20.
-        "FWK20 services.yml worker never brought up live (staging/prod battery overlay uninstantiated)",
+        # Correction (2026-06-16): no shipped target brings services.yml up (compose-ssh uses
+        # app-host.yml), so the staging/prod overlay is consumer-target scaffolding. FWK20 closed
+        # the live broker->worker->DLQ path on the *dev* stack; services.yml's guard is FWK19.
+        "FWK19 services.yml worker battery service lacks batteries-on compose-config validation",
     ),
     SurfaceClass(
         "service:staging.yml:app",

@@ -1406,3 +1406,45 @@ new` (records `_commit = installed version`), so the new integrity guard sees IN
 `framework integrity --ci` + `task ci` pass; the guard compares version strings, not tag
 existence. Next: push → PR → required checks (gate/build/render-complete) → squash-merge → tag
 v0.2.12 → release.yml.
+
+#### #0126 · completed · FWK20 · 2026-06-17
+New docker-gated acceptance test `test_rendered_workers_live_broker_dlq_and_beat`
+(closes assessment H3+H4). Brings `postgres+redis+worker+beat` up `--profile dev`
+(base+observability+dev merge, mirroring the no-root worker test) and proves the two
+live round-trips the `task_always_eager` workers tests structurally can't:
+(1) **DLQ** — injects a `@app.task(base=BaseTask, max_retries=0)` failing task into the
+rendered `tasks.py` *before build* (baked into the image, registered via app.py's
+`include`), enqueues it through the REAL redis broker from inside the worker container
+(`compose exec worker python -c "...delay()"`), then polls `dead_letter_tasks` via
+`compose exec postgres psql` until a row lands — exercising broker→worker→`on_failure`→DB.
+(2) **beat** — polls `compose exec redis redis-cli GET demo:worker:heartbeat` (the liveness
+marker the scheduled `heartbeat` task writes), proving beat→broker→worker, not just "beat
+booted". Migrations: `APP_RUN_MIGRATIONS=false` on worker/beat, so the table is created by
+`compose exec worker alembic upgrade head` (we don't start `app`). DB/redis queried via
+`compose exec` (no host driver deps). FWK29 registry: `dev.yml:{worker,beat,redis}` →
+EXERCISED naming this test; `services.yml:{worker,beat}` re-pointed FWK20→FWK19 (the
+staging/prod overlay is consumer-target scaffolding no shipped target brings up; Correction
+2026-06-16). `tests/runtime_coverage/` 9 passed.
+
+#### #0127 · completed · FWK20 · 2026-06-17
+The test went RED on a **real latent template bug** (systematic-debugging): beat exited (1)
+on start with `[Errno 13] Permission denied: 'celerybeat-schedule'`. Root cause —
+`PersistentScheduler` writes its schedule db to CWD `/app` (root-owned from the image's
+`COPY --from=builder`), but dev `beat` runs as the host UID (`user: ${UID:-1000}…`, the
+override that keeps bind-mounted `__pycache__` host-owned) → can't write → crash → **no
+scheduled task ever fires in `task dev`** for any workers consumer. The old no-root test
+missed it (only asserts the *worker's* `__pycache__`). Isolation confirmed it's beat-only: a
+manual `heartbeat.delay()` set the redis key fine. Fix (dev-scoped, minimal): dev `beat`
+command gains `--schedule=/tmp/celerybeat-schedule` (writable; schedule rebuilt from
+schedule.py each boot, only last-run timestamps are ephemeral). prod/staging `services.yml`
+beat runs as root → unaffected, left as-is. Added a CI-visible render guard to
+`test_render_workers_compose_services` (the acceptance test is local-only/CI-ignored). Re-run
+GREEN in 74s — the RED→GREEN on a real crash is the test's non-vacuity proof (à la FWK8); the
+DLQ half is non-vacuous by construction (`dlq_count` init −1, only a real row sets it ≥1).
+Verified: targeted render/parity/coverage 51 passed; ruff check + format clean.
+
+#### #0128 · completed · FWK20 · 2026-06-17
+Scope call (user): the dev-beat fix is template payload that ships to consumers, but **no
+release** — there are no current celery consumers, so the patch release is deferred (lands in
+a future template-change batch). Landed test + fix + registry on branch
+`fwk20-workers-live-broker-dlq-beat`. Branch-end review + PR next.
