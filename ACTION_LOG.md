@@ -1352,3 +1352,14 @@ template (Copier records no `_commit`), so the guard raised "no _commit"; fixed 
 to also `record_portable_source(dest, installed_framework_version())` (what `framework new`
 does), making the fixtures in-sync. `tests/integrity/` + `tests/test_cli.py` = 166 passed;
 ruff + mypy clean.
+
+#### #0121 · completed · FWK34 · 2026-06-16
+Task 4 — `integrity` is skew-aware ADVISORY (non-blocking). The `integrity` command computes
+`project_version_skew` after the allow-drift path; on a skew (either direction) it prints a
+warning naming the CLI/_commit mismatch + directional remedy and exits 0 (never blocks
+`task dev`/`task ci`); unchanged + authoritative when in-sync and under `--ci` (CI pins the
+CLI). A missing `_commit` surfaces as an error (exit 1). Two new tests in `tests/test_cli.py`
+(non-fatal warning + `check_integrity` not run under skew; in-sync still runs the real check).
+Verified no regression across integrity-command callers: test_cli + integrity_workers +
+integrity/ = 170 passed; dogfood + downskill + review registry/framework_target = 75 passed;
+ruff + mypy clean.

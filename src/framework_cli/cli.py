@@ -143,6 +143,30 @@ def integrity(
         typer.echo(f"Recorded intentional drift: {', '.join(allow_drift)}")
         raise typer.Exit(0)
 
+    # FWK34: integrity renders the canonical from the bundled (installed-CLI) template, so a
+    # CLI/_commit skew makes drift unreliable. This command runs from generated-project
+    # Taskfile preconditions with the dev's GLOBAL CLI (CI pins it via --ci), so do NOT
+    # hard-fail on skew — warn and exit 0 so `task dev` is never blocked on benign skew.
+    from framework_cli.version_sync import (
+        VersionSkew,
+        project_version_skew,
+        skew_remedy,
+    )
+
+    try:
+        skew, installed_tag, commit_tag = project_version_skew(project)
+    except VersionSkewError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    if skew is not VersionSkew.IN_SYNC:
+        typer.echo(
+            f"framework integrity: skipped — your framework CLI is {installed_tag} but this "
+            f"project is pinned {commit_tag}, so integrity cannot verify against the matching "
+            f"template version (and `framework restore` is disabled until they match). "
+            + skew_remedy(skew, installed_tag, commit_tag)
+        )
+        raise typer.Exit(0)
+
     findings = check_integrity(project, ci=ci)
     for f in findings:
         label = "ERROR" if f.fatal else "warning"

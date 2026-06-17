@@ -3305,3 +3305,47 @@ def test_version_flag_prints_installed_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
     assert installed_framework_version() in result.stdout
+
+
+def test_integrity_warns_non_fatally_on_skew(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    import framework_cli.version_sync as vs
+    from framework_cli.cli import app
+
+    (tmp_path / ".copier-answers.yml").write_text("_commit: v0.2.11\n")
+    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.8")
+    monkeypatch.chdir(tmp_path)
+
+    def _boom(*a, **k):
+        raise AssertionError("check_integrity must not run under skew")
+
+    monkeypatch.setattr(cli, "check_integrity", _boom)
+
+    result = CliRunner().invoke(app, ["integrity"])
+    assert result.exit_code == 0  # non-fatal: never blocks `task dev`
+    assert "0.2.8" in result.stdout and "v0.2.11" in result.stdout
+    assert "uv tool install" in result.stdout
+
+
+def test_integrity_runs_normally_when_in_sync(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    import framework_cli.version_sync as vs
+    from framework_cli.cli import app
+
+    (tmp_path / ".copier-answers.yml").write_text("_commit: v0.2.11\n")
+    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.11")
+    monkeypatch.chdir(tmp_path)
+
+    called = []
+    monkeypatch.setattr(
+        cli, "check_integrity", lambda project, ci: called.append(ci) or []
+    )
+
+    result = CliRunner().invoke(app, ["integrity"])
+    assert result.exit_code == 0
+    assert called == [False]  # the real check ran (no findings -> OK)
+    assert "framework integrity: OK" in result.stdout
