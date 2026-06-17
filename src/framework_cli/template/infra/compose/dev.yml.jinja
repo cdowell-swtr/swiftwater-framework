@@ -169,7 +169,12 @@ services:
     # Run as the invoking host user so bind-mounted /app/src writes (__pycache__) are
     # host-owned, not root-owned (mirrors the app service). :-1000 keeps raw `compose` working.
     user: "${UID:-1000}:${GID:-1000}"
-    command: ["celery", "-A", "{{ package_name }}.tasks.app", "beat", "--loglevel=info"]
+    # PersistentScheduler writes its schedule db to the CWD (/app), which is root-owned in the
+    # image while this service runs as the host UID above -> [Errno 13] crashes beat on start.
+    # Point it at a writable path (/tmp). The schedule itself is rebuilt from schedule.py on every
+    # boot; only last-run timestamps live in the db, so an ephemeral dev location is fine.
+    # (prod/staging beat in services.yml runs as root, so it keeps the default location.)
+    command: ["celery", "-A", "{{ package_name }}.tasks.app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
     environment:
       APP_RUN_MIGRATIONS: "false"  # shares entrypoint.sh; don't let beat run migrations
       APP_REDIS_URL: "redis://redis:6379/0"

@@ -2097,6 +2097,158 @@ def test_rendered_workers_dev_stack_leaves_no_root_owned_files(tmp_path: Path):
 
 @pytest.mark.skipif(
     not _docker_available(),
+    reason="uv + docker required: brings the workers dev stack up live to exercise the "
+    "broker->worker->DLQ + beat round-trips",
+)
+def test_rendered_workers_live_broker_dlq_and_beat(tmp_path: Path):
+    # FWK20 (H3+H4): every other workers test runs Celery EAGER (task_always_eager=True), so the
+    # live broker->worker->DLQ path and beat's live scheduling are exercised by NOTHING. Bring up
+    # redis+worker+beat (+postgres) and prove BOTH round-trips end-to-end:
+    #   * DLQ: enqueue a deterministically-failing task through the REAL redis broker; the worker
+    #     consumes it, exhausts retries, and BaseTask.on_failure writes a dead_letter_tasks row.
+    #   * beat: beat schedules the heartbeat task (every 30s) -> the worker runs it -> it writes the
+    #     liveness marker in redis, proving beat->broker->worker (stronger than "beat started").
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
+
+    # No shipped task fails deterministically (process_async returns None), so inject one. With
+    # max_retries=0 the first failure exhausts retries immediately (no backoff wait) -> on_failure
+    # -> DLQ. Injected before the build so it is baked into the image (build context = project
+    # root) and registered via app.py's `include=[...tasks.tasks...]`.
+    tasks_py = dest / "src" / "demo" / "tasks" / "tasks.py"
+    tasks_py.write_text(
+        tasks_py.read_text()
+        + (
+            "\n\n"
+            "@app.task(base=BaseTask, bind=True, max_retries=0)\n"
+            "def _acceptance_boom(self) -> None:\n"
+            '    """FWK20 live-broker DLQ probe (test-injected): always fails terminally."""\n'
+            '    raise ValueError("boom")\n'
+        )
+    )
+
+    # Mirror `task dev`'s real merge order (base + observability + dev); observability.yml supplies
+    # grafana's image so --profile dev config-validation accepts it. We only `up` the data services
+    # + worker + beat, so the obs containers never start (cf. the no-root worker test above).
+    base, obs, dev = (
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+    )
+    compose = [
+        "docker",
+        "compose",
+        "-f",
+        base,
+        "-f",
+        obs,
+        "-f",
+        dev,
+        "--profile",
+        "dev",
+    ]
+    up = [*compose, "up", "-d", "--build", "postgres", "redis", "worker", "beat"]
+    down = [*compose, "down", "-v"]
+    env = _compose_env()
+
+    def _exec(*argv: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        # `docker compose exec -T <argv>`; argv carries any exec flags, the service, and the cmd.
+        return subprocess.run(
+            [*compose, "exec", "-T", *argv],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=check,
+        )
+
+    dlq_count = -1
+    heartbeat = ""
+    try:
+        assert subprocess.run(up, cwd=dest, env=env).returncode == 0
+        # the worker depends_on postgres+redis HEALTHY, so once the worker container is execable
+        # postgres is ready. APP_RUN_MIGRATIONS=false on worker/beat -> create the dead_letter_tasks
+        # table by hand (the `app` service, which we don't start, is what normally migrates).
+        migrated = False
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            if (
+                _exec("worker", "alembic", "upgrade", "head", check=False).returncode
+                == 0
+            ):
+                migrated = True
+                break
+            time.sleep(3)
+        assert migrated, "alembic upgrade head never succeeded in the worker container"
+
+        # DLQ round-trip: enqueue the failing task THROUGH the live redis broker (from inside the
+        # worker container, which carries APP_CELERY_BROKER_URL); the worker pool then consumes it.
+        _exec(
+            "worker",
+            "python",
+            "-c",
+            "from demo.tasks.tasks import _acceptance_boom; _acceptance_boom.delay()",
+        )
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            r = _exec(
+                "-e",
+                "PGPASSWORD=app",
+                "postgres",
+                "psql",
+                "-U",
+                "app",
+                "-d",
+                "app",
+                "-tAc",
+                "SELECT count(*) FROM dead_letter_tasks",
+                check=False,
+            )
+            if r.returncode == 0 and r.stdout.strip().isdigit():
+                dlq_count = int(r.stdout.strip())
+                if dlq_count >= 1:
+                    break
+            time.sleep(2)
+
+        # beat round-trip: beat schedules `heartbeat` (30s) -> worker runs it -> writes the redis
+        # liveness key, proving the beat->broker->worker chain (not merely that beat booted).
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            r = _exec("redis", "redis-cli", "GET", "demo:worker:heartbeat", check=False)
+            if r.returncode == 0 and r.stdout.strip():
+                heartbeat = r.stdout.strip()
+                break
+            time.sleep(3)
+    finally:
+        subprocess.run(down, cwd=dest, env=env)
+        # worker/beat run as the host UID, but reclaim any residue so pytest can clean tmp_path.
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{dest}:/work",
+                "alpine",
+                "chown",
+                "-R",
+                f"{os.getuid()}:{os.getgid()}",
+                "/work",
+            ]
+        )
+    assert dlq_count >= 1, (
+        "the failing task never landed in dead_letter_tasks via the live broker->worker->DLQ "
+        f"path (last count={dlq_count})"
+    )
+    assert heartbeat, (
+        "beat never drove the heartbeat task through the broker to the worker "
+        "(redis liveness marker demo:worker:heartbeat unset)"
+    )
+
+
+@pytest.mark.skipif(
+    not _docker_available(),
     reason="uv + docker (+ network for npm ci) required: brings up the frontend dev service",
 )
 def test_rendered_frontend_dev_stack_leaves_no_root_owned_files(tmp_path: Path):

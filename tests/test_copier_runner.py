@@ -1258,6 +1258,11 @@ def test_render_workers_compose_services(tmp_path: Path):
         assert svc in dev["services"]
     assert "celery-exporter" not in dev["services"]
     assert "redisdata" in dev["volumes"]
+    # FWK20: dev beat runs as the host UID against a root-owned /app, so its PersistentScheduler
+    # must write its schedule db to a writable path (/tmp) or it crashes with [Errno 13] on start
+    # and never fires scheduled tasks. CI-visible floor for the live round-trip in the (local-only)
+    # acceptance test test_rendered_workers_live_broker_dlq_and_beat.
+    assert "--schedule=/tmp/celerybeat-schedule" in dev["services"]["beat"]["command"]
     obs = _yaml.safe_load(
         (dest / "infra" / "compose" / "observability.yml").read_text()
     )
