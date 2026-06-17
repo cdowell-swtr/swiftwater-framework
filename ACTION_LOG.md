@@ -1332,3 +1332,12 @@ Task 1 — `framework --version`. Added an eager `--version` option on the Typer
 `test_version_flag_prints_installed_version`. Red→green; full `tests/test_cli.py` 121 passed;
 ruff + mypy clean. (Implementer subagent hit a transient 529 after the edits but before the
 commit; controller verified the work and finished the commit.)
+
+#### #0119 · completed · FWK34 · 2026-06-16
+Task 2 — `src/framework_cli/version_sync.py`: the pure skew helper (`VersionSkew`
+IN_SYNC/CLI_BEHIND/CLI_AHEAD, `VersionSkewError`, `parse_version`, `project_version_skew`,
+`skew_remedy`, `require_version_sync`) comparing `version_tag(installed_framework_version())`
+to the project's `_commit`. 8 tests (truth table + missing-`_commit` + directional remedies +
+parse). Red→green; ruff + mypy clean. (API overloaded for subagent dispatch — 529s — so the
+controller implemented this fully-specified module directly per the plan; branch-end Opus
+review still covers it.)
