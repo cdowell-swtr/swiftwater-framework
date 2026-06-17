@@ -1733,3 +1733,15 @@ promissory notes in `working/review-system.md` → links to the reference; added
 Bite-proven (append a stale line → test_reference_doc_is_current RED → regenerate → green). Gates:
 guard 3 passed, tests/review/ 327 passed/3 skipped, ruff + format + mypy(48 files) clean. Docs/dev-
 tooling only → no template payload, no release, no FWK29 surface. Branch fwk3-reviewer-reference-docs.
+
+#### #0147 · completed · FWK3 · 2026-06-17
+Branch-end Opus review (code-quality + accuracy): **APPROVE-WITH-NITS**, no critical/important.
+Reviewer read all 21 prompts + the registry and confirmed every blurb faithfully represents its
+prompt (incl. the misleading-named api-design=GraphQL / contracts=Pact / performance=query-cost,
+the 4-way obs split, coverage-gap's FWK29 deferral, and the compliance/privacy/data-integrity/
+data-lineage boundaries), the table cells match the registry, render/guard/links are sound, and no
+prose re-states blocking/advisory. Applied the one worthwhile nit: coverage-gap blurb "new
+enumerable-surface kinds" → "surfaces of a kind `enumerate.py` doesn't recognize" (precision —
+the open-world half flags NON-enumerated kinds); regenerated the doc, guard 3 passed, ruff/format
+clean. Left the privacy/application-logic "defers to" framing as-is (reviewer: accurate effective-
+scope, not a fabrication). Ready for PR.

@@ -65,7 +65,7 @@ Consumer-driven contract testing via Pact: a provider change that breaks a commi
 
 ### `review-coverage-gap`
 
-Framework-native, agentic: whether a newly provisioned operational surface in the template is exercised by a test that drives it on its real runtime path (not just render-checked or mock-patched). Flags new enumerable-surface kinds and in-app lifecycle/route/worker paths the change adds but no test drives live. Diff-anchored; defers to anything already classified in the FWK29 `registry.py` (EXERCISED/EXEMPT/KNOWN_GAP).
+Framework-native, agentic: whether a newly provisioned operational surface in the template is exercised by a test that drives it on its real runtime path (not just render-checked or mock-patched). Flags surfaces of a kind `enumerate.py` doesn't recognize, and in-app lifecycle/route/worker paths the change adds but no test drives live. Diff-anchored; defers to anything already classified in the FWK29 `registry.py` (EXERCISED/EXEMPT/KNOWN_GAP).
 
 ### `review-data-integrity`
 
