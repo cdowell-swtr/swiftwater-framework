@@ -1529,3 +1529,13 @@ a sanity-assert. Warns fixed: FWK24 WS nonce → 16 bytes; FWK27 dropped redunda
 FWK25 port-poll `except` += `IndexError`; FWK26 corrected a misstated helper precondition; FWK28
 placement note + the false-alarm `load.js` anticipated-bug (verified present). Net: FWK23/25/26/19
 verifiers returned READY; FWK24/27/28 NEEDS-FIX → now fixed. Plans are hands-free-ready. PR #51 updated.
+
+#### #0134 · completed · coverage-batch · 2026-06-17
+Added an explicit "escape hatch — NEVER block on the human (park-and-continue)" section to the
+shared execution-policy doc (per user): if a step would need my *permission* (outward-facing /
+hard-to-reverse) or my *input* (an unresolvable design fork / ambiguous real-bug fix), the run does
+NOT ask or wait — it parks ONLY that unit (xfail(strict)/skip + reason "PARKED: …", registry stays
+KNOWN_GAP), commits what's done, finishes the rest of the current item that doesn't need me, and
+moves to the next. Generalizes the real-bug rule (now cross-references it); the sole intended
+permission gate is the terminal batch-PR-for-review. Morning report gains a dedicated "PARKED —
+needs my decision/permission" to-do list. PR #51 updated.

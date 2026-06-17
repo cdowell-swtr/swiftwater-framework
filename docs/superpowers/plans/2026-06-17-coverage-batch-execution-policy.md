@@ -23,6 +23,35 @@ highs (FWK20 workers-live, FWK21 battery-runtime) shipped. FWK22 is a dropped to
 
 Plan files: `docs/superpowers/plans/2026-06-17-fwk<NN>-<slug>.md`.
 
+## Escape hatch — NEVER block on the human (park-and-continue)
+
+The run is fully unattended overnight. It must **never stop to wait for input or approval.** If
+finishing a step would require EITHER:
+
+- **my permission** — an outward-facing or hard-to-reverse action: merging to `master`,
+  cutting/pushing a release or tag, publishing anything, deleting/overwriting something I created,
+  or any destructive/networked action beyond a test's own scope; OR
+- **my input** — a decision that genuinely can't be resolved from the code, the plan, or a sensible
+  default: an unanticipated design fork, a real-bug fix that's non-trivial/ambiguous/risky, or a
+  pre-chosen fork-default that turns out wrong,
+
+then **do NOT ask and do NOT wait. Park it and keep going:**
+
+1. **Park only the blocked unit** — the single step / sub-test / task that needs me, plus anything
+   that strictly depends on it. Mark it `@pytest.mark.xfail(strict=True, reason="PARKED: <what + why>
+   — needs <input|permission>")` (or `skip` if it can't even be written), leave any related FWK29
+   registry entry KNOWN_GAP, and commit what IS done.
+2. **Continue with the rest of the CURRENT item** that does not need me (the independent sub-tasks),
+   then move to the next item in the order. Never let one parked unit sink a whole item.
+3. **Record every parked unit in the morning report** with enough context to decide in one read: what
+   was blocked, the exact decision or permission needed, the options, and where it lives
+   (file/test/commit). If it's also a real bug, additionally do the `ACTION_LOG` + new `PLAN.md`
+   entry (per the real-bug policy).
+
+This generalizes the real-bug policy below — an ambiguous fix is just one kind of "needs my input."
+The ONLY thing that waits for me is the **terminal step: opening the batch PR for review** (the merge
+is the single intended permission gate). Never leave the `gate` tier red.
+
 ## Operating environment (laptop)
 
 - Requires **docker acceptance parity** — buildx + dind-capable, host-UID-clean. See
@@ -67,9 +96,10 @@ patch a symptom. Then:
   `--schedule` one-liner): apply the template fix, add a CI-visible render guard where one fits,
   let the test go green. This is a template-payload change → **defer the release** (no consumers)
   but note it.
-- **Non-trivial / ambiguous / risky:** do **not** guess unattended. Mark the new test
-  `@pytest.mark.xfail(reason="FWK<NN>: real bug — <one line>", strict=True)`, leave the FWK29
-  registry entry **KNOWN_GAP** (do **not** falsely flip to EXERCISED), and continue.
+- **Non-trivial / ambiguous / risky:** do **not** guess unattended — this is a "needs my input"
+  case, so apply the **escape hatch** (park-and-continue) above: `@pytest.mark.xfail(reason="FWK<NN>:
+  real bug — <one line>", strict=True)`, leave the FWK29 registry entry **KNOWN_GAP** (do **not**
+  falsely flip to EXERCISED), and continue.
 - **Every real bug, fixed or deferred, gets ALL of:** (1) an `ACTION_LOG.md` entry; (2) a **new
   `PLAN.md` `Next` entry** (a new `FWK` task ID) capturing the bug + proposed fix; (3) a line in
   the morning report.
@@ -95,5 +125,10 @@ surface via env) are preferred over expensive rebuilds; document which was used.
 
 ## Morning report (end of run)
 
-A single summary: per item — green / xfail(+bug) / skipped; bugs found (with the new FWK IDs +
-ACTION_LOG refs); the batch PR link; any item that couldn't complete and why.
+A single summary, structured so I can act in one read:
+- **Per item:** green / partial / xfail / skipped, and which sub-tasks landed.
+- **Bugs found** (with the new `FWK` IDs + `ACTION_LOG` refs).
+- **⚠ PARKED — needs my decision/permission** (the escape-hatch list): each with *what* was blocked,
+  the *exact* decision or permission needed, the options, and *where* it lives (file/test/commit).
+  This is the to-do list for my morning pass.
+- The batch PR link; anything that couldn't complete and why.
