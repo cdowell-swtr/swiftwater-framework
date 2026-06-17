@@ -1547,3 +1547,20 @@ Bash … <model> temporarily unavailable") is transient infrastructure, NOT a de
 does NOT fail/park/skip; it waits ~60s and retries the same action at 1-minute intervals
 indefinitely until it works, then resumes. No give-up timeout. Kept distinct from the escape hatch
 (human-decision park) and noted the separate full-quota-outage case (cron, not in-session sleep). PR #51 updated.
+
+#### #0136 · completed · FWK35 · 2026-06-17
+`task doctor works for templates, but not for the framework` (user). The template ships every
+generated project a `task doctor` host-tool preflight (`scripts/doctor.sh.jinja`), but the
+framework repo's own `Taskfile.yml` had only `test`/`lint`. Added `scripts/doctor.sh` +
+a `doctor:` target mirroring the template's pattern (presence-only, advisory, set -uo pipefail,
+✓/✗, exit 1 on any miss) but checking the framework's FULL host tool set — confirmed via
+`grep` that the suite shells out to docker ×75 / node ×8 / npm ×4 / mkcert ×3 / task ×2 /
+shellcheck ×2 — so: docker, docker compose, docker buildx, uv, git, task, mkcert, node, npm,
+shellcheck (superset of the template's, which gates node on the react battery). Wired as the
+laptop overnight-run preflight in the coverage-batch policy ("Preflight first: run `task doctor`")
++ a callout in `laptop-dev-parity.md` (that doc was scoped to the minimal reviewer-eval path;
+the full acceptance/coverage-batch run needs the whole set). Regression test
+`tests/test_framework_doctor.py` (target present + `doctor.sh` bash-n-clean + checks each tool).
+Verified: `shellcheck scripts/doctor.sh` clean, `task doctor` 10/10 green on this box, test 2
+passed, ruff clean. Framework dev tooling only → no release, no template payload, no FWK29 surface
+(enumerate runs on a rendered project, not the framework's own scripts/). Branch fwk35-framework-doctor.

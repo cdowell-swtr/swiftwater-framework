@@ -72,6 +72,10 @@ abandon anything because of it.
 
 ## Operating environment (laptop)
 
+- **Preflight first:** run **`task doctor`** in the framework repo before kicking off the run — it
+  presence-checks every host tool the suite shells out to (docker + buildx, mkcert, task, uv, git,
+  node/npm, shellcheck) and exits non-zero on any miss. This is the cheapest guard against the
+  FWK24-class "`mkcert`/`task` absent → the test *errors* instead of skipping" surprise.
 - Requires **docker acceptance parity** — buildx + dind-capable, host-UID-clean. See
   `docs/maintenance/laptop-dev-parity.md`. The acceptance tier is docker-gated
   (`skipif not _docker_available()`) and **CI-ignored / local-only**, so these tests run on
