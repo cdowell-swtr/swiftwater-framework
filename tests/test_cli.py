@@ -3297,3 +3297,11 @@ def test_gate_finalize_errored_agent_in_marker_summary(tmp_path):
     assert "security" in marker["summary"], (
         f"expected agent name in marker summary; got: {marker['summary']!r}"
     )
+
+
+def test_version_flag_prints_installed_version():
+    from framework_cli.integrity.manifest import installed_framework_version
+
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert installed_framework_version() in result.stdout

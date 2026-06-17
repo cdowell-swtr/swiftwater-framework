@@ -1325,3 +1325,10 @@ hard skew-error there would newly block `task dev` on benign cross-project skew.
 skew-aware ADVISORY — warns + exits 0 (never blocks) on skew, unchanged + authoritative when
 in-sync/`--ci`. Implementation plan written (7 tasks, TDD, full code):
 `docs/superpowers/plans/2026-06-16-fwk34-cli-version-sync.md`. Next: subagent-driven execution.
+
+#### #0118 · completed · FWK34 · 2026-06-16
+Task 1 — `framework --version`. Added an eager `--version` option on the Typer app callback
+(`cli.py` `_version_callback` → `installed_framework_version()` + exit) + test
+`test_version_flag_prints_installed_version`. Red→green; full `tests/test_cli.py` 121 passed;
+ruff + mypy clean. (Implementer subagent hit a transient 529 after the edits but before the
+commit; controller verified the work and finished the commit.)

@@ -47,8 +47,22 @@ review_config_app = typer.Typer(
 app.add_typer(review_config_app, name="review-config")
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(installed_framework_version())
+        raise typer.Exit()
+
+
 @app.callback()
-def _main() -> None:
+def _main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the installed framework CLI version and exit.",
+    ),
+) -> None:
     """Framework CLI — scaffold solid, observable, testable Python projects."""
 
 
