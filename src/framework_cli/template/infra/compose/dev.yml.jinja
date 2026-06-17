@@ -15,7 +15,7 @@ services:
       WATCHFILES_FORCE_POLLING: "true"  # reliable reload on Windows/WSL bind mounts
       APP_OTEL_ENABLED: "true"
       APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
-      APP_DATABASE_URL: "postgresql+psycopg://app:app@postgres:5432/app"
+      APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:app@postgres:5432/app}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -141,10 +141,10 @@ services:
       # Only the app/migrate step runs migrations — workers share entrypoint.sh, so disable
       # its alembic-upgrade to avoid concurrent `upgrade head` racing the app on startup.
       APP_RUN_MIGRATIONS: "false"
-      APP_REDIS_URL: "redis://redis:6379/0"
-      APP_CELERY_BROKER_URL: "redis://redis:6379/0"
-      APP_CELERY_RESULT_BACKEND: "redis://redis:6379/1"
-      APP_DATABASE_URL: "postgresql+psycopg://app:app@postgres:5432/app"
+      APP_REDIS_URL: "${APP_REDIS_URL:-redis://redis:6379/0}"
+      APP_CELERY_BROKER_URL: "${APP_CELERY_BROKER_URL:-redis://redis:6379/0}"
+      APP_CELERY_RESULT_BACKEND: "${APP_CELERY_RESULT_BACKEND:-redis://redis:6379/1}"
+      APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:app@postgres:5432/app}"
       APP_OTEL_ENABLED: "true"
       APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
     volumes:
@@ -177,9 +177,9 @@ services:
     command: ["celery", "-A", "{{ package_name }}.tasks.app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
     environment:
       APP_RUN_MIGRATIONS: "false"  # shares entrypoint.sh; don't let beat run migrations
-      APP_REDIS_URL: "redis://redis:6379/0"
-      APP_CELERY_BROKER_URL: "redis://redis:6379/0"
-      APP_CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+      APP_REDIS_URL: "${APP_REDIS_URL:-redis://redis:6379/0}"
+      APP_CELERY_BROKER_URL: "${APP_CELERY_BROKER_URL:-redis://redis:6379/0}"
+      APP_CELERY_RESULT_BACKEND: "${APP_CELERY_RESULT_BACKEND:-redis://redis:6379/1}"
       APP_OTEL_ENABLED: "true"
       APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
     volumes:

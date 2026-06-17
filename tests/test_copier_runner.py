@@ -3840,3 +3840,30 @@ def test_compose_wrapper_shifts_host_ports_by_offset(tmp_path: Path):
     # No offset → today's defaults (single-stack DX preserved).
     defaults = run_wrapper({})
     assert defaults["HTTP_HOST_PORT"] == "8000"
+
+
+def test_dev_compose_urls_are_env_overridable(tmp_path: Path):
+    """Every APP_*_URL literal in dev.yml is wrapped so the operator's env wins
+    (the FWK6 seam), with today's container DSN as the default fallback."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    # app: database URL is overridable, default unchanged
+    assert (
+        'APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:app@postgres:5432/app}"'
+        in dev
+    )
+    # worker + beat: redis/celery URLs overridable
+    for var, default in (
+        ("APP_REDIS_URL", "redis://redis:6379/0"),
+        ("APP_CELERY_BROKER_URL", "redis://redis:6379/0"),
+        ("APP_CELERY_RESULT_BACKEND", "redis://redis:6379/1"),
+    ):
+        assert f'{var}: "${{{var}:-{default}}}"' in dev, (
+            f"{var} not env-overridable in dev.yml"
+        )
+    # no bare literal APP_*_URL remains (every one is wrapped in ${...:-...})
+    for m in re.finditer(r'^\s*(APP_\w*_URL):\s*"([^"]*)"', dev, re.MULTILINE):
+        assert m.group(2).startswith("${"), (
+            f"{m.group(1)} still a bare literal: {m.group(2)}"
+        )

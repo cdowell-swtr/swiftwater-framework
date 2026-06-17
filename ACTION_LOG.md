@@ -1794,3 +1794,12 @@ core), T4 services.yml→INTENTIONALLY_UNLOCKED, T5 opt-in tls-ca.yml CA overlay
 (settings precedence + .env.example + deploy README), T7 live acceptance (managed app boots vs
 out-of-stack DB), T8 FWK29 classification + branch-end Opus review. Next: dispatch execution
 (subagent-driven per review-model policy).
+
+#### #0151 · completed · FWK6 · 2026-06-17
+T1 (subagent-driven, Sonnet impl): env-overridable `APP_*_URL` in `dev.yml.jinja` — wrapped all 8
+literals (app DATABASE; worker REDIS/BROKER/RESULT_BACKEND/DATABASE; beat REDIS/BROKER/RESULT_BACKEND)
+as `${VAR:-<container-default>}`; defaults byte-identical, dev keeps its co-located containers.
+Render guard `test_dev_compose_urls_are_env_overridable` (TDD red→green); regression `-k compose/dev/
+render` 183 passed. Spec review ✅; Opus quality review caught a `ruff format` miss in the new test
+(over-length asserts + dead inner `import re` — the [[ruff-format-check-after-inline-edits]] class CI's
+`gate` catches but `ruff check` misses) → fixed (format + drop import), re-verified clean.
