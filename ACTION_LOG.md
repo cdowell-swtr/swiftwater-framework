@@ -1448,3 +1448,42 @@ Scope call (user): the dev-beat fix is template payload that ships to consumers,
 release** — there are no current celery consumers, so the patch release is deferred (lands in
 a future template-change batch). Landed test + fix + registry on branch
 `fwk20-workers-live-broker-dlq-beat`. Branch-end review + PR next.
+
+#### #0129 · completed · FWK21 · 2026-06-17
+Closed coverage gaps H5 + H6 (the "Docker target built but only returncode==0
+asserted" shape) via Approach A (standalone, DB-less). Brainstormed (user picked A +
+extend-react/new-claudesub structure) → plan doc `docs/superpowers/plans/2026-06-17-fwk21-battery-docker-runtime.md`
+→ inline execution. Shared helper `_run_image_serving(image, *, extra_env=None,
+ready_path="/heartbeat")` in test_rendered_project.py: `docker run -d` on a `_free_tcp_port()`
+host port with `APP_RUN_MIGRATIONS=false` (entrypoint skips alembic/seed → uvicorn boots
+DB-less; verified every Settings field defaults + lifespan "must not require the DB"), polls
+ready_path until 200, yields the base URL, `docker rm -f` in finally, raises with `docker logs`
+on not-ready. **H5** new `test_rendered_claudesubscriptioncli_docker_runtime_serves_heartbeat`:
+build DEFAULT (runtime) target + run → /heartbeat 200 proves the runtime image boots with
+litellm-claude-cli importable (create_app calls register_claude_cli(); the git dep reaches
+runtime only via COPY --from=builder, distinct from the builder-stage test). **H6** extends
+test_rendered_react_battery_passes: run demo-react:ci → GET / asserts `id="root"` in the served
+body (Vite preserves the root div in dist/index.html), proving /app/frontend/dist landed + is
+served by the StaticFiles mount. Both green (H5 55s, H6 43s, together 54s).
+
+#### #0130 · completed · FWK21 · 2026-06-17
+Bite-proofs (non-vacuity). H5: temp `ready_path="/definitely-not-a-route"` → RED ("did not
+serve … within 60s" + docker logs), proving the readiness gate depends on the real response;
+reverted. H6: temp `extra_env={"APP_SERVE_SPA": "false"}` (settings gate
+`serve_spa and _dist.exists()` in main.py) → app boots (/heartbeat 200, vitest 5 passed) but
+GET / → HTTP 404 → RED, proving the assert depends on the SPA actually being SERVED (build
+green ≠ served); reverted. FWK29 registry: `docker-stage:Dockerfile:frontend-build` → EXERCISED
+(test_rendered_react_battery_passes); `service:dev.yml:frontend` re-pointed KNOWN_GAP → FWK24
+(the standalone runtime-image run exercises the prod StaticFiles mount, NOT the dev Vite
+dev-server compose service — a different surface; the dev-server live-serve folds into the react
+live-frontend work). H5 flips no entry (runtime stage already EXERCISED; litellm-claude-cli is a
+Python dep, not an enumerable operational surface). runtime_coverage 9 passed; ruff + format clean.
+
+#### #0131 · completed · FWK21 · 2026-06-17
+Branch-end Opus review (code-quality + spec): APPROVE-WITH-NITS. Source-level trace confirmed
+both checks non-vacuous (H5: runtime installs no git, dep arrives only via COPY --from=builder,
+/heartbeat dep-free, APP_RUN_MIGRATIONS=false skips entrypoint.sh DB work; H6: SPA mount gated on
+serve_spa+_dist.exists, id="root" Vite-preserved) and all four registry decisions correct. Nits:
+the inner `assert resp.status == 200` lines are dead (urllib raises HTTPError on non-2xx first) —
+accepted as defensive/symmetry per the reviewer. Landed on branch `fwk21-battery-docker-runtime`.
+No release (test-only). PR next.
