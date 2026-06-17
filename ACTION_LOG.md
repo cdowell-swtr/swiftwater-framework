@@ -1816,3 +1816,19 @@ Spec review ✅ + Opus quality review APPROVE-with-minor → hardened the test (
 with the dev guard). NOTE for T3: `test_staging_standalone_merges` (and the prod standalone merge
 test) assert `postgres` is defined in staging.yml/prod.yml — they must be updated when T3 relocates
 postgres to services.yml.
+
+#### #0153 · amended · FWK6 · 2026-06-17
+**Scope widened mid-execution (user-confirmed): "data stores" → "externalizable-backend edges."** A
+template-wide sweep for the same foreclosure (hardcoded host literal that shadows the env / hard
+`depends_on`) found two more pothole classes beyond the app's store URLs: (1) the **4 store exporters**
+in `observability.yml` (postgres/mongodb/celery/redis exporters — hardcoded store host + `depends_on`),
+and (2) the **OTLP egress** `APP_OTEL_EXPORTER_OTLP_ENDPOINT` (6 literals across dev/services/obs; pure
+env-wrap — nothing `depends_on` the collector). Both folded in. Deliberately EXCLUDED (documented in
+spec, not oversight): the internal observability mesh (grafana/prometheus/loki/tempo/promtail — swapped
+wholesale for managed-observability, not per-edge) and the ephemeral `postgres-test`. Updated spec
+(scope = externalizable-backend edge; exclusions recorded) + plan (new **Task 4** = observability
+backend parity; Task 3 test-list de-under-enumerated with the 5 prod/staging postgres-location tests a
+sweep found; downstream tasks renumbered to 5–9). Exporter `depends_on` edges relocate to `services.yml`
+grouped next to each store so the managed workflow (delete a store block) drops app+exporter edges
+together. Surfaced by the T2 spec/quality review catching the dangling-`depends_on` break in the
+prod+obs merge.

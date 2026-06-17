@@ -55,12 +55,33 @@ confidential/trade-secret data, per-client segregation) is **optionality, not pr
 capability**: remove every assumption that would force a rewrite, and pull forward only
 the one item whose retrofit is genuinely infra-painful.
 
+**Scope unit = the *externalizable-backend edge*, not just "data stores."** A pothole is a
+workload→backend edge where the backend could plausibly become external/managed, hardcoded
+as a compose `environment:`/`command:` literal that shadows the env. A template-wide sweep
+(2026-06-17) found three such edge classes — the data stores, **their Prometheus exporters**,
+and the **OTLP egress** — all carrying the identical foreclosure. The narrower "data-store"
+framing was too tight; FWK6 covers all three.
+
 **In scope:**
 
-- **(A) The URL seam** — make every `APP_*_URL` env-overridable in compose; the DSN is
-  opaque and operator-owned (the framework never parses it).
+- **(A) The connection seam** — make every externalizable-backend literal env-overridable
+  in compose (the value is opaque and operator-owned; the framework never parses it):
+  - app/worker/beat data-store URLs (`APP_DATABASE_URL`, `APP_REDIS_URL`, `APP_MONGO_URL`,
+    `APP_CELERY_BROKER_URL`, `APP_CELERY_RESULT_BACKEND`);
+  - the **store exporters'** connections in `observability.yml` (`postgres-exporter`
+    `DATA_SOURCE_NAME`; `mongodb-exporter --mongodb.uri`; `celery-exporter --broker-url`;
+    `redis-exporter --redis.addr`) → new `*_EXPORTER_*` env knobs;
+  - the **OTLP egress** `APP_OTEL_EXPORTER_OTLP_ENDPOINT` (6 literals across dev.yml /
+    services.yml / observability.yml) — a pure env-wrap (nothing `depends_on` the
+    collector; OTLP is fire-and-forget, so no edge to relocate). Unblocks managed/SaaS
+    observability (Grafana Cloud, Honeycomb, Datadog OTLP).
 - **(B) Conditional container + `depends_on`** — so an external store cleanly omits the
-  co-located container with no dangling dependency edge.
+  co-located container with no dangling dependency edge. This applies to **both** the
+  app→store edge **and** the exporter→store edge: each store's `depends_on` consumers (the
+  app fragment *and* the matching exporter fragment) move into `services.yml` next to the
+  store, so removing one store block from `services.yml` (the managed workflow) drops all
+  its dependency edges together — no dangling `depends_on` left in the locked
+  `observability.yml`.
 - **(C) CA-bundle mount slot** — an off-by-default, documented convention so TLS
   `verify-full` to a managed store does not require hand-editing every service later.
   This is the one column-B item pulled forward because (a) trade-secret-in-transit puts
@@ -77,6 +98,15 @@ the one item whose retrofit is genuinely infra-painful.
   compose/runtime concern. Out of frame.
 - **Redis Sentinel / cluster-seed** — the one failover shape that does not fit a single
   DSN. Documented as a known extension point; not built.
+- **The internal observability mesh** — grafana→datasources, promtail→loki,
+  otel-collector→tempo, prometheus scrape configs. These reference each other by service
+  name too, but they are consumed only as a co-deployed *set*: you do not externalize
+  `prometheus` while keeping `loki` local — you replace the whole observability overlay
+  with managed observability. That is a separate, larger feature (externalize the
+  pipeline), not a per-edge URL flip. Excluded *by nature*, not as an oversight.
+- **The ephemeral test DB** (`test.yml` `postgres-test`, `@postgres-test`) — a per-run
+  tmpfs throwaway, intentionally pinned; you never point a test suite at a managed store.
+  Stays literal.
 - **`mode` enum / proxy / tunnel / native ergonomics** (the rejected "first-class runtime
   modes" option) — would gold-plate the *collapsing* (cheap) axis while leaving the axis
   that actually defines enterprise-grade (auth/TLS) at the framework's current tier,

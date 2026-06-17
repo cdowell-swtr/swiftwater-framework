@@ -4,7 +4,7 @@
 
 **Goal:** Remove the hardcoded co-located-container assumption from a generated project's compose stack so any data store can be a co-located container **or** an external endpoint (managed / native / tunneled / proxied), selected by env + overlay membership, without hand-editing locked files or rewriting.
 
-**Architecture:** Two-layer seam. (1) Every `APP_*_URL` **literal** in a compose `environment:` block becomes `${APP_*_URL:-<container-default>}` so the operator's env wins and today's behavior is the fallback. (2) The always-on `postgres` service and the `app → postgres` `depends_on` edge move out of the locked `prod.yml`/`staging.yml` into the operator-merged `services.yml` overlay, so **self-hosted** = merge `services.yml` (already the documented deploy path) and **managed** = omit it + set `APP_DATABASE_URL`. An opt-in `tls-ca.yml` overlay carries an off-by-default CA-bundle mount for `verify-full` to managed stores. `services.yml` (and `tls-ca.yml`) move to `INTENTIONALLY_UNLOCKED` since operators now edit them.
+**Architecture:** Two-layer seam over every *externalizable-backend edge* (data stores, their Prometheus exporters, and the OTLP egress — not just data stores; a 2026-06-17 sweep found all three carry the identical foreclosure). (1) Every hardcoded backend **literal** in a compose `environment:`/`command:` becomes `${VAR:-<default>}` so the operator's env wins and today's behavior is the fallback. (2) The always-on `postgres` service and **every** `depends_on` edge pointing at a store — the `app → store` edge **and** the matching `exporter → store` edge — move out of the locked `prod.yml`/`staging.yml`/`observability.yml` into the operator-merged `services.yml` overlay, grouped next to each store, so **self-hosted** = merge `services.yml` (already the documented deploy path) and **managed** = remove a store's block from `services.yml` + set its URL, dropping all its dependency edges together (no dangling `depends_on` left in locked files). An opt-in `tls-ca.yml` overlay carries an off-by-default CA-bundle mount for `verify-full` to managed stores. `services.yml` (and `tls-ca.yml`) move to `INTENTIONALLY_UNLOCKED` since operators now edit them. The OTLP egress is a pure env-wrap (nothing `depends_on` the collector). **Out of scope (excluded by nature, documented in the spec):** the internal observability mesh (grafana/prometheus/loki/tempo/promtail wiring — externalized wholesale, not per-edge) and the ephemeral `postgres-test`.
 
 **Tech Stack:** Copier `.jinja` compose templates; `docker compose config` (merge validation); pytest (`tests/test_copier_runner.py` render guards, `tests/integrity/test_classes.py`, `tests/acceptance/test_rendered_project.py` live tier, `tests/runtime_coverage/` FWK29 ratchet); PyYAML.
 
@@ -23,10 +23,11 @@
 ## File Structure
 
 **Template payload (rendered into projects — NOT framework source; mirror via render, do not lint as framework code):**
-- `src/framework_cli/template/infra/compose/dev.yml.jinja` — *modify:* wrap the `APP_*_URL` literals (app/worker/beat). Otherwise unchanged (dev keeps its container + `depends_on`).
+- `src/framework_cli/template/infra/compose/dev.yml.jinja` — *modify:* wrap the `APP_*_URL` literals (app/worker/beat) [Task 1]; wrap the `APP_OTEL_EXPORTER_OTLP_ENDPOINT` literals (app/worker/beat) [Task 4]. Otherwise unchanged (dev keeps its container + `depends_on`).
 - `src/framework_cli/template/infra/compose/prod.yml.jinja` — *modify:* wrap `APP_DATABASE_URL` (drop `:?` from the inline default); **remove** the `postgres` service, the app `depends_on`, and the `pgdata` volume (they move to `services.yml`).
 - `src/framework_cli/template/infra/compose/staging.yml.jinja` — *modify:* identical treatment to `prod.yml`.
-- `src/framework_cli/template/infra/compose/services.yml.jinja` — *modify:* wrap worker/beat `APP_*_URL` literals; **add** the always-on `postgres` service (prod-style, carries the `${POSTGRES_PASSWORD:?…}` guard + `uses_postgres_extension` image/preloads), an `app:` fragment carrying `depends_on: postgres`, and the `pgdata` volume; rewrite the header to the composition-seam contract.
+- `src/framework_cli/template/infra/compose/services.yml.jinja` — *modify:* wrap worker/beat `APP_*_URL` literals; **add** the always-on `postgres` service (prod-style, carries the `${POSTGRES_PASSWORD:?…}` guard + `uses_postgres_extension` image/preloads), an `app:` fragment carrying `depends_on: postgres`, and the `pgdata` volume; rewrite the header to the composition-seam contract. **(Task 4 also adds the relocated exporter `depends_on` fragments here, grouped with each store.)**
+- `src/framework_cli/template/infra/compose/observability.yml.jinja` — *modify (Task 4):* env-wrap the four store-exporter connections (`postgres-exporter` `DATA_SOURCE_NAME` → `${POSTGRES_EXPORTER_DSN:-…}`; `mongodb-exporter --mongodb.uri` → `${MONGODB_EXPORTER_URI:-…}`; `celery-exporter --broker-url` → `${CELERY_EXPORTER_BROKER_URL:-…}`; `redis-exporter --redis.addr` → `${REDIS_EXPORTER_ADDR:-…}`) and the app/worker/beat `APP_OTEL_EXPORTER_OTLP_ENDPOINT` literal; **remove** the four exporter `depends_on` blocks (they move to `services.yml`). This file is LOCKED — framework-author edit; the integrity checksum re-derives. It stays LOCKED (not unlocked) — its mesh is internal.
 - `src/framework_cli/template/infra/compose/tls-ca.yml.jinja` — *create:* opt-in overlay; `app`/`worker`/`beat` fragments mounting `../tls/ca:/etc/ssl/app-ca:ro`.
 - `src/framework_cli/template/infra/tls/ca/.gitkeep` — *create:* empty placeholder so the CA mount source dir ships.
 - `src/framework_cli/template/src/{{package_name}}/config/settings.py.jinja` — *modify:* doc-comment the precedence (env > compose default-literal > Settings default). No behavior change.
@@ -401,9 +402,17 @@ def test_render_services_overlay_always_has_postgres(tmp_path: Path):
     assert "mongo" not in cfg["services"] and "redis" not in cfg["services"]
 ```
 
+- [ ] **Step 6b: Update the OTHER tests that assume postgres lives in prod/staging** (the plan under-enumerated these; a sweep found them — verify the full set before finishing):
+
+  - **`test_staging_standalone_merges`** (asserts `postgres` present in `staging.yml` merged standalone): staging.yml is no longer self-contained. Repurpose it to assert the **managed shape** — merge `staging.yml` alone with `APP_DATABASE_URL` injected, assert `postgres` NOT in services and app has no `depends_on`; OR convert it to merge `staging.yml + services.yml` and assert postgres present. Prefer the managed-shape assertion (the self-hosted shape is covered by `test_staging_plus_services_overlay_merges`).
+  - **`test_prod_plus_overlay_merges_with_obs_stack`** (merges `prod.yml + observability.yml`, asserts `app` + `postgres` + `postgres-exporter`): postgres is no longer in prod.yml, so add `-f services.yml` to its merge (→ `prod + services + observability`). postgres then comes from services.yml and `postgres-exporter`'s `depends_on` resolves (whether that edge lives in obs or, after Task 4, in services). Keep the existing service assertions.
+  - **`test_prod_staging_postgres_image_switches_for_extensions`** (asserts `image: postgres:17` in prod.yml/staging.yml + the extension image): postgres image now lives in `services.yml`. Re-point both reads to `services.yml`.
+  - **`test_staging_plus_services_overlay_merges`** (merges staging+services+obs): should still PASS (postgres now from services.yml). Run it to confirm; adjust only if it asserted postgres came specifically from staging.yml.
+  - **`test_render_compose_structure`** (dev.yml `app.depends_on.postgres` + `postgres:5432` in the URL): dev is unchanged — confirm it still PASSES, no edit expected.
+
 - [ ] **Step 7: Run the affected render tests — expect PASS**
 
-Run: `uv run pytest tests/test_copier_runner.py -q -k "managed_db_topology or staging_prod_compose or services_overlay or prod_plus_services or dev_and_services_images"`
+Run: `uv run pytest tests/test_copier_runner.py -q -k "managed_db_topology or staging_prod or services_overlay or prod_plus or staging_plus or postgres_image or compose_structure or dev_and_services_images"`
 Expected: PASS. (`test_prod_plus_services_plus_obs_merges` still passes — postgres now comes from services.yml in that merge.)
 
 - [ ] **Step 8: Commit**
@@ -415,7 +424,122 @@ git commit -m "FWK6: relocate postgres + depends_on to services.yml (managed = o
 
 ---
 
-## Task 4: `services.yml` → `INTENTIONALLY_UNLOCKED` (section D)
+## Task 4: Observability backend parity — store exporters + OTLP egress
+
+> **Renumbering note:** this task was inserted after the scope was widened from "data stores" to "externalizable-backend edges." The original Task 4 (services.yml unlock) and onward shift down by one — they follow below as Tasks 5–9.
+
+**Files:**
+- Modify: `src/framework_cli/template/infra/compose/observability.yml.jinja` (env-wrap the 4 exporter connections + the app OTLP literal; remove the 4 exporter `depends_on` blocks)
+- Modify: `src/framework_cli/template/infra/compose/dev.yml.jinja` (env-wrap the OTLP literal on app/worker/beat)
+- Modify: `src/framework_cli/template/infra/compose/services.yml.jinja` (env-wrap the OTLP literal on worker/beat; add the 4 exporter `depends_on` fragments, grouped next to each store)
+- Test: `tests/test_copier_runner.py`
+
+**Context:** the store exporters carry the same foreclosure as the app (hardcoded store host + hard `depends_on`); the OTLP endpoint is a hardcoded literal that shadows the env. Nothing `depends_on` the otel-collector (verified), so OTLP is a pure env-wrap. The exporter `depends_on` edges move into `services.yml` *next to their store* so the managed workflow (delete a store's block from the now-editable services.yml) drops the store + the app edge + the exporter edge together. observability.yml stays LOCKED (its internal mesh is not operator-edited); env-wrapping its literals is a framework-author edit.
+
+- [ ] **Step 1: Write the failing tests** — add to `tests/test_copier_runner.py`:
+
+```python
+def test_observability_backend_connections_are_env_overridable(tmp_path: Path):
+    """FWK6: the store exporters' connections and the OTLP egress are env-overridable
+    (same foreclosure class as the app data-store URLs)."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "mongodb"]})
+    comp = dest / "infra" / "compose"
+    obs = (comp / "observability.yml").read_text()
+    assert "${POSTGRES_EXPORTER_DSN:-postgresql://app:${POSTGRES_PASSWORD:-app}@postgres:5432/app?sslmode=disable}" in obs
+    assert "${MONGODB_EXPORTER_URI:-mongodb://mongo:27017}" in obs
+    assert "${CELERY_EXPORTER_BROKER_URL:-redis://redis:6379/0}" in obs
+    assert "${REDIS_EXPORTER_ADDR:-redis://redis:6379}" in obs
+    # OTLP egress env-overridable everywhere it appears (dev x3, services x2, observability x1)
+    for fname in ("dev.yml", "services.yml", "observability.yml"):
+        text = (comp / fname).read_text()
+        if "APP_OTEL_EXPORTER_OTLP_ENDPOINT" in text:
+            for line in text.splitlines():
+                if "APP_OTEL_EXPORTER_OTLP_ENDPOINT" in line:
+                    assert "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}" in line, (
+                        f"{fname}: OTLP endpoint not env-overridable: {line.strip()}"
+                    )
+
+
+def test_exporter_depends_on_moved_to_services_overlay(tmp_path: Path):
+    """FWK6: each store exporter's depends_on edge lives in services.yml (next to its store),
+    not in the locked observability.yml — so removing a store from services.yml (managed)
+    drops the exporter's dependency too, with no dangling edge."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "mongodb"]})
+    comp = dest / "infra" / "compose"
+    obs = __import__("yaml").safe_load((comp / "observability.yml").read_text())
+    svc = __import__("yaml").safe_load((comp / "services.yml").read_text())
+    for exporter, store in (
+        ("postgres-exporter", "postgres"),
+        ("mongodb-exporter", "mongo"),
+        ("celery-exporter", "redis"),
+        ("redis-exporter", "redis"),
+    ):
+        assert "depends_on" not in obs["services"][exporter], (
+            f"{exporter} still has depends_on in observability.yml"
+        )
+        assert svc["services"][exporter]["depends_on"][store]["condition"] == "service_healthy", (
+            f"{exporter} depends_on {store} not relocated to services.yml"
+        )
+```
+
+- [ ] **Step 2: Run them — expect FAIL.**
+
+Run: `uv run pytest tests/test_copier_runner.py -q -k "observability_backend_connections or exporter_depends_on_moved"`
+
+- [ ] **Step 3: Env-wrap the exporter connections in `observability.yml.jinja`**
+
+```yaml
+  postgres-exporter:
+    ...
+    environment:
+      DATA_SOURCE_NAME: "${POSTGRES_EXPORTER_DSN:-postgresql://app:${POSTGRES_PASSWORD:-app}@postgres:5432/app?sslmode=disable}"
+```
+```yaml
+  mongodb-exporter:
+    command: ["--mongodb.uri=${MONGODB_EXPORTER_URI:-mongodb://mongo:27017}", "--collect-all"]
+```
+```yaml
+  celery-exporter:
+    command: ["--broker-url=${CELERY_EXPORTER_BROKER_URL:-redis://redis:6379/0}"]
+```
+```yaml
+  redis-exporter:
+    command: ["--redis.addr=${REDIS_EXPORTER_ADDR:-redis://redis:6379}"]
+```
+
+- [ ] **Step 4: Remove the 4 exporter `depends_on` blocks from `observability.yml.jinja`** (the whole `depends_on:` / `<store>:` / `condition: service_healthy` block under each of the 4 exporters). Leave each exporter's `image`/`environment`/`command`/`ports` intact.
+
+- [ ] **Step 5: Env-wrap the OTLP literal** in `dev.yml.jinja` (app/worker/beat), `services.yml.jinja` (worker/beat), and `observability.yml.jinja` (app):
+
+```yaml
+      APP_OTEL_EXPORTER_OTLP_ENDPOINT: "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
+```
+
+- [ ] **Step 6: Add the exporter `depends_on` fragments to `services.yml.jinja`**, grouped with each store (postgres-exporter always; the battery exporters under their existing battery `{% if %}` gates). Example for postgres (place near the postgres service block from Task 3):
+
+```yaml
+  # postgres-exporter's dependency edge lives here so removing postgres (managed) drops it too.
+  postgres-exporter:
+    depends_on:
+      postgres:
+        condition: service_healthy
+```
+and for the battery exporters inside the matching `{%- if "mongodb" in batteries %}` / `{%- if "workers" in batteries %}` / `{%- if "redis" in batteries or "workers" in batteries %}` blocks: `mongodb-exporter`→`mongo`, `celery-exporter`→`redis`, `redis-exporter`→`redis`, each a `depends_on` fragment matching the gate that defines the exporter in observability.yml.
+
+- [ ] **Step 7: Run the new tests + the obs/merge regressions — expect PASS**
+
+Run: `uv run pytest tests/test_copier_runner.py -q -k "observability_backend or exporter_depends_on or prod_plus or staging_plus or exporters_in_observability or obs"` and also run `uv run pytest tests/test_obs_completeness.py -q`.
+Expected: PASS. The `prod+services+obs` and `staging+services+obs` merges still validate (postgres present from services → relocated exporter `depends_on` resolves). If a `docker compose config` merge test now fails because an exporter `depends_on` can't resolve, confirm `services.yml` carries the matching fragment under the right battery gate.
+
+- [ ] **Step 8: Format/lint the test file** (`uv run ruff format --check tests/test_copier_runner.py` + `uv run ruff check tests/test_copier_runner.py`) — clean.
+
+- [ ] **Step 9: Commit** (controller appends ACTION_LOG + commits per the cadence note).
+
+---
+
+## Task 5: `services.yml` → `INTENTIONALLY_UNLOCKED` (section D)
 
 **Files:**
 - Modify: `src/framework_cli/integrity/classes.py`
@@ -462,7 +586,7 @@ git commit -m "FWK6: services.yml is a composition seam (INTENTIONALLY_UNLOCKED)
 
 ---
 
-## Task 5: Opt-in CA-bundle overlay `tls-ca.yml` (section C)
+## Task 6: Opt-in CA-bundle overlay `tls-ca.yml` (section C)
 
 **Files:**
 - Create: `src/framework_cli/template/infra/compose/tls-ca.yml.jinja`
@@ -579,7 +703,7 @@ git commit -m "FWK6: opt-in tls-ca.yml CA-bundle overlay (off by default)"
 
 ---
 
-## Task 6: Docs — Settings precedence, `.env.example`, deploy README
+## Task 7: Docs — Settings precedence, `.env.example`, deploy README
 
 **Files:**
 - Modify: `src/framework_cli/template/src/{{package_name}}/config/settings.py.jinja`
@@ -662,7 +786,7 @@ git commit -m "FWK6: document the managed/self-hosted data-store runtime contrac
 
 ---
 
-## Task 7: Live acceptance test — app boots against an out-of-stack DB
+## Task 8: Live acceptance test — app boots against an out-of-stack DB
 
 **Files:**
 - Modify: `tests/acceptance/test_rendered_project.py`
@@ -735,7 +859,7 @@ git commit -m "FWK6: live acceptance — managed-topology app boots against out-
 
 ---
 
-## Task 8: FWK29 runtime-coverage classification + branch-end gate
+## Task 9: FWK29 runtime-coverage classification + branch-end gate
 
 **Files:**
 - Modify: `tests/runtime_coverage/registry.py`
