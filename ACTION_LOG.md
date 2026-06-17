@@ -1564,3 +1564,22 @@ the full acceptance/coverage-batch run needs the whole set). Regression test
 Verified: `shellcheck scripts/doctor.sh` clean, `task doctor` 10/10 green on this box, test 2
 passed, ruff clean. Framework dev tooling only → no release, no template payload, no FWK29 surface
 (enumerate runs on a rendered project, not the framework's own scripts/). Branch fwk35-framework-doctor.
+
+#### #0137 · completed · coverage-batch · 2026-06-17
+**FWK24** (item 1/7 of `fwk-coverage-batch`) — per-battery live routes through Traefik +
+react RUM. Three docker-gated acceptance tests in `test_rendered_project.py`, all GREEN +
+bite-proven: `test_rendered_per_battery_routes_through_traefik` (M8 — all-6-battery render up on
+`--profile dev`, asserts WS /ws 101, webhook HMAC 200/401, graphql 200, llm/agents 502 + metric
+series through Traefik; bite: flip bad-sig→200 RED), `test_rendered_react_rum_round_trip` (M9 —
+runs the shipped `test_frontend_rum.py`; bite: bogus path→exit4 RED), and
+`test_rendered_frontend_dev_server_serves_spa` (Vite dev server serves `id="root"`; bite:
+impossible marker RED). Added shared Traefik helpers `_mkcert_ssl_context`/`_traefik_request`/
+`_traefik_ws_upgrade` (FWK8 TLS recipe) reused by later items. FWK29 registry:
+`service:dev.yml:frontend` → EXERCISED.
+**Real bug found + FIXED (defer release → FWK36):** the `websockets` battery `/ws` route 404s
+live — `uvicorn` installed without a WebSocket lib (`No supported WebSocket library detected`).
+Fix: conditional `websockets>=14` in `pyproject.toml.jinja` + a CI-visible render guard
+(`test_render_with_websockets_battery` asserts the dep; new negative guard for the no-battery
+case). Bite-proven RED→GREEN by stashing the template fix. Small/obvious/scoped → applied per the
+real-bug policy; release deferred (no consumers gated in this run). Subagent-driven (Sonnet
+implementer; controller review + commit). No release.

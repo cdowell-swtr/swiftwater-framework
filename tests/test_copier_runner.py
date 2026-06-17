@@ -1015,6 +1015,16 @@ def test_render_with_websockets_battery(tmp_path: Path):
     assert (dest / "src" / "demo" / "websockets" / "connection_manager.py").is_file()
     assert (dest / "tests" / "functional" / "test_websockets.py").is_file()
     assert "router" in (dest / "src" / "demo" / "routes" / "websockets.py").read_text()
+    # FWK24: uvicorn ships without a WebSocket library, so the /ws route 404s live unless the
+    # websockets package is an explicit dep. CI-visible guard for the fix the docker-gated
+    # acceptance test (test_rendered_per_battery_routes_through_traefik) caught.
+    assert "websockets>=" in (dest / "pyproject.toml").read_text()
+
+
+def test_render_without_websockets_battery_has_no_websockets_dep(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # no batteries
+    assert "websockets>=" not in (dest / "pyproject.toml").read_text()
 
 
 def test_render_frontend_obs_artifacts(tmp_path: Path):

@@ -497,11 +497,9 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "service:dev.yml:frontend",
         "infra/compose/dev.yml",
-        _KG,
-        # H6/FWK21 closed the runtime-image SPA serve (test_rendered_react_battery_passes runs the
-        # image and GETs /). The residual is the dev Vite dev-server compose service serving the
-        # SPA live over HTTP — lower value, folded into the react live-frontend work.
-        "FWK24 dev Vite frontend service never asserted to serve the SPA live over HTTP",
+        _EX,
+        # FWK24: the dev Vite server is brought up and GET / asserts the served SPA shell (id="root").
+        "test_rendered_frontend_dev_server_serves_spa",
     ),
     SurfaceClass(
         "service:dev.yml:grafana",
