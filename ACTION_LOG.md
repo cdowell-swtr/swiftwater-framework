@@ -1696,3 +1696,13 @@ accepted as-is. Full verification: gate-tier pytest 954 passed / 3 env-skips; al
 run together = 25 passed + 1 transient ghcr.io TLS-handshake pull flake on
 `test_rendered_worker_span_reaches_tempo` (re-ran → GREEN; [[render-matrix-dockerhub-flake-triage]]);
 ruff/format/mypy clean. No release (test-only; the websockets template fix is deferred → FWK36).
+
+#### #0145 · amended · 2026-06-17
+Reconciled the CLAUDE.md "Operating environment" bullet with reality, found during the
+fwk-coverage-batch overnight run (#53). The doc claimed this box ships native Node 22 + docker
+buildx + shellcheck in `~/.local/bin` and a 16 GB `/tmp`; in fact only `uv`/`claude` were
+preinstalled, and the acceptance toolchain had to be apt-installed (docker.io 29.x + compose-v2 +
+buildx, node 22/npm, mkcert + libnss3-tools, shellcheck) plus go-task 3.51.1 to `/usr/local/bin`.
+Corrected: distro Ubuntu 26.04/WSL2/systemd; no host k6 (grafana/k6 image); docker-group needs a
+fresh login; `/tmp` is a ~4 GB tmpfs → `TMPDIR=/var/tmp`; sandbox must be disabled for
+docker/acceptance; `task doctor` is the preflight; ghcr.io/Hub pull timeouts are flakes. Doc-only.
