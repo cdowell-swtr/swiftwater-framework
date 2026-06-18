@@ -1893,3 +1893,19 @@ in the opaque DSN. 4 new tests (off-by-default render, app-only-without-workers,
 merge, integrity-unlocked); test_prod_plus_tls_ca_merges includes observability.yml (same image-less-
 fragment coupling as T4). tls_ca tests + 47 integrity pass; mypy/ruff clean. Controller-verified
 off-by-default + gating + .gitkeep render.
+
+#### #0158 · completed · FWK6 · 2026-06-17
+T7 (subagent-driven, Sonnet impl): docs for the externalizable-backend runtime contract (expanded for
+the wider scope). `settings.py.jinja` — precedence comment on `database_url` (env > compose
+`${VAR:-default}` > Settings default; opaque DSN). `.env.example.jinja` — added a "Data-store & backend
+runtime" block inside the framework region (markers intact 1/1; battery-gated the redis/mongo/exporter
+lines) documenting `APP_DATABASE_URL`/`APP_REDIS_URL`/`APP_MONGO_URL` + the 4 `*_EXPORTER_*` knobs +
+`APP_OTEL_EXPORTER_OTLP_ENDPOINT` + the CA/verify-full path. `infra/deploy/README.md` — new "Data-store
+& backend runtime (self-hosted vs managed)" section: the `-f env -f services -f observability` merge
+(+ the services-requires-observability coupling), the managed workflow (edit services.yml + set vars),
+SaaS-OTLP, and `tls-ca.yml` + CA drop. New guard `test_datastore_runtime_docs_present`; 56 + 47 integrity
+tests pass; rendered settings.py format-clean; no test deleted. Spec+fact-check review ✅ (every env-var
+name / merge command / CA path cross-checked against the real templates) → applied 2 accuracy fixes: a
+README pronoun ambiguity ("its"→"services.yml's" image-less fragments) and a now-contradictory
+pre-existing `settings.py.jinja` comment ("Compose injects APP_MONGO_URL" — false; compose sets no
+APP_MONGO_URL, the app reads it from env over the Settings default) rewritten to the correct precedence.

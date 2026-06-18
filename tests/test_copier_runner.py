@@ -3369,6 +3369,20 @@ def test_alert_smoke_clean_when_no_failures(tmp_path: Path):
     assert "ok" in (result.stdout + result.stderr).lower()
 
 
+def test_datastore_runtime_docs_present(tmp_path: Path):
+    """FWK6: the managed/self-hosted runtime contract is documented where operators look."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "mongodb"]})
+    env_example = (dest / ".env.example").read_text()
+    assert "APP_DATABASE_URL" in env_example and "managed" in env_example.lower()
+    assert "APP_OTEL_EXPORTER_OTLP_ENDPOINT" in env_example  # OTLP egress documented
+    readme = (dest / "infra" / "deploy" / "README.md").read_text()
+    assert "services.yml" in readme and "managed" in readme.lower()
+    assert "tls-ca.yml" in readme  # CA / verify-full path documented
+    settings = (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    assert "APP_DATABASE_URL" in settings  # precedence note references the env var
+
+
 def test_alert_smoke_advisory_when_alertmanager_unreachable(tmp_path: Path):
     # The common CI case: Alertmanager not reachable from the runner → skip, still exit 0.
     dest = tmp_path / "demo"
