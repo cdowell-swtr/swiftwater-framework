@@ -758,8 +758,9 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "service:staging.yml:app",
         "infra/compose/staging.yml:4-53",
         _EX,
-        # FWK19: staging.yml standalone config-validation proves the app service resolves
-        # correctly (APP_IMAGE, APP_ENVIRONMENT: staging, healthcheck, depends_on).
+        # FWK19/FWK6: staging.yml standalone config-validation proves the app service resolves
+        # correctly (APP_IMAGE, APP_ENVIRONMENT: staging, healthcheck). The depends_on edge now
+        # lives in services.yml (FWK6), so staging.yml alone is the managed shape.
         "test_staging_standalone_merges",
     ),
     SurfaceClass(

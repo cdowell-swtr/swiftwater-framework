@@ -1949,3 +1949,17 @@ settings.py ≤93 cols, project ruff clean. The mongo-comment rewrite touches no
 there). **Pre-existing (NOT FWK6):** `env-parity/good/parity-preserved` fails `.env.example:16` on
 master too — FWK31's host-ports block broke its anchor; latent (tests/eval not in the gate). Flagged
 for a separate fix; out of FWK6 scope.
+
+#### #0162 · completed · FWK6 · 2026-06-17
+T9 part 3 — branch-end gate + whole-branch reviews, all green. **Gate:** ruff check + ruff format
+--check + mypy clean; full non-acceptance/eval suite **968 passed, 3 skipped** (the 2 fixture-coupling
+failures fixed). **Branch-end spec review (Sonnet) = ✅ meets spec** (all 7 areas A–E + exporters + OTLP
+delivered; no gaps, no divergence, no scope creep — the scope-widen is the spec's own clarification).
+**Branch-end whole-branch quality review (Opus) = APPROVE TO MERGE** (seam byte-identical verified live
+across all 5 battery combos; eager-`:?` gotcha handled; battery-gate consistency airtight — every
+exporter depends_on fragment backed by its observability.yml definition; managed/self-hosted merge
+behaves as specced; regression fully recovered with guards restored; live test a genuine proof). Applied
+the one cosmetic Opus nit (stale `service:staging.yml:app` registry comment re: relocated depends_on).
+**FWK6 implementation COMPLETE on branch `fwk6-datastore-runtime-parity` (9 TDD tasks).** Per user:
+**PR HELD** — release-deferred, to be batched with FWK36+FWK37 into one PR (one render-matrix run) given
+the Actions-minutes budget (90% used, resets 2026-07-01). Branch is ready-but-unpushed.
