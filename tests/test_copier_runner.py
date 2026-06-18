@@ -4158,3 +4158,19 @@ def test_dev_summary_script_renders_and_is_shellcheck_clean(tmp_path: Path):
     if shutil.which("shellcheck"):
         r = sp.run(["shellcheck", str(script)], capture_output=True, text=True)
         assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dev_targets_run_detached_with_summary(tmp_path: Path):
+    """FWK37: dev/dev:lite bring the stack up detached + healthy (`up -d --wait`) and print
+    the summary, instead of tailing logs attached."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    import yaml as _y
+
+    spec = _y.safe_load((dest / "Taskfile.yml").read_text())
+    for target in ("dev", "dev:lite"):
+        cmds = "\n".join(str(c) for c in spec["tasks"][target]["cmds"])
+        assert "up -d --wait --build" in cmds, (
+            f"{target} must use detached `up -d --wait --build`"
+        )
+        assert "./scripts/dev_summary.sh" in cmds, f"{target} must print the summary"

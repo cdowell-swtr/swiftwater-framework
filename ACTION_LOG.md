@@ -2081,3 +2081,10 @@ the react dev URL was silently dropped → added a `Frontend` row (verified prin
 raise and, as the terminal command under `set -e`, abort `task dev` → wrapped the NDJSON fallback in
 `try/except` (verified malformed input now exits 0, degrades to the bare banner); dropped the dead
 `import sys`.
+
+#### #0172 · completed · FWK37 · 2026-06-18
+T2 (subagent-driven, Sonnet): Taskfile `dev`/`dev:lite` now run `./scripts/compose.sh … up -d --wait
+--build` (detached, blocks only until healthchecks pass) + a second cmd `./scripts/dev_summary.sh …`
+with the SAME `-f …/--profile …` selector args (no arg drift). descs updated to say detached. compose.sh
++ dev:reset untouched. Render guard `test_dev_targets_run_detached_with_summary` (red→green; confirmed
+the go-task `tasks:` mapping path); regression `-k taskfile/dev/compose/render` 39 passed; ruff clean.

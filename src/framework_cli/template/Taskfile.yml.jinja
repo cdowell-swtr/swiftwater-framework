@@ -9,7 +9,7 @@ tasks:
       - framework integrity
 
   dev:
-    desc: Full local stack over HTTPS (app + Traefik). Requires Docker + mkcert.
+    desc: Full local stack over HTTPS (app + Traefik), detached + healthy; prints where everything is.
     preconditions:
       - sh: command -v docker
         msg: "Docker is required for `task dev`. Install Docker, then retry. Run `task doctor` to check all host tools."
@@ -25,10 +25,11 @@ tasks:
       GID:
         sh: id -g
     cmds:
-      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev up --build
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev up -d --wait --build
+      - ./scripts/dev_summary.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev
 
   dev:lite:
-    desc: App only over plain HTTP at localhost:8000 (no Traefik) — resource-light.
+    desc: App only over plain HTTP at localhost:8000 (no Traefik), detached + healthy; prints where everything is.
     preconditions:
       - sh: command -v docker
         msg: "Docker is required for `task dev:lite`. Run `task doctor` to check all host tools."
@@ -40,7 +41,8 @@ tasks:
       GID:
         sh: id -g
     cmds:
-      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/dev.yml --profile lite up --build
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/dev.yml --profile lite up -d --wait --build
+      - ./scripts/dev_summary.sh -f infra/compose/base.yml -f infra/compose/dev.yml --profile lite
 
   dev:reset:
     desc: Tear the local stack down (including volumes) and rebuild.
