@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Print a one-shot "stack is up" summary for the local dev stack: every running service's
+# published host port, mapped to a friendly label + URL. Derived entirely from
+# `docker compose ps` (the single source of truth) so it auto-reflects dev vs lite, present
+# batteries, and any PORT_OFFSET — no second copy of scripts/compose.sh's port map.
+# Usage: dev_summary.sh <compose selector args>   e.g.  dev_summary.sh -f a.yml -f b.yml --profile dev
+set -euo pipefail
+slug="{{ project_slug }}"
+offset="${PORT_OFFSET:-0}"
+ps_json="$(docker compose "$@" ps --format json 2>/dev/null || true)"
+SLUG="$slug" OFFSET="$offset" PS_JSON="$ps_json" python3 {% raw %}<<'PY'
+import json, os
+
+slug = os.environ["SLUG"]
+offset = os.environ["OFFSET"]
+raw = os.environ.get("PS_JSON", "").strip()
+# Best-effort: a malformed/empty `docker compose ps` must never abort `task dev` (this is the
+# terminal command under `set -e`). Degrade to the bare banner rather than raising.
+svcs = []
+if raw:
+    try:
+        parsed = json.loads(raw)
+        svcs = parsed if isinstance(parsed, list) else [parsed]
+    except json.JSONDecodeError:
+        try:
+            svcs = [json.loads(ln) for ln in raw.splitlines() if ln.strip()]
+        except Exception:
+            svcs = []
+
+port = {}
+running = set()
+for s in svcs:
+    name = s.get("Service")
+    if not name:
+        continue
+    running.add(name)
+    for pub in (s.get("Publishers") or []):
+        pp = pub.get("PublishedPort")
+        if pp:
+            port[name] = pp
+
+def line(label, value):
+    print(f"  {label:<13}{value}")
+
+bar = "━" * 50
+print(bar)
+print(f"  {slug} — stack is up  ✓        (PORT_OFFSET={offset})")
+print(bar)
+
+if "app" in port:
+    direct = f"http://localhost:{port['app']}"
+    if "traefik" in running:
+        line("App", f"https://{slug}.localhost  ·  {direct}")
+    else:
+        line("App", direct)
+
+if "frontend" in port:
+    line("Frontend", f"http://localhost:{port['frontend']}")
+
+for name, label in [
+    ("grafana", "Grafana"), ("prometheus", "Prometheus"),
+    ("alertmanager", "Alertmanager"), ("loki", "Loki"), ("tempo", "Tempo"),
+]:
+    if name in port:
+        line(label, f"http://localhost:{port[name]}")
+
+for name, label in [("postgres", "Postgres"), ("mongo", "Mongo"), ("redis", "Redis")]:
+    if name in port:
+        line(label, f"localhost:{port[name]}")
+
+exp = [(n, port[n]) for n in
+       ("postgres-exporter", "mongodb-exporter", "celery-exporter", "redis-exporter")
+       if n in port]
+if exp:
+    print("  (+ exporters: " + " · ".join(f"{n.split('-')[0]} :{p}" for n, p in exp) + ")")
+
+known = {"app", "traefik", "grafana", "prometheus", "alertmanager", "loki", "tempo",
+         "postgres", "mongo", "redis", "postgres-exporter", "mongodb-exporter",
+         "celery-exporter", "redis-exporter", "otel-collector", "promtail",
+         "worker", "beat", "frontend"}
+for name in sorted(port):
+    if name not in known:
+        line(name, f"localhost:{port[name]}")
+
+print()
+print("  logs: task dev:logs   ·   stop: task dev:down   ·   reset: task dev:reset")
+print(bar)
+PY
+{% endraw %}

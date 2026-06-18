@@ -2065,3 +2065,19 @@ FWK29 registry for dev_summary.sh. T5 **reworked** the dev:lite live test — de
 RETURNS (stack stays up), so the old `proc.terminate()` would LEAK; now synchronous, assert /health +
 summary-names-app-at-ephemeral-port, tear down via `task dev:down`. Branch-end gate + Opus review.
 Next: dispatch execution.
+
+#### #0171 · completed · FWK37 · 2026-06-18
+T1 (subagent-driven, Sonnet): created `scripts/dev_summary.sh.jinja` (copier `_templates_suffix:
+.jinja` → renders to executable `scripts/dev_summary.sh`, 100755). Derives the summary from
+`docker compose "$@" ps --format json` (no hardcoded ports — anti-drift vs compose.sh); python parse in
+a `{% raw %}`-wrapped heredoc. **Impl caught a real bug in the plan's draft:** `printf "$json" | python3
+<<'PY'` (shellcheck SC2259) — the heredoc consumes stdin (it's the script source), so `sys.stdin.read()`
+would get nothing and the ps JSON would be LOST; fixed by passing it via a `PS_JSON` env var
+(`os.environ`). Render guard `test_dev_summary_script_renders_and_is_shellcheck_clean` (renders clean, no
+raw markers leak, bash -n + shellcheck clean); ruff/mypy clean. Opus quality review caught 2 real
+Importants → fixed: (1) a running `frontend` (react battery) was in `known` but had no labeled row →
+the react dev URL was silently dropped → added a `Frontend` row (verified prints
+`http://localhost:5173`); (2) the python parse was unguarded → a malformed `docker compose ps` could
+raise and, as the terminal command under `set -e`, abort `task dev` → wrapped the NDJSON fallback in
+`try/except` (verified malformed input now exits 0, degrades to the bare banner); dropped the dead
+`import sys`.

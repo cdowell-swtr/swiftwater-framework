@@ -4136,3 +4136,25 @@ def test_generated_workflows_have_concurrency(tmp_path: Path):
         assert w["concurrency"]["cancel-in-progress"] is False, (
             f"{name} must not cancel"
         )
+
+
+def test_dev_summary_script_renders_and_is_shellcheck_clean(tmp_path: Path):
+    """FWK37: the stack-is-up summary script renders, is executable bash, and (when shellcheck
+    is available) passes it. It derives from `docker compose ps` — no hardcoded port list."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    script = dest / "scripts" / "dev_summary.sh"
+    assert script.is_file()
+    text = script.read_text()
+    assert "docker compose" in text and "ps" in text and "--format json" in text
+    assert "python3" in text  # parses ps json
+    # no second copy of compose.sh's port map (anti-drift): it must not hardcode the defaults
+    assert "8000" not in text and "3000" not in text, (
+        "summary must derive ports from ps, not hardcode"
+    )
+    import subprocess as sp
+
+    assert sp.run(["bash", "-n", str(script)]).returncode == 0
+    if shutil.which("shellcheck"):
+        r = sp.run(["shellcheck", str(script)], capture_output=True, text=True)
+        assert r.returncode == 0, r.stdout + r.stderr
