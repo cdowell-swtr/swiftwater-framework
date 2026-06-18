@@ -4111,6 +4111,8 @@ def test_prod_plus_tls_ca_merges(tmp_path: Path):
     )
     assert r.returncode == 0, r.stderr
     assert "/etc/ssl/app-ca" in r.stdout
+
+
 def test_generated_workflows_have_concurrency(tmp_path: Path):
     """FWK38: ci.yml cancels superseded PR runs; deploys + docs serialize (never cancel).
     Caps the redundant-run pile-up that drives a private consumer's Actions-minute spend."""

@@ -2026,3 +2026,15 @@ YAML); controller-verified the 4 concurrency blocks (raw-wrap correct in ci.jinj
 deploys) rather than a heavyweight subagent review. **PR HELD** to batch with FWK6/36/37 into one
 release (per maintainer; framework CI is free so no minute reason — release cadence only). Meridian's
 relief is the brief, available now, independent of the release.
+
+#### #0168 · note · housekeeping · 2026-06-18
+Assembled the **FWK6 + FWK38 batch** for one release. origin/master had advanced (PR #58 / FWK37
+plan-add merged → `b9ee738`, adding PLAN FWK37 + ACTION_LOG `#0149`), so both feature branches (off
+pre-#58 master) were stale. Pulled master, branched `fwk6-38-batch`, merged FWK6 then FWK38 (`--no-ff`,
+history preserved). Conflict resolution: **ACTION_LOG renumbered to a clean monotonic run** —
+`#0149`(#58) / `#0150–#0163`(FWK6, was 0149–0162) / `#0164–#0167`(FWK38, was 0163–0166); dropped the
+now-obsolete "numbered #0163 to clear the parallel branch" self-note. **PLAN.md** keeps both FWK37 +
+FWK38. **test_copier_runner.py** keeps both branches' appended tests (the marker-removal collapsed the
+inter-function blank lines → `ruff format` restored them — the one post-merge fix). Verified on the
+batch: ruff check + format clean (211 files), mypy clean; full suite next. Feature code is disjoint
+(FWK6 = compose/settings/integrity; FWK38 = .github/workflows), only the bookkeeping files overlapped.
