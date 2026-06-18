@@ -401,6 +401,13 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "test_rendered_project_coverage_gate_passes",
     ),
     SurfaceClass(
+        "script:scripts/dev_summary.sh",
+        "scripts/dev_summary.sh",
+        _EX,
+        # FWK37: invoked by `task dev`/`dev:lite`; the dev:lite live test asserts its printed block.
+        "test_rendered_taskfile_dev_lite_target_drives_stack",
+    ),
+    SurfaceClass(
         "script:scripts/doctor.sh",
         "scripts/doctor.sh",
         _EX,

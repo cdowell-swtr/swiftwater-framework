@@ -2096,3 +2096,10 @@ down` — NO `-v`, keeps volumes; distinct from `dev:reset`'s `down -v`). Projec
 `name:`, no `-f` needed. Render guard `test_dev_logs_and_down_targets` (asserts logs -f + slug, and NO
 -v in down); regression `-k taskfile/dev` 17 passed; ruff clean. Controller-verified the diff (mechanical
 YAML; render-guard = spec check).
+
+#### #0174 · completed · FWK37 · 2026-06-18
+T4 (subagent-driven, Sonnet): classified the new script. `scripts/dev_summary.sh` added to
+`integrity/classes.py` LOCKED_TRACKED (alphabetical: coverage < dev_summary < doctor) + a guard test;
+FWK29 registry entry `script:scripts/dev_summary.sh` (exact key enumerate emits) = EXERCISED, evidence
+the dev:lite live test (reworked in T5). `tests/integrity/` 48 + `tests/runtime_coverage/` 9 passed;
+mypy/ruff clean. Controller-verified.
