@@ -2038,3 +2038,87 @@ FWK38. **test_copier_runner.py** keeps both branches' appended tests (the marker
 inter-function blank lines → `ruff format` restored them — the one post-merge fix). Verified on the
 batch: ruff check + format clean (211 files), mypy clean; full suite next. Feature code is disjoint
 (FWK6 = compose/settings/integrity; FWK38 = .github/workflows), only the bookkeeping files overlapped.
+
+#### #0169 · note · FWK37 · 2026-06-18
+Brainstormed FWK37 (`task dev` UX) → approved spec `docs/superpowers/specs/2026-06-18-task-dev-ux-design.md`.
+Problem: `task dev`/`dev:lite` run `up --build` ATTACHED → tail every container's logs, "app is up"
+scrolls off, terminal held hostage; no on-demand logs/stop. Decisions: (1) detached + honest readiness
+`up -d --wait --build` (Compose returns only when healthchecks pass — existing healthchecks make it
+free); (2) **comprehensive** summary (readability = clean static block + no scrolling, not trimming);
+(3) **derived from the running stack** — new `scripts/dev_summary.sh` reads `docker compose -p
+{{project_slug}} ps` (json via python3) → maps service→label/URL, single source of truth (auto-reflects
+dev/lite, batteries, PORT_OFFSET; no drift vs compose.sh); (4) namespaced `task dev:logs`
+(`compose -p {slug} logs -f`) + `task dev:down` (`compose -p {slug} down`, NO -v → keeps volumes,
+distinct from dev:reset). compose.sh unchanged (still port-shifts + execs); Taskfile orchestrates
+up-then-summary as two cmds. dev_summary.sh = new surface → integrity LOCKED_TRACKED + FWK29 entry.
+Testing: render guards + live acceptance (bring up dev:lite, run dev_summary.sh, assert app URL at the
+offset-aware port + a present store) + shellcheck. Next: writing-plans. Template payload, release-deferred.
+
+#### #0170 · note · FWK37 · 2026-06-18
+Wrote the FWK37 implementation plan `docs/superpowers/plans/2026-06-18-task-dev-ux.md` (5 tasks).
+T1 `scripts/dev_summary.sh` (new): derives the summary from `docker compose <-f set> ps --format json`
+parsed by python3 (heredoc `{% raw %}`-wrapped so Jinja ignores Python braces; slug/offset via env, not
+Jinja-in-Python); maps service→label/URL, comprehensive, unknown-service catch-all. T2 Taskfile dev/
+dev:lite → `up -d --wait --build` + `dev_summary.sh` step (compose.sh unchanged). T3 `dev:logs`
+(`compose -p slug logs -f`) + `dev:down` (`compose -p slug down`, NO -v). T4 integrity LOCKED_TRACKED +
+FWK29 registry for dev_summary.sh. T5 **reworked** the dev:lite live test — detached `task dev:lite`
+RETURNS (stack stays up), so the old `proc.terminate()` would LEAK; now synchronous, assert /health +
+summary-names-app-at-ephemeral-port, tear down via `task dev:down`. Branch-end gate + Opus review.
+Next: dispatch execution.
+
+#### #0171 · completed · FWK37 · 2026-06-18
+T1 (subagent-driven, Sonnet): created `scripts/dev_summary.sh.jinja` (copier `_templates_suffix:
+.jinja` → renders to executable `scripts/dev_summary.sh`, 100755). Derives the summary from
+`docker compose "$@" ps --format json` (no hardcoded ports — anti-drift vs compose.sh); python parse in
+a `{% raw %}`-wrapped heredoc. **Impl caught a real bug in the plan's draft:** `printf "$json" | python3
+<<'PY'` (shellcheck SC2259) — the heredoc consumes stdin (it's the script source), so `sys.stdin.read()`
+would get nothing and the ps JSON would be LOST; fixed by passing it via a `PS_JSON` env var
+(`os.environ`). Render guard `test_dev_summary_script_renders_and_is_shellcheck_clean` (renders clean, no
+raw markers leak, bash -n + shellcheck clean); ruff/mypy clean. Opus quality review caught 2 real
+Importants → fixed: (1) a running `frontend` (react battery) was in `known` but had no labeled row →
+the react dev URL was silently dropped → added a `Frontend` row (verified prints
+`http://localhost:5173`); (2) the python parse was unguarded → a malformed `docker compose ps` could
+raise and, as the terminal command under `set -e`, abort `task dev` → wrapped the NDJSON fallback in
+`try/except` (verified malformed input now exits 0, degrades to the bare banner); dropped the dead
+`import sys`.
+
+#### #0172 · completed · FWK37 · 2026-06-18
+T2 (subagent-driven, Sonnet): Taskfile `dev`/`dev:lite` now run `./scripts/compose.sh … up -d --wait
+--build` (detached, blocks only until healthchecks pass) + a second cmd `./scripts/dev_summary.sh …`
+with the SAME `-f …/--profile …` selector args (no arg drift). descs updated to say detached. compose.sh
++ dev:reset untouched. Render guard `test_dev_targets_run_detached_with_summary` (red→green; confirmed
+the go-task `tasks:` mapping path); regression `-k taskfile/dev/compose/render` 39 passed; ruff clean.
+
+#### #0173 · completed · FWK37 · 2026-06-18
+T3 (subagent-driven, Sonnet): added `dev:logs` (`docker compose -p {{project_slug}} logs -f` — follow
+on demand, Ctrl-C stops following not the stack) + `dev:down` (`docker compose -p {{project_slug}}
+down` — NO `-v`, keeps volumes; distinct from `dev:reset`'s `down -v`). Project-scoped via base.yml's
+`name:`, no `-f` needed. Render guard `test_dev_logs_and_down_targets` (asserts logs -f + slug, and NO
+-v in down); regression `-k taskfile/dev` 17 passed; ruff clean. Controller-verified the diff (mechanical
+YAML; render-guard = spec check).
+
+#### #0174 · completed · FWK37 · 2026-06-18
+T4 (subagent-driven, Sonnet): classified the new script. `scripts/dev_summary.sh` added to
+`integrity/classes.py` LOCKED_TRACKED (alphabetical: coverage < dev_summary < doctor) + a guard test;
+FWK29 registry entry `script:scripts/dev_summary.sh` (exact key enumerate emits) = EXERCISED, evidence
+the dev:lite live test (reworked in T5). `tests/integrity/` 48 + `tests/runtime_coverage/` 9 passed;
+mypy/ruff clean. Controller-verified.
+
+#### #0175 · completed · FWK37 · 2026-06-18
+T5 (subagent-driven, Sonnet, sandbox-off + TMPDIR=/var/tmp): reworked
+`test_rendered_taskfile_dev_lite_target_drives_stack` for the detached behavior. Old version
+backgrounded `task dev:lite` (it ran attached) + tore down via `proc.terminate()` — which under FWK37's
+detached `up -d --wait` would LEAK the stack (task returns, containers keep running). Now: run `task
+dev:lite` synchronously (returns after --wait healthy), assert /health 200 over the ephemeral port AND
+that the printed summary names the app at `http://localhost:<port>`, tear down via `task dev:down` in
+finally. **The live end-to-end proof of FWK37** (detached up + derive-from-ps summary at the offset-aware
+port). PASS in 48.75s; **bite-proven no leak** (`docker compose -p demo ps -q` empty after teardown);
+diff confined to the one function; ruff clean. **Branch-end Opus review caught a real teardown leak the
+impl's bite-proof missed:** the acceptance isolate-fixture renames the project via
+`COMPOSE_PROJECT_NAME=swfwacc-<test>`, but `task dev:down`'s explicit `-p {{slug}}` (`demo`) OVERRIDES
+that → tore down the empty `demo` project, leaking the test's real `swfwacc-` stack (the bite-proof
+checked `-p demo ps`, the wrong project → false "no leak"). The shipped `dev:down` is correct for real
+consumers (project == slug); the bug was only using it as the TEST teardown under the fixture. Fixed:
+teardown is now a bare `docker compose -f base -f dev --profile lite down -v` with `env` (carries
+COMPOSE_PROJECT_NAME) — matches the sibling dev:lite tests. Re-verified: live test PASS 34s, **no
+`swfwacc`/`demo` containers leaked** after. Full `test_copier_runner` 268 passed.

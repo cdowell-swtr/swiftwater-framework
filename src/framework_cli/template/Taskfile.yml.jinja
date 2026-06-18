@@ -9,7 +9,7 @@ tasks:
       - framework integrity
 
   dev:
-    desc: Full local stack over HTTPS (app + Traefik). Requires Docker + mkcert.
+    desc: Full local stack over HTTPS (app + Traefik), detached + healthy; prints where everything is.
     preconditions:
       - sh: command -v docker
         msg: "Docker is required for `task dev`. Install Docker, then retry. Run `task doctor` to check all host tools."
@@ -25,10 +25,11 @@ tasks:
       GID:
         sh: id -g
     cmds:
-      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev up --build
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev up -d --wait --build
+      - ./scripts/dev_summary.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev
 
   dev:lite:
-    desc: App only over plain HTTP at localhost:8000 (no Traefik) — resource-light.
+    desc: App only over plain HTTP at localhost:8000 (no Traefik), detached + healthy; prints where everything is.
     preconditions:
       - sh: command -v docker
         msg: "Docker is required for `task dev:lite`. Run `task doctor` to check all host tools."
@@ -40,7 +41,8 @@ tasks:
       GID:
         sh: id -g
     cmds:
-      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/dev.yml --profile lite up --build
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/dev.yml --profile lite up -d --wait --build
+      - ./scripts/dev_summary.sh -f infra/compose/base.yml -f infra/compose/dev.yml --profile lite
 
   dev:reset:
     desc: Tear the local stack down (including volumes) and rebuild.
@@ -50,6 +52,16 @@ tasks:
     cmds:
       - docker compose -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev down -v
       - task: dev
+
+  dev:logs:
+    desc: Follow the dev stack's logs (Ctrl-C stops following; the stack keeps running).
+    cmds:
+      - docker compose -p {{ project_slug }} logs -f
+
+  dev:down:
+    desc: Stop the dev stack but KEEP volumes (data survives). Use dev:reset to wipe + rebuild.
+    cmds:
+      - docker compose -p {{ project_slug }} down
 
   test:
     desc: Run the test suite

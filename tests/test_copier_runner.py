@@ -4136,3 +4136,56 @@ def test_generated_workflows_have_concurrency(tmp_path: Path):
         assert w["concurrency"]["cancel-in-progress"] is False, (
             f"{name} must not cancel"
         )
+
+
+def test_dev_summary_script_renders_and_is_shellcheck_clean(tmp_path: Path):
+    """FWK37: the stack-is-up summary script renders, is executable bash, and (when shellcheck
+    is available) passes it. It derives from `docker compose ps` — no hardcoded port list."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    script = dest / "scripts" / "dev_summary.sh"
+    assert script.is_file()
+    text = script.read_text()
+    assert "docker compose" in text and "ps" in text and "--format json" in text
+    assert "python3" in text  # parses ps json
+    # no second copy of compose.sh's port map (anti-drift): it must not hardcode the defaults
+    assert "8000" not in text and "3000" not in text, (
+        "summary must derive ports from ps, not hardcode"
+    )
+    import subprocess as sp
+
+    assert sp.run(["bash", "-n", str(script)]).returncode == 0
+    if shutil.which("shellcheck"):
+        r = sp.run(["shellcheck", str(script)], capture_output=True, text=True)
+        assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_dev_targets_run_detached_with_summary(tmp_path: Path):
+    """FWK37: dev/dev:lite bring the stack up detached + healthy (`up -d --wait`) and print
+    the summary, instead of tailing logs attached."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    import yaml as _y
+
+    spec = _y.safe_load((dest / "Taskfile.yml").read_text())
+    for target in ("dev", "dev:lite"):
+        cmds = "\n".join(str(c) for c in spec["tasks"][target]["cmds"])
+        assert "up -d --wait --build" in cmds, (
+            f"{target} must use detached `up -d --wait --build`"
+        )
+        assert "./scripts/dev_summary.sh" in cmds, f"{target} must print the summary"
+
+
+def test_dev_logs_and_down_targets(tmp_path: Path):
+    """FWK37: on-demand log-follow + a stop that KEEPS volumes (distinct from dev:reset's -v)."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    import yaml as _y
+
+    spec = _y.safe_load((dest / "Taskfile.yml").read_text())
+    logs = "\n".join(str(c) for c in spec["tasks"]["dev:logs"]["cmds"])
+    down = "\n".join(str(c) for c in spec["tasks"]["dev:down"]["cmds"])
+    assert (
+        "logs -f" in logs and "demo" in logs
+    )  # project-scoped follow (slug=demo in DATA)
+    assert "down" in down and "-v" not in down, "dev:down must keep volumes (no -v)"

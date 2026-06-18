@@ -100,3 +100,9 @@ def test_tls_ca_overlay_is_intentionally_unlocked():
     from framework_cli.integrity.classes import INTENTIONALLY_UNLOCKED
 
     assert "infra/compose/tls-ca.yml" in INTENTIONALLY_UNLOCKED
+
+
+def test_dev_summary_script_is_locked():
+    from framework_cli.integrity.classes import LOCKED_TRACKED
+
+    assert "scripts/dev_summary.sh" in LOCKED_TRACKED
