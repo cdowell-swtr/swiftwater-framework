@@ -10,6 +10,12 @@ on:
 permissions:
   contents: write # mike pushes the built site to the gh-pages branch
 
+# Serialize release publishes — never cancel a publish, and don't let two tag publishes race
+# the gh-pages branch.
+concurrency:
+  group: docs
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest

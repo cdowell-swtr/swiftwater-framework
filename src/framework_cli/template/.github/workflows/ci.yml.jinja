@@ -11,6 +11,20 @@ on:
 permissions:
   contents: read
 
+# Cancel a superseded run when you push again to the same branch/PR — the latest commit is the
+# only one that matters, and this stops redundant CI from piling up (the dominant Actions cost
+# for an active repo: this workflow's jobs are billed per-job, rounded up to the minute).
+concurrency:
+  group: {% raw %}${{ github.workflow }}-${{ github.ref }}{% endraw %}
+  cancel-in-progress: true
+
+# Optional: skip CI on docs-only changes by adding `paths-ignore` under the triggers above, e.g.
+#   pull_request:
+#     paths-ignore: ["**.md", "docs/**"]
+# CAVEAT: only do this if these CI jobs are NOT branch-protection-"required" — a required check
+# skipped by a paths filter wedges the PR at "Expected — waiting for status". (A wedge-safe
+# variant needs an always-running aggregate "ci-complete" sentinel; not shipped.)
+
 jobs:
   # Step 0: framework integrity — verify the framework scaffolding is intact before anything
   # else. Installs the framework CLI pinned to the version this project was generated from

@@ -1788,3 +1788,14 @@ deploy-prod/docs (deploy-*.yml are verbatim non-jinja → no raw); T3 produce th
 workflows + integrity-drift-self-heals note; fact-checked against Meridian's real files; NOT applied by
 me). Render guard `test_generated_workflows_have_concurrency`. User: FWK6/36/37 batch into this release
 too (brief unblocks Meridian regardless). Next: dispatch execution.
+
+#### #0165 · completed · FWK38 · 2026-06-18
+T1+T2 (inline executing-plans): `concurrency` added to all 4 generated workflows.
+`ci.yml.jinja` — `cancel-in-progress: true`, group `${{ github.workflow }}-${{ github.ref }}`
+(`{% raw %}`-wrapped since it's a rendered .jinja; render-verified it unescapes correctly) + the opt-in
+`paths-ignore` comment with the required-check wedge caveat. `deploy-staging.yml` / `deploy-prod.yml`
+(verbatim, non-jinja → literal group, no raw) + `docs.yml.jinja` — serialized groups
+(`deploy-staging`/`deploy-prod`/`docs`, `cancel-in-progress: false`; deploys never cancel mid-deploy,
+docs prevents racing gh-pages publishes) + deploy-staging opt-in paths comment. TDD via
+`test_generated_workflows_have_concurrency` (red→green); workflow/ci/deploy regressions 25 passed,
+`test_workflow_node24` 3 passed; ruff clean. Committed T1+T2 together (shared test → no red commit).

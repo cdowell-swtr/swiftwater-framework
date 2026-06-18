@@ -18,6 +18,11 @@ permissions:
   contents: read
   packages: read
 
+# Serialize prod deploys — never cancel an in-flight deploy.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
 jobs:
   deploy-prod:
     runs-on: ubuntu-latest

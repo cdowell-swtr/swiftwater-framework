@@ -3840,3 +3840,28 @@ def test_compose_wrapper_shifts_host_ports_by_offset(tmp_path: Path):
     # No offset → today's defaults (single-stack DX preserved).
     defaults = run_wrapper({})
     assert defaults["HTTP_HOST_PORT"] == "8000"
+
+
+def test_generated_workflows_have_concurrency(tmp_path: Path):
+    """FWK38: ci.yml cancels superseded PR runs; deploys + docs serialize (never cancel).
+    Caps the redundant-run pile-up that drives a private consumer's Actions-minute spend."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    wf = dest / ".github" / "workflows"
+
+    ci = yaml.safe_load((wf / "ci.yml").read_text())
+    assert ci["concurrency"]["group"] == "${{ github.workflow }}-${{ github.ref }}"
+    assert ci["concurrency"]["cancel-in-progress"] is True
+    # opt-in paths guidance is present (commented, so read raw text)
+    assert "paths-ignore" in (wf / "ci.yml").read_text()
+
+    for name, group in (
+        ("deploy-staging.yml", "deploy-staging"),
+        ("deploy-prod.yml", "deploy-prod"),
+        ("docs.yml", "docs"),
+    ):
+        w = yaml.safe_load((wf / name).read_text())
+        assert w["concurrency"]["group"] == group, f"{name} concurrency group"
+        assert w["concurrency"]["cancel-in-progress"] is False, (
+            f"{name} must not cancel"
+        )
