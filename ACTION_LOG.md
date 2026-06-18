@@ -2103,3 +2103,22 @@ T4 (subagent-driven, Sonnet): classified the new script. `scripts/dev_summary.sh
 FWK29 registry entry `script:scripts/dev_summary.sh` (exact key enumerate emits) = EXERCISED, evidence
 the dev:lite live test (reworked in T5). `tests/integrity/` 48 + `tests/runtime_coverage/` 9 passed;
 mypy/ruff clean. Controller-verified.
+
+#### #0175 · completed · FWK37 · 2026-06-18
+T5 (subagent-driven, Sonnet, sandbox-off + TMPDIR=/var/tmp): reworked
+`test_rendered_taskfile_dev_lite_target_drives_stack` for the detached behavior. Old version
+backgrounded `task dev:lite` (it ran attached) + tore down via `proc.terminate()` — which under FWK37's
+detached `up -d --wait` would LEAK the stack (task returns, containers keep running). Now: run `task
+dev:lite` synchronously (returns after --wait healthy), assert /health 200 over the ephemeral port AND
+that the printed summary names the app at `http://localhost:<port>`, tear down via `task dev:down` in
+finally. **The live end-to-end proof of FWK37** (detached up + derive-from-ps summary at the offset-aware
+port). PASS in 48.75s; **bite-proven no leak** (`docker compose -p demo ps -q` empty after teardown);
+diff confined to the one function; ruff clean. **Branch-end Opus review caught a real teardown leak the
+impl's bite-proof missed:** the acceptance isolate-fixture renames the project via
+`COMPOSE_PROJECT_NAME=swfwacc-<test>`, but `task dev:down`'s explicit `-p {{slug}}` (`demo`) OVERRIDES
+that → tore down the empty `demo` project, leaking the test's real `swfwacc-` stack (the bite-proof
+checked `-p demo ps`, the wrong project → false "no leak"). The shipped `dev:down` is correct for real
+consumers (project == slug); the bug was only using it as the TEST teardown under the fixture. Fixed:
+teardown is now a bare `docker compose -f base -f dev --profile lite down -v` with `env` (carries
+COMPOSE_PROJECT_NAME) — matches the sibling dev:lite tests. Re-verified: live test PASS 34s, **no
+`swfwacc`/`demo` containers leaked** after. Full `test_copier_runner` 268 passed.

@@ -1311,68 +1311,46 @@ def test_rendered_taskfile_dev_lite_precondition_rejects_missing_lock(
     reason="uv + docker + go-task required: task dev:lite live-stack exercise",
 )
 def test_rendered_taskfile_dev_lite_target_drives_stack(tmp_path: Path) -> None:
-    # M5/FWK25: the existing dev:lite test calls raw `docker compose … up` directly, bypassing
-    # `task`. Running `task dev:lite` exercises the preconditions (docker + uv.lock), the
-    # -f merge order, and the UID/GID env shell-outs. The target calls ./scripts/compose.sh
-    # (FWK31 PORT_OFFSET wrapper) in attached mode — run it as a background subprocess, poll
-    # /health over the ephemeral host port, assert up, then tear down.
+    # FWK37: `task dev:lite` now runs DETACHED (`up -d --wait`) and prints the stack-is-up
+    # summary, then returns. Run it synchronously; assert /health over the ephemeral port AND
+    # that the summary names the app at that port. Teardown uses a bare `down -v` (NOT
+    # `task dev:down`): the isolate-fixture renames the project via COMPOSE_PROJECT_NAME, which
+    # the env carries into a bare `down`, but `dev:down`'s explicit `-p {{slug}}` would override
+    # that and tear down the wrong (empty) project, leaking this test's isolated stack.
     import json as _json
 
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     assert subprocess.run(["uv", "lock"], cwd=dest).returncode == 0
-
-    base = "infra/compose/base.yml"
-    dev = "infra/compose/dev.yml"
+    base, dev = "infra/compose/base.yml", "infra/compose/dev.yml"
     env = _compose_env()
-    # task dev:lite runs compose attached; background it so the test can poll.
-    proc = subprocess.Popen(
-        ["task", "dev:lite"],
-        cwd=dest,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
     try:
-        # discover the ephemeral host port the isolate-fixture bound to 0.
-        # give docker a moment to bind before querying the port mapping.
-        port = None
-        deadline = time.time() + 120
-        while time.time() < deadline:
-            try:
-                port = _compose_host_port(dest, [base, dev], "app", 8000)
-                break
-            except (subprocess.CalledProcessError, ValueError, IndexError):
-                time.sleep(3)
-        assert port is not None, (
-            "could not resolve the app ephemeral host port within 120s — "
-            "task dev:lite may not have started docker compose"
+        up = subprocess.run(
+            ["task", "dev:lite"],
+            cwd=dest,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=600,
         )
-
-        # poll /health until 200 (proves the whole task entrypoint: preconditions passed,
-        # compose.sh invoked correctly, stack came up with the right -f merge order,
-        # UID/GID env reached the container so the bind mount is host-owned).
-        body = None
-        deadline = time.time() + 120
-        while time.time() < deadline:
-            try:
-                with urllib.request.urlopen(
-                    f"http://localhost:{port}/health", timeout=3
-                ) as resp:
-                    if resp.status == 200:
-                        body = _json.loads(resp.read())
-                        break
-            except OSError:
-                time.sleep(3)
-        assert body is not None, (
-            f"app did not serve /health 200 within 120s after `task dev:lite` "
-            f"(port={port}) — precondition, merge order, or UID/GID env regression"
-        )
+        assert up.returncode == 0, f"task dev:lite failed:\n{up.stdout}\n{up.stderr}"
+        port = _compose_host_port(dest, [base, dev], "app", 8000)
+        with urllib.request.urlopen(
+            f"http://localhost:{port}/health", timeout=5
+        ) as resp:
+            assert resp.status == 200
+            body = _json.loads(resp.read())
         assert body["status"] in {"ok", "degraded"}
-        assert "request_latency_p99_ms" in body["slos"]
+        # the summary (printed by dev_summary.sh as the 2nd cmd) named the app at this port;
+        # stdout carries the Python print() output from dev_summary.sh
+        out = up.stdout + up.stderr
+        assert "stack is up" in out, f"no summary in task dev:lite output:\n{out}"
+        assert f"http://localhost:{port}" in out, (
+            f"summary did not show the app at the ephemeral port {port}:\n{out}"
+        )
     finally:
-        proc.terminate()
-        # Tear down via raw compose with the same -f list + isolation env.
+        # bare `down -v` with env (carries COMPOSE_PROJECT_NAME from the isolate fixture) → tears
+        # down THIS test's isolated stack; -v is correct for a throwaway test stack.
         subprocess.run(
             [
                 "docker",
@@ -1388,11 +1366,9 @@ def test_rendered_taskfile_dev_lite_target_drives_stack(tmp_path: Path) -> None:
             ],
             cwd=dest,
             env=env,
+            capture_output=True,
+            text=True,
         )
-        try:
-            proc.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            proc.kill()
 
 
 @pytest.mark.skipif(
