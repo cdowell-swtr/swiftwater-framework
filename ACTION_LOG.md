@@ -2122,3 +2122,16 @@ consumers (project == slug); the bug was only using it as the TEST teardown unde
 teardown is now a bare `docker compose -f base -f dev --profile lite down -v` with `env` (carries
 COMPOSE_PROJECT_NAME) — matches the sibling dev:lite tests. Re-verified: live test PASS 34s, **no
 `swfwacc`/`demo` containers leaked** after. Full `test_copier_runner` 268 passed.
+
+#### #0176 · milestone · release · 2026-06-18
+Cut **v0.3.0** (minor bump — carries behavior changes + new capability, not just patches). Bumped
+`pyproject` `0.2.12 → 0.3.0`, `dogfood.py DOGFOOD_COMMIT v0.2.12 → v0.3.0`, regenerated `uv.lock`
+(`framework-cli 0.2.12 → 0.3.0`). Moved FWK6/FWK36/FWK37/FWK38 → PLAN `Done`. **Ships** (vs v0.2.12):
+**FWK36** websockets `/ws` fix (`websockets>=14` — existing websockets consumers need it); **FWK20** dev
+`beat --schedule=/tmp/...` crash fix (scheduled tasks fire in local dev again); **FWK6** data-store
+runtime parity (compose topology change — postgres → services.yml; managed-store support); **FWK37**
+`task dev` detached + summary + `dev:logs`/`dev:down` (attached→detached behavior change); **FWK38**
+generated-workflow `concurrency`. Minor bump rationale: FWK6 (prod/staging compose topology) and FWK37
+(detached `task dev`) change behavior; `framework upgrade` re-renders the compose files + `task dev`.
+Cut via a release PR (master protected); render-matrix on #59/#60 already proved the payload green; tag
+`v0.3.0` after merge → `release.yml` publishes. Per [[release-cut-procedure]].
