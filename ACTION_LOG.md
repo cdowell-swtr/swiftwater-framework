@@ -1755,3 +1755,20 @@ source of truth" line (FWK3). Branch hygiene: local + remote already clean — o
 `gh-pages` remain (all feature branches auto-deleted on their squash-merges). Native memories
 recorded (unattended coverage-batch run pattern; pre-run adversarial plan verification). Docs/state
 only → no release.
+
+#### #0163 · note · FWK38 · 2026-06-18
+Brainstormed FWK38 (CI Actions-minutes savings) → approved spec
+`docs/superpowers/specs/2026-06-18-ci-actions-minutes-savings-design.md`. (Numbered #0163, not #0149,
+to clear the parallel fwk6 branch's #0149–#0162; the gap self-heals when fwk6 merges.) Premise-correcting
+finding: the framework repo is **PUBLIC → unlimited free CI** (timing API bills 0), so optimizing it
+saves nothing on the quota; the 1834/2000 included min is **Meridian** (private). Root cause: the
+generated `ci.yml` fans into 9 per-job-billed jobs with NO `concurrency`, so mid-PR pushes pile up
+redundant 9-min runs. Scope = levers 1 (concurrency) + 3 (paths); lever 2 (collapse the fan-out)
+deferred. Two targets: **(A)** template fix (this FWK38, off `master` branch `fwk38-ci-actions-savings`)
+— `concurrency` on all 4 generated workflows (ci/docs cancel-in-progress:true; deploys serialized
+false) + `paths` include on `docs.yml`; NO workflow-level `paths-ignore` on `ci.yml` (wedges
+required checks for consumers — opt-in comment + deferred sentinel restructure); **(B)** a written
+**brief** for Meridian to apply the same now (Meridian `main` has no required checks → `ci.yml`
+`paths-ignore` safe; locked-file drift self-heals on next `framework upgrade`) — I produce the brief,
+I do NOT edit Meridian (per maintainer). Next: writing-plans. Template payload, release-deferred (batch
+cadence, not minutes — framework CI is free).
