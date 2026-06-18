@@ -419,15 +419,19 @@ def test_render_tempo_otel_collector(tmp_path: Path):
     # The overlay carries the OTEL app fragment (deep-merged onto app):
     overlay_app_env = overlay["services"]["app"]["environment"]
     assert overlay_app_env["APP_OTEL_ENABLED"] == "true"
+    # FWK6: the OTLP endpoint is env-overridable now (default unchanged).
     assert (
         overlay_app_env["APP_OTEL_EXPORTER_OTLP_ENDPOINT"]
-        == "http://otel-collector:4317"
+        == "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
     )
     # dev.yml app still has these too (harmless redundancy — overlay + dev both set them):
     dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
     app_env = dev["services"]["app"]["environment"]
     assert app_env["APP_OTEL_ENABLED"] == "true"
-    assert app_env["APP_OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4317"
+    assert (
+        app_env["APP_OTEL_EXPORTER_OTLP_ENDPOINT"]
+        == "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
+    )
 
 
 def test_render_includes_db_model_and_repository(tmp_path: Path):
@@ -2047,6 +2051,8 @@ def test_managed_db_topology_drops_postgres_and_depends_on(tmp_path: Path):
             str(comp / "prod.yml"),
             "-f",
             str(comp / "services.yml"),
+            "-f",
+            str(comp / "observability.yml"),
             "config",
         ],
         capture_output=True,
@@ -2310,7 +2316,9 @@ def test_staging_standalone_merges(tmp_path: Path) -> None:
 
     FWK6 section B: staging.yml no longer defines postgres; it is an app-only file.
     Managed deploy = `-f staging.yml` + APP_DATABASE_URL pointing at managed PG (no POSTGRES_PASSWORD).
-    Self-hosted deploy = `-f staging.yml -f services.yml` (postgres comes from services.yml).
+    Self-hosted deploy = `-f staging.yml -f services.yml -f observability.yml` (postgres comes
+    from services.yml; observability.yml is required — services.yml's exporter depends_on
+    fragments are image-less and only valid merged with the exporter definitions there).
     """
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
@@ -2404,7 +2412,9 @@ def test_staging_plus_services_overlay_merges(tmp_path: Path) -> None:
         "APP_ENVIRONMENT is not 'staging' in the staging+services merge — wrong merge order"
     )
 
-    # services.yml without batteries → no worker/beat/redis/mongo (no phantom services)
+    # services.yml without batteries → no worker/beat/redis/mongo (no phantom services);
+    # observability.yml is always merged in practice (provides exporter images for the
+    # postgres-exporter depends_on fragment that services.yml contributes).
     dest2 = tmp_path / "demo_bare"
     render_project(dest2, {**DATA})  # no batteries
     comp2 = dest2 / "infra" / "compose"
@@ -2416,6 +2426,8 @@ def test_staging_plus_services_overlay_merges(tmp_path: Path) -> None:
             str(comp2 / "staging.yml"),
             "-f",
             str(comp2 / "services.yml"),
+            "-f",
+            str(comp2 / "observability.yml"),
             "config",
         ],
         capture_output=True,
@@ -2423,7 +2435,7 @@ def test_staging_plus_services_overlay_merges(tmp_path: Path) -> None:
         env=env,
     )
     assert r2.returncode == 0, (
-        f"staging.yml + services.yml (no batteries) config failed:\n{r2.stderr}"
+        f"staging.yml + services.yml + observability.yml (no batteries) config failed:\n{r2.stderr}"
     )
     assert "worker" not in r2.stdout and "redis" not in r2.stdout, (
         "worker or redis appeared in staging+services (no batteries) merge — "
@@ -3977,3 +3989,52 @@ def test_production_compose_urls_are_env_overridable(tmp_path: Path):
             assert m.group(2).startswith("${"), (
                 f"{fname}: {m.group(1)} still a bare literal: {m.group(2)}"
             )
+
+
+def test_observability_backend_connections_are_env_overridable(tmp_path: Path):
+    """FWK6: the store exporters' connections and the OTLP egress are env-overridable
+    (same foreclosure class as the app data-store URLs)."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "mongodb"]})
+    comp = dest / "infra" / "compose"
+    obs = (comp / "observability.yml").read_text()
+    assert (
+        "${POSTGRES_EXPORTER_DSN:-postgresql://app:${POSTGRES_PASSWORD:-app}@postgres:5432/app?sslmode=disable}"
+        in obs
+    )
+    assert "${MONGODB_EXPORTER_URI:-mongodb://mongo:27017}" in obs
+    assert "${CELERY_EXPORTER_BROKER_URL:-redis://redis:6379/0}" in obs
+    assert "${REDIS_EXPORTER_ADDR:-redis://redis:6379}" in obs
+    # OTLP egress env-overridable everywhere it appears (dev, services, observability)
+    for fname in ("dev.yml", "services.yml", "observability.yml"):
+        text = (comp / fname).read_text()
+        for line in text.splitlines():
+            if "APP_OTEL_EXPORTER_OTLP_ENDPOINT" in line:
+                assert (
+                    "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
+                    in line
+                ), f"{fname}: OTLP endpoint not env-overridable: {line.strip()}"
+
+
+def test_exporter_depends_on_moved_to_services_overlay(tmp_path: Path):
+    """FWK6: each store exporter's depends_on edge lives in services.yml (next to its store),
+    not in the locked observability.yml — so removing a store from services.yml (managed)
+    drops the exporter's dependency too, with no dangling edge."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "mongodb"]})
+    comp = dest / "infra" / "compose"
+    obs = yaml.safe_load((comp / "observability.yml").read_text())
+    svc = yaml.safe_load((comp / "services.yml").read_text())
+    for exporter, store in (
+        ("postgres-exporter", "postgres"),
+        ("mongodb-exporter", "mongo"),
+        ("celery-exporter", "redis"),
+        ("redis-exporter", "redis"),
+    ):
+        assert "depends_on" not in obs["services"][exporter], (
+            f"{exporter} still has depends_on in observability.yml"
+        )
+        assert (
+            svc["services"][exporter]["depends_on"][store]["condition"]
+            == "service_healthy"
+        ), f"{exporter} depends_on {store} not relocated to services.yml"

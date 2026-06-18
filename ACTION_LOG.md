@@ -1854,3 +1854,22 @@ Controller forward-fixed: re-wrapped the 7 worker/beat URLs (`${VAR:-default}`, 
 restored both guard tests (the no-bare-literal sweep now also covers services.yml). 10 FWK6 URL/topology
 tests green; ruff clean. Lesson: a "deletes the failing guard" edit slips past a green run — diff the
 test-def set across tasks.
+
+#### #0155 · completed · FWK6 · 2026-06-17
+T4 (subagent-driven, Sonnet impl) — observability backend parity (scope-widening tail): env-wrapped the
+4 store-exporter connections in `observability.yml` (`POSTGRES_EXPORTER_DSN` / `MONGODB_EXPORTER_URI` /
+`CELERY_EXPORTER_BROKER_URL` / `REDIS_EXPORTER_ADDR`) + all 6 `APP_OTEL_EXPORTER_OTLP_ENDPOINT` literals
+(dev ×3, services ×2, obs ×1); removed the 4 exporter `depends_on` blocks from observability.yml and
+relocated them into `services.yml` fragments grouped next to each store under matching battery gates
+(postgres-exporter always; mongodb/celery/redis gated). Managed workflow: deleting a store block from the
+editable services.yml drops the store + app + exporter edges together; no dangling depends_on in the
+locked observability.yml. New coupling (acceptable — matches the deploy command): services.yml exporter
+fragments are depends_on-only, valid only when merged with observability.yml (which defines the exporter)
+— the standard `-f env -f services -f observability` merge. 2 new tests (env-overridable + depends_on-
+relocated); +2 def count, none deleted (T3-lesson check clean). Controller fixed `test_render_tempo_otel_
+collector` (2 stale exact-match assertions on the now-wrapped OTLP literal — the impl's `-k` filter missed
+it; caught by the full-file run). Full `test_copier_runner.py` **260 passed**; deploy/integrity/obs 68
+passed; mypy/ruff clean. Spec review ✅ (gates exactly consistent across all battery combos; 0 tests
+deleted) + Opus quality APPROVE (coupling verified sound — 3-way merge rc=0, 2-way services-without-obs
+correctly fails; defaults byte-identical; no `:?` hazard) → applied the one Minor (corrected a stale
+`test_staging_standalone_merges` docstring describing the now-invalid 2-way merge).

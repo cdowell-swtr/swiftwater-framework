@@ -43,6 +43,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # depends_on fragment: merged onto observability.yml's postgres-exporter so it waits
+  # for the co-located postgres. Dropped with the store block in the managed case.
+  postgres-exporter:
+    depends_on:
+      postgres:
+        condition: service_healthy
 {%- if "mongodb" in batteries or "workers" in batteries or "redis" in batteries %}
 {%- if "mongodb" in batteries %}
   mongo:
@@ -56,6 +63,12 @@ services:
       start_period: 10s
     volumes:
       - "mongodata:/data/db"
+
+  # depends_on fragment: merged onto observability.yml's mongodb-exporter.
+  mongodb-exporter:
+    depends_on:
+      mongo:
+        condition: service_healthy
 {%- endif %}
 {%- if "workers" in batteries or "redis" in batteries %}
   redis:
@@ -68,6 +81,12 @@ services:
       retries: 10
     volumes:
       - "redisdata:/data"
+
+  # depends_on fragment: merged onto observability.yml's redis-exporter.
+  redis-exporter:
+    depends_on:
+      redis:
+        condition: service_healthy
 {%- endif %}
 {%- if "workers" in batteries %}
 
@@ -82,7 +101,7 @@ services:
       APP_CELERY_BROKER_URL: "${APP_CELERY_BROKER_URL:-redis://redis:6379/0}"
       APP_CELERY_RESULT_BACKEND: "${APP_CELERY_RESULT_BACKEND:-redis://redis:6379/1}"
       APP_OTEL_ENABLED: "true"
-      APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      APP_OTEL_EXPORTER_OTLP_ENDPOINT: "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
     healthcheck:
       test: ["CMD", "celery", "-A", "{{ package_name }}.tasks.app", "inspect", "ping"]
       interval: 15s
@@ -105,7 +124,13 @@ services:
       APP_CELERY_BROKER_URL: "${APP_CELERY_BROKER_URL:-redis://redis:6379/0}"
       APP_CELERY_RESULT_BACKEND: "${APP_CELERY_RESULT_BACKEND:-redis://redis:6379/1}"
       APP_OTEL_ENABLED: "true"
-      APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      APP_OTEL_EXPORTER_OTLP_ENDPOINT: "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # depends_on fragment: merged onto observability.yml's celery-exporter.
+  celery-exporter:
     depends_on:
       redis:
         condition: service_healthy
