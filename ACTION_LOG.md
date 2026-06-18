@@ -1909,3 +1909,18 @@ name / merge command / CA path cross-checked against the real templates) → app
 README pronoun ambiguity ("its"→"services.yml's" image-less fragments) and a now-contradictory
 pre-existing `settings.py.jinja` comment ("Compose injects APP_MONGO_URL" — false; compose sets no
 APP_MONGO_URL, the app reads it from env over the Settings default) rewritten to the correct precedence.
+
+#### #0159 · completed · FWK6 · 2026-06-17
+T8 (subagent-driven, Sonnet impl) — live acceptance proof. New
+`test_rendered_project_managed_db_boots_without_colocated_postgres` (acceptance tier, local-only/
+CI-ignored): renders the project, `uv lock`, builds the image, starts an EXTERNAL postgres on a
+user-defined docker network (not in any compose stack, no depends_on), runs the app on that network in
+the managed shape (`APP_DATABASE_URL` injected at the external pg, migrations ON), polls `/heartbeat`
+200 → proves the entrypoint's `alembic upgrade head` + seed ran against the externally-supplied URL.
+Complements T3's `docker compose config` topology test (which proves prod.yml alone drops postgres +
+depends_on) with a real boot. **Bite-proven:** pointing `ext_url` at a dead host → alembic
+`OperationalError: failed to resolve host` → never serves → test FAILS (so it exercises real DB
+connectivity, not just image boot). Purely additive (no existing test touched); teardown in `finally`;
+unique port-suffixed network/container names; ruff clean. Ran the sandbox-disabled docker path.
+Spec review ✅ (proof sound + non-vacuous) → applied the one nit: skipif uses the file's
+`_docker_available()` (binary + daemon check) instead of bare `shutil.which`.

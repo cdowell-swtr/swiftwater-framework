@@ -4277,3 +4277,117 @@ def test_load_sh_fails_gracefully_without_docker_target(tmp_path: Path) -> None:
         "path was never exercised (this test cannot pass on an image-pull failure)\n"
         + combined
     )
+
+
+# ---------------------------------------------------------------------------
+# FWK6 — managed topology live acceptance
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _docker_available(), reason="docker required")
+def test_rendered_project_managed_db_boots_without_colocated_postgres(
+    tmp_path: Path,
+) -> None:
+    """FWK6 (live): the managed topology — app with NO co-located postgres and NO depends_on —
+    boots and runs migrations against an EXTERNAL postgres reached purely via the injected
+    APP_DATABASE_URL. Complements the docker-compose-config topology test with a real boot.
+
+    Proves: entrypoint runs ``alembic upgrade head`` + seed against the external DB (if either
+    step fails the container exits before uvicorn starts, so /heartbeat never returns 200).
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    # Mirror what `framework new` does: generate uv.lock on the host so the Dockerfile's
+    # `COPY pyproject.toml uv.lock` + `uv sync --frozen` have a lockfile to work with.
+    lock = subprocess.run(["uv", "lock"], cwd=dest, capture_output=True, text=True)
+    assert lock.returncode == 0, f"uv lock failed:\n{lock.stdout}\n{lock.stderr}"
+    port = _free_tcp_port()
+    suffix = str(port)
+    net = f"fwk6net-{suffix}"
+    pg = f"fwk6pg-{suffix}"
+    app = f"fwk6app-{suffix}"
+    image = f"fwk6-managed-{suffix}:ci"
+    try:
+        assert (
+            subprocess.run(
+                ["docker", "network", "create", net], capture_output=True, text=True
+            ).returncode
+            == 0
+        )
+        # External postgres — not in any compose stack, reached only by URL over the shared net.
+        pg_run = subprocess.run(
+            [
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                pg,
+                "--network",
+                net,
+                "-e",
+                "POSTGRES_USER=app",
+                "-e",
+                "POSTGRES_PASSWORD=app",
+                "-e",
+                "POSTGRES_DB=app",
+                "postgres:17",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert pg_run.returncode == 0, pg_run.stderr
+        # Build the project image from the rendered project.
+        build = subprocess.run(
+            ["docker", "build", "-f", "infra/docker/Dockerfile", "-t", image, "."],
+            cwd=dest,
+            capture_output=True,
+            text=True,
+        )
+        assert build.returncode == 0, f"docker build failed:\n{build.stderr[-3000:]}"
+        # Run the app in the MANAGED shape: external DB via injected URL, migrations ON
+        # (the default APP_RUN_MIGRATIONS=true runs alembic + seed before uvicorn).
+        ext_url = f"postgresql+psycopg://app:app@{pg}:5432/app"
+        app_run = subprocess.run(
+            [
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                app,
+                "--network",
+                net,
+                "-p",
+                f"{port}:8000",
+                "-e",
+                f"APP_DATABASE_URL={ext_url}",
+                image,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert app_run.returncode == 0, app_run.stderr
+        base = f"http://127.0.0.1:{port}"
+        # Allow 90s: postgres init (~5s) + migrate + seed + uvicorn boot.
+        deadline = time.time() + 90
+        ready = False
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(f"{base}/heartbeat", timeout=3) as resp:
+                    if resp.status == 200:
+                        ready = True
+                        break
+            except Exception:
+                pass
+            time.sleep(2)
+        if not ready:
+            logs = subprocess.run(
+                ["docker", "logs", app], capture_output=True, text=True
+            )
+            raise AssertionError(
+                "managed-topology app did not serve /heartbeat in 90s\n"
+                f"--- docker logs ---\n{logs.stdout[-3000:]}\n{logs.stderr[-3000:]}"
+            )
+    finally:
+        for name in (app, pg):
+            subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+        subprocess.run(["docker", "network", "rm", net], capture_output=True)
