@@ -1934,3 +1934,18 @@ depends_on fragment; managed-topology config test), the 4 `service:services.yml:
 fragments (exporter-relocation test), `overlay:tls-ca.yml` + `service:tls-ca.yml:{app,worker,beat}` (CA
 overlay; tls-ca merge/render tests). `tests/runtime_coverage/` 9 passed (set-equality + no-stale both
 green); ruff/format clean.
+
+#### #0161 · completed · FWK6 · 2026-06-17
+T9 part 2 — branch-end gate caught an eval-fixture coupling regression from T7. The full non-acceptance
+suite went 2-red: `test_realize_cached_reuses_base_render` + `test_bundle_agent_assembles_domain_
+context[security]` — both `git apply` failures (`patch failed: src/demo/config/settings.py:33`). Root
+cause: T7's precedence rewrite of the `database_url` comment **replaced** the standalone line
+`# testcontainers Postgres (overridden per session).`, which 3 fixtures' change.patch anchor on
+([[eval-fixtures-coupled-to-template]]). Fix: reorder the comment so the **verbatim** original 3 lines
+(ending with that exact standalone anchor line immediately above `database_url`) are preserved and the
+precedence note sits ABOVE them. Verified by `git apply --check` against rendered base/react projects:
+**6/7** settings/.env fixtures apply (security ×2, env-parity ×3 minus one, obs-fe, privacy). Rendered
+settings.py ≤93 cols, project ruff clean. The mongo-comment rewrite touches no fixture (none anchor
+there). **Pre-existing (NOT FWK6):** `env-parity/good/parity-preserved` fails `.env.example:16` on
+master too — FWK31's host-ports block broke its anchor; latent (tests/eval not in the gate). Flagged
+for a separate fix; out of FWK6 scope.

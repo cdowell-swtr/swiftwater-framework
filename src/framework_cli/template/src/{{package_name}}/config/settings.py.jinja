@@ -50,11 +50,13 @@ class Settings(BaseSettings):
     # to keep those routes from being shadowed.
     serve_spa: bool = True
 
-    # Database connection (SQLAlchemy URL). Resolution precedence: APP_DATABASE_URL in the
-    # environment (set by the operator for a managed/external store) > the compose file's
-    # ${APP_DATABASE_URL:-…} default (the co-located container DSN) > this Settings default
-    # (out-of-compose fallback for host tooling / tests). The DSN is opaque — failover hosts
-    # and ?sslmode=verify-full&sslrootcert=… all go here.
+    # Resolution precedence: APP_DATABASE_URL in the environment (set by the operator for a
+    # managed/external store) > the compose file's ${APP_DATABASE_URL:-…} default (the
+    # co-located container DSN) > this Settings default. The DSN is opaque — failover hosts
+    # and ?sslmode=verify-full&sslrootcert=… all go in it.
+    # Database connection (SQLAlchemy URL). The Compose stack injects the in-network URL
+    # via APP_DATABASE_URL; host tooling (alembic) uses the localhost form; tests use a
+    # testcontainers Postgres (overridden per session).
     database_url: str = "postgresql+psycopg://app:app@postgres:5432/app"
 {%- if "webhooks" in batteries %}
 
