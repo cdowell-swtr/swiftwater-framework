@@ -1,0 +1,19 @@
+# Opt-in TLS CA-bundle overlay (FWK6). Merge this when the app/worker/beat connect to a
+# managed data store that requires verify-full TLS:
+#   -f prod.yml -f services.yml -f tls-ca.yml   (drop services.yml if every store is managed)
+# Drop your CA bundle at infra/tls/ca/<name>.pem (the dir ships empty) and reference it in
+# the opaque DSN, e.g.
+#   APP_DATABASE_URL=...?sslmode=verify-full&sslrootcert=/etc/ssl/app-ca/<name>.pem
+# Off by default: nothing references the mounted path unless your DSN does.
+services:
+  app:
+    volumes:
+      - "../tls/ca:/etc/ssl/app-ca:ro"
+{%- if "workers" in batteries %}
+  worker:
+    volumes:
+      - "../tls/ca:/etc/ssl/app-ca:ro"
+  beat:
+    volumes:
+      - "../tls/ca:/etc/ssl/app-ca:ro"
+{%- endif %}

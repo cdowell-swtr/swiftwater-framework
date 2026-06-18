@@ -1761,3 +1761,210 @@ Added **FWK37** to PLAN `Next` (backlog only, not started): improve `task dev`/`
 bring the stack up DETACHED (free the terminal) + print a prominent "stack is up" summary with the
 key (PORT_OFFSET-aware) URLs, instead of attaching and tailing all container logs; add `task logs`
 + `task down`. Template payload, release-deferred. Captured per user request (no design/impl yet).
+#### #0150 · note · FWK6 · 2026-06-17
+Brainstormed FWK6 (data-store runtime parity) → approved design spec
+`docs/superpowers/specs/2026-06-17-datastore-runtime-parity-design.md`. Mapped the full landscape of
+store-connection topologies and found the **locality** spectrum collapses (managed/native/tunneled/
+proxied all = "an opaque external URL + no co-located container"); the variation that survives lives
+in cardinality/auth/TLS, most of which a single opaque DSN already expresses. Scope locked at **#1
+foreclosure-removal** (not the rejected #3 "runtime modes", which would gold-plate the cheap axis):
+**(A)** make every `APP_*_URL` env-overridable in compose (FWK31 `${VAR:-default}` pattern lifted to
+URLs; the literal in `environment:` is the actual lie that shadows the documented managed escape
+hatch — the Python `Settings` layer already binds `APP_*_URL`, so it's not the problem); **(B)**
+per-(store×env) conditional container + `depends_on` — dev unchanged, prod/staging move the store +
+its dependency edge into the includable self-hosted overlay so managed = omit-overlay + set-URL
+(load-bearing caveat: relies on `depends_on` map merging additively across overlays — plan verifies
+empirically via `docker compose config` FIRST, render-time per-store omission is the fallback);
+**(C)** pull forward an off-by-default CA-bundle mount slot (the one infra-painful TLS retrofit on
+the trade-secret-in-transit path); **(D)** resolve `services.yml` → `INTENTIONALLY_UNLOCKED`
+(operators edit it; locking re-creates the foreclosure). Explicitly deferred-but-not-foreclosed: IAM/
+token auth, per-tenant routing, Redis Sentinel/cluster-seed. Driven by an ambitious-but-early
+consumer (Meridian: DR/failover/BC, confidential data) — design principle = optionality, not
+premature capability. Next: writing-plans. Template payload → release-deferred (batches w/ FWK36/37).
+
+#### #0151 · note · FWK6 · 2026-06-17
+Wrote the FWK6 implementation plan `docs/superpowers/plans/2026-06-17-datastore-runtime-parity.md`
+(8 TDD tasks, subagent-driven). **Empirically de-risked the three load-bearing compose mechanisms
+at plan-time via throwaway `docker compose config` probes** (caught a real gotcha the spec's
+verify-first clause anticipated): (1) `depends_on` long-form maps **merge additively** across `-f`
+overlays — `base+services` → `app.depends_on.postgres` present, `base` alone → none; so omitting
+`services.yml` cleanly drops the container AND the dependency edge (no render-time fallback needed);
+(2) compose **eagerly** interpolates the `:-` default branch, so a nested
+`${APP_DATABASE_URL:-…${POSTGRES_PASSWORD:?msg}…}` **errors in the managed case even when the override
+is set** → fix = plain `${POSTGRES_PASSWORD}` in the inline default, `:?` guard lives on the postgres
+service (self-hosted only); (3) confirmed the no-`:?` variant succeeds managed + builds the default
+DSN self-hosted. Amended the spec with both findings. Plan structure: T1 dev URL seam, T2 prod/
+staging/services URL seam, T3 relocate postgres+depends_on prod/staging→services.yml (section B
+core), T4 services.yml→INTENTIONALLY_UNLOCKED, T5 opt-in tls-ca.yml CA overlay, T6 docs
+(settings precedence + .env.example + deploy README), T7 live acceptance (managed app boots vs
+out-of-stack DB), T8 FWK29 classification + branch-end Opus review. Next: dispatch execution
+(subagent-driven per review-model policy).
+
+#### #0152 · completed · FWK6 · 2026-06-17
+T1 (subagent-driven, Sonnet impl): env-overridable `APP_*_URL` in `dev.yml.jinja` — wrapped all 8
+literals (app DATABASE; worker REDIS/BROKER/RESULT_BACKEND/DATABASE; beat REDIS/BROKER/RESULT_BACKEND)
+as `${VAR:-<container-default>}`; defaults byte-identical, dev keeps its co-located containers.
+Render guard `test_dev_compose_urls_are_env_overridable` (TDD red→green); regression `-k compose/dev/
+render` 183 passed. Spec review ✅; Opus quality review caught a `ruff format` miss in the new test
+(over-length asserts + dead inner `import re` — the [[ruff-format-check-after-inline-edits]] class CI's
+`gate` catches but `ruff check` misses) → fixed (format + drop import), re-verified clean.
+
+#### #0153 · completed · FWK6 · 2026-06-17
+T2 (subagent-driven, Sonnet impl): env-overridable `APP_*_URL` in the production compose files —
+`prod.yml`/`staging.yml` app `APP_DATABASE_URL` + `services.yml` worker (4) / beat (3). Inline DSN
+default uses plain `${POSTGRES_PASSWORD}` (NO `:?`) — the empirically-verified fix for compose's eager
+`:-` interpolation (a nested `:?` errors in the managed case even when the override is set); the `:?`
+guard stays on the postgres service. Render guard `test_production_compose_urls_are_env_overridable`
+(TDD red→green); `-k compose/staging_prod/services/render` 184 passed; test file ruff-clean.
+Spec review ✅ + Opus quality review APPROVE-with-minor → hardened the test (assert the worker
+`APP_DATABASE_URL` in services.yml + a no-bare-literal sweep over prod/staging/services, symmetric
+with the dev guard). NOTE for T3: `test_staging_standalone_merges` (and the prod standalone merge
+test) assert `postgres` is defined in staging.yml/prod.yml — they must be updated when T3 relocates
+postgres to services.yml.
+
+#### #0154 · amended · FWK6 · 2026-06-17
+**Scope widened mid-execution (user-confirmed): "data stores" → "externalizable-backend edges."** A
+template-wide sweep for the same foreclosure (hardcoded host literal that shadows the env / hard
+`depends_on`) found two more pothole classes beyond the app's store URLs: (1) the **4 store exporters**
+in `observability.yml` (postgres/mongodb/celery/redis exporters — hardcoded store host + `depends_on`),
+and (2) the **OTLP egress** `APP_OTEL_EXPORTER_OTLP_ENDPOINT` (6 literals across dev/services/obs; pure
+env-wrap — nothing `depends_on` the collector). Both folded in. Deliberately EXCLUDED (documented in
+spec, not oversight): the internal observability mesh (grafana/prometheus/loki/tempo/promtail — swapped
+wholesale for managed-observability, not per-edge) and the ephemeral `postgres-test`. Updated spec
+(scope = externalizable-backend edge; exclusions recorded) + plan (new **Task 4** = observability
+backend parity; Task 3 test-list de-under-enumerated with the 5 prod/staging postgres-location tests a
+sweep found; downstream tasks renumbered to 5–9). Exporter `depends_on` edges relocate to `services.yml`
+grouped next to each store so the managed workflow (delete a store block) drops app+exporter edges
+together. Surfaced by the T2 spec/quality review catching the dangling-`depends_on` break in the
+prod+obs merge.
+
+#### #0155 · completed · FWK6 · 2026-06-17
+T3 (subagent-driven, Sonnet impl): relocated the always-on `postgres` service + the `app→postgres`
+`depends_on` edge + the `pgdata` volume OUT of the locked `prod.yml`/`staging.yml` INTO the
+operator-merged `services.yml` overlay (section-B core). `services.yml` now always emits `services:`
+(postgres is always-on, no longer battery-gated) with postgres (prod-style image + `:?` password
+guard) + an `app:` depends_on fragment first, battery block following without re-declaring `services:`,
+always-on `pgdata` volume. Self-hosted = `-f prod.yml -f services.yml`; managed = omit services.yml +
+set `APP_DATABASE_URL` (no postgres, no dangling depends_on — verified by the new
+`test_managed_db_topology_drops_postgres_and_depends_on` via `docker compose config`). Updated 9 tests
+(plan under-enumerated; sweep + impl found them): staging_prod_compose, services_overlay→always_has_
+postgres, staging_standalone (→managed shape), prod_plus_overlay (+`-f services.yml`), prod_staging_
+postgres_image (read services.yml), staging_plus_services, render_timescaledb_battery, preload_join,
+compose_structure(dev, unchanged). Full `test_copier_runner.py` **256 passed**; ruff clean. (FWK29
+runtime_coverage reconciliation deferred to T9.) **Spec review caught a regression the green suite hid:**
+the restructure reverted T2's env-wrapping on the `services.yml` worker/beat URLs (7 back to bare + the
+`:?` re-added on the worker DB) AND deleted both URL-guard tests (`test_dev_compose_urls_…`,
+`test_production_compose_urls_…`) — so the bare-literal regression passed because its guard was gone.
+Controller forward-fixed: re-wrapped the 7 worker/beat URLs (`${VAR:-default}`, no `:?` on the DB) and
+restored both guard tests (the no-bare-literal sweep now also covers services.yml). 10 FWK6 URL/topology
+tests green; ruff clean. Lesson: a "deletes the failing guard" edit slips past a green run — diff the
+test-def set across tasks.
+
+#### #0156 · completed · FWK6 · 2026-06-17
+T4 (subagent-driven, Sonnet impl) — observability backend parity (scope-widening tail): env-wrapped the
+4 store-exporter connections in `observability.yml` (`POSTGRES_EXPORTER_DSN` / `MONGODB_EXPORTER_URI` /
+`CELERY_EXPORTER_BROKER_URL` / `REDIS_EXPORTER_ADDR`) + all 6 `APP_OTEL_EXPORTER_OTLP_ENDPOINT` literals
+(dev ×3, services ×2, obs ×1); removed the 4 exporter `depends_on` blocks from observability.yml and
+relocated them into `services.yml` fragments grouped next to each store under matching battery gates
+(postgres-exporter always; mongodb/celery/redis gated). Managed workflow: deleting a store block from the
+editable services.yml drops the store + app + exporter edges together; no dangling depends_on in the
+locked observability.yml. New coupling (acceptable — matches the deploy command): services.yml exporter
+fragments are depends_on-only, valid only when merged with observability.yml (which defines the exporter)
+— the standard `-f env -f services -f observability` merge. 2 new tests (env-overridable + depends_on-
+relocated); +2 def count, none deleted (T3-lesson check clean). Controller fixed `test_render_tempo_otel_
+collector` (2 stale exact-match assertions on the now-wrapped OTLP literal — the impl's `-k` filter missed
+it; caught by the full-file run). Full `test_copier_runner.py` **260 passed**; deploy/integrity/obs 68
+passed; mypy/ruff clean. Spec review ✅ (gates exactly consistent across all battery combos; 0 tests
+deleted) + Opus quality APPROVE (coupling verified sound — 3-way merge rc=0, 2-way services-without-obs
+correctly fails; defaults byte-identical; no `:?` hazard) → applied the one Minor (corrected a stale
+`test_staging_standalone_merges` docstring describing the now-invalid 2-way merge).
+
+#### #0157 · completed · FWK6 · 2026-06-17
+T5 (subagent-driven, Sonnet impl): `infra/compose/services.yml` moved LOCKED_TRACKED →
+INTENTIONALLY_UNLOCKED in `integrity/classes.py` (section D — it's now the operator-edited composition
+seam for managed deploys, alongside seed.py/notify.sh). TDD guard `test_services_overlay_is_a_
+composition_seam_not_locked`; `tests/integrity/` 46 passed (stale-entry/reference-integrity green),
+mypy + ruff clean. Controller-verified the 2-line tuple move (exactly one occurrence, in the right
+list); no separate quality review — no quality surface beyond the guarded change.
+
+#### #0158 · completed · FWK6 · 2026-06-17
+T6 (subagent-driven, Sonnet impl): opt-in CA-bundle overlay (section C). New
+`infra/compose/tls-ca.yml.jinja` (app always; worker/beat gated on workers battery — they're only
+defined when services.yml is merged) mounting `../tls/ca:/etc/ssl/app-ca:ro`; new empty
+`infra/tls/ca/.gitkeep` (ships the mount dir, renders OK — mirrors traefik/certs/.gitkeep);
+`infra/compose/tls-ca.yml` added to INTENTIONALLY_UNLOCKED. OFF BY DEFAULT — nothing references the
+mount unless the operator drops a bundle + sets `?sslmode=verify-full&sslrootcert=/etc/ssl/app-ca/…`
+in the opaque DSN. 4 new tests (off-by-default render, app-only-without-workers, prod+services+obs+tls-ca
+merge, integrity-unlocked); test_prod_plus_tls_ca_merges includes observability.yml (same image-less-
+fragment coupling as T4). tls_ca tests + 47 integrity pass; mypy/ruff clean. Controller-verified
+off-by-default + gating + .gitkeep render.
+
+#### #0159 · completed · FWK6 · 2026-06-17
+T7 (subagent-driven, Sonnet impl): docs for the externalizable-backend runtime contract (expanded for
+the wider scope). `settings.py.jinja` — precedence comment on `database_url` (env > compose
+`${VAR:-default}` > Settings default; opaque DSN). `.env.example.jinja` — added a "Data-store & backend
+runtime" block inside the framework region (markers intact 1/1; battery-gated the redis/mongo/exporter
+lines) documenting `APP_DATABASE_URL`/`APP_REDIS_URL`/`APP_MONGO_URL` + the 4 `*_EXPORTER_*` knobs +
+`APP_OTEL_EXPORTER_OTLP_ENDPOINT` + the CA/verify-full path. `infra/deploy/README.md` — new "Data-store
+& backend runtime (self-hosted vs managed)" section: the `-f env -f services -f observability` merge
+(+ the services-requires-observability coupling), the managed workflow (edit services.yml + set vars),
+SaaS-OTLP, and `tls-ca.yml` + CA drop. New guard `test_datastore_runtime_docs_present`; 56 + 47 integrity
+tests pass; rendered settings.py format-clean; no test deleted. Spec+fact-check review ✅ (every env-var
+name / merge command / CA path cross-checked against the real templates) → applied 2 accuracy fixes: a
+README pronoun ambiguity ("its"→"services.yml's" image-less fragments) and a now-contradictory
+pre-existing `settings.py.jinja` comment ("Compose injects APP_MONGO_URL" — false; compose sets no
+APP_MONGO_URL, the app reads it from env over the Settings default) rewritten to the correct precedence.
+
+#### #0160 · completed · FWK6 · 2026-06-17
+T8 (subagent-driven, Sonnet impl) — live acceptance proof. New
+`test_rendered_project_managed_db_boots_without_colocated_postgres` (acceptance tier, local-only/
+CI-ignored): renders the project, `uv lock`, builds the image, starts an EXTERNAL postgres on a
+user-defined docker network (not in any compose stack, no depends_on), runs the app on that network in
+the managed shape (`APP_DATABASE_URL` injected at the external pg, migrations ON), polls `/heartbeat`
+200 → proves the entrypoint's `alembic upgrade head` + seed ran against the externally-supplied URL.
+Complements T3's `docker compose config` topology test (which proves prod.yml alone drops postgres +
+depends_on) with a real boot. **Bite-proven:** pointing `ext_url` at a dead host → alembic
+`OperationalError: failed to resolve host` → never serves → test FAILS (so it exercises real DB
+connectivity, not just image boot). Purely additive (no existing test touched); teardown in `finally`;
+unique port-suffixed network/container names; ruff clean. Ran the sandbox-disabled docker path.
+Spec review ✅ (proof sound + non-vacuous) → applied the one nit: skipif uses the file's
+`_docker_available()` (binary + daemon check) instead of bare `shutil.which`.
+
+#### #0161 · completed · FWK6 · 2026-06-17
+T9 part 1 — FWK29 runtime-coverage reconciliation. The relocation + new overlay shifted the enumerated
+surface set: removed 2 stale (`service:prod.yml:postgres`, `service:staging.yml:postgres` — postgres
+moved out), added 10 in `tests/runtime_coverage/registry.py` (all EXERCISED): `service:services.yml:
+postgres` (relocated store; staging+services+obs merge), `service:services.yml:app` (app→postgres
+depends_on fragment; managed-topology config test), the 4 `service:services.yml:*-exporter` depends_on
+fragments (exporter-relocation test), `overlay:tls-ca.yml` + `service:tls-ca.yml:{app,worker,beat}` (CA
+overlay; tls-ca merge/render tests). `tests/runtime_coverage/` 9 passed (set-equality + no-stale both
+green); ruff/format clean.
+
+#### #0162 · completed · FWK6 · 2026-06-17
+T9 part 2 — branch-end gate caught an eval-fixture coupling regression from T7. The full non-acceptance
+suite went 2-red: `test_realize_cached_reuses_base_render` + `test_bundle_agent_assembles_domain_
+context[security]` — both `git apply` failures (`patch failed: src/demo/config/settings.py:33`). Root
+cause: T7's precedence rewrite of the `database_url` comment **replaced** the standalone line
+`# testcontainers Postgres (overridden per session).`, which 3 fixtures' change.patch anchor on
+([[eval-fixtures-coupled-to-template]]). Fix: reorder the comment so the **verbatim** original 3 lines
+(ending with that exact standalone anchor line immediately above `database_url`) are preserved and the
+precedence note sits ABOVE them. Verified by `git apply --check` against rendered base/react projects:
+**6/7** settings/.env fixtures apply (security ×2, env-parity ×3 minus one, obs-fe, privacy). Rendered
+settings.py ≤93 cols, project ruff clean. The mongo-comment rewrite touches no fixture (none anchor
+there). **Pre-existing (NOT FWK6):** `env-parity/good/parity-preserved` fails `.env.example:16` on
+master too — FWK31's host-ports block broke its anchor; latent (tests/eval not in the gate). Flagged
+for a separate fix; out of FWK6 scope.
+
+#### #0163 · completed · FWK6 · 2026-06-17
+T9 part 3 — branch-end gate + whole-branch reviews, all green. **Gate:** ruff check + ruff format
+--check + mypy clean; full non-acceptance/eval suite **968 passed, 3 skipped** (the 2 fixture-coupling
+failures fixed). **Branch-end spec review (Sonnet) = ✅ meets spec** (all 7 areas A–E + exporters + OTLP
+delivered; no gaps, no divergence, no scope creep — the scope-widen is the spec's own clarification).
+**Branch-end whole-branch quality review (Opus) = APPROVE TO MERGE** (seam byte-identical verified live
+across all 5 battery combos; eager-`:?` gotcha handled; battery-gate consistency airtight — every
+exporter depends_on fragment backed by its observability.yml definition; managed/self-hosted merge
+behaves as specced; regression fully recovered with guards restored; live test a genuine proof). Applied
+the one cosmetic Opus nit (stale `service:staging.yml:app` registry comment re: relocated depends_on).
+**FWK6 implementation COMPLETE on branch `fwk6-datastore-runtime-parity` (9 TDD tasks).** Per user:
+**PR HELD** — release-deferred, to be batched with FWK36+FWK37 into one PR (one render-matrix run) given
+the Actions-minutes budget (90% used, resets 2026-07-01). Branch is ready-but-unpushed.

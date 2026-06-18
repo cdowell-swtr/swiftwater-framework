@@ -419,15 +419,19 @@ def test_render_tempo_otel_collector(tmp_path: Path):
     # The overlay carries the OTEL app fragment (deep-merged onto app):
     overlay_app_env = overlay["services"]["app"]["environment"]
     assert overlay_app_env["APP_OTEL_ENABLED"] == "true"
+    # FWK6: the OTLP endpoint is env-overridable now (default unchanged).
     assert (
         overlay_app_env["APP_OTEL_EXPORTER_OTLP_ENDPOINT"]
-        == "http://otel-collector:4317"
+        == "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
     )
     # dev.yml app still has these too (harmless redundancy — overlay + dev both set them):
     dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
     app_env = dev["services"]["app"]["environment"]
     assert app_env["APP_OTEL_ENABLED"] == "true"
-    assert app_env["APP_OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4317"
+    assert (
+        app_env["APP_OTEL_EXPORTER_OTLP_ENDPOINT"]
+        == "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
+    )
 
 
 def test_render_includes_db_model_and_repository(tmp_path: Path):
@@ -725,7 +729,12 @@ def test_render_staging_prod_compose(tmp_path: Path):
         assert "${APP_IMAGE" in app["image"]
         assert app["environment"]["APP_ENVIRONMENT"] == env
         assert app["restart"] == "unless-stopped"
-        assert compose["services"]["postgres"]["restart"] == "unless-stopped"
+        assert "postgres" not in compose["services"], (
+            f"{env}.yml must not define postgres (moved to services.yml)"
+        )
+        assert "depends_on" not in app, (
+            f"{env}.yml app must have no inline depends_on (moved to services.yml)"
+        )
 
 
 def test_render_includes_ci_pipeline(tmp_path: Path):
@@ -2005,6 +2014,63 @@ def test_render_alertmanager_webhook(tmp_path: Path):
 @pytest.mark.skipif(
     shutil.which("docker") is None, reason="docker required for compose config"
 )
+def test_managed_db_topology_drops_postgres_and_depends_on(tmp_path: Path):
+    """FWK6 section B: prod.yml ALONE (managed) has no co-located postgres and the app has
+    no dangling depends_on; merging services.yml (self-hosted) restores both."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})  # no batteries: postgres is always-on
+    comp = dest / "infra" / "compose"
+    env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
+
+    managed_env = {
+        **os.environ,
+        "APP_IMAGE": "demo:ci",
+        "APP_DATABASE_URL": "postgresql+psycopg://u:p@managed.example:5432/db",
+    }
+    r = subprocess.run(
+        ["docker", "compose", "-f", str(comp / "prod.yml"), "config"],
+        capture_output=True,
+        text=True,
+        env=managed_env,
+    )
+    assert r.returncode == 0, r.stderr
+    cfg = yaml.safe_load(r.stdout)
+    assert "postgres" not in cfg["services"], (
+        "managed prod.yml must not define postgres"
+    )
+    assert "depends_on" not in cfg["services"]["app"], (
+        "managed app must have no depends_on"
+    )
+    assert "managed.example" in r.stdout, "injected APP_DATABASE_URL must win"
+
+    r2 = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp / "prod.yml"),
+            "-f",
+            str(comp / "services.yml"),
+            "-f",
+            str(comp / "observability.yml"),
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r2.returncode == 0, r2.stderr
+    cfg2 = yaml.safe_load(r2.stdout)
+    assert "postgres" in cfg2["services"], "self-hosted merge must define postgres"
+    assert (
+        cfg2["services"]["app"]["depends_on"]["postgres"]["condition"]
+        == "service_healthy"
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
 def test_prod_plus_overlay_merges_with_obs_stack(tmp_path: Path) -> None:
     """Docker compose config merge-validation: proves the obs overlay wiring is correct.
 
@@ -2018,7 +2084,7 @@ def test_prod_plus_overlay_merges_with_obs_stack(tmp_path: Path) -> None:
     comp = dest / "infra" / "compose"
     base_env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
 
-    # --- Scenario 1: prod + overlay → full obs stack, auth-required grafana ---
+    # --- Scenario 1: prod + services + overlay → full obs stack, auth-required grafana ---
 
     r = subprocess.run(
         [
@@ -2027,6 +2093,8 @@ def test_prod_plus_overlay_merges_with_obs_stack(tmp_path: Path) -> None:
             "-f",
             str(comp / "prod.yml"),
             "-f",
+            str(comp / "services.yml"),
+            "-f",
             str(comp / "observability.yml"),
             "config",
         ],
@@ -2034,7 +2102,9 @@ def test_prod_plus_overlay_merges_with_obs_stack(tmp_path: Path) -> None:
         text=True,
         env=base_env,
     )
-    assert r.returncode == 0, f"prod + overlay compose config failed:\n{r.stderr}"
+    assert r.returncode == 0, (
+        f"prod + services + overlay compose config failed:\n{r.stderr}"
+    )
     for svc in (
         "prometheus",
         "grafana",
@@ -2043,7 +2113,9 @@ def test_prod_plus_overlay_merges_with_obs_stack(tmp_path: Path) -> None:
         "app",
         "postgres",
     ):
-        assert svc in r.stdout, f"service '{svc}' missing from prod+overlay config"
+        assert svc in r.stdout, (
+            f"service '{svc}' missing from prod+services+overlay config"
+        )
     # prod grafana must NOT have anonymous auth (the overlay is prod-safe):
     assert "GF_AUTH_ANONYMOUS_ENABLED" not in r.stdout, (
         "prod grafana must not have GF_AUTH_ANONYMOUS_ENABLED — the overlay is prod-safe"
@@ -2121,12 +2193,19 @@ def test_render_services_overlay_mongodb(tmp_path: Path):
     assert "mongo" in cfg["services"] and "mongodata" in cfg["volumes"]
 
 
-def test_render_services_overlay_empty_is_valid(tmp_path: Path):
+def test_render_services_overlay_always_has_postgres(tmp_path: Path):
+    """FWK6: services.yml is the self-hosted store overlay; postgres (always-on) is present
+    even with no battery, and the app fragment carries the depends_on edge."""
     dest = tmp_path / "demo"
-    render_project(dest, {**DATA})  # no battery → valid YAML no-op (comment only)
-    svc = (dest / "infra" / "compose" / "services.yml").read_text()
-    parsed = __import__("yaml").safe_load(svc)  # must not raise
-    assert not (parsed or {}).get("services")  # no battery services
+    render_project(dest, {**DATA})  # no batteries
+    cfg = yaml.safe_load((dest / "infra" / "compose" / "services.yml").read_text())
+    assert "postgres" in cfg["services"]
+    assert (
+        cfg["services"]["app"]["depends_on"]["postgres"]["condition"]
+        == "service_healthy"
+    )
+    assert "pgdata" in cfg["volumes"]
+    assert "mongo" not in cfg["services"] and "redis" not in cfg["services"]
 
 
 def test_render_exporters_in_observability_overlay(tmp_path: Path):
@@ -2233,56 +2312,43 @@ def test_prod_plus_services_plus_obs_merges(tmp_path: Path):
     shutil.which("docker") is None, reason="docker required for compose config"
 )
 def test_staging_standalone_merges(tmp_path: Path) -> None:
-    """compose config merge-validation: staging.yml standalone is a valid topology.
+    """compose config merge-validation: staging.yml ALONE is the managed (no co-located PG) shape.
 
-    Mirrors the prod.yml guard: staging.yml is self-contained (no base.yml merge needed —
-    it defines both `app` and `postgres` directly). Asserts the two named services are
-    present, the image slot resolves, and the POSTGRES_PASSWORD env var is threaded through
-    the postgres service. Two scenarios:
-    1. Baseline (no extensions) — image: postgres:17.
-    2. Extension battery (timescaledb) — conditional command + POSTGRES_IMAGE var.
+    FWK6 section B: staging.yml no longer defines postgres; it is an app-only file.
+    Managed deploy = `-f staging.yml` + APP_DATABASE_URL pointing at managed PG (no POSTGRES_PASSWORD).
+    Self-hosted deploy = `-f staging.yml -f services.yml -f observability.yml` (postgres comes
+    from services.yml; observability.yml is required — services.yml's exporter depends_on
+    fragments are image-less and only valid merged with the exporter definitions there).
     """
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
     comp = dest / "infra" / "compose"
-    env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
+    managed_env = {
+        **os.environ,
+        "APP_IMAGE": "demo:ci",
+        "APP_DATABASE_URL": "postgresql+psycopg://u:p@managed.example:5432/db",
+    }
 
-    # --- Scenario 1: baseline staging.yml (no extension) ---
+    # --- Managed shape: staging.yml alone (no postgres, no depends_on) ---
     r = subprocess.run(
         ["docker", "compose", "-f", str(comp / "staging.yml"), "config"],
         capture_output=True,
         text=True,
-        env=env,
+        env=managed_env,
     )
-    assert r.returncode == 0, f"staging.yml config failed:\n{r.stderr}"
-    for svc in ("app", "postgres"):
-        assert svc in r.stdout, f"service '{svc}' missing from staging.yml config"
+    assert r.returncode == 0, f"staging.yml (managed) config failed:\n{r.stderr}"
+    cfg = yaml.safe_load(r.stdout)
+    assert "postgres" not in cfg["services"], (
+        "managed staging.yml must not define postgres (moved to services.yml)"
+    )
+    assert "depends_on" not in cfg["services"]["app"], (
+        "managed staging.yml app must have no depends_on (moved to services.yml)"
+    )
     assert "APP_ENVIRONMENT: staging" in r.stdout, (
         "APP_ENVIRONMENT not set to 'staging' in staging.yml config"
     )
     assert "unless-stopped" in r.stdout, (
         "restart: unless-stopped missing from staging.yml config (staging services must restart)"
-    )
-
-    # --- Scenario 2: timescaledb extension — conditional command key ---
-    dest2 = tmp_path / "demo_ts"
-    render_project(dest2, {**DATA, "batteries": ["timescaledb"]})
-    comp2 = dest2 / "infra" / "compose"
-    env_ts = {
-        **os.environ,
-        "APP_IMAGE": "demo:ci",
-        "POSTGRES_PASSWORD": "x",
-        "POSTGRES_IMAGE": "demo-postgres:ci",
-    }
-    r2 = subprocess.run(
-        ["docker", "compose", "-f", str(comp2 / "staging.yml"), "config"],
-        capture_output=True,
-        text=True,
-        env=env_ts,
-    )
-    assert r2.returncode == 0, f"staging.yml (timescaledb) config failed:\n{r2.stderr}"
-    assert "shared_preload_libraries=timescaledb" in r2.stdout, (
-        "timescaledb preload command missing from staging.yml (timescaledb battery) config"
     )
 
 
@@ -2346,7 +2412,9 @@ def test_staging_plus_services_overlay_merges(tmp_path: Path) -> None:
         "APP_ENVIRONMENT is not 'staging' in the staging+services merge — wrong merge order"
     )
 
-    # services.yml without batteries → no worker/beat/redis/mongo (no phantom services)
+    # services.yml without batteries → no worker/beat/redis/mongo (no phantom services);
+    # observability.yml is always merged in practice (provides exporter images for the
+    # postgres-exporter depends_on fragment that services.yml contributes).
     dest2 = tmp_path / "demo_bare"
     render_project(dest2, {**DATA})  # no batteries
     comp2 = dest2 / "infra" / "compose"
@@ -2358,6 +2426,8 @@ def test_staging_plus_services_overlay_merges(tmp_path: Path) -> None:
             str(comp2 / "staging.yml"),
             "-f",
             str(comp2 / "services.yml"),
+            "-f",
+            str(comp2 / "observability.yml"),
             "config",
         ],
         capture_output=True,
@@ -2365,7 +2435,7 @@ def test_staging_plus_services_overlay_merges(tmp_path: Path) -> None:
         env=env,
     )
     assert r2.returncode == 0, (
-        f"staging.yml + services.yml (no batteries) config failed:\n{r2.stderr}"
+        f"staging.yml + services.yml + observability.yml (no batteries) config failed:\n{r2.stderr}"
     )
     assert "worker" not in r2.stdout and "redis" not in r2.stdout, (
         "worker or redis appeared in staging+services (no batteries) merge — "
@@ -2396,14 +2466,11 @@ def test_render_timescaledb_battery(tmp_path):
     assert "packagecloud.io" not in df  # the flaky apt source is gone
     dev = (dest / "infra" / "compose" / "dev.yml").read_text()
     assert "shared_preload_libraries=timescaledb" in dev
-    # prod + staging carry the same shared_preload_libraries command (regression guard)
+    # services.yml carries the same shared_preload_libraries command (regression guard);
+    # prod/staging no longer define postgres — they're app-only (FWK6 section B).
     assert (
         "shared_preload_libraries=timescaledb"
-        in (dest / "infra" / "compose" / "prod.yml").read_text()
-    )
-    assert (
-        "shared_preload_libraries=timescaledb"
-        in (dest / "infra" / "compose" / "staging.yml").read_text()
+        in (dest / "infra" / "compose" / "services.yml").read_text()
     )
     assert "timeseries import models" in (dest / "migrations" / "env.py").read_text()
 
@@ -2430,19 +2497,34 @@ def test_uses_postgres_extension_render_switches_postgres_image(tmp_path):
 
 
 def test_prod_staging_postgres_image_switches_for_extensions(tmp_path):
+    # FWK6: postgres is in services.yml (the self-hosted overlay), not prod/staging.
+    # Baseline: services.yml postgres uses postgres:17.
     base = tmp_path / "base"
     render_project(base, {**DATA, "batteries": []})
-    assert "image: postgres:17" in (base / "infra" / "compose" / "prod.yml").read_text()
     assert (
-        "image: postgres:17" in (base / "infra" / "compose" / "staging.yml").read_text()
+        "image: postgres:17"
+        in (base / "infra" / "compose" / "services.yml").read_text()
+    )
+    # prod/staging no longer define postgres at all:
+    assert (
+        "image: postgres:17"
+        not in (base / "infra" / "compose" / "prod.yml").read_text()
+    )
+    assert (
+        "image: postgres:17"
+        not in (base / "infra" / "compose" / "staging.yml").read_text()
     )
 
+    # Extension battery: services.yml switches to the custom image (${POSTGRES_IMAGE}).
     ext = tmp_path / "ext"
     render_project(ext, {**DATA, "batteries": ["pgvector"]})
+    services = (ext / "infra" / "compose" / "services.yml").read_text()
+    assert "${POSTGRES_IMAGE" in services and "image: postgres:17" not in services
+    # prod/staging remain postgres-free:
     prod = (ext / "infra" / "compose" / "prod.yml").read_text()
-    assert "${POSTGRES_IMAGE" in prod and "image: postgres:17" not in prod
+    assert "${POSTGRES_IMAGE" not in prod and "image: postgres:17" not in prod
     staging = (ext / "infra" / "compose" / "staging.yml").read_text()
-    assert "${POSTGRES_IMAGE" in staging and "image: postgres:17" not in staging
+    assert "${POSTGRES_IMAGE" not in staging and "image: postgres:17" not in staging
 
 
 def test_age_migration_ordering():
@@ -2564,7 +2646,9 @@ def test_full_migration_chain_ordering():
 def test_preload_join_in_all_compose_files(tmp_path):
     dest = tmp_path / "p"
     render_project(dest, {**DATA, "batteries": ["timescaledb", "age"]})
-    for f in ["dev.yml", "test.yml", "prod.yml", "staging.yml"]:
+    # FWK6: postgres lives in services.yml (self-hosted overlay), not prod/staging.
+    # The preload must appear in dev.yml, test.yml, and services.yml (prod-equivalent path).
+    for f in ["dev.yml", "test.yml", "services.yml"]:
         text = (dest / "infra" / "compose" / f).read_text()
         assert "shared_preload_libraries=timescaledb,age" in text, (
             f"{f} is missing the joined preload 'shared_preload_libraries=timescaledb,age'"
@@ -3285,6 +3369,20 @@ def test_alert_smoke_clean_when_no_failures(tmp_path: Path):
     assert "ok" in (result.stdout + result.stderr).lower()
 
 
+def test_datastore_runtime_docs_present(tmp_path: Path):
+    """FWK6: the managed/self-hosted runtime contract is documented where operators look."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "mongodb"]})
+    env_example = (dest / ".env.example").read_text()
+    assert "APP_DATABASE_URL" in env_example and "managed" in env_example.lower()
+    assert "APP_OTEL_EXPORTER_OTLP_ENDPOINT" in env_example  # OTLP egress documented
+    readme = (dest / "infra" / "deploy" / "README.md").read_text()
+    assert "services.yml" in readme and "managed" in readme.lower()
+    assert "tls-ca.yml" in readme  # CA / verify-full path documented
+    settings = (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    assert "APP_DATABASE_URL" in settings  # precedence note references the env var
+
+
 def test_alert_smoke_advisory_when_alertmanager_unreachable(tmp_path: Path):
     # The common CI case: Alertmanager not reachable from the runner → skip, still exit 0.
     dest = tmp_path / "demo"
@@ -3840,3 +3938,176 @@ def test_compose_wrapper_shifts_host_ports_by_offset(tmp_path: Path):
     # No offset → today's defaults (single-stack DX preserved).
     defaults = run_wrapper({})
     assert defaults["HTTP_HOST_PORT"] == "8000"
+
+
+def test_dev_compose_urls_are_env_overridable(tmp_path: Path):
+    """Every APP_*_URL literal in dev.yml is wrapped so the operator's env wins
+    (the FWK6 seam), with today's container DSN as the default fallback."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    dev = (dest / "infra" / "compose" / "dev.yml").read_text()
+    # app: database URL is overridable, default unchanged
+    assert (
+        'APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:app@postgres:5432/app}"'
+        in dev
+    )
+    # worker + beat: redis/celery URLs overridable
+    for var, default in (
+        ("APP_REDIS_URL", "redis://redis:6379/0"),
+        ("APP_CELERY_BROKER_URL", "redis://redis:6379/0"),
+        ("APP_CELERY_RESULT_BACKEND", "redis://redis:6379/1"),
+    ):
+        assert f'{var}: "${{{var}:-{default}}}"' in dev, (
+            f"{var} not env-overridable in dev.yml"
+        )
+    # no bare literal APP_*_URL remains (every one is wrapped in ${...:-...})
+    for m in re.finditer(r'^\s*(APP_\w*_URL):\s*"([^"]*)"', dev, re.MULTILINE):
+        assert m.group(2).startswith("${"), (
+            f"{m.group(1)} still a bare literal: {m.group(2)}"
+        )
+
+
+def test_production_compose_urls_are_env_overridable(tmp_path: Path):
+    """prod/staging app DATABASE_URL and services.yml worker/beat URLs are env-overridable.
+    The inline default drops the :? password guard (compose eagerly interpolates the :- branch,
+    so a nested :? would break the managed override) — the guard lives on the postgres service."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    comp = dest / "infra" / "compose"
+    for env in ("prod", "staging"):
+        text = (comp / f"{env}.yml").read_text()
+        assert (
+            'APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:${POSTGRES_PASSWORD}@postgres:5432/app}"'
+            in text
+        ), f"{env}.yml APP_DATABASE_URL not env-overridable / still uses :? in default"
+    svc = (comp / "services.yml").read_text()
+    # worker DB URL carries the same :?-removal subtlety as prod/staging — assert it too
+    assert (
+        'APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:${POSTGRES_PASSWORD}@postgres:5432/app}"'
+        in svc
+    ), (
+        "services.yml worker APP_DATABASE_URL not env-overridable / still uses :? in default"
+    )
+    for var, default in (
+        ("APP_REDIS_URL", "redis://redis:6379/0"),
+        ("APP_CELERY_BROKER_URL", "redis://redis:6379/0"),
+        ("APP_CELERY_RESULT_BACKEND", "redis://redis:6379/1"),
+    ):
+        assert f'{var}: "${{{var}:-{default}}}"' in svc, (
+            f"{var} not env-overridable in services.yml"
+        )
+    # symmetry with the dev guard: no bare literal APP_*_URL remains in the production files
+    for fname in ("prod.yml", "staging.yml", "services.yml"):
+        text = (comp / fname).read_text()
+        for m in re.finditer(r'^\s*(APP_\w*_URL):\s*"([^"]*)"', text, re.MULTILINE):
+            assert m.group(2).startswith("${"), (
+                f"{fname}: {m.group(1)} still a bare literal: {m.group(2)}"
+            )
+
+
+def test_observability_backend_connections_are_env_overridable(tmp_path: Path):
+    """FWK6: the store exporters' connections and the OTLP egress are env-overridable
+    (same foreclosure class as the app data-store URLs)."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "mongodb"]})
+    comp = dest / "infra" / "compose"
+    obs = (comp / "observability.yml").read_text()
+    assert (
+        "${POSTGRES_EXPORTER_DSN:-postgresql://app:${POSTGRES_PASSWORD:-app}@postgres:5432/app?sslmode=disable}"
+        in obs
+    )
+    assert "${MONGODB_EXPORTER_URI:-mongodb://mongo:27017}" in obs
+    assert "${CELERY_EXPORTER_BROKER_URL:-redis://redis:6379/0}" in obs
+    assert "${REDIS_EXPORTER_ADDR:-redis://redis:6379}" in obs
+    # OTLP egress env-overridable everywhere it appears (dev, services, observability)
+    for fname in ("dev.yml", "services.yml", "observability.yml"):
+        text = (comp / fname).read_text()
+        for line in text.splitlines():
+            if "APP_OTEL_EXPORTER_OTLP_ENDPOINT" in line:
+                assert (
+                    "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
+                    in line
+                ), f"{fname}: OTLP endpoint not env-overridable: {line.strip()}"
+
+
+def test_exporter_depends_on_moved_to_services_overlay(tmp_path: Path):
+    """FWK6: each store exporter's depends_on edge lives in services.yml (next to its store),
+    not in the locked observability.yml — so removing a store from services.yml (managed)
+    drops the exporter's dependency too, with no dangling edge."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers", "mongodb"]})
+    comp = dest / "infra" / "compose"
+    obs = yaml.safe_load((comp / "observability.yml").read_text())
+    svc = yaml.safe_load((comp / "services.yml").read_text())
+    for exporter, store in (
+        ("postgres-exporter", "postgres"),
+        ("mongodb-exporter", "mongo"),
+        ("celery-exporter", "redis"),
+        ("redis-exporter", "redis"),
+    ):
+        assert "depends_on" not in obs["services"][exporter], (
+            f"{exporter} still has depends_on in observability.yml"
+        )
+        assert (
+            svc["services"][exporter]["depends_on"][store]["condition"]
+            == "service_healthy"
+        ), f"{exporter} depends_on {store} not relocated to services.yml"
+
+
+def test_tls_ca_overlay_renders_off_by_default(tmp_path: Path):
+    """FWK6 section C: an opt-in CA-bundle overlay ships with an (empty) mount dir, so it is
+    inert until the operator drops a bundle and merges it. No effect on the default topology."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    comp = dest / "infra" / "compose"
+    overlay = comp / "tls-ca.yml"
+    assert overlay.is_file()
+    cfg = yaml.safe_load(overlay.read_text())
+    for svc in ("app", "worker", "beat"):
+        vols = cfg["services"][svc]["volumes"]
+        assert any("/etc/ssl/app-ca" in v for v in vols), f"{svc} missing CA mount"
+    assert (dest / "infra" / "tls" / "ca" / ".gitkeep").is_file()
+
+
+def test_tls_ca_overlay_app_only_without_workers(tmp_path: Path):
+    """Without the workers battery, tls-ca.yml carries only the app fragment (worker/beat
+    are not defined anywhere to merge onto)."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})  # no batteries
+    cfg = yaml.safe_load((dest / "infra" / "compose" / "tls-ca.yml").read_text())
+    assert "app" in cfg["services"]
+    assert "worker" not in cfg["services"] and "beat" not in cfg["services"]
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_prod_plus_tls_ca_merges(tmp_path: Path):
+    """prod.yml + services.yml + observability.yml + tls-ca.yml is a valid merge and the app
+    gains the CA mount. (observability.yml is required because services.yml's postgres-exporter
+    depends_on fragment is image-less and only valid when merged with the exporter definition
+    there — the same constraint as all other self-hosted + obs merges.)"""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    comp = dest / "infra" / "compose"
+    env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
+    r = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp / "prod.yml"),
+            "-f",
+            str(comp / "services.yml"),
+            "-f",
+            str(comp / "observability.yml"),
+            "-f",
+            str(comp / "tls-ca.yml"),
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "/etc/ssl/app-ca" in r.stdout

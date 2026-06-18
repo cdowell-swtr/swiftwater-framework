@@ -649,13 +649,6 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "merge-validated (inventory H1 demoted to config-validation)",
     ),
     SurfaceClass(
-        "service:prod.yml:postgres",
-        "infra/compose/prod.yml:3-52",
-        _EM,
-        "consumer-target service — no shipped path brings prod.yml up; compose-config "
-        "merge-validated (inventory H1 demoted to config-validation)",
-    ),
-    SurfaceClass(
         "service:services.yml:beat",
         "infra/compose/services.yml:59-72",
         _EX,
@@ -685,20 +678,89 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         # with APP_RUN_MIGRATIONS=false and the promoted image.
         "test_staging_plus_services_overlay_merges",
     ),
+    # ---- FWK6: postgres + depends_on fragments relocated into services.yml ------------
+    SurfaceClass(
+        "service:services.yml:postgres",
+        "infra/compose/services.yml",
+        _EX,
+        # FWK6: the always-on relational store moved out of prod.yml/staging.yml into the
+        # services overlay; the staging+services+obs config merge validates it appears.
+        "test_staging_plus_services_overlay_merges",
+    ),
+    SurfaceClass(
+        "service:services.yml:app",
+        "infra/compose/services.yml",
+        _EX,
+        # FWK6: app→postgres depends_on fragment (merged onto prod/staging app). The managed
+        # vs self-hosted config merge proves the edge appears self-hosted and drops managed.
+        "test_managed_db_topology_drops_postgres_and_depends_on",
+    ),
+    SurfaceClass(
+        "service:services.yml:postgres-exporter",
+        "infra/compose/services.yml",
+        _EX,
+        # FWK6: exporter→store depends_on fragment relocated from observability.yml so the
+        # managed-delete workflow drops the edge with the store.
+        "test_exporter_depends_on_moved_to_services_overlay",
+    ),
+    SurfaceClass(
+        "service:services.yml:mongodb-exporter",
+        "infra/compose/services.yml",
+        _EX,
+        # FWK6: exporter→store depends_on fragment (mongodb battery).
+        "test_exporter_depends_on_moved_to_services_overlay",
+    ),
+    SurfaceClass(
+        "service:services.yml:celery-exporter",
+        "infra/compose/services.yml",
+        _EX,
+        # FWK6: exporter→store depends_on fragment (workers battery).
+        "test_exporter_depends_on_moved_to_services_overlay",
+    ),
+    SurfaceClass(
+        "service:services.yml:redis-exporter",
+        "infra/compose/services.yml",
+        _EX,
+        # FWK6: exporter→store depends_on fragment (redis or workers battery).
+        "test_exporter_depends_on_moved_to_services_overlay",
+    ),
+    # ---- FWK6: opt-in TLS CA-bundle overlay ------------------------------------------
+    SurfaceClass(
+        "overlay:tls-ca.yml",
+        "infra/compose/tls-ca.yml",
+        _EX,
+        # FWK6: opt-in CA-bundle overlay; the prod+services+obs+tls-ca config merge validates
+        # it merges and the mount appears.
+        "test_prod_plus_tls_ca_merges",
+    ),
+    SurfaceClass(
+        "service:tls-ca.yml:app",
+        "infra/compose/tls-ca.yml",
+        _EX,
+        # FWK6: app CA-bundle mount fragment (off by default; merged on opt-in).
+        "test_prod_plus_tls_ca_merges",
+    ),
+    SurfaceClass(
+        "service:tls-ca.yml:worker",
+        "infra/compose/tls-ca.yml",
+        _EX,
+        # FWK6: worker CA-bundle mount fragment (workers battery; off by default).
+        "test_tls_ca_overlay_renders_off_by_default",
+    ),
+    SurfaceClass(
+        "service:tls-ca.yml:beat",
+        "infra/compose/tls-ca.yml",
+        _EX,
+        # FWK6: beat CA-bundle mount fragment (workers battery; off by default).
+        "test_tls_ca_overlay_renders_off_by_default",
+    ),
     SurfaceClass(
         "service:staging.yml:app",
         "infra/compose/staging.yml:4-53",
         _EX,
-        # FWK19: staging.yml standalone config-validation proves the app service resolves
-        # correctly (APP_IMAGE, APP_ENVIRONMENT: staging, healthcheck, depends_on).
-        "test_staging_standalone_merges",
-    ),
-    SurfaceClass(
-        "service:staging.yml:postgres",
-        "infra/compose/staging.yml:4-53",
-        _EX,
-        # FWK19: staging.yml standalone config-validation proves postgres resolves correctly
-        # (POSTGRES_PASSWORD env var, healthcheck, pgdata volume).
+        # FWK19/FWK6: staging.yml standalone config-validation proves the app service resolves
+        # correctly (APP_IMAGE, APP_ENVIRONMENT: staging, healthcheck). The depends_on edge now
+        # lives in services.yml (FWK6), so staging.yml alone is the managed shape.
         "test_staging_standalone_merges",
     ),
     SurfaceClass(
