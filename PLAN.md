@@ -5,6 +5,7 @@
 > Maintained per `pi-convention.md` (PI-convention: v2).
 
 ## Next
+- [ ] FWK39 — **Fix: `scripts/dev_summary.sh` trailing-blank vs EOF hook** (v0.3.0 follow-up; surfaced by Meridian). The locked rendered `dev_summary.sh` ended `…PY\n\n` (the `{% endraw %}` line emitted a trailing blank); the generated project's `end-of-file-fixer` pre-commit hook strips it → a LOCKED framework file fails a framework hook → permanent integrity drift on every consumer's first commit after upgrading to v0.3.0. Fix: `{% endraw %}` → `{% endraw -%}` (trims the render's trailing newline → ends `…PY\n`) + a render guard (`text.endswith("\n") and not "\n\n"`). Root-cause gap: FWK37's task gate didn't run the acceptance `test_rendered_project_precommit_runs_clean`. Patch-release candidate (v0.3.1).
 - [ ] FWK4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
 - [ ] FWK7 — Plan 30: full reverse integrity-coverage check + 23-file battery-infra classification  deps: consumes INTENTIONALLY_UNLOCKED (shipped v0.2.4)
 - [ ] FWK9 — Propagate the PI + MEMORY conventions into generated projects (template payload)  deps: FWK1, FWK2

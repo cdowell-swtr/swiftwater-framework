@@ -4152,6 +4152,13 @@ def test_dev_summary_script_renders_and_is_shellcheck_clean(tmp_path: Path):
     assert "8000" not in text and "3000" not in text, (
         "summary must derive ports from ps, not hardcode"
     )
+    # FWK39: no trailing blank line. The script is integrity-LOCKED, and the generated project's
+    # `end-of-file-fixer` pre-commit hook strips a trailing blank — which would make a locked
+    # framework file fail a framework hook and report permanent integrity drift on every consumer.
+    assert text.endswith("\n") and not text.endswith("\n\n"), (
+        "dev_summary.sh has a trailing blank line — end-of-file-fixer will strip it and break "
+        "the integrity lock (use `{% endraw -%}` to trim the render's trailing newline)"
+    )
     import subprocess as sp
 
     assert sp.run(["bash", "-n", str(script)]).returncode == 0
