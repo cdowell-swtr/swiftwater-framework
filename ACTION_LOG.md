@@ -2053,3 +2053,15 @@ distinct from dev:reset). compose.sh unchanged (still port-shifts + execs); Task
 up-then-summary as two cmds. dev_summary.sh = new surface → integrity LOCKED_TRACKED + FWK29 entry.
 Testing: render guards + live acceptance (bring up dev:lite, run dev_summary.sh, assert app URL at the
 offset-aware port + a present store) + shellcheck. Next: writing-plans. Template payload, release-deferred.
+
+#### #0170 · note · FWK37 · 2026-06-18
+Wrote the FWK37 implementation plan `docs/superpowers/plans/2026-06-18-task-dev-ux.md` (5 tasks).
+T1 `scripts/dev_summary.sh` (new): derives the summary from `docker compose <-f set> ps --format json`
+parsed by python3 (heredoc `{% raw %}`-wrapped so Jinja ignores Python braces; slug/offset via env, not
+Jinja-in-Python); maps service→label/URL, comprehensive, unknown-service catch-all. T2 Taskfile dev/
+dev:lite → `up -d --wait --build` + `dev_summary.sh` step (compose.sh unchanged). T3 `dev:logs`
+(`compose -p slug logs -f`) + `dev:down` (`compose -p slug down`, NO -v). T4 integrity LOCKED_TRACKED +
+FWK29 registry for dev_summary.sh. T5 **reworked** the dev:lite live test — detached `task dev:lite`
+RETURNS (stack stays up), so the old `proc.terminate()` would LEAK; now synchronous, assert /health +
+summary-names-app-at-ephemeral-port, tear down via `task dev:down`. Branch-end gate + Opus review.
+Next: dispatch execution.
