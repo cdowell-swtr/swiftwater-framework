@@ -1,0 +1,2 @@
+# FWK6: drop a managed-store CA bundle here (e.g. rds-ca.pem) and merge -f tls-ca.yml.
+# This dir ships empty; the read-only mount of an empty dir is inert.

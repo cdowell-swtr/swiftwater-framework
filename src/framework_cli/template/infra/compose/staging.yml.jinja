@@ -1,6 +1,8 @@
 # Staging topology — production-equivalent. The configured deploy strategy (infra/deploy/)
 # runs the SAME registry image (APP_IMAGE) against this definition on the staging target.
 # No bind mounts, no hot reload, no dev tooling. Secrets come from the target's environment.
+# The co-located postgres + its depends_on live in services.yml (the self-hosted overlay):
+# self-hosted = `-f staging.yml -f services.yml`; managed = omit services.yml + set APP_DATABASE_URL.
 services:
   app:
     image: ${APP_IMAGE:?set APP_IMAGE to the pushed registry tag}
@@ -8,7 +10,7 @@ services:
     environment:
       TZ: UTC
       APP_ENVIRONMENT: staging
-      APP_DATABASE_URL: "postgresql+psycopg://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/app"
+      APP_DATABASE_URL: "${APP_DATABASE_URL:-postgresql+psycopg://app:${POSTGRES_PASSWORD}@postgres:5432/app}"
     ports:
       - "8000:8000"
     # Liveness so `restart: unless-stopped` can recover a wedged app. start_period covers
@@ -19,35 +21,3 @@ services:
       timeout: 3s
       retries: 5
       start_period: 30s
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  postgres:
-{%- if uses_postgres_extension %}
-    image: ${POSTGRES_IMAGE:?set POSTGRES_IMAGE to the built+pushed custom Postgres tag (extensions baked in)}
-{%- else %}
-    image: postgres:17
-{%- endif %}
-{%- set _preloads = [] %}
-{%- if "timescaledb" in batteries %}{% set _ = _preloads.append("timescaledb") %}{% endif %}
-{%- if "age" in batteries %}{% set _ = _preloads.append("age") %}{% endif %}
-{%- if _preloads %}
-    command: ["postgres", "-c", "shared_preload_libraries={{ _preloads | join(',') }}"]
-{%- endif %}
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the target environment}
-      POSTGRES_DB: app
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d app"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
-    volumes:
-      - "pgdata:/var/lib/postgresql/data"
-
-volumes:
-  pgdata: {}

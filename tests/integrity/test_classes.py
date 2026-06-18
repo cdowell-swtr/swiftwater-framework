@@ -85,3 +85,18 @@ def test_seam_files_are_intentionally_unlocked():
         assert rel in INTENTIONALLY_UNLOCKED, (
             f"{rel} should be recorded as intentionally unlocked"
         )
+
+
+def test_services_overlay_is_a_composition_seam_not_locked():
+    """FWK6: services.yml is now operator-edited (managed URLs, omit stores), so it is an
+    intentional composition seam, not a checksummed locked file."""
+    from framework_cli.integrity.classes import INTENTIONALLY_UNLOCKED, LOCKED_TRACKED
+
+    assert "infra/compose/services.yml" in INTENTIONALLY_UNLOCKED
+    assert "infra/compose/services.yml" not in LOCKED_TRACKED
+
+
+def test_tls_ca_overlay_is_intentionally_unlocked():
+    from framework_cli.integrity.classes import INTENTIONALLY_UNLOCKED
+
+    assert "infra/compose/tls-ca.yml" in INTENTIONALLY_UNLOCKED

@@ -5,7 +5,7 @@ services:
   app:
     environment:
       APP_OTEL_ENABLED: "true"
-      APP_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      APP_OTEL_EXPORTER_OTLP_ENDPOINT: "${APP_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -84,44 +84,32 @@ services:
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.16.0
     environment:
-      DATA_SOURCE_NAME: "postgresql://app:${POSTGRES_PASSWORD:-app}@postgres:5432/app?sslmode=disable"
+      DATA_SOURCE_NAME: "${POSTGRES_EXPORTER_DSN:-postgresql://app:${POSTGRES_PASSWORD:-app}@postgres:5432/app?sslmode=disable}"
     ports:
       - "${POSTGRES_EXPORTER_HOST_PORT:-9187}:9187"
-    depends_on:
-      postgres:
-        condition: service_healthy
 {%- if "mongodb" in batteries %}
 
   mongodb-exporter:
     image: percona/mongodb_exporter:0.43
-    command: ["--mongodb.uri=mongodb://mongo:27017", "--collect-all"]
+    command: ["--mongodb.uri=${MONGODB_EXPORTER_URI:-mongodb://mongo:27017}", "--collect-all"]
     ports:
       - "${MONGODB_EXPORTER_HOST_PORT:-9216}:9216"
-    depends_on:
-      mongo:
-        condition: service_healthy
 {%- endif %}
 {%- if "workers" in batteries %}
 
   celery-exporter:
     image: danihodovic/celery-exporter:0.10.5
-    command: ["--broker-url=redis://redis:6379/0"]
+    command: ["--broker-url=${CELERY_EXPORTER_BROKER_URL:-redis://redis:6379/0}"]
     ports:
       - "${CELERY_EXPORTER_HOST_PORT:-9808}:9808"
-    depends_on:
-      redis:
-        condition: service_healthy
 {%- endif %}
 {%- if "redis" in batteries or "workers" in batteries %}
 
   redis-exporter:
     image: oliver006/redis_exporter:v1.62.0
-    command: ["--redis.addr=redis://redis:6379"]
+    command: ["--redis.addr=${REDIS_EXPORTER_ADDR:-redis://redis:6379}"]
     ports:
       - "${REDIS_EXPORTER_HOST_PORT:-9121}:9121"
-    depends_on:
-      redis:
-        condition: service_healthy
 {%- endif %}
 
 volumes:

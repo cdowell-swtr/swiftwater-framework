@@ -139,6 +139,57 @@ overrides to anonymous). Materialize `APP_ALERT_WEBHOOK_URL` as the Alertmanager
 on the target (Task 4 wires `url_file` in `alertmanager.yml`); provide it as a mounted secret,
 not a bare env var.
 
+## Data-store & backend runtime (self-hosted vs managed)
+
+Every externalizable backend — Postgres, Redis, MongoDB, the four Prometheus store-exporters,
+and the OTLP egress — is env-overridable. The same image runs in both modes; the only
+difference is which env vars are set and which compose overlays are merged.
+
+**Resolution precedence (the core contract):** `APP_DATABASE_URL` / `APP_REDIS_URL` /
+`APP_MONGO_URL` set by the operator > the compose file's `${VAR:-default}` literal (the
+co-located-container DSN) > the Python `Settings` default (host-tooling / test fallback). The
+value is an **opaque DSN** — failover hosts, TLS query params, and `?sslmode=verify-full` all
+go in it.
+
+**Self-hosted (default):**
+
+```bash
+docker compose -f infra/compose/$DEPLOY_ENV.yml -f infra/compose/services.yml -f infra/compose/observability.yml up -d
+```
+
+Postgres, battery data stores (MongoDB, Redis), and Celery workers run locally via
+`services.yml`. `observability.yml` **must** be merged alongside `services.yml` —
+`services.yml`'s exporter `depends_on` fragments are image-less and only valid with the
+exporter image definitions in `observability.yml`.
+
+**Managed / external store:** edit `infra/compose/services.yml` to remove the store service
+block(s) you are externalising (their `depends_on` edges are grouped with them and go too),
+then set the matching env vars as target secrets:
+
+| Backend | Env var(s) |
+|---|---|
+| Postgres | `APP_DATABASE_URL` |
+| Redis (app + Celery) | `APP_REDIS_URL`, `APP_CELERY_BROKER_URL`, `APP_CELERY_RESULT_BACKEND` |
+| MongoDB | `APP_MONGO_URL` |
+| Postgres exporter | `POSTGRES_EXPORTER_DSN` |
+| MongoDB exporter | `MONGODB_EXPORTER_URI` |
+| Celery exporter | `CELERY_EXPORTER_BROKER_URL` |
+| Redis exporter | `REDIS_EXPORTER_ADDR` |
+
+Worker and beat services remain self-hosted (they run the app image) and connect to the
+managed broker via the env vars above.
+
+**Managed / SaaS observability:** set `APP_OTEL_EXPORTER_OTLP_ENDPOINT` at your
+collector (e.g. Grafana Cloud, Honeycomb). No overlay change required — the compose stack
+already reads this from the environment.
+
+**TLS verify-full to a managed store:** also merge `-f infra/compose/tls-ca.yml` and drop
+your CA bundle at `infra/tls/ca/<name>.pem`, then reference it in the DSN:
+
+```
+?sslmode=verify-full&sslrootcert=/etc/ssl/app-ca/<name>.pem
+```
+
 ## Battery services in staging/prod
 
 Battery data stores (MongoDB, Redis) and Celery workers live in `infra/compose/services.yml`.

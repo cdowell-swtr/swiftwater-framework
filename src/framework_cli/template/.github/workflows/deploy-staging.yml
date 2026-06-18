@@ -13,6 +13,17 @@ permissions:
   contents: read
   packages: write
 
+# Serialize staging deploys — never cancel an in-flight deploy (that could leave a half-applied
+# release); a deploy triggered while one is running queues behind it.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+# Optional: skip the staging deploy on docs-only merges by adding `paths-ignore` under the
+# `push:` trigger above, e.g.  paths-ignore: ["**.md", "docs/**"]  — safe here (a push event has
+# no PR-merge gate to wedge), but it IS a behavior change (docs-only merges won't redeploy), so
+# it's left opt-in.
+
 jobs:
   build-push:
     runs-on: ubuntu-latest
