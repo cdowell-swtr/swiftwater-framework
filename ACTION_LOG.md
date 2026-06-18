@@ -1755,3 +1755,9 @@ source of truth" line (FWK3). Branch hygiene: local + remote already clean — o
 `gh-pages` remain (all feature branches auto-deleted on their squash-merges). Native memories
 recorded (unattended coverage-batch run pattern; pre-run adversarial plan verification). Docs/state
 only → no release.
+
+#### #0149 · completed · planning · 2026-06-17
+Added **FWK37** to PLAN `Next` (backlog only, not started): improve `task dev`/`dev:lite` UX —
+bring the stack up DETACHED (free the terminal) + print a prominent "stack is up" summary with the
+key (PORT_OFFSET-aware) URLs, instead of attaching and tailing all container logs; add `task logs`
++ `task down`. Template payload, release-deferred. Captured per user request (no design/impl yet).
