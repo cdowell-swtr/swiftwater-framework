@@ -2038,3 +2038,18 @@ FWK38. **test_copier_runner.py** keeps both branches' appended tests (the marker
 inter-function blank lines → `ruff format` restored them — the one post-merge fix). Verified on the
 batch: ruff check + format clean (211 files), mypy clean; full suite next. Feature code is disjoint
 (FWK6 = compose/settings/integrity; FWK38 = .github/workflows), only the bookkeeping files overlapped.
+
+#### #0169 · note · FWK37 · 2026-06-18
+Brainstormed FWK37 (`task dev` UX) → approved spec `docs/superpowers/specs/2026-06-18-task-dev-ux-design.md`.
+Problem: `task dev`/`dev:lite` run `up --build` ATTACHED → tail every container's logs, "app is up"
+scrolls off, terminal held hostage; no on-demand logs/stop. Decisions: (1) detached + honest readiness
+`up -d --wait --build` (Compose returns only when healthchecks pass — existing healthchecks make it
+free); (2) **comprehensive** summary (readability = clean static block + no scrolling, not trimming);
+(3) **derived from the running stack** — new `scripts/dev_summary.sh` reads `docker compose -p
+{{project_slug}} ps` (json via python3) → maps service→label/URL, single source of truth (auto-reflects
+dev/lite, batteries, PORT_OFFSET; no drift vs compose.sh); (4) namespaced `task dev:logs`
+(`compose -p {slug} logs -f`) + `task dev:down` (`compose -p {slug} down`, NO -v → keeps volumes,
+distinct from dev:reset). compose.sh unchanged (still port-shifts + execs); Taskfile orchestrates
+up-then-summary as two cmds. dev_summary.sh = new surface → integrity LOCKED_TRACKED + FWK29 entry.
+Testing: render guards + live acceptance (bring up dev:lite, run dev_summary.sh, assert app URL at the
+offset-aware port + a present store) + shellcheck. Next: writing-plans. Template payload, release-deferred.
