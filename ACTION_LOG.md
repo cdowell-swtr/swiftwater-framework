@@ -1924,3 +1924,13 @@ connectivity, not just image boot). Purely additive (no existing test touched); 
 unique port-suffixed network/container names; ruff clean. Ran the sandbox-disabled docker path.
 Spec review ✅ (proof sound + non-vacuous) → applied the one nit: skipif uses the file's
 `_docker_available()` (binary + daemon check) instead of bare `shutil.which`.
+
+#### #0160 · completed · FWK6 · 2026-06-17
+T9 part 1 — FWK29 runtime-coverage reconciliation. The relocation + new overlay shifted the enumerated
+surface set: removed 2 stale (`service:prod.yml:postgres`, `service:staging.yml:postgres` — postgres
+moved out), added 10 in `tests/runtime_coverage/registry.py` (all EXERCISED): `service:services.yml:
+postgres` (relocated store; staging+services+obs merge), `service:services.yml:app` (app→postgres
+depends_on fragment; managed-topology config test), the 4 `service:services.yml:*-exporter` depends_on
+fragments (exporter-relocation test), `overlay:tls-ca.yml` + `service:tls-ca.yml:{app,worker,beat}` (CA
+overlay; tls-ca merge/render tests). `tests/runtime_coverage/` 9 passed (set-equality + no-stale both
+green); ruff/format clean.
