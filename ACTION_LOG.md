@@ -2135,3 +2135,18 @@ generated-workflow `concurrency`. Minor bump rationale: FWK6 (prod/staging compo
 (detached `task dev`) change behavior; `framework upgrade` re-renders the compose files + `task dev`.
 Cut via a release PR (master protected); render-matrix on #59/#60 already proved the payload green; tag
 `v0.3.0` after merge → `release.yml` publishes. Per [[release-cut-procedure]].
+
+#### #0177 · completed · FWK39 · 2026-06-18
+Fix (Meridian-flagged, v0.3.0 follow-up): the locked rendered `scripts/dev_summary.sh` ended `…PY\n\n`
+— the `{% endraw %}` line emitted a trailing blank. The generated project's `end-of-file-fixer`
+pre-commit hook strips it → a LOCKED framework file fails a framework hook → permanent `framework
+integrity` drift on every consumer's first commit after upgrading to v0.3.0 (Meridian worked around via
+`integrity --allow-drift`, a recorded-drift marker). Fix: `{% endraw %}` → `{% endraw -%}` (trims the
+render's trailing newline; rendered file now ends `…PY\n`, EOF-fixer is a no-op — verified) + a render
+guard in `test_dev_summary_script_renders_and_is_shellcheck_clean` (`endswith("\n") and not "\n\n"`,
+bite-confirmed it catches the old `\n\n`). Shellcheck/bash still clean. **Root-cause gap:** FWK37's
+per-task gate ran test_copier_runner + the live dev:lite test but NOT the acceptance
+`test_rendered_project_precommit_runs_clean` (the heavy tier that runs `pre-commit run --all-files` on a
+fresh render) — which would have caught it; the new targeted guard is the fast CI-visible catch. Patch
+v0.3.1 candidate so consumers don't need the drift marker. (Note: the env-parity eval-fixture
+`.env.example` anchor break flagged during FWK6 remains separate/pre-existing.)
