@@ -1873,3 +1873,11 @@ passed; mypy/ruff clean. Spec review ✅ (gates exactly consistent across all ba
 deleted) + Opus quality APPROVE (coupling verified sound — 3-way merge rc=0, 2-way services-without-obs
 correctly fails; defaults byte-identical; no `:?` hazard) → applied the one Minor (corrected a stale
 `test_staging_standalone_merges` docstring describing the now-invalid 2-way merge).
+
+#### #0156 · completed · FWK6 · 2026-06-17
+T5 (subagent-driven, Sonnet impl): `infra/compose/services.yml` moved LOCKED_TRACKED →
+INTENTIONALLY_UNLOCKED in `integrity/classes.py` (section D — it's now the operator-edited composition
+seam for managed deploys, alongside seed.py/notify.sh). TDD guard `test_services_overlay_is_a_
+composition_seam_not_locked`; `tests/integrity/` 46 passed (stale-entry/reference-integrity green),
+mypy + ruff clean. Controller-verified the 2-line tuple move (exactly one occurrence, in the right
+list); no separate quality review — no quality surface beyond the guarded change.

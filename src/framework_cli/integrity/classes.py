@@ -33,7 +33,6 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "infra/compose/dev.yml",
     "infra/compose/observability.yml",
     "infra/compose/prod.yml",
-    "infra/compose/services.yml",
     "infra/compose/staging.yml",
     "infra/compose/test.yml",
     "infra/deploy/strategy.sh",
@@ -76,6 +75,7 @@ LOCKED_TRACKED: tuple[str, ...] = (
 INTENTIONALLY_UNLOCKED: tuple[str, ...] = (
     "scripts/seed.py",  # thin entrypoint; the idempotent seed() helper in db/seed.py is the mechanism
     "infra/deploy/notify.sh",  # deploy-notification seam — "wire your channel here"
+    "infra/compose/services.yml",  # FWK6: self-hosted store overlay — operators edit it (managed URLs / omit stores)
 )
 
 # Gitignored + existence-only: a framework-managed file legitimately absent from a fresh
