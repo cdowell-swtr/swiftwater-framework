@@ -1968,3 +1968,61 @@ the one cosmetic Opus nit (stale `service:staging.yml:app` registry comment re: 
 **FWK6 implementation COMPLETE on branch `fwk6-datastore-runtime-parity` (9 TDD tasks).** Per user:
 **PR HELD** — release-deferred, to be batched with FWK36+FWK37 into one PR (one render-matrix run) given
 the Actions-minutes budget (90% used, resets 2026-07-01). Branch is ready-but-unpushed.
+#### #0164 · note · FWK38 · 2026-06-18
+Brainstormed FWK38 (CI Actions-minutes savings) → approved spec
+`docs/superpowers/specs/2026-06-18-ci-actions-minutes-savings-design.md`. Premise-correcting
+finding: the framework repo is **PUBLIC → unlimited free CI** (timing API bills 0), so optimizing it
+saves nothing on the quota; the 1834/2000 included min is **Meridian** (private). Root cause: the
+generated `ci.yml` fans into 9 per-job-billed jobs with NO `concurrency`, so mid-PR pushes pile up
+redundant 9-min runs. Scope = levers 1 (concurrency) + 3 (paths); lever 2 (collapse the fan-out)
+deferred. Two targets: **(A)** template fix (this FWK38, off `master` branch `fwk38-ci-actions-savings`)
+— `concurrency` on all 4 generated workflows (ci/docs cancel-in-progress:true; deploys serialized
+false) + `paths` include on `docs.yml`; NO workflow-level `paths-ignore` on `ci.yml` (wedges
+required checks for consumers — opt-in comment + deferred sentinel restructure); **(B)** a written
+**brief** for Meridian to apply the same now (Meridian `main` has no required checks → `ci.yml`
+`paths-ignore` safe; locked-file drift self-heals on next `framework upgrade`) — I produce the brief,
+I do NOT edit Meridian (per maintainer). Next: writing-plans. Template payload, release-deferred (batch
+cadence, not minutes — framework CI is free).
+
+#### #0165 · completed · FWK38 · 2026-06-18
+Wrote the FWK38 implementation plan `docs/superpowers/plans/2026-06-18-ci-actions-minutes-savings.md`
+(3 tasks). **Plan-time spec correction:** the generated `docs.yml` is **tag-triggered only**
+(`push: tags: ["v*"]` — publishes the docs site on release; the docs *gate* is a job inside `ci.yml`),
+so the spec's "docs.yml paths-include" was wrong → corrected the spec: template lever 3 (paths) has no
+safe-by-default home (`ci.yml` wedges required checks; `docs.yml` is tag-only; `deploy-staging`
+paths-ignore is a behavior change), so it ships as a **documented opt-in comment** on `ci.yml.jinja` +
+`deploy-staging.yml`; `docs.yml` gets a serialized concurrency group (anti-gh-pages-race), not paths.
+User confirmed the corrected basis. Plan: T1 `ci.yml.jinja` cancel-in-progress concurrency (`{% raw %}`
+-wrapped `${{…}}`) + paths opt-in comment; T2 serialized `cancel-in-progress:false` on deploy-staging/
+deploy-prod/docs (deploy-*.yml are verbatim non-jinja → no raw); T3 produce the Meridian brief at
+`~/meridian-ci-savings-brief.md` (outside the public repo; exact paste-ready YAML for Meridian's 4
+workflows + integrity-drift-self-heals note; fact-checked against Meridian's real files; NOT applied by
+me). Render guard `test_generated_workflows_have_concurrency`. User: FWK6/36/37 batch into this release
+too (brief unblocks Meridian regardless). Next: dispatch execution.
+
+#### #0166 · completed · FWK38 · 2026-06-18
+T1+T2 (inline executing-plans): `concurrency` added to all 4 generated workflows.
+`ci.yml.jinja` — `cancel-in-progress: true`, group `${{ github.workflow }}-${{ github.ref }}`
+(`{% raw %}`-wrapped since it's a rendered .jinja; render-verified it unescapes correctly) + the opt-in
+`paths-ignore` comment with the required-check wedge caveat. `deploy-staging.yml` / `deploy-prod.yml`
+(verbatim, non-jinja → literal group, no raw) + `docs.yml.jinja` — serialized groups
+(`deploy-staging`/`deploy-prod`/`docs`, `cancel-in-progress: false`; deploys never cancel mid-deploy,
+docs prevents racing gh-pages publishes) + deploy-staging opt-in paths comment. TDD via
+`test_generated_workflows_have_concurrency` (red→green); workflow/ci/deploy regressions 25 passed,
+`test_workflow_node24` 3 passed; ruff clean. Committed T1+T2 together (shared test → no red commit).
+
+#### #0167 · completed · FWK38 · 2026-06-18
+T3 + branch-end (inline). **T3:** produced the Meridian brief at `~/meridian-ci-savings-brief.md`
+(OUTSIDE the public repo — names Meridian's private workflow layout). Paste-ready `concurrency` +
+`paths`/`paths-ignore` YAML for Meridian's 4 workflows, fact-checked against Meridian's REAL files (read
+`/home/chris/Claude Code/Projects/meridian/.github/workflows/*` — anchors match the template exactly:
+ci/docs-layout = push-main+PR, deploy-staging = push-main, deploy-prod = tags; all `permissions:`→`jobs:`)
++ the integrity-drift-self-heals note + a live verify step (watch a superseded run flip to Cancelled).
+**Did NOT edit Meridian** (per maintainer). **Gate:** ruff check + format clean (211 files);
+`test_generated_workflows_have_concurrency` + `test_workflow_node24` pass. Branch diff = spec + plan +
+4 workflow files + 1 test + PLAN/ACTION_LOG, nothing stray. **FWK38 implementation COMPLETE on branch
+`fwk38-ci-actions-savings`** (off master, independent of held FWK6). Inline-executed (small mechanical
+YAML); controller-verified the 4 concurrency blocks (raw-wrap correct in ci.jinja, absent in verbatim
+deploys) rather than a heavyweight subagent review. **PR HELD** to batch with FWK6/36/37 into one
+release (per maintainer; framework CI is free so no minute reason — release cadence only). Meridian's
+relief is the brief, available now, independent of the release.

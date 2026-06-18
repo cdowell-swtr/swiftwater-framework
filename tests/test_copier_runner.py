@@ -4111,3 +4111,26 @@ def test_prod_plus_tls_ca_merges(tmp_path: Path):
     )
     assert r.returncode == 0, r.stderr
     assert "/etc/ssl/app-ca" in r.stdout
+def test_generated_workflows_have_concurrency(tmp_path: Path):
+    """FWK38: ci.yml cancels superseded PR runs; deploys + docs serialize (never cancel).
+    Caps the redundant-run pile-up that drives a private consumer's Actions-minute spend."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["docs"]})
+    wf = dest / ".github" / "workflows"
+
+    ci = yaml.safe_load((wf / "ci.yml").read_text())
+    assert ci["concurrency"]["group"] == "${{ github.workflow }}-${{ github.ref }}"
+    assert ci["concurrency"]["cancel-in-progress"] is True
+    # opt-in paths guidance is present (commented, so read raw text)
+    assert "paths-ignore" in (wf / "ci.yml").read_text()
+
+    for name, group in (
+        ("deploy-staging.yml", "deploy-staging"),
+        ("deploy-prod.yml", "deploy-prod"),
+        ("docs.yml", "docs"),
+    ):
+        w = yaml.safe_load((wf / name).read_text())
+        assert w["concurrency"]["group"] == group, f"{name} concurrency group"
+        assert w["concurrency"]["cancel-in-progress"] is False, (
+            f"{name} must not cancel"
+        )
