@@ -1772,3 +1772,19 @@ required checks for consumers — opt-in comment + deferred sentinel restructure
 `paths-ignore` safe; locked-file drift self-heals on next `framework upgrade`) — I produce the brief,
 I do NOT edit Meridian (per maintainer). Next: writing-plans. Template payload, release-deferred (batch
 cadence, not minutes — framework CI is free).
+
+#### #0164 · completed · FWK38 · 2026-06-18
+Wrote the FWK38 implementation plan `docs/superpowers/plans/2026-06-18-ci-actions-minutes-savings.md`
+(3 tasks). **Plan-time spec correction:** the generated `docs.yml` is **tag-triggered only**
+(`push: tags: ["v*"]` — publishes the docs site on release; the docs *gate* is a job inside `ci.yml`),
+so the spec's "docs.yml paths-include" was wrong → corrected the spec: template lever 3 (paths) has no
+safe-by-default home (`ci.yml` wedges required checks; `docs.yml` is tag-only; `deploy-staging`
+paths-ignore is a behavior change), so it ships as a **documented opt-in comment** on `ci.yml.jinja` +
+`deploy-staging.yml`; `docs.yml` gets a serialized concurrency group (anti-gh-pages-race), not paths.
+User confirmed the corrected basis. Plan: T1 `ci.yml.jinja` cancel-in-progress concurrency (`{% raw %}`
+-wrapped `${{…}}`) + paths opt-in comment; T2 serialized `cancel-in-progress:false` on deploy-staging/
+deploy-prod/docs (deploy-*.yml are verbatim non-jinja → no raw); T3 produce the Meridian brief at
+`~/meridian-ci-savings-brief.md` (outside the public repo; exact paste-ready YAML for Meridian's 4
+workflows + integrity-drift-self-heals note; fact-checked against Meridian's real files; NOT applied by
+me). Render guard `test_generated_workflows_have_concurrency`. User: FWK6/36/37 batch into this release
+too (brief unblocks Meridian regardless). Next: dispatch execution.

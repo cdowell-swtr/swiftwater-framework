@@ -69,29 +69,42 @@ wedges PRs at "Expected — waiting for status" (the skipped required check neve
 
 **A1. `concurrency` on all generated workflows.**
 
-`ci.yml.jinja` and the generated `docs.yml` (PR-iteration workflows) — cancel superseded:
+`ci.yml.jinja` (the PR-iteration workflow — the dominant cost) — cancel superseded:
 ```yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 ```
 
-`deploy-staging.yml` and `deploy-prod.yml` (deploys) — **serialize, never cancel mid-deploy**:
+`deploy-staging.yml`, `deploy-prod.yml`, and the generated `docs.yml` — **serialize, never
+cancel**:
 ```yaml
 concurrency:
-  group: deploy-staging   # (deploy-prod for the prod workflow)
+  group: deploy-staging   # deploy-prod / docs respectively
   cancel-in-progress: false
 ```
 Cancelling a half-finished deploy is unsafe; concurrent merges queue their deploys instead.
+The generated `docs.yml` is **tag-triggered only** (`push: tags: ["v*"]` — it publishes the
+docs site on release; the docs *gate* runs as a job inside `ci.yml`). A serialized group on
+it is a small correctness win (two release publishes can't race the `gh-pages` branch); it is
+NOT a budget item and gets `cancel-in-progress: false`.
 
-**A2. `paths` (scoped to wedge-safe).**
+**A2. `paths` — documented opt-in, NOT a default (no safe-by-default home on the template).**
 
-- Generated `docs.yml` (docs-publish workflow; **not** a required gate): add a `paths:`
-  *include* so it runs only on docs-relevant changes (`docs/**`, `mkdocs.yml`, `**.md`), not
-  on code-only changes.
-- `ci.yml.jinja`: **no** workflow-level `paths-ignore` (wedge risk). Add a comment block
-  documenting how a consumer with no required CI checks can opt into `paths-ignore` for
-  docs-only changes, and that the wedge-safe sentinel restructure is a tracked follow-up.
+There is no place to ship a `paths` filter by default without either a footgun or a behavior
+change:
+- `ci.yml` — a workflow-level `paths-ignore` would **wedge** any consumer who marks the CI
+  jobs branch-protection-required (the skipped required check never reports). Deferred.
+- `docs.yml` — tag-triggered, so there is no PR/push trigger to filter. N/A.
+- `deploy-staging.yml` — a `paths-ignore` here *would* be wedge-safe (it's a `push` event, no
+  PR-merge gate), but skipping a deploy on docs-only merges is a **behavior change** some
+  consumers don't want. Not a silent default.
+
+So the template ships a **comment block** in `ci.yml.jinja` and `deploy-staging.yml` showing
+how to opt into `paths-ignore` for docs-only changes, with the required-check caveat spelled
+out (and noting the wedge-safe `ci.yml` sentinel restructure is a tracked follow-up). The
+concrete `paths` saving is realized in **Meridian's brief** (Deliverable B), where its repo
+specifics (no required checks) make it safe.
 
 ### Deliverable B — Meridian brief (produced, not applied)
 
@@ -118,10 +131,11 @@ A markdown brief instructing Meridian's maintainer/session to apply, in Meridian
 
 ## Testing (template side)
 
-- `tests/test_copier_runner.py` render guards: a render asserts the generated `ci.yml` and
-  `docs.yml` carry the `${{ github.workflow }}-${{ github.ref }}` concurrency group with
-  `cancel-in-progress: true`; `deploy-staging.yml`/`deploy-prod.yml` carry the serialized
-  `deploy-*` group with `cancel-in-progress: false`; `docs.yml` carries the `paths` include.
+- `tests/test_copier_runner.py` render guards: a render asserts the generated `ci.yml` carries
+  the `${{ github.workflow }}-${{ github.ref }}` concurrency group with `cancel-in-progress:
+  true`; `deploy-staging.yml`, `deploy-prod.yml`, and `docs.yml` carry a serialized concurrency
+  group with `cancel-in-progress: false`; and `ci.yml`/`deploy-staging.yml` carry the opt-in
+  `paths-ignore` comment block.
 - The existing YAML-validity / `test_workflow_node24` guards still pass (`concurrency` and
   `paths` are valid GHA keys; no action versions change).
 - **No FWK29 change:** `concurrency`/`paths` are metadata on existing workflows, not new
