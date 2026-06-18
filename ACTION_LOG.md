@@ -1799,3 +1799,19 @@ T1+T2 (inline executing-plans): `concurrency` added to all 4 generated workflows
 docs prevents racing gh-pages publishes) + deploy-staging opt-in paths comment. TDD via
 `test_generated_workflows_have_concurrency` (red→green); workflow/ci/deploy regressions 25 passed,
 `test_workflow_node24` 3 passed; ruff clean. Committed T1+T2 together (shared test → no red commit).
+
+#### #0166 · completed · FWK38 · 2026-06-18
+T3 + branch-end (inline). **T3:** produced the Meridian brief at `~/meridian-ci-savings-brief.md`
+(OUTSIDE the public repo — names Meridian's private workflow layout). Paste-ready `concurrency` +
+`paths`/`paths-ignore` YAML for Meridian's 4 workflows, fact-checked against Meridian's REAL files (read
+`/home/chris/Claude Code/Projects/meridian/.github/workflows/*` — anchors match the template exactly:
+ci/docs-layout = push-main+PR, deploy-staging = push-main, deploy-prod = tags; all `permissions:`→`jobs:`)
++ the integrity-drift-self-heals note + a live verify step (watch a superseded run flip to Cancelled).
+**Did NOT edit Meridian** (per maintainer). **Gate:** ruff check + format clean (211 files);
+`test_generated_workflows_have_concurrency` + `test_workflow_node24` pass. Branch diff = spec + plan +
+4 workflow files + 1 test + PLAN/ACTION_LOG, nothing stray. **FWK38 implementation COMPLETE on branch
+`fwk38-ci-actions-savings`** (off master, independent of held FWK6). Inline-executed (small mechanical
+YAML); controller-verified the 4 concurrency blocks (raw-wrap correct in ci.jinja, absent in verbatim
+deploys) rather than a heavyweight subagent review. **PR HELD** to batch with FWK6/36/37 into one
+release (per maintainer; framework CI is free so no minute reason — release cadence only). Meridian's
+relief is the brief, available now, independent of the release.
