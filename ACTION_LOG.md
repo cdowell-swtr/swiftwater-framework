@@ -2150,3 +2150,13 @@ per-task gate ran test_copier_runner + the live dev:lite test but NOT the accept
 fresh render) — which would have caught it; the new targeted guard is the fast CI-visible catch. Patch
 v0.3.1 candidate so consumers don't need the drift marker. (Note: the env-parity eval-fixture
 `.env.example` anchor break flagged during FWK6 remains separate/pre-existing.)
+
+#### #0178 · milestone · release · 2026-06-18
+Cut **v0.3.1** (patch — FWK39 only). Bumped `pyproject` `0.3.0 → 0.3.1`, `dogfood.py DOGFOOD_COMMIT
+v0.3.0 → v0.3.1`, regenerated `uv.lock`; moved FWK39 → PLAN `Done`. Ships the FWK39 fix
+(`dev_summary.sh` `{% endraw -%}` — no trailing blank, so the locked file no longer fights the
+generated project's `end-of-file-fixer` hook → no integrity drift on upgrade). Courtesy patch so
+v0.3.0 adopters don't need the `--allow-drift` marker. Cut via release PR (master protected);
+render-matrix on #62 + the post-merge master push prove the payload; tag `v0.3.1` after merge →
+`release.yml` (guard→ci→broad-matrix→publish). Per [[release-cut-procedure]] +
+[[release-yml-runs-full-gate-before-publish]].
