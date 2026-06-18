@@ -4038,3 +4038,62 @@ def test_exporter_depends_on_moved_to_services_overlay(tmp_path: Path):
             svc["services"][exporter]["depends_on"][store]["condition"]
             == "service_healthy"
         ), f"{exporter} depends_on {store} not relocated to services.yml"
+
+
+def test_tls_ca_overlay_renders_off_by_default(tmp_path: Path):
+    """FWK6 section C: an opt-in CA-bundle overlay ships with an (empty) mount dir, so it is
+    inert until the operator drops a bundle and merges it. No effect on the default topology."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["workers"]})
+    comp = dest / "infra" / "compose"
+    overlay = comp / "tls-ca.yml"
+    assert overlay.is_file()
+    cfg = yaml.safe_load(overlay.read_text())
+    for svc in ("app", "worker", "beat"):
+        vols = cfg["services"][svc]["volumes"]
+        assert any("/etc/ssl/app-ca" in v for v in vols), f"{svc} missing CA mount"
+    assert (dest / "infra" / "tls" / "ca" / ".gitkeep").is_file()
+
+
+def test_tls_ca_overlay_app_only_without_workers(tmp_path: Path):
+    """Without the workers battery, tls-ca.yml carries only the app fragment (worker/beat
+    are not defined anywhere to merge onto)."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})  # no batteries
+    cfg = yaml.safe_load((dest / "infra" / "compose" / "tls-ca.yml").read_text())
+    assert "app" in cfg["services"]
+    assert "worker" not in cfg["services"] and "beat" not in cfg["services"]
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_prod_plus_tls_ca_merges(tmp_path: Path):
+    """prod.yml + services.yml + observability.yml + tls-ca.yml is a valid merge and the app
+    gains the CA mount. (observability.yml is required because services.yml's postgres-exporter
+    depends_on fragment is image-less and only valid when merged with the exporter definition
+    there — the same constraint as all other self-hosted + obs merges.)"""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    comp = dest / "infra" / "compose"
+    env = {**os.environ, "APP_IMAGE": "demo:ci", "POSTGRES_PASSWORD": "x"}
+    r = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(comp / "prod.yml"),
+            "-f",
+            str(comp / "services.yml"),
+            "-f",
+            str(comp / "observability.yml"),
+            "-f",
+            str(comp / "tls-ca.yml"),
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "/etc/ssl/app-ca" in r.stdout

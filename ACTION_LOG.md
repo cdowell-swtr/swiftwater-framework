@@ -1881,3 +1881,15 @@ seam for managed deploys, alongside seed.py/notify.sh). TDD guard `test_services
 composition_seam_not_locked`; `tests/integrity/` 46 passed (stale-entry/reference-integrity green),
 mypy + ruff clean. Controller-verified the 2-line tuple move (exactly one occurrence, in the right
 list); no separate quality review — no quality surface beyond the guarded change.
+
+#### #0157 · completed · FWK6 · 2026-06-17
+T6 (subagent-driven, Sonnet impl): opt-in CA-bundle overlay (section C). New
+`infra/compose/tls-ca.yml.jinja` (app always; worker/beat gated on workers battery — they're only
+defined when services.yml is merged) mounting `../tls/ca:/etc/ssl/app-ca:ro`; new empty
+`infra/tls/ca/.gitkeep` (ships the mount dir, renders OK — mirrors traefik/certs/.gitkeep);
+`infra/compose/tls-ca.yml` added to INTENTIONALLY_UNLOCKED. OFF BY DEFAULT — nothing references the
+mount unless the operator drops a bundle + sets `?sslmode=verify-full&sslrootcert=/etc/ssl/app-ca/…`
+in the opaque DSN. 4 new tests (off-by-default render, app-only-without-workers, prod+services+obs+tls-ca
+merge, integrity-unlocked); test_prod_plus_tls_ca_merges includes observability.yml (same image-less-
+fragment coupling as T4). tls_ca tests + 47 integrity pass; mypy/ruff clean. Controller-verified
+off-by-default + gating + .gitkeep render.
