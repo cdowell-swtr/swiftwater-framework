@@ -4174,3 +4174,18 @@ def test_dev_targets_run_detached_with_summary(tmp_path: Path):
             f"{target} must use detached `up -d --wait --build`"
         )
         assert "./scripts/dev_summary.sh" in cmds, f"{target} must print the summary"
+
+
+def test_dev_logs_and_down_targets(tmp_path: Path):
+    """FWK37: on-demand log-follow + a stop that KEEPS volumes (distinct from dev:reset's -v)."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA})
+    import yaml as _y
+
+    spec = _y.safe_load((dest / "Taskfile.yml").read_text())
+    logs = "\n".join(str(c) for c in spec["tasks"]["dev:logs"]["cmds"])
+    down = "\n".join(str(c) for c in spec["tasks"]["dev:down"]["cmds"])
+    assert (
+        "logs -f" in logs and "demo" in logs
+    )  # project-scoped follow (slug=demo in DATA)
+    assert "down" in down and "-v" not in down, "dev:down must keep volumes (no -v)"

@@ -2088,3 +2088,11 @@ T2 (subagent-driven, Sonnet): Taskfile `dev`/`dev:lite` now run `./scripts/compo
 with the SAME `-f …/--profile …` selector args (no arg drift). descs updated to say detached. compose.sh
 + dev:reset untouched. Render guard `test_dev_targets_run_detached_with_summary` (red→green; confirmed
 the go-task `tasks:` mapping path); regression `-k taskfile/dev/compose/render` 39 passed; ruff clean.
+
+#### #0173 · completed · FWK37 · 2026-06-18
+T3 (subagent-driven, Sonnet): added `dev:logs` (`docker compose -p {{project_slug}} logs -f` — follow
+on demand, Ctrl-C stops following not the stack) + `dev:down` (`docker compose -p {{project_slug}}
+down` — NO `-v`, keeps volumes; distinct from `dev:reset`'s `down -v`). Project-scoped via base.yml's
+`name:`, no `-f` needed. Render guard `test_dev_logs_and_down_targets` (asserts logs -f + slug, and NO
+-v in down); regression `-k taskfile/dev` 17 passed; ruff clean. Controller-verified the diff (mechanical
+YAML; render-guard = spec check).
