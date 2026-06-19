@@ -129,9 +129,10 @@ tasks:
       - bash scripts/doctor.sh
 
   hooks:
-    desc: Install git pre-commit hooks
+    desc: Install pre-commit hooks (pre-commit + commit-msg stages)
     cmds:
-      - uv run pre-commit install
+      - uv run pre-commit install --install-hooks
+      - uv run pre-commit install --hook-type commit-msg
 
   hooks:run:
     desc: Run all pre-commit hooks against all files

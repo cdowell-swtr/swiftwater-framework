@@ -61,6 +61,7 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "scripts/check_migrations.py",
     "scripts/coverage.sh",
     "scripts/dev_summary.sh",
+    "scripts/docs_layout_check.sh",
     "scripts/doctor.sh",
     "scripts/entrypoint.sh",
     "scripts/export-openapi.sh",
@@ -78,6 +79,11 @@ INTENTIONALLY_UNLOCKED: tuple[str, ...] = (
     "infra/deploy/notify.sh",  # deploy-notification seam — "wire your channel here"
     "infra/compose/services.yml",  # FWK6: self-hosted store overlay — operators edit it (managed URLs / omit stores)
     "infra/compose/tls-ca.yml",  # FWK6: opt-in CA-bundle TLS overlay — operator-supplied bundle + DSN param
+    "PLAN.md",  # FWK9: PI stateful file — seeded once, consumer-owned (upgrade never clobbers)
+    "ACTION_LOG.md",  # FWK9: PI append-only log — seeded once, consumer-owned
+    "MEMORY.md",  # FWK9: committed-memory index — seeded once, consumer-owned
+    "_archive/ARCHIVED_PLAN.md",  # FWK9: PI archive stub — consumer-owned
+    "_archive/ARCHIVED_ACTION_LOG.md",  # FWK9: PI archive stub — consumer-owned
 )
 
 # Gitignored + existence-only: a framework-managed file legitimately absent from a fresh
@@ -93,6 +99,7 @@ GITIGNORED_EXISTENCE: tuple[str, ...] = (".env",)
 # builder-editable, and its breakage is loud, not silent.) `.pre-commit-config.yaml` is hybrid
 # (not locked) so a project can add its own hooks below FRAMEWORK:END as more `repos:` entries.
 HYBRID_TRACKED: tuple[str, ...] = (
+    "AGENTS.md",
     "CLAUDE.md",
     ".env.example",
     "Taskfile.yml",

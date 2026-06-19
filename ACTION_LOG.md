@@ -2160,3 +2160,86 @@ v0.3.0 adopters don't need the `--allow-drift` marker. Cut via release PR (maste
 render-matrix on #62 + the post-merge master push prove the payload; tag `v0.3.1` after merge →
 `release.yml` (guard→ci→broad-matrix→publish). Per [[release-cut-procedure]] +
 [[release-yml-runs-full-gate-before-publish]].
+
+#### #0179 · note · FWK9 · 2026-06-18
+Brainstormed + wrote the FWK9 design spec
+(`docs/superpowers/specs/2026-06-18-fwk9-propagate-conventions-design.md`). Scope decision:
+widen FWK9 from "PI + MEMORY" to the **full patterns roster** (5 conventions) — generated
+projects become "new project adopting from zero" per patterns' `CONVENTIONS-INDEX.md`. Key
+rulings: (1) **born-adopted + patterns-cited**, NOT "adopt live" — patterns is PRIVATE, the
+framework PUBLIC, so a live-fetch directive would bake a private-repo runtime dep into a public
+artifact + break render-and-exercise; cite patterns as authority instead of vendoring the
+stale-prone doc bodies. (2) **Vendor the docs-layout validator script** as a `local` hook (it
+otherwise pre-commit-clones private patterns); git's hooks are public (gitleaks +
+conventional-pre-commit) so referenced normally. (3) **`pi_prefix` copier question** (derived
+default, persisted → stable across upgrade). (4) PI stays **agent-upheld** (no framework
+PreToolUse hook imposed on consumers). (5) Stateful PI/MEMORY files seeded once
+(`_skip_if_exists` + INTENTIONALLY_UNLOCKED) — upgrade never clobbers a consumer's PLAN.md. Next:
+writing-plans → subagent-driven implementation on branch `fwk9-propagate-conventions`.
+
+#### #0180 · note · FWK9 · 2026-06-18
+FWK9 task 1/6 (subagent-driven): added the `pi_prefix` copier question (derived default
+`(slug|upper|strip -_)[:4]`) + new managed `template/AGENTS.md.jinja` carrying the three PORTABLE
+convention pointer blocks (PI / docs-layout / git), each citing `cdowell-swtr/patterns` @ tag (no
+vendored body). 3 render-level tests green; ruff clean. Sonnet impl + Sonnet spec (✅) + Opus
+quality (APPROVE; AGENTS.md→HYBRID_TRACKED registration deferred to task 5 as planned).
+
+#### #0181 · note · FWK9 · 2026-06-18
+FWK9 task 2/6: added the two CC-specific convention blocks to the generated `template/CLAUDE.md.jinja`
+managed region — `@AGENTS.md` + `@MEMORY.md` imports, the Committed Memory pointer (MEMORY-convention
+v1) and superpowers model-routing pointer (SUPERPOWERS-MODEL-ROUTING-convention v1), citing patterns.
+Render test green; full suite 272/272. Sonnet impl + Sonnet spec (✅) + Opus quality (APPROVE; the
+`@MEMORY.md` import resolves once task 3 seeds MEMORY.md on this branch).
+
+#### #0182 · note · FWK9 · 2026-06-18
+FWK9 task 3/6: seeded the stateful PI + Committed-Memory files into the template payload —
+`PLAN.md.jinja`, `ACTION_LOG.md.jinja` (dated `#0001 · note` via new `render_date` injected in
+`copier_runner.render_project` w/ `setdefault`, override-able), static `MEMORY.md`, `_memory/.gitkeep`,
+`_archive/` stubs — plus `_skip_if_exists` (6 rendered paths) so `upgrade` never clobbers a consumer's
+plan. mypy/ruff clean; 2 tests green. Sonnet impl + Sonnet spec (✅) + Opus quality (APPROVE; applied
+the minor seed-log wording fix — empty `Next` → future tense).
+
+#### #0183 · note · FWK9 · 2026-06-18
+FWK9 task 4/6: wired the two validator-bearing conventions into the generated pre-commit config —
+public `conventional-pre-commit` @v3.6.0 (commit-msg stage) + `default_install_hook_types`
+[pre-commit, commit-msg]; vendored the docs-layout zero-dep validator to
+`template/scripts/docs_layout_check.sh` (provenance comment; patterns is private so cannot be
+pre-commit-cloned) as a `local` hook; Taskfile `hooks:` installs both stages; README optional-
+registration note. Opus quality CONFIRMED the validator passes on a FRESH render (baseline +
+all-batteries, exit 0). Sonnet impl + Sonnet spec (fixed dropped `uv run`) + Opus quality (APPROVE;
+applied `stages: [pre-commit]` to stop the docs-layout hook double-firing). Follow-up noted: no guard
+detects an upstream docs-layout/v2 (re-vendor drift).
+
+#### #0184 · note · FWK9 · 2026-06-18
+FWK9 task 5/6: framework-side bookkeeping for the new template files — integrity `classes.py`:
+`AGENTS.md`→HYBRID_TRACKED, `scripts/docs_layout_check.sh`→LOCKED_TRACKED, 5 PI/memory state files
+(PLAN/ACTION_LOG/MEMORY + 2 _archive stubs)→INTENTIONALLY_UNLOCKED (seed-once, consumer-owned — locking
+would let restore clobber a consumer's plan). 3 integrity asserts + a minimal collateral fix to
+test_generate.py (AGENTS.md added to the marker-less fake-project fixture; assertion preserved). FWK29
+registry: the 3 new surfaces (conventional-pre-commit / docs-layout hooks + docs_layout_check.sh script)
+classified interim _KG with FWK9-prefixed evidence (completeness test requires an EXERCISED entry name a
+REAL test fn; the exerciser lands in task 6 → promote to _EX then). Sonnet impl + Sonnet spec (✅, deviation
+sound) + Opus quality (APPROVE; applied alpha-ordering nit on the 2 hook entries). 60/60 integrity+coverage.
+
+#### #0185 · note · FWK9 · 2026-06-18
+FWK9 task 6/6: acceptance tests proving the born-adopted project works + promoted the 3 FWK29
+surfaces _KG→_EX. `test_rendered_project_adopts_conventions`: fresh render → `pre-commit run
+--all-files` green (exercises the vendored docs-layout validator + conventional-pre-commit) +
+commit-msg gate rejects a malformed message. `test_upgrade_preserves_seeded_plan_and_prefix`: git-
+backed local template source, render→edit PLAN.md→bump v2→`run_update`, proves `_skip_if_exists`
+holds. Sonnet impl + Sonnet spec (✅, non-vacuity confirmed) + Opus quality found the upgrade test was
+VACUOUS (passed even with PLAN.md removed from the skip-list, since PLAN.md.jinja was byte-identical
+v1→v2). Fix (Sonnet): v2 bump appends a marker to PLAN.md.jinja → assert the marker is ABSENT from the
+consumer's PLAN.md (skip honored) + `_commit: v2` landed. Re-proven: FAILS with the skip entry removed,
+PASSES restored. Both tests + runtime_coverage (9) green; ruff/mypy clean.
+
+#### #0186 · completed · FWK9 · 2026-06-18
+FWK9 DONE — generated projects born-adopt the full patterns convention roster (template payload).
+6 subagent-driven TDD tasks (#0180–#0185), branch `fwk9-propagate-conventions` (commits f2402fc →
+577ba3d on the 60e0074 spec). Branch-end Opus review = APPROVE-WITH-NITS (only cosmetic: AGENTS.md
+double-load via `@AGENTS.md` is intentional house-style; two adjacent "Conventions" headings) +
+confirmed the core public-safety invariant (zero private-patterns runtime dep in a fresh render) and
+seed-once integrity. Full gate: ruff/format/mypy clean, 984 passed / 3 skipped (non-acceptance) + the
+2 new uv+git acceptance tests green (docker tier runs in CI). No release (ships on the next cut).
+Follow-up filed: FWK40 (docs-layout re-vendor drift guard). Plan doc committed with the branch.
+Next: open a PR (master protected) → merge.

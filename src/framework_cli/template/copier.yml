@@ -1,5 +1,13 @@
 _templates_suffix: .jinja
 
+_skip_if_exists:
+  - PLAN.md
+  - ACTION_LOG.md
+  - MEMORY.md
+  - _memory/.gitkeep
+  - _archive/ARCHIVED_PLAN.md
+  - _archive/ARCHIVED_ACTION_LOG.md
+
 project_name:
   type: str
   help: Human-readable project name
@@ -18,6 +26,11 @@ python_version:
   type: str
   help: Python version to target
   default: "3.12"
+
+pi_prefix:
+  type: str
+  help: PI task-ID prefix (short uppercase tag, e.g. FWK, MDN)
+  default: "{{ (project_slug | upper | replace('-', '') | replace('_', ''))[:4] }}"
 
 batteries:
   type: yaml

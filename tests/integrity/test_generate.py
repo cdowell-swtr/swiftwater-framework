@@ -89,7 +89,7 @@ def test_build_manifest_raises_when_hybrid_file_lacks_markers(tmp_path: Path):
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(f"content of {rel}\n")
     (proj / ".gitignore").write_text("")
-    for rel in ("CLAUDE.md", "Taskfile.yml"):
+    for rel in ("AGENTS.md", "CLAUDE.md", "Taskfile.yml"):
         (proj / rel).write_text("no markers\n")
     (proj / ".env.example").write_text("no markers\n")
     with pytest.raises(AuthoringError, match="markers"):

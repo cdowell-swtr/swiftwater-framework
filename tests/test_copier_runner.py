@@ -82,6 +82,20 @@ def test_render_includes_claude_md(tmp_path: Path):
     assert "write the failing test first" in text.lower()
 
 
+def test_render_claude_md_imports_agents_and_memory(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    claude = (dest / "CLAUDE.md").read_text()
+    assert "@AGENTS.md" in claude
+    assert "@MEMORY.md" in claude
+    assert "MEMORY-convention: v1" in claude
+    assert "SUPERPOWERS-MODEL-ROUTING-convention: v1" in claude
+    # CC-specific blocks must sit INSIDE the managed region (before the closing marker)
+    body = claude
+    assert body.index("MEMORY-convention: v1") < body.index("FRAMEWORK:END")
+    assert body.index("@AGENTS.md") < body.index("FRAMEWORK:END")
+
+
 def test_render_readme_documents_gates(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
@@ -4196,3 +4210,73 @@ def test_dev_logs_and_down_targets(tmp_path: Path):
         "logs -f" in logs and "demo" in logs
     )  # project-scoped follow (slug=demo in DATA)
     assert "down" in down and "-v" not in down, "dev:down must keep volumes (no -v)"
+
+
+def test_render_seeds_agents_md_with_portable_convention_blocks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    agents = (dest / "AGENTS.md").read_text()
+    assert "PI-convention: v2" in agents
+    assert "DOCS-convention: v1" in agents
+    assert "GIT-convention: v1" in agents
+    assert "cdowell-swtr/patterns" in agents
+    from framework_cli.integrity.sections import section_content
+
+    assert section_content(agents) is not None
+    assert "FRAMEWORK:END" in agents
+
+
+def test_render_pi_prefix_defaults_from_slug(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # slug "demo"
+    agents = (dest / "AGENTS.md").read_text()
+    assert "`DEMO`" in agents  # derived default, uppercased slug truncated to 4
+
+
+def test_render_pi_prefix_override(tmp_path: Path):
+    dest = tmp_path / "proj"
+    render_project(dest, {**DATA, "pi_prefix": "MRDN"})
+    agents = (dest / "AGENTS.md").read_text()
+    assert "`MRDN`" in agents
+    assert "MRDN1, MRDN2" in agents
+
+
+def test_render_seeds_pi_and_memory_state_files(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert (dest / "PLAN.md").is_file()
+    assert (dest / "MEMORY.md").is_file()
+    assert (dest / "_memory" / ".gitkeep").is_file()
+    assert (dest / "_archive" / "ARCHIVED_PLAN.md").is_file()
+    assert (dest / "_archive" / "ARCHIVED_ACTION_LOG.md").is_file()
+    log = (dest / "ACTION_LOG.md").read_text()
+    assert "#0001 · note" in log
+    assert "adopted" in log.lower()
+    memory = (dest / "MEMORY.md").read_text()
+    assert "MEMORY-convention: v1" in memory
+
+
+def test_render_date_is_injected_into_seed_log(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "render_date": "2026-01-02"})
+    log = (dest / "ACTION_LOG.md").read_text()
+    assert "2026-01-02" in log
+
+
+def test_render_precommit_adds_convention_hooks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    cfg = (dest / ".pre-commit-config.yaml").read_text()
+    assert "conventional-pre-commit" in cfg
+    assert "commit-msg" in cfg
+    assert "default_install_hook_types" in cfg
+    assert "docs-layout" in cfg
+    assert (dest / "scripts" / "docs_layout_check.sh").is_file()
+
+
+def test_render_docs_layout_validator_is_zero_dep_bash(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    script = (dest / "scripts" / "docs_layout_check.sh").read_text()
+    assert script.startswith("#!/usr/bin/env bash")
+    assert "vendored from cdowell-swtr/patterns" in script

@@ -4367,3 +4367,222 @@ def test_rendered_project_managed_db_boots_without_colocated_postgres(
         for name in (app, pg):
             subprocess.run(["docker", "rm", "-f", name], capture_output=True)
         subprocess.run(["docker", "network", "rm", net], capture_output=True)
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("git") is None,
+    reason="uv and git are required for this test",
+)
+def test_rendered_project_adopts_conventions(tmp_path: Path):
+    # FWK9: a fresh render is born adopted — pre-commit (incl. the vendored docs-layout
+    # validator + conventional-pre-commit) is green, and the commit-msg gate rejects a
+    # malformed message.
+    #
+    # Mirrors test_rendered_project_precommit_runs_clean exactly in setup: same skipif,
+    # same render→git-init→git-add→uv-sync, same SKIP=coverage-threshold env. Adds:
+    #   1) docs-layout and conventional-pre-commit are exercised (green on the born layout);
+    #   2) a NON-conventional commit message is rejected by conventional-pre-commit at the
+    #      commit-msg stage — proving the hook is actually enforcing the convention.
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
+    # Configure git identity so `git commit` works in the test environment.
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=dest, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=dest, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
+
+    sync = subprocess.run(["uv", "sync"], cwd=dest)
+    assert sync.returncode == 0, "uv sync failed in the generated project"
+
+    # 1) pre-commit run --all-files must exit 0 (docs-layout passes on the born layout;
+    #    conventional-pre-commit config loads cleanly; coverage-threshold skipped).
+    result = subprocess.run(
+        ["uv", "run", "pre-commit", "run", "--all-files"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "SKIP": "coverage-threshold"},
+    )
+    assert result.returncode == 0, (
+        "pre-commit hooks did not pass cleanly on a born-adopted project "
+        "(docs-layout or conventional-pre-commit failed to load/run):\n"
+        + result.stdout
+        + result.stderr
+    )
+
+    # 2) Install the commit-msg hook, then assert a malformed message is REJECTED.
+    #    `pre-commit install --hook-type commit-msg` writes .git/hooks/commit-msg.
+    install = subprocess.run(
+        ["uv", "run", "pre-commit", "install", "--hook-type", "commit-msg"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert install.returncode == 0, (
+        "pre-commit install --hook-type commit-msg failed:\n"
+        + install.stdout
+        + install.stderr
+    )
+
+    # Make an initial commit so HEAD exists (commit-msg hook fires on EVERY commit).
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "feat: initial scaffold"],
+        cwd=dest,
+        check=True,
+        capture_output=True,
+    )
+
+    # A NON-conventional message must be rejected (returncode != 0).
+    bad_commit = subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "not conventional"],
+        cwd=dest,
+        capture_output=True,
+        text=True,
+    )
+    assert bad_commit.returncode != 0, (
+        "conventional-pre-commit did NOT reject a malformed commit message "
+        "'not conventional' — the commit-msg hook is not enforcing the convention.\n"
+        + bad_commit.stdout
+        + bad_commit.stderr
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("git") is None,
+    reason="uv and git are required for this test",
+)
+def test_upgrade_preserves_seeded_plan_and_prefix(tmp_path: Path):
+    # FWK9: PLAN.md is seed-once (_skip_if_exists) — a v2 template change to PLAN.md
+    # must NOT reach the consumer's file, and a consumer edit must survive unchanged.
+    # pi_prefix must be stable across an update (managed AGENTS.md re-renders from the
+    # persisted .copier-answers.yml answer, not from the project files).
+    #
+    # Harness: build a git-backed template source repo (containing the REAL bundled
+    # template content), tag v1; render a project from it; consumer-edit PLAN.md; bump
+    # to v2 with a deliberate change to PLAN.md.jinja (the seeded file's own template);
+    # run_update to v2.  Because PLAN.md is in _skip_if_exists, the v2 template change
+    # must be ABSENT from the consumer's file — that absence is the actual proof.
+    # A plain run_copy with overwrite=True would NOT trigger _skip_if_exists.
+
+    from copier import run_copy, run_update
+
+    from framework_cli.copier_runner import template_path
+
+    def _git(repo: Path, *args: str) -> None:
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+    # --- Build the git-backed template source from the real bundled template ---
+    src = tmp_path / "tmpl_src"
+    src.mkdir()
+    real_tpl = template_path()
+    # Copy the entire bundled template tree into the source repo as-is.
+    # The bundled template uses a _subdirectory copier.yml at root; replicate
+    # the same structure (copier.yml at root + template content at root level,
+    # since the bundled template does NOT use a subdirectory wrapper — it IS the
+    # template root already).
+    for item in real_tpl.iterdir():
+        target = src / item.name
+        if item.is_dir():
+            shutil.copytree(str(item), str(target))
+        else:
+            shutil.copy2(str(item), str(target))
+    _git(src, "init", "-q")
+    _git(src, "config", "user.email", "s@x")
+    _git(src, "config", "user.name", "s")
+    _git(src, "add", "-A")
+    _git(src, "commit", "-qm", "v1")
+    _git(src, "tag", "v1")
+
+    # --- Render the project from v1 ---
+    dest = tmp_path / "demo"
+    run_copy(
+        str(src),
+        str(dest),
+        data={**DATA, "pi_prefix": "DEMO"},
+        defaults=True,
+        overwrite=True,
+        quiet=True,
+        vcs_ref="v1",
+    )
+
+    # Git-init the project and commit the initial scaffold.
+    _git(dest, "init", "-q")
+    _git(dest, "config", "user.email", "b@x")
+    _git(dest, "config", "user.name", "b")
+    _git(dest, "add", "-A")
+    _git(dest, "commit", "-qm", "scaffold")
+
+    # --- Consumer edit: append a real task line to PLAN.md ---
+    plan_path = dest / "PLAN.md"
+    consumer_line = "- DEMO1: my consumer task"
+    plan_path.write_text(plan_path.read_text() + consumer_line + "\n")
+    _git(dest, "add", "PLAN.md")
+    _git(dest, "commit", "-qm", "feat: add consumer task to PLAN")
+
+    # --- Bump the template to v2: modify PLAN.md.jinja (the seeded file's own template)
+    # so that — absent _skip_if_exists — the update WOULD overwrite the consumer's file.
+    # The v2 marker line must be absent from the consumer's PLAN.md after run_update;
+    # its absence is the proof that _skip_if_exists held.
+    plan_tpl = src / "PLAN.md.jinja"
+    plan_tpl.write_text(plan_tpl.read_text() + "- FRAMEWORK-SEEDED-V2-LINE\n")
+    _git(src, "add", "-A")
+    _git(src, "commit", "-qm", "v2")
+    _git(src, "tag", "v2")
+
+    # Rewrite .copier-answers.yml to record _commit: v1 with the local src path so
+    # run_update knows where to update FROM (mirrors test_upgrade.py's _project helper).
+    answers_path = dest / ".copier-answers.yml"
+    kept = [
+        ln
+        for ln in answers_path.read_text().splitlines()
+        if not ln.startswith(("_src_path:", "_commit:"))
+    ]
+    kept += [f"_src_path: {src}", "_commit: v1"]
+    answers_path.write_text("\n".join(kept) + "\n")
+    _git(dest, "add", ".copier-answers.yml")
+    _git(dest, "commit", "-qm", "fix: record local src path for upgrade test")
+
+    # --- run_update to v2 (the real _skip_if_exists upgrade path) ---
+    run_update(
+        str(dest),
+        defaults=True,
+        overwrite=True,
+        quiet=True,
+        vcs_ref="v2",
+        data={**DATA, "pi_prefix": "DEMO"},
+    )
+
+    updated_plan = plan_path.read_text()
+
+    # 1) The v2 template change to PLAN.md must NOT appear in the consumer's file.
+    #    PLAN.md is _skip_if_exists, so the v2 PLAN.md.jinja change must be skipped.
+    #    This is the non-vacuous proof: without _skip_if_exists the v2 marker would leak in.
+    assert "FRAMEWORK-SEEDED-V2-LINE" not in updated_plan, (
+        "seed-once broken: a v2 template change to PLAN.md leaked into the consumer's file "
+        "(PLAN.md should be _skip_if_exists)"
+    )
+
+    # 2) The consumer's own edit must survive (_skip_if_exists held end-to-end).
+    assert consumer_line in updated_plan, (
+        "consumer task line was LOST from PLAN.md after run_update to v2 — "
+        "_skip_if_exists did NOT protect the consumer-edited file.\n"
+        f"PLAN.md content after update:\n{updated_plan}"
+    )
+
+    # 3) run_update must have done real work: the recorded _commit must have advanced to v2.
+    updated_answers = answers_path.read_text()
+    assert "_commit: v2" in updated_answers, (
+        "run_update did not advance _commit to v2 in .copier-answers.yml — "
+        "the update may have been a no-op.\n"
+        f".copier-answers.yml after update:\n{updated_answers}"
+    )
+
+    # 4) AGENTS.md must still contain the DEMO prefix (managed region re-rendered from
+    #    the persisted pi_prefix answer; the update re-renders it correctly).
+    agents_content = (dest / "AGENTS.md").read_text()
+    assert "DEMO" in agents_content, (
+        "pi_prefix 'DEMO' not found in AGENTS.md after run_update — "
+        "the managed region was not re-rendered from the persisted answer.\n"
+        f"AGENTS.md content after update:\n{agents_content}"
+    )
