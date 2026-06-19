@@ -2243,3 +2243,25 @@ seed-once integrity. Full gate: ruff/format/mypy clean, 984 passed / 3 skipped (
 2 new uv+git acceptance tests green (docker tier runs in CI). No release (ships on the next cut).
 Follow-up filed: FWK40 (docs-layout re-vendor drift guard). Plan doc committed with the branch.
 Next: open a PR (master protected) → merge.
+
+#### #0187 · note · FWK40 · 2026-06-18
+Brainstormed + wrote the FWK40 design spec
+(`docs/superpowers/specs/2026-06-18-fwk40-vendored-freshness-design.md`). FWK9 follow-up: the docs-
+layout validator is vendored at `docs-layout/v1` with provenance-only — nothing detects an upstream
+`v2`. Decision: a LOCAL auth-gated pytest check (NOT a scheduled workflow + PAT — that would re-couple
+automation to the private patterns repo, the thing FWK9 designed out). Where patterns is reachable
+(maintainer machine), two checks: (1) staleness — hard FAIL if a newer `docs-layout/v*` tag exists
+(local-only, CI skips so it never blocks PRs); (2) fidelity — vendored == upstream @ pin (minus the
+provenance line). Pure helpers (parse_pinned_tag / latest_version / strip_provenance) unit-tested; thin
+gh wiring live-only. Out of scope: the root-vendored pi/memory docs (HEAD-pinned, different model).
+
+#### #0188 · completed · FWK40 · 2026-06-18
+FWK40 DONE — `tests/test_vendored_freshness.py`: local auth-gated freshness check for the vendored
+docs-layout validator. Pure helpers (parse_pinned_tag / latest_version / strip_provenance) + 8 unit
+tests (run in CI) + 2 live tests (staleness hard-FAIL on a newer `docs-layout/v*` tag; fidelity vs
+upstream @ pin) gated behind a `gh api repos/cdowell-swtr/patterns` reachability probe → skip in
+CI/offline/no-auth (never blocks PRs, no secret). Inline executing-plans; branch-end Opus =
+APPROVE-WITH-NITS (broadened the probe except → OSError; docstring typo). Non-vacuity proven on this
+authed box (pin→v0 fails staleness `assert 1<=0`; body `# drift` fails fidelity; validator restored).
+10/10 green; ruff/format/mypy clean. No release/template-payload change. Branch `fwk40-vendored-
+freshness` → PR next (master protected).
