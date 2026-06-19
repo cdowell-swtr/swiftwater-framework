@@ -135,3 +135,107 @@ def test_pi_memory_state_files_are_intentionally_unlocked():
     ):
         assert rel not in LOCKED_TRACKED
         assert rel in INTENTIONALLY_UNLOCKED
+
+
+def test_baseline_escapees_are_locked():
+    """FWK7: framework-owned files that render in a baseline project but had escaped the
+    locked registry (a PORT_OFFSET wrapper + 4 static obs configs)."""
+    from framework_cli.integrity.classes import LOCKED_TRACKED
+
+    for rel in (
+        "scripts/compose.sh",
+        "infra/observability/grafana/dashboards/otel-collector.json",
+        "infra/observability/grafana/dashboards/prometheus.json",
+        "infra/observability/prometheus/alerts/otel_collector_alerts.yml",
+        "infra/observability/prometheus/alerts/prometheus_alerts.yml",
+    ):
+        assert rel in LOCKED_TRACKED, (
+            f"{rel} should be locked (baseline framework infra)"
+        )
+
+
+def test_gitkeep_placeholders_are_classified_by_content():
+    """FWK7: a genuinely EMPTY .gitkeep is EXEMPT (nothing to checksum); a .gitkeep carrying
+    guidance content has a stable checksum worth protecting and is LOCKED_TRACKED."""
+    from framework_cli.integrity.classes import EXEMPT, LOCKED_TRACKED
+
+    # 0-byte placeholder — exempt, not locked.
+    assert "infra/traefik/certs/.gitkeep" in EXEMPT
+    assert "infra/traefik/certs/.gitkeep" not in LOCKED_TRACKED
+    # carries a CA-bundle hint (non-empty) — locked, not exempt.
+    assert "infra/tls/ca/.gitkeep" in LOCKED_TRACKED
+    assert "infra/tls/ca/.gitkeep" not in EXEMPT
+
+
+def test_classification_categories_are_pairwise_disjoint():
+    """FWK7: a path must fall in exactly one category — the reverse check's set-difference would
+    otherwise mask a double-classified path."""
+    from itertools import combinations
+
+    from framework_cli.integrity.classes import (
+        BATTERY_LOCKED,
+        EXEMPT,
+        GITIGNORED_EXISTENCE,
+        HYBRID_TRACKED,
+        INTENTIONALLY_UNLOCKED,
+        LOCKED_TRACKED,
+    )
+
+    categories = {
+        "LOCKED_TRACKED": set(LOCKED_TRACKED),
+        "HYBRID_TRACKED": set(HYBRID_TRACKED),
+        "GITIGNORED_EXISTENCE": set(GITIGNORED_EXISTENCE),
+        "INTENTIONALLY_UNLOCKED": set(INTENTIONALLY_UNLOCKED),
+        "BATTERY_LOCKED": set(BATTERY_LOCKED),
+        "EXEMPT": set(EXEMPT),
+    }
+    for (a_name, a), (b_name, b) in combinations(categories.items(), 2):
+        overlap = a & b
+        assert overlap == set(), f"{a_name} and {b_name} share paths: {sorted(overlap)}"
+
+
+def test_battery_locked_covers_the_expected_files():
+    from framework_cli.integrity.classes import BATTERY_LOCKED, LOCKED_TRACKED
+
+    # 22 battery-conditional framework files; none also in the baseline locked set.
+    assert len(BATTERY_LOCKED) == 22
+    for path, gate in BATTERY_LOCKED.items():
+        assert path not in LOCKED_TRACKED, (
+            f"{path} is both baseline-locked and battery-locked"
+        )
+        assert isinstance(gate, tuple) and gate, f"{path} needs a non-empty gate tuple"
+    # spot-check a single-gate, a multi-gate, and a non-obs entry
+    assert BATTERY_LOCKED["infra/observability/grafana/dashboards/redis.json"] == (
+        "redis",
+        "workers",
+    )
+    assert BATTERY_LOCKED["infra/docker/postgres.Dockerfile"] == (
+        "pgvector",
+        "timescaledb",
+        "age",
+    )
+    assert BATTERY_LOCKED[".github/workflows/docs.yml"] == ("docs",)
+
+
+def test_rules_default_is_baseline_only():
+    from framework_cli.integrity.classes import LOCKED_TRACKED, rules
+
+    paths = {r.path for r in rules()}
+    # no battery-conditional path leaks into the default (baseline) rule set
+    assert "infra/observability/grafana/dashboards/redis.json" not in paths
+    assert set(LOCKED_TRACKED) <= paths
+
+
+def test_rules_adds_battery_locked_for_active_batteries():
+    from framework_cli.integrity.classes import rules
+
+    redis_rule = "infra/observability/grafana/dashboards/redis.json"
+    assert redis_rule in {r.path for r in rules(["redis"])}
+    # shared gate: workers also activates the redis dashboards
+    assert redis_rule in {r.path for r in rules(["workers"])}
+    # a non-gating battery activates none of redis's files
+    assert redis_rule not in {r.path for r in rules(["graphql"])}
+    # every activated battery file is a locked/tracked Rule
+    for r in rules(["redis"]):
+        if r.path == redis_rule:
+            assert r.cls == "locked" and r.tier == "tracked"

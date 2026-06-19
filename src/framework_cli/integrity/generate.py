@@ -8,6 +8,7 @@ from framework_cli.integrity.classes import rules
 from framework_cli.integrity.hashing import sha256_file
 from framework_cli.integrity.manifest import Entry, Manifest
 from framework_cli.integrity.sections import section_sha256
+from framework_cli.source import read_batteries
 
 
 class AuthoringError(Exception):
@@ -28,7 +29,7 @@ def build_manifest(project: Path, framework_version: str) -> Manifest:
     """
     spec = _gitignore_spec(project)
     entries: list[Entry] = []
-    for rule in rules():
+    for rule in rules(read_batteries(project)):
         if rule.tier == "tracked":
             if spec.match_file(rule.path):
                 raise AuthoringError(
