@@ -1,0 +1,224 @@
+import json
+from pathlib import Path
+
+from framework_cli.review.audit.pipeline import run_audit
+from tests.review.audit.conftest import StubBackend
+
+
+# ---------------------------------------------------------------------------
+# Test A — Defect 1 (CRITICAL): a refute-item failure must NOT crash the pipeline
+# ---------------------------------------------------------------------------
+
+
+def test_run_audit_survives_a_refute_item_failure(tmp_path: Path):
+    """One skeptic work-item raises → run_stage records {"item":…,"error":…}.
+    The vmap build must skip that record (no 'agent'/'idx'/'verdict' keys) and
+    the affected edit must survive as unverified (verdict is None)."""
+
+    def scripted(system, messages):
+        text = " ".join(b.get("text", "") for b in system)
+        if "reviewer-prompt AUDITOR" in text:
+            return json.dumps(
+                {
+                    "agent": "security",
+                    "edits": [],
+                    "proposed_block_threshold": "high",
+                    "fixture_verdicts": {},
+                }
+            )
+        if "roster RECONCILER" in text:
+            return json.dumps(
+                {
+                    "agents": [
+                        {
+                            "agent": "security",
+                            "proposed_block_threshold": "high",
+                            "edits": [
+                                {
+                                    "target": "domain_prompt",
+                                    "rationale": "ok",
+                                    "before": "a",
+                                    "after": "GOOD",
+                                },
+                                {
+                                    "target": "domain_prompt",
+                                    "rationale": "boom",
+                                    "before": "c",
+                                    "after": "BOOM",
+                                },
+                            ],
+                            "fixture_verdicts": {},
+                        }
+                    ],
+                    "preamble_edits": [],
+                }
+            )
+        if "adversarial SKEPTIC" in text:
+            if "--- after ---\nBOOM" in text:
+                raise RuntimeError("skeptic boom")
+            return json.dumps({"refuted": False, "reason": "fine"})
+        return "{}"
+
+    cl = run_audit(
+        ["security"],
+        backend=StubBackend(scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=tmp_path / "out",
+        skeptics=1,
+    )
+    afters = {e.after: e for e in cl.agents[0].edits}
+    # pipeline completed; GOOD got 1 survive → kept with verdict
+    assert (
+        afters["GOOD"].verdict is not None and afters["GOOD"].verdict.refuted is False
+    )
+    # BOOM's refute raised → verdict None → kept as unverified
+    assert afters["BOOM"].verdict is None
+
+
+# ---------------------------------------------------------------------------
+# Test B — Defect 2 (IMPORTANT): resume reuses the pinned reconcile output
+# ---------------------------------------------------------------------------
+
+
+def test_run_audit_resume_reuses_pinned_reconcile(tmp_path: Path):
+    """On resume=True, Stage 2 (reconcile) must be read from the checkpoint file,
+    NOT re-called. The resumed result must match the FIRST run's edits even when
+    the new backend would reconcile to a different edit set."""
+
+    out = tmp_path / "out"
+
+    def make_scripted(recon_edits_after: str):
+        def scripted(system, messages):
+            text = " ".join(b.get("text", "") for b in system)
+            if "reviewer-prompt AUDITOR" in text:
+                return json.dumps(
+                    {
+                        "agent": "security",
+                        "edits": [],
+                        "proposed_block_threshold": "high",
+                        "fixture_verdicts": {},
+                    }
+                )
+            if "roster RECONCILER" in text:
+                return json.dumps(
+                    {
+                        "agents": [
+                            {
+                                "agent": "security",
+                                "proposed_block_threshold": "high",
+                                "edits": [
+                                    {
+                                        "target": "domain_prompt",
+                                        "rationale": "r",
+                                        "before": "a",
+                                        "after": recon_edits_after,
+                                    }
+                                ],
+                                "fixture_verdicts": {},
+                            }
+                        ],
+                        "preamble_edits": [],
+                    }
+                )
+            if "adversarial SKEPTIC" in text:
+                return json.dumps({"refuted": False, "reason": "ok"})
+            return "{}"
+
+        return scripted
+
+    # First run — reconcile returns "FIRST"
+    cl1 = run_audit(
+        ["security"],
+        backend=StubBackend(make_scripted("FIRST")),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    assert [e.after for e in cl1.agents[0].edits] == ["FIRST"]
+
+    # Resume — backend would reconcile to "SECOND", but pinned checkpoint wins
+    cl2 = run_audit(
+        ["security"],
+        backend=StubBackend(make_scripted("SECOND")),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+        resume=True,
+    )
+    assert [e.after for e in cl2.agents[0].edits] == [
+        "FIRST"
+    ]  # pinned reconcile reused
+
+
+def _scripted(system, messages):
+    text = " ".join(b.get("text", "") for b in system)
+    if "reviewer-prompt AUDITOR" in text:
+        return json.dumps(
+            {
+                "agent": "security",
+                "edits": [
+                    {
+                        "target": "domain_prompt",
+                        "rationale": "r",
+                        "before": "a",
+                        "after": "b",
+                    }
+                ],
+                "proposed_block_threshold": "high",
+                "fixture_verdicts": {},
+            }
+        )
+    if "roster RECONCILER" in text:
+        return json.dumps(
+            {
+                "agents": [
+                    {
+                        "agent": "security",
+                        "proposed_block_threshold": "high",
+                        "edits": [
+                            {
+                                "target": "domain_prompt",
+                                "rationale": "keep",
+                                "before": "a",
+                                "after": "b",
+                            },
+                            {
+                                "target": "domain_prompt",
+                                "rationale": "drop",
+                                "before": "c",
+                                "after": "d",
+                            },
+                        ],
+                        "fixture_verdicts": {},
+                    }
+                ],
+                "preamble_edits": [],
+            }
+        )
+    if "adversarial SKEPTIC" in text:
+        # refute only the "drop" change (after == "d")
+        refuted = "--- after ---\nd" in text
+        return json.dumps({"refuted": refuted, "reason": "x"})
+    return "{}"
+
+
+def test_run_audit_produces_vetted_changelist(tmp_path: Path):
+    backend = StubBackend(_scripted)
+    cl = run_audit(
+        ["security"],
+        backend=backend,
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=tmp_path / "out",
+        skeptics=3,
+    )
+    edits = cl.agents[0].edits
+    # the refuted "drop" edit (after == "d") is excluded; the "keep" edit survives
+    assert [e.after for e in edits] == ["b"]
+    assert edits[0].verdict is not None and edits[0].verdict.refuted is False
+    # the changelist + each stage's records were persisted under out_dir
+    assert (tmp_path / "out" / "changelist.json").exists()
+    assert (tmp_path / "out" / "changelist-full.json").exists()

@@ -9,6 +9,8 @@ class _Spec:
         self.model = "m"
         self.context = ContextPolicy(strategy)
         self.prompt = "P"
+        self.block_threshold = "high"
+        self.severity_enum = None
 
 
 def _backend_returning(findings_json):

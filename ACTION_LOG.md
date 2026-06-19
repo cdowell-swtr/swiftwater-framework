@@ -2326,3 +2326,88 @@ slice" comment (spec reviewer note); added `test_classification_categories_are_p
 minor — enforces "exactly one category", which the set-difference reverse check would otherwise mask).
 Declined the `len(BATTERY_LOCKED)==22` magic-number and test-local-import nits (intentional / matches
 file style). tests/integrity/ 67 passed; ruff/format/mypy clean. Ready for PR.
+
+#### #0193 · note · FWK4 · 2026-06-19
+FWK4 (Plan 23) brainstormed → design spec written + committed on branch `fwk4-reviewer-self-audit`
+(`docs/superpowers/specs/2026-06-19-fwk4-reviewer-self-audit-design.md`). Captures the Plan 21
+audit→synthesis→adversarial method as a repeatable **in-process** `framework reviewer-audit` command.
+Five forks resolved in brainstorming: (1) **reviewers-only** (rendered-project agents deferred);
+(2) **in-process Python on the LiteLLM backend seam** — explicitly NOT a Claude Code Workflow (the
+provider is already abstracted Plan 5/20); (3) **unified 1..N agents** with the full roster always
+loaded as the consistency baseline (auditing one reviewer in isolation has no consistency oracle);
+(4) output boundary = **vetted changelist + dry-run git-applyable apply-preview**, no auto-apply
+(Plan-21 Phase-1/Phase-2 seam made repeatable); (5) rubric stored via **runtime prompt assembly** —
+single canonical preamble (rubric core + output/findings-schema contract) composed with each agent's
+domain block at prompt-build, so consistency for the centralized blocks is structural (cannot drift)
+and the audit focuses judgment on the domain deltas. Empirical scoping finding: the "shared" rubric is
+already drifted (only 10/21 prompts carry the canonical `## Severity` header; the output contract
+wandered) → Phase 0 (centralization) folded in as a prerequisite. Per-agent severity enum **derived
+from `block_threshold`** (advisory→`low|info`). Build = 4 phases (0 centralization mergeable
+checkpoint · 1 brief+orchestrator+audit · 2 reconciliation+adversarial · 3 apply-preview+runbook),
+subagent-driven TDD, reusing `backend.py`/`checkpoint.py`. Test/maintainer-tooling only → no release,
+no template payload. Plan (writing-plans) next.
+
+#### #0194 · note · FWK4 · 2026-06-19
+FWK4 implementation plan written + committed: `docs/superpowers/plans/2026-06-19-fwk4-reviewer-self-audit.md`.
+**4 phases / 22 tasks**, subagent-driven TDD, complete inline code per step. **P0 (runtime-assembly
+rubric centralization, independently mergeable):** new canonical `review/rubric.md` + `preamble.py`
+(`build_preamble`/`severity_enum_for`, advisory cap + output-contract enum derived from
+`block_threshold`, `AgentSpec.severity_enum` override for dependency's bespoke `high|low|info`);
+`composed_prompt` accessor composed at the `request.py` system-prompt seam; trim all 21 `agents/*.md`
+to domain-only (worked example + structural drift guard `test_domain_files_do_not_redefine_centralized_sections`);
+eval re-confirm sweep is the behavior-preservation oracle. Empirical note baked in: the "shared" rubric
+is per-agent *tailored* not verbatim (only Severity ladder + Output contract are byte-identical), so P0
+centralizes the full canonical rubric and re-confirms via eval. **P1:** `audit/` pkg — typed
+`changelist.py` (ProposedEdit/AgentChange/Verdict + `vetted()`), `brief.py` (target composed-prompt +
+fixtures + baseline findings + full-roster bars = consistency oracle), `orchestrator.py` (checkpointed
+work-queue reusing `checkpoint.py`), `stages.audit_agent` (Stage 1, Opus). **P2:** `stages.reconcile`
+(Stage 2 cross-agent) + `stages.refute` (Stage 3 adversarial, default-to-refuted, majority-survives) +
+`pipeline.run_audit` (refuted excluded from `changelist.json`, retained in `changelist-full.json`).
+**P3:** `preview.render_patch` (git-applyable), `framework reviewer-audit` CLI (mirrors `eval` backend
+resolution; skip-neutral w/o key), runbook + mkdocs nav. All LLM-stage tests use a `StubBackend`
+(`.messages.create`-shaped) → no key/quota. Self-review: spec coverage ✓, no placeholders, type
+consistency across stages ✓. Ready to execute (subagent-driven recommended).
+
+#### #0195 · completed · FWK4 · 2026-06-19
+**Phase 0 DONE (mergeable checkpoint)** + **Phase 1 underway** — subagent-driven (Sonnet impl, Sonnet spec,
+Opus quality per [[subagent-review-model-pattern]]); controller commits (impl stages, never commits —
+[[subagent-implementers-stop-before-commit]]). **P0a** runtime-assembly mechanism (canonical
+`review/rubric.md` + `preamble.py` + `composed_prompt` seam in `request.py`; severity enum derived from
+`block_threshold`, `dependency` override). **P0b** trimmed all 21 `agents/*.md` to domain-only; Opus
+quality caught 10 seam-stale assertions across test_runner/engine/agentic/coverage_gap (fixed →
+`composed_prompt`) + a coverage-gap advisory-cap-vs-medium/high contradiction (fixed via
+`severity_enum=("high","medium","low","info")` override). **P0c eval behavior-oracle (free subagent
+backend, `--repeat 1`): security 1.00/0.00, usability 1.00/1.00 (advisory band), coverage-gap 1.00/0.00,
+architecture[agentic] 1.00/0.00 — all PASS → composed prompts are behavior-equivalent.** Reviewer-reference
+regen = no diff (registry-driven); integrity + runtime_coverage green; full non-acceptance gate **1019
+passed/3 skipped** pre-P1, **1027 passed** with P1 (Opus-verified the `pythonpath+="."` / `tests/__init__.py`
+change is runtime-safe). **P1a** StubBackend + typed `audit/changelist.py` (Changelist/AgentChange/
+ProposedEdit/Verdict + `vetted()`). **P1b** `audit/brief.py` (reconciled to the REAL `eval --findings-out`
+subdir layout `<dir>/<agent>/<kind>/<case>__r<n>.json`). **P1c** `audit/orchestrator.py` `run_stage`
+(checkpoint.py-reusing resumable work-queue). **P1d** `audit/stages.py` `audit_agent` (Stage 1, Opus,
+roster-as-consistency-oracle, fenced+prose-tolerant JSON; Opus quality fixed the output contract: added
+`critical` to the threshold enum, `null`→JSON-null not string `"null"` + downstream normalize, baseline/
+max-tokens constants). Commits 713389e→(this). Next: P2 (reconcile + adversarial spine) → pipeline → P3
+(apply-preview + CLI + runbook). No release / no template payload.
+
+#### #0196 · completed · FWK4 · 2026-06-19
+**FWK4 implementation COMPLETE → PR #67.** Phases 2–3 + branch-end. **P2a** `stages.reconcile`
+(cross-agent) + `stages.refute` (adversarial, default-to-refuted, strict-majority-survives); Opus
+review fixed reconcile inheriting the Stage-1 stringified-`null` defect + `from_dict` robustness.
+**P2b** `pipeline.run_audit` (audit→reconcile→refute→vetted `changelist.json` + audit-trail
+`changelist-full.json`); Opus review caught TWO confirmed defects (TDD regressions added): a single
+refute-item failure crashed the run via a `vmap` KeyError (now skips failure records), and resume
+re-ran the un-checkpointed reconcile → Stage-3 desync/silent verdict mis-binding (reconcile output now
+checkpointed to `stage2-reconcile.json` + reused on resume). **P3a** `preview.render_patch`
+(git-applyable; real `git apply --check` test). **P3b** `framework reviewer-audit` CLI (mirrors `eval`
+backend resolution; skip-neutral w/o backend). **P3c** maintainer runbook
+`documentation/contributing/reviewer-audit.md` + mkdocs nav (strict build clean). **P3d** branch-end:
+Sonnet spec review = **SPEC COMPLIANT** (every requirement mapped to real code, no gaps/over-builds);
+Opus whole-branch quality = **APPROVED** (5 Minor follow-ups — 2 folded in: dropped the dead
+`audit_agent(root=...)` param; `render_patch` resolves a path-less rubric edit to `rubric.md` + notes
+any un-renderable edit instead of silently dropping; remaining 3 noted: checkpoint-provenance guard on
+`--resume`, optional DRY of the `null`-normalize / text-extract helpers). Full non-acceptance gate
+**1041 passed/3 skipped**; ruff/format/mypy clean. 13 commits on `fwk4-reviewer-self-audit`.
+Test/maintainer-tooling only → no release, no template payload (rendered projects unaffected). On
+merge: move FWK4 to Done + grep master for a marker ([[verify-master-content-after-pr-merge]]); the
+roadmap `Next` queue is then empty.

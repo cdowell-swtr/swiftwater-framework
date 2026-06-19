@@ -1313,6 +1313,63 @@ def eval_analyze(
         raise typer.Exit(1)
 
 
+@app.command(name="reviewer-audit")
+def reviewer_audit(
+    agents: list[str] = typer.Argument(
+        None, help="Reviewers to audit (default: all registered)."
+    ),
+    baseline: str = typer.Option(
+        "",
+        "--baseline",
+        help="Dir of a prior `framework eval --findings-out` run (evidence).",
+    ),
+    out: str = typer.Option(
+        ".framework/reviewer-audit",
+        "--out",
+        help="Output dir for the changelist + preview.",
+    ),
+    backend: str | None = typer.Option(
+        None, "--backend", help="'api' (paid) or 'subagent' (free claude -p)."
+    ),
+    skeptics: int = typer.Option(
+        3, "--skeptics", help="Adversarial skeptics per change."
+    ),
+    resume: bool = typer.Option(
+        False, "--resume", help="Resume a prior run from --out."
+    ),
+) -> None:
+    """Audit reviewer prompts (rubric consistency, severity bar, scope, fixtures) and emit a
+    vetted changelist + a dry-run apply-preview patch. No edits are applied (FWK4)."""
+    from framework_cli.review.audit.pipeline import run_audit
+    from framework_cli.review.audit.preview import render_patch
+
+    res = _resolve_review_backend(flag=backend or None, key_env=EVAL_KEY_ENV)
+    if res.backend is None:  # type: ignore[attr-defined]
+        reason = getattr(res, "reason", "")
+        msg = _no_backend_message(reason, key_env=EVAL_KEY_ENV)
+        typer.echo(f"reviewer-audit: skipped ({msg})")
+        raise typer.Exit(0)
+
+    _backend = _make_backend(res.backend, EVAL_KEY_ENV)  # type: ignore[attr-defined]
+    targets = list(agents) if agents else agent_names()
+    out_dir = Path(out)
+    cl = run_audit(
+        targets,
+        backend=_backend,
+        root=Path.cwd(),
+        baseline_dir=Path(baseline) if baseline else None,
+        out_dir=out_dir,
+        skeptics=skeptics,
+        resume=resume,
+    )
+    patch = render_patch(cl)
+    (out_dir / "apply-preview.patch").write_text(patch)
+    n = sum(len(a.edits) for a in cl.agents) + len(cl.preamble_edits)
+    typer.echo(
+        f"reviewer-audit: {n} vetted change(s) across {len(targets)} agent(s) → {out_dir}/"
+    )
+
+
 def _staged_files() -> list[str]:
     """Return the list of files in the staged set (git diff --cached --name-only)."""
     result = subprocess.run(

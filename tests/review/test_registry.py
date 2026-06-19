@@ -4,6 +4,7 @@ from framework_cli.review.registry import (
     AgentSpec,
     active_agents,
     agent_names,
+    composed_prompt,
     get_agent,
 )
 
@@ -45,7 +46,7 @@ def test_security_agent_spec():
     assert spec.active_when == "always"
     assert spec.model  # a model id is set
     assert "OWASP" in spec.prompt or "injection" in spec.prompt
-    assert "JSON" in spec.prompt  # instructs JSON-only output
+    assert "JSON" in composed_prompt(spec)  # JSON output contract supplied by preamble
 
 
 def test_unknown_agent_raises():
@@ -83,7 +84,8 @@ def test_every_agent_prompt_loads_and_demands_json(name):
     spec = get_agent(name)
     assert spec.name == f"review-{name}"
     assert spec.prompt.strip()
-    assert "JSON" in spec.prompt
+    # JSON output contract is now supplied by the preamble; check the composed prompt.
+    assert "JSON" in composed_prompt(spec)
 
 
 @pytest.mark.parametrize("name", _EXPECTED_BATTERY)
@@ -92,7 +94,8 @@ def test_every_battery_agent_prompt_loads_and_demands_json(name):
     assert spec.name == f"review-{name}"
     assert spec.active_when == "battery"
     assert spec.prompt.strip()
-    assert "JSON" in spec.prompt
+    # JSON output contract is now supplied by the preamble; check the composed prompt.
+    assert "JSON" in composed_prompt(spec)
 
 
 def test_advisory_and_filetrigger_config():
@@ -271,7 +274,7 @@ def test_env_parity_agent_spec():
         ".env.example",
         "src/*/config/settings.py",
     }
-    assert "JSON" in spec.prompt
+    assert "JSON" in composed_prompt(spec)  # JSON output contract supplied by preamble
     assert "dev-only" in spec.prompt.lower() or "parity" in spec.prompt.lower()
     # The composition-oracle must be in the prompt (the whole reason the agent is agentic) —
     # a tighter check than "parity", which guards against a prompt swap.
