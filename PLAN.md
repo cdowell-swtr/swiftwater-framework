@@ -10,7 +10,7 @@
   - [x] T1 lock 5 baseline escapees + EXEMPT
   - [x] T2 BATTERY_LOCKED + battery-aware rules()
   - [x] T3 build_manifest battery integration
-  - [ ] T4 coverage.py + forward check
+  - [x] T4 coverage.py + forward check
   - [ ] T5 anti-stale + genuinely-gated guards
   - [ ] T6 per-gate accuracy guard
   - [ ] T7 docs + FWK29 confirm + gate + close
