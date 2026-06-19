@@ -2283,3 +2283,14 @@ single-battery render — the under-lock guard; user explicitly requested). Corr
 premise: battery obs files are hand-authored static `.jinja` (only slo is gen'd), so lockable like
 their locked postgres siblings. Test/integrity-infra only → no standalone release. Awaiting user spec
 review before writing-plans.
+
+#### #0190 · note · FWK7 · 2026-06-18
+FWK7 implementation plan written + committed: `docs/superpowers/plans/2026-06-18-fwk7-reverse-
+integrity-coverage.md`. 7 TDD tasks (Task 1 baseline escapees → LOCKED_TRACKED + EXEMPT; Task 2
+BATTERY_LOCKED + `rules(batteries=())`; Task 3 build_manifest battery integration; Task 4
+`integrity/coverage.py` helper + forward all-batteries check; Task 5 anti-stale + genuinely-gated;
+Task 6 `test_battery_locked_gating_is_accurate`; Task 7 docs+FWK29-confirm+gate+close) with complete
+code per step + bite-proofs. Verified plan assumptions: `test_generate.py`'s synthetic `_fake_project`
+(no `.copier-answers.yml` → read_batteries []=baseline) stays green post-Task-1; doc to update =
+`documentation/overview/what-you-get.md`. Spec review gate passed (user approved). Ready to execute
+subagent-driven.
