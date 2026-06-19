@@ -9,7 +9,7 @@
 - [ ] FWK7 — Plan 30: full reverse integrity-coverage check + battery-infra classification  deps: consumes INTENTIONALLY_UNLOCKED (shipped v0.2.4) — **IN PROGRESS** on `fwk7-reverse-integrity-coverage` (subagent-driven; plan `docs/superpowers/plans/2026-06-18-fwk7-reverse-integrity-coverage.md`)
   - [x] T1 lock 5 baseline escapees + EXEMPT
   - [x] T2 BATTERY_LOCKED + battery-aware rules()
-  - [ ] T3 build_manifest battery integration
+  - [x] T3 build_manifest battery integration
   - [ ] T4 coverage.py + forward check
   - [ ] T5 anti-stale + genuinely-gated guards
   - [ ] T6 per-gate accuracy guard

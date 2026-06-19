@@ -101,3 +101,42 @@ def test_write_manifest_creates_loadable_lock(tmp_path: Path):
     out = write_manifest(proj, "0.1.0")
     assert out == proj / ".framework" / "integrity.lock"
     Manifest.loads(out.read_text())  # parses without error
+
+
+def test_manifest_locks_battery_files_when_battery_active(tmp_path):
+    from framework_cli.copier_runner import render_project
+    from framework_cli.integrity.generate import build_manifest
+
+    dest = tmp_path / "proj"
+    render_project(
+        dest,
+        {
+            "project_name": "Demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+            "batteries": ["redis"],
+        },
+    )
+    manifest = build_manifest(dest, "v0.0.0-test")
+    paths = {e.path for e in manifest.entries}
+    assert "infra/observability/grafana/dashboards/redis.json" in paths
+
+
+def test_manifest_omits_battery_files_in_baseline(tmp_path):
+    from framework_cli.copier_runner import render_project
+    from framework_cli.integrity.generate import build_manifest
+
+    dest = tmp_path / "proj"
+    render_project(
+        dest,
+        {
+            "project_name": "Demo",
+            "project_slug": "demo",
+            "package_name": "demo",
+            "python_version": "3.12",
+        },
+    )
+    manifest = build_manifest(dest, "v0.0.0-test")
+    paths = {e.path for e in manifest.entries}
+    assert "infra/observability/grafana/dashboards/redis.json" not in paths
