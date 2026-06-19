@@ -4239,3 +4239,25 @@ def test_render_pi_prefix_override(tmp_path: Path):
     agents = (dest / "AGENTS.md").read_text()
     assert "`MRDN`" in agents
     assert "MRDN1, MRDN2" in agents
+
+
+def test_render_seeds_pi_and_memory_state_files(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert (dest / "PLAN.md").is_file()
+    assert (dest / "MEMORY.md").is_file()
+    assert (dest / "_memory" / ".gitkeep").is_file()
+    assert (dest / "_archive" / "ARCHIVED_PLAN.md").is_file()
+    assert (dest / "_archive" / "ARCHIVED_ACTION_LOG.md").is_file()
+    log = (dest / "ACTION_LOG.md").read_text()
+    assert "#0001 · note" in log
+    assert "adopted" in log.lower()
+    memory = (dest / "MEMORY.md").read_text()
+    assert "MEMORY-convention: v1" in memory
+
+
+def test_render_date_is_injected_into_seed_log(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "render_date": "2026-01-02"})
+    log = (dest / "ACTION_LOG.md").read_text()
+    assert "2026-01-02" in log

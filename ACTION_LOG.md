@@ -2190,3 +2190,11 @@ managed region — `@AGENTS.md` + `@MEMORY.md` imports, the Committed Memory poi
 v1) and superpowers model-routing pointer (SUPERPOWERS-MODEL-ROUTING-convention v1), citing patterns.
 Render test green; full suite 272/272. Sonnet impl + Sonnet spec (✅) + Opus quality (APPROVE; the
 `@MEMORY.md` import resolves once task 3 seeds MEMORY.md on this branch).
+
+#### #0182 · note · FWK9 · 2026-06-18
+FWK9 task 3/6: seeded the stateful PI + Committed-Memory files into the template payload —
+`PLAN.md.jinja`, `ACTION_LOG.md.jinja` (dated `#0001 · note` via new `render_date` injected in
+`copier_runner.render_project` w/ `setdefault`, override-able), static `MEMORY.md`, `_memory/.gitkeep`,
+`_archive/` stubs — plus `_skip_if_exists` (6 rendered paths) so `upgrade` never clobbers a consumer's
+plan. mypy/ruff clean; 2 tests green. Sonnet impl + Sonnet spec (✅) + Opus quality (APPROVE; applied
+the minor seed-log wording fix — empty `Next` → future tense).

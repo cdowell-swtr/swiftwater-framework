@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from datetime import date
 from importlib.resources import files
 from pathlib import Path
 
@@ -15,6 +16,7 @@ def render_project(dest: Path, data: Mapping[str, object]) -> None:
     from framework_cli.migrations import migration_context
 
     merged = dict(data)
+    merged.setdefault("render_date", date.today().isoformat())
     batteries = merged.get("batteries", []) or []
     merged.update(migration_context(batteries if isinstance(batteries, list) else []))
     run_copy(

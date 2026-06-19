@@ -1,5 +1,13 @@
 _templates_suffix: .jinja
 
+_skip_if_exists:
+  - PLAN.md
+  - ACTION_LOG.md
+  - MEMORY.md
+  - _memory/.gitkeep
+  - _archive/ARCHIVED_PLAN.md
+  - _archive/ARCHIVED_ACTION_LOG.md
+
 project_name:
   type: str
   help: Human-readable project name
