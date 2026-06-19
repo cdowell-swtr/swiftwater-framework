@@ -2232,3 +2232,14 @@ VACUOUS (passed even with PLAN.md removed from the skip-list, since PLAN.md.jinj
 v1→v2). Fix (Sonnet): v2 bump appends a marker to PLAN.md.jinja → assert the marker is ABSENT from the
 consumer's PLAN.md (skip honored) + `_commit: v2` landed. Re-proven: FAILS with the skip entry removed,
 PASSES restored. Both tests + runtime_coverage (9) green; ruff/mypy clean.
+
+#### #0186 · completed · FWK9 · 2026-06-18
+FWK9 DONE — generated projects born-adopt the full patterns convention roster (template payload).
+6 subagent-driven TDD tasks (#0180–#0185), branch `fwk9-propagate-conventions` (commits f2402fc →
+577ba3d on the 60e0074 spec). Branch-end Opus review = APPROVE-WITH-NITS (only cosmetic: AGENTS.md
+double-load via `@AGENTS.md` is intentional house-style; two adjacent "Conventions" headings) +
+confirmed the core public-safety invariant (zero private-patterns runtime dep in a fresh render) and
+seed-once integrity. Full gate: ruff/format/mypy clean, 984 passed / 3 skipped (non-acceptance) + the
+2 new uv+git acceptance tests green (docker tier runs in CI). No release (ships on the next cut).
+Follow-up filed: FWK40 (docs-layout re-vendor drift guard). Plan doc committed with the branch.
+Next: open a PR (master protected) → merge.
