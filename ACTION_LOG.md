@@ -2160,3 +2160,19 @@ v0.3.0 adopters don't need the `--allow-drift` marker. Cut via release PR (maste
 render-matrix on #62 + the post-merge master push prove the payload; tag `v0.3.1` after merge →
 `release.yml` (guard→ci→broad-matrix→publish). Per [[release-cut-procedure]] +
 [[release-yml-runs-full-gate-before-publish]].
+
+#### #0179 · note · FWK9 · 2026-06-18
+Brainstormed + wrote the FWK9 design spec
+(`docs/superpowers/specs/2026-06-18-fwk9-propagate-conventions-design.md`). Scope decision:
+widen FWK9 from "PI + MEMORY" to the **full patterns roster** (5 conventions) — generated
+projects become "new project adopting from zero" per patterns' `CONVENTIONS-INDEX.md`. Key
+rulings: (1) **born-adopted + patterns-cited**, NOT "adopt live" — patterns is PRIVATE, the
+framework PUBLIC, so a live-fetch directive would bake a private-repo runtime dep into a public
+artifact + break render-and-exercise; cite patterns as authority instead of vendoring the
+stale-prone doc bodies. (2) **Vendor the docs-layout validator script** as a `local` hook (it
+otherwise pre-commit-clones private patterns); git's hooks are public (gitleaks +
+conventional-pre-commit) so referenced normally. (3) **`pi_prefix` copier question** (derived
+default, persisted → stable across upgrade). (4) PI stays **agent-upheld** (no framework
+PreToolUse hook imposed on consumers). (5) Stateful PI/MEMORY files seeded once
+(`_skip_if_exists` + INTENTIONALLY_UNLOCKED) — upgrade never clobbers a consumer's PLAN.md. Next:
+writing-plans → subagent-driven implementation on branch `fwk9-propagate-conventions`.

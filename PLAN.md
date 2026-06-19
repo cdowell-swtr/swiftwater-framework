@@ -7,7 +7,7 @@
 ## Next
 - [ ] FWK4 — Plan 23: agent self-improvement tooling (capture the Plan 21 audit→synthesis→adversarial method as repeatable tooling)
 - [ ] FWK7 — Plan 30: full reverse integrity-coverage check + 23-file battery-infra classification  deps: consumes INTENTIONALLY_UNLOCKED (shipped v0.2.4)
-- [ ] FWK9 — Propagate the PI + MEMORY conventions into generated projects (template payload)  deps: FWK1, FWK2
+- [ ] FWK9 — Propagate the patterns convention roster (PI + MEMORY + docs-layout + git + model-routing) into generated projects (template payload)  deps: FWK1, FWK2  → spec: `docs/superpowers/specs/2026-06-18-fwk9-propagate-conventions-design.md`
 
 ## Done
 - [x] FWK39 — **Fix: `scripts/dev_summary.sh` trailing-blank vs EOF hook** (shipped **v0.3.1**, PR #62; v0.3.0 follow-up, surfaced by Meridian). The locked rendered `dev_summary.sh` ended `…PY\n\n` (the `{% endraw %}` line emitted a trailing blank); the generated project's `end-of-file-fixer` hook strips it → a LOCKED framework file fails a framework hook → permanent integrity drift on every consumer's first commit after upgrading to v0.3.0 (Meridian worked around via `integrity --allow-drift`). Fix: `{% endraw %}` → `{% endraw -%}` (render now ends `…PY\n`; EOF-fixer is a no-op) + a CI-visible render guard (no-trailing-blank, bite-confirmed). Root-cause gap: FWK37's task gate didn't run the acceptance `test_rendered_project_precommit_runs_clean`.  → log:#0177
