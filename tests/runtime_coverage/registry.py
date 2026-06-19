@@ -104,12 +104,29 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "test_rendered_project_precommit_runs_clean",
     ),
     SurfaceClass(
+        "hook:conventional-pre-commit",
+        ".pre-commit-config.yaml",
+        _KG,
+        # FWK9: git convention — commit-msg hook; a conventional message passes and a
+        # malformed one is rejected on a fresh render. Exercised by
+        # test_rendered_project_adopts_conventions (Task 6, not yet landed).
+        "FWK9: test_rendered_project_adopts_conventions lands in Task 6",
+    ),
+    SurfaceClass(
         "hook:coverage-threshold",
         ".pre-commit-config.yaml:60",
         _EX,
         # Skipped in precommit-runs-clean (needs Docker/Postgres); the command it runs
         # (scripts/coverage.sh) is driven directly by the coverage-gate acceptance test.
         "test_rendered_project_coverage_gate_passes",
+    ),
+    SurfaceClass(
+        "hook:docs-layout",
+        ".pre-commit-config.yaml",
+        _KG,
+        # FWK9: docs-layout convention — vendored local validator, green on the born layout.
+        # Exercised by test_rendered_project_adopts_conventions (Task 6, not yet landed).
+        "FWK9: test_rendered_project_adopts_conventions lands in Task 6",
     ),
     SurfaceClass(
         "hook:end-of-file-fixer",
@@ -406,6 +423,14 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         _EX,
         # FWK37: invoked by `task dev`/`dev:lite`; the dev:lite live test asserts its printed block.
         "test_rendered_taskfile_dev_lite_target_drives_stack",
+    ),
+    SurfaceClass(
+        "script:scripts/docs_layout_check.sh",
+        "scripts/docs_layout_check.sh",
+        _KG,
+        # FWK9: the docs-layout validator script, driven by the docs-layout pre-commit hook.
+        # Exercised by test_rendered_project_adopts_conventions (Task 6, not yet landed).
+        "FWK9: test_rendered_project_adopts_conventions lands in Task 6",
     ),
     SurfaceClass(
         "script:scripts/doctor.sh",

@@ -2209,3 +2209,14 @@ registration note. Opus quality CONFIRMED the validator passes on a FRESH render
 all-batteries, exit 0). Sonnet impl + Sonnet spec (fixed dropped `uv run`) + Opus quality (APPROVE;
 applied `stages: [pre-commit]` to stop the docs-layout hook double-firing). Follow-up noted: no guard
 detects an upstream docs-layout/v2 (re-vendor drift).
+
+#### #0184 · note · FWK9 · 2026-06-18
+FWK9 task 5/6: framework-side bookkeeping for the new template files — integrity `classes.py`:
+`AGENTS.md`→HYBRID_TRACKED, `scripts/docs_layout_check.sh`→LOCKED_TRACKED, 5 PI/memory state files
+(PLAN/ACTION_LOG/MEMORY + 2 _archive stubs)→INTENTIONALLY_UNLOCKED (seed-once, consumer-owned — locking
+would let restore clobber a consumer's plan). 3 integrity asserts + a minimal collateral fix to
+test_generate.py (AGENTS.md added to the marker-less fake-project fixture; assertion preserved). FWK29
+registry: the 3 new surfaces (conventional-pre-commit / docs-layout hooks + docs_layout_check.sh script)
+classified interim _KG with FWK9-prefixed evidence (completeness test requires an EXERCISED entry name a
+REAL test fn; the exerciser lands in task 6 → promote to _EX then). Sonnet impl + Sonnet spec (✅, deviation
+sound) + Opus quality (APPROVE; applied alpha-ordering nit on the 2 hook entries). 60/60 integrity+coverage.

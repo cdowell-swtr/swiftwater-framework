@@ -106,3 +106,32 @@ def test_dev_summary_script_is_locked():
     from framework_cli.integrity.classes import LOCKED_TRACKED
 
     assert "scripts/dev_summary.sh" in LOCKED_TRACKED
+
+
+def test_agents_md_is_hybrid():
+    from framework_cli.integrity.classes import HYBRID_TRACKED
+
+    assert "AGENTS.md" in HYBRID_TRACKED
+
+
+def test_docs_layout_validator_is_locked():
+    from framework_cli.integrity.classes import LOCKED_TRACKED
+
+    assert "scripts/docs_layout_check.sh" in LOCKED_TRACKED
+
+
+def test_pi_memory_state_files_are_intentionally_unlocked():
+    from framework_cli.integrity.classes import (
+        INTENTIONALLY_UNLOCKED,
+        LOCKED_TRACKED,
+    )
+
+    for rel in (
+        "PLAN.md",
+        "ACTION_LOG.md",
+        "MEMORY.md",
+        "_archive/ARCHIVED_PLAN.md",
+        "_archive/ARCHIVED_ACTION_LOG.md",
+    ):
+        assert rel not in LOCKED_TRACKED
+        assert rel in INTENTIONALLY_UNLOCKED
