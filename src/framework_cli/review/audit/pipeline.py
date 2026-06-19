@@ -36,7 +36,7 @@ def run_audit(
     # Stage 1 — audit fan-out (per target), checkpointed.
     def _audit(target: str) -> dict[str, Any]:
         brief = build_audit_brief(target, root=root, baseline_dir=baseline_dir)
-        return audit_agent(brief, backend, root=root)
+        return audit_agent(brief, backend)
 
     reports = run_stage(
         targets,

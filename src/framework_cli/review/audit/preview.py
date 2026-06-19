@@ -9,10 +9,10 @@ import difflib
 from framework_cli.review.audit.changelist import Changelist, ProposedEdit
 
 _TEXTUAL = {"domain_prompt", "fixture", "rubric"}
+_RUBRIC_PATH = "src/framework_cli/review/rubric.md"
 
 
-def _diff(edit: ProposedEdit) -> str:
-    path = edit.path or "<unknown-path>"
+def _diff(edit: ProposedEdit, path: str) -> str:
     before = edit.before.splitlines(keepends=True)
     after = edit.after.splitlines(keepends=True)
     return "".join(
@@ -20,28 +20,41 @@ def _diff(edit: ProposedEdit) -> str:
     )
 
 
+def _resolved_path(edit: ProposedEdit) -> str | None:
+    """The file an edit applies to, or None if it can't be placed in a patch. A rubric
+    edit defaults to the canonical rubric.md when no explicit path is given."""
+    if edit.path:
+        return edit.path
+    if edit.target == "rubric":
+        return _RUBRIC_PATH
+    return None
+
+
+def _emit(label: str, edit: ProposedEdit, out: list[str], notes: list[str]) -> None:
+    path = _resolved_path(edit)
+    if edit.target in _TEXTUAL and path:
+        out.append(f"# {label}: {edit.rationale}\n{_diff(edit, path)}")
+    elif edit.target == "block_threshold":
+        notes.append(
+            f"# {label}: set block_threshold {edit.before} -> {edit.after} "
+            f"({edit.rationale}) — edit registry.py by hand"
+        )
+    else:
+        # Never silently drop a vetted edit: a textual edit with no placeable path is
+        # recorded as a note pointing at the full changelist.
+        notes.append(
+            f"# {label}: {edit.target} edit not renderable as a patch "
+            f"({edit.rationale}) — see changelist-full.json"
+        )
+
+
 def render_patch(changelist: Changelist) -> str:
     out: list[str] = []
     notes: list[str] = []
     for ac in changelist.agents:
         for e in ac.edits:
-            if e.target in _TEXTUAL and e.path:
-                out.append(f"# {ac.agent}: {e.rationale}\n{_diff(e)}")
-            elif e.target == "block_threshold":
-                notes.append(
-                    f"# {ac.agent}: set block_threshold {e.before} -> {e.after} "
-                    f"({e.rationale}) — edit registry.py by hand"
-                )
+            _emit(ac.agent, e, out, notes)
     for e in changelist.preamble_edits:
-        if e.path or e.target == "rubric":
-            e2 = ProposedEdit(
-                e.target,
-                e.rationale,
-                e.before,
-                e.after,
-                e.path or "src/framework_cli/review/rubric.md",
-                e.verdict,
-            )
-            out.append(f"# rubric: {e.rationale}\n{_diff(e2)}")
+        _emit("rubric", e, out, notes)
     header = "\n".join(notes)
     return (header + "\n\n" if header else "") + "\n".join(out)

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from typing import Any
 
 from framework_cli.review.audit.brief import AuditBrief
@@ -79,7 +78,7 @@ def _fmt_fixtures(brief: AuditBrief) -> str:
     )
 
 
-def audit_agent(brief: AuditBrief, backend: Any, *, root: Path) -> dict[str, Any]:  # noqa: ARG001
+def audit_agent(brief: AuditBrief, backend: Any) -> dict[str, Any]:
     system = _AUDIT_SYSTEM.format(
         prompt=brief.composed_prompt,
         roster=json.dumps(brief.roster_bars, indent=2, sort_keys=True),

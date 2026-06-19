@@ -54,6 +54,32 @@ def test_render_patch_skips_non_textual_targets():
     assert "security" in patch
 
 
+def test_render_patch_renders_path_less_rubric_edit():
+    # a per-agent rubric edit with no path defaults to the canonical rubric.md — never
+    # silently dropped (the Opus branch-end finding).
+    cl = Changelist(
+        agents=[
+            AgentChange(
+                "security",
+                None,
+                edits=[
+                    ProposedEdit(
+                        target="rubric",
+                        rationale="tighten severity ladder",
+                        before="old\n",
+                        after="new\n",
+                    )
+                ],
+                fixture_verdicts={},
+            )
+        ],
+        preamble_edits=[],
+    )
+    patch = render_patch(cl)
+    assert "src/framework_cli/review/rubric.md" in patch
+    assert "+new" in patch and "-old" in patch
+
+
 def test_rendered_patch_applies_with_git(tmp_path: Path):
     # a tiny git repo with one file; render a patch editing it; `git apply --check` must pass
     repo = tmp_path

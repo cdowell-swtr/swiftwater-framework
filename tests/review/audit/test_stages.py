@@ -27,7 +27,7 @@ def test_audit_agent_parses_structured_report(tmp_path: Path):
     )
     backend = StubBackend([report_json])
     brief = build_audit_brief("security", root=Path.cwd(), baseline_dir=None)
-    report = audit_agent(brief, backend, root=Path.cwd())
+    report = audit_agent(brief, backend)
     assert report["agent"] == "security"
     assert report["proposed_block_threshold"] == "high"
     assert report["edits"][0]["target"] == "domain_prompt"
@@ -40,7 +40,7 @@ def test_audit_agent_parses_structured_report(tmp_path: Path):
 def test_audit_agent_tolerates_fenced_json(tmp_path: Path):
     backend = StubBackend(['```json\n{"agent":"security","edits":[]}\n```'])
     brief = build_audit_brief("security", root=Path.cwd(), baseline_dir=None)
-    report = audit_agent(brief, backend, root=Path.cwd())
+    report = audit_agent(brief, backend)
     assert report["agent"] == "security"
     assert report["edits"] == []
 
@@ -50,7 +50,7 @@ def test_audit_agent_tolerates_surrounding_prose(tmp_path: Path):
         ['Here is the report:\n{"agent":"security","edits":[]}\nHope that helps!']
     )
     brief = build_audit_brief("security", root=Path.cwd(), baseline_dir=None)
-    report = audit_agent(brief, backend, root=Path.cwd())
+    report = audit_agent(brief, backend)
     assert report["agent"] == "security"
     assert report["edits"] == []
 
@@ -58,7 +58,7 @@ def test_audit_agent_tolerates_surrounding_prose(tmp_path: Path):
 def test_audit_agent_normalizes_string_null_threshold(tmp_path: Path):
     backend = StubBackend(['{"agent":"usability","proposed_block_threshold":"null"}'])
     brief = build_audit_brief("usability", root=Path.cwd(), baseline_dir=None)
-    report = audit_agent(brief, backend, root=Path.cwd())
+    report = audit_agent(brief, backend)
     assert report["proposed_block_threshold"] is None
 
 
