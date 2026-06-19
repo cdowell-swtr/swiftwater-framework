@@ -11,8 +11,8 @@
   - [x] T2 BATTERY_LOCKED + battery-aware rules()
   - [x] T3 build_manifest battery integration
   - [x] T4 coverage.py + forward check
-  - [ ] T5 anti-stale + genuinely-gated guards
-  - [ ] T6 per-gate accuracy guard
+  - [x] T5 anti-stale + genuinely-gated guards
+  - [x] T6 per-gate accuracy guard
   - [ ] T7 docs + FWK29 confirm + gate + close
 ## Done
 - [x] FWK40 — **docs-layout validator re-vendor freshness check** (FWK9 follow-up; maintainer-side test only, no release/template payload). New `tests/test_vendored_freshness.py`: a **local, auth-gated** check that hard-**FAIL**s if `cdowell-swtr/patterns` ships a `docs-layout/v*` tag newer than the pin in the vendored `scripts/docs_layout_check.sh` provenance comment, plus a fidelity check (vendored == upstream @ pin, modulo the provenance line). **Skips** wherever patterns is unreachable (CI/no-`gh`-auth/offline), so it never blocks PRs and needs no secret — rejected a scheduled-workflow+PAT alternative (would re-couple automation to the private repo FWK9 designed out). Logic in pure helpers (`parse_pinned_tag`/`latest_version`/`strip_provenance`) unit-tested deterministically; thin `gh` wiring is live-only. Non-vacuity proven (pin→v0 fails staleness; body drift fails fidelity). Inline (executing-plans); branch-end Opus = APPROVE-WITH-NITS (broadened the probe `except`→`OSError`; typo). 10/10 green; ruff/format/mypy clean. Out of scope: the framework's own HEAD-pinned `pi-convention.md`/`memory-convention.md` (different staleness model) — possible future item.  → log:#0187–#0188
