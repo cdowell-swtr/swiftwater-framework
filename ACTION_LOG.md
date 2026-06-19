@@ -2367,3 +2367,25 @@ work-queue reusing `checkpoint.py`), `stages.audit_agent` (Stage 1, Opus). **P2:
 resolution; skip-neutral w/o key), runbook + mkdocs nav. All LLM-stage tests use a `StubBackend`
 (`.messages.create`-shaped) → no key/quota. Self-review: spec coverage ✓, no placeholders, type
 consistency across stages ✓. Ready to execute (subagent-driven recommended).
+
+#### #0195 · completed · FWK4 · 2026-06-19
+**Phase 0 DONE (mergeable checkpoint)** + **Phase 1 underway** — subagent-driven (Sonnet impl, Sonnet spec,
+Opus quality per [[subagent-review-model-pattern]]); controller commits (impl stages, never commits —
+[[subagent-implementers-stop-before-commit]]). **P0a** runtime-assembly mechanism (canonical
+`review/rubric.md` + `preamble.py` + `composed_prompt` seam in `request.py`; severity enum derived from
+`block_threshold`, `dependency` override). **P0b** trimmed all 21 `agents/*.md` to domain-only; Opus
+quality caught 10 seam-stale assertions across test_runner/engine/agentic/coverage_gap (fixed →
+`composed_prompt`) + a coverage-gap advisory-cap-vs-medium/high contradiction (fixed via
+`severity_enum=("high","medium","low","info")` override). **P0c eval behavior-oracle (free subagent
+backend, `--repeat 1`): security 1.00/0.00, usability 1.00/1.00 (advisory band), coverage-gap 1.00/0.00,
+architecture[agentic] 1.00/0.00 — all PASS → composed prompts are behavior-equivalent.** Reviewer-reference
+regen = no diff (registry-driven); integrity + runtime_coverage green; full non-acceptance gate **1019
+passed/3 skipped** pre-P1, **1027 passed** with P1 (Opus-verified the `pythonpath+="."` / `tests/__init__.py`
+change is runtime-safe). **P1a** StubBackend + typed `audit/changelist.py` (Changelist/AgentChange/
+ProposedEdit/Verdict + `vetted()`). **P1b** `audit/brief.py` (reconciled to the REAL `eval --findings-out`
+subdir layout `<dir>/<agent>/<kind>/<case>__r<n>.json`). **P1c** `audit/orchestrator.py` `run_stage`
+(checkpoint.py-reusing resumable work-queue). **P1d** `audit/stages.py` `audit_agent` (Stage 1, Opus,
+roster-as-consistency-oracle, fenced+prose-tolerant JSON; Opus quality fixed the output contract: added
+`critical` to the threshold enum, `null`→JSON-null not string `"null"` + downstream normalize, baseline/
+max-tokens constants). Commits 713389e→(this). Next: P2 (reconcile + adversarial spine) → pipeline → P3
+(apply-preview + CLI + runbook). No release / no template payload.

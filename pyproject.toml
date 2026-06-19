@@ -42,7 +42,7 @@ build-backend = "hatchling.build"
 packages = ["src/framework_cli"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 
 [tool.ruff]
