@@ -60,4 +60,6 @@ nav:
       - CLI: reference/cli.md
       - Python API: reference/api.md
       - Review agents: reference/review-agents.md
-  - Contributing: contributing/index.md
+  - Contributing:
+      - Overview: contributing/index.md
+      - Auditing the review agents: contributing/reviewer-audit.md
