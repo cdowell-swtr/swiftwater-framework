@@ -82,6 +82,20 @@ def test_render_includes_claude_md(tmp_path: Path):
     assert "write the failing test first" in text.lower()
 
 
+def test_render_claude_md_imports_agents_and_memory(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    claude = (dest / "CLAUDE.md").read_text()
+    assert "@AGENTS.md" in claude
+    assert "@MEMORY.md" in claude
+    assert "MEMORY-convention: v1" in claude
+    assert "SUPERPOWERS-MODEL-ROUTING-convention: v1" in claude
+    # CC-specific blocks must sit INSIDE the managed region (before the closing marker)
+    body = claude
+    assert body.index("MEMORY-convention: v1") < body.index("FRAMEWORK:END")
+    assert body.index("@AGENTS.md") < body.index("FRAMEWORK:END")
+
+
 def test_render_readme_documents_gates(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

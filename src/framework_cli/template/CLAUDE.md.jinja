@@ -67,6 +67,30 @@ Coverage gates by stage (spec §6): **pre-commit** runs unit+functional at **>=7
 - `task hooks` — install pre-commit; `task hooks:run` — run all hooks
 - An editor hook runs ruff + mypy on each Python file as it is edited; fix what it reports before moving on.
 
+## Project conventions
+
+This project adopts the `cdowell-swtr/patterns` convention roster. Portable conventions
+(Planning Instrument, docs layout, git) are in `@AGENTS.md`; the Claude-Code-specific ones
+are below.
+
+@AGENTS.md
+
+<!-- MEMORY-convention: v1 -->
+## Committed project memory
+Project memory is autoloaded from `MEMORY.md` (imported below). Resolve `[[slug]]` to `_memory/<slug>.md`.
+Commit a memory only when it is BOTH useful to anyone working this repo AND safe to publish; otherwise keep
+it in the native store. When in doubt, native. Full convention: `cdowell-swtr/patterns` `memory-convention.md` @ `memory/v1`.
+
+@MEMORY.md
+
+<!-- SUPERPOWERS-MODEL-ROUTING-convention: v1 -->
+## Superpowers model routing
+When running superpowers subagent-driven-development, route subagents by per-role model *floors* (never below):
+implementer ≥ latest Sonnet; spec/mechanistic review ≥ latest Sonnet; code-quality review = latest Opus;
+final full-implementation review = latest Opus. Upgrades (incl. the BLOCKED escalation) are always fine; only
+downgrade below a floor is forbidden. This overrides the skill's "Model Selection" heuristic.
+Full convention: `cdowell-swtr/patterns` `superpowers-model-routing-convention.md` @ `superpowers-model-routing/v1`.
+
 <!-- FRAMEWORK:END -->
 
 ## Project notes

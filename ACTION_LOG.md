@@ -2183,3 +2183,10 @@ FWK9 task 1/6 (subagent-driven): added the `pi_prefix` copier question (derived 
 convention pointer blocks (PI / docs-layout / git), each citing `cdowell-swtr/patterns` @ tag (no
 vendored body). 3 render-level tests green; ruff clean. Sonnet impl + Sonnet spec (✅) + Opus
 quality (APPROVE; AGENTS.md→HYBRID_TRACKED registration deferred to task 5 as planned).
+
+#### #0181 · note · FWK9 · 2026-06-18
+FWK9 task 2/6: added the two CC-specific convention blocks to the generated `template/CLAUDE.md.jinja`
+managed region — `@AGENTS.md` + `@MEMORY.md` imports, the Committed Memory pointer (MEMORY-convention
+v1) and superpowers model-routing pointer (SUPERPOWERS-MODEL-ROUTING-convention v1), citing patterns.
+Render test green; full suite 272/272. Sonnet impl + Sonnet spec (✅) + Opus quality (APPROVE; the
+`@MEMORY.md` import resolves once task 3 seeds MEMORY.md on this branch).
