@@ -2326,3 +2326,23 @@ slice" comment (spec reviewer note); added `test_classification_categories_are_p
 minor — enforces "exactly one category", which the set-difference reverse check would otherwise mask).
 Declined the `len(BATTERY_LOCKED)==22` magic-number and test-local-import nits (intentional / matches
 file style). tests/integrity/ 67 passed; ruff/format/mypy clean. Ready for PR.
+
+#### #0193 · note · FWK4 · 2026-06-19
+FWK4 (Plan 23) brainstormed → design spec written + committed on branch `fwk4-reviewer-self-audit`
+(`docs/superpowers/specs/2026-06-19-fwk4-reviewer-self-audit-design.md`). Captures the Plan 21
+audit→synthesis→adversarial method as a repeatable **in-process** `framework reviewer-audit` command.
+Five forks resolved in brainstorming: (1) **reviewers-only** (rendered-project agents deferred);
+(2) **in-process Python on the LiteLLM backend seam** — explicitly NOT a Claude Code Workflow (the
+provider is already abstracted Plan 5/20); (3) **unified 1..N agents** with the full roster always
+loaded as the consistency baseline (auditing one reviewer in isolation has no consistency oracle);
+(4) output boundary = **vetted changelist + dry-run git-applyable apply-preview**, no auto-apply
+(Plan-21 Phase-1/Phase-2 seam made repeatable); (5) rubric stored via **runtime prompt assembly** —
+single canonical preamble (rubric core + output/findings-schema contract) composed with each agent's
+domain block at prompt-build, so consistency for the centralized blocks is structural (cannot drift)
+and the audit focuses judgment on the domain deltas. Empirical scoping finding: the "shared" rubric is
+already drifted (only 10/21 prompts carry the canonical `## Severity` header; the output contract
+wandered) → Phase 0 (centralization) folded in as a prerequisite. Per-agent severity enum **derived
+from `block_threshold`** (advisory→`low|info`). Build = 4 phases (0 centralization mergeable
+checkpoint · 1 brief+orchestrator+audit · 2 reconciliation+adversarial · 3 apply-preview+runbook),
+subagent-driven TDD, reusing `backend.py`/`checkpoint.py`. Test/maintainer-tooling only → no release,
+no template payload. Plan (writing-plans) next.
