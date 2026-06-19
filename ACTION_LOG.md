@@ -2294,3 +2294,23 @@ code per step + bite-proofs. Verified plan assumptions: `test_generate.py`'s syn
 (no `.copier-answers.yml` → read_batteries []=baseline) stays green post-Task-1; doc to update =
 `documentation/overview/what-you-get.md`. Spec review gate passed (user approved). Ready to execute
 subagent-driven.
+
+#### #0191 · completed · FWK7 · 2026-06-18
+FWK7 DONE on branch `fwk7-reverse-integrity-coverage` (7 TDD tasks, subagent-driven, per-task
+controller-verified + bite-proofed). Closed the reverse integrity-coverage gap: `gate`-tier
+`tests/integrity/test_coverage.py` (pure `integrity/coverage.py` helper) fails if any infra-surface
+file under `_SURFACE_ROOTS=(infra,scripts,.github/workflows)` is unclassified. Classified all 29:
+**5 → LOCKED_TRACKED** (`scripts/compose.sh` — the real escapee + 4 static otel/prometheus obs),
+**22 → BATTERY_LOCKED** (path→gate-batteries; ANY-active locks), **2 .gitkeep → EXEMPT**.
+`rules(batteries=())` battery param (empty=baseline); `build_manifest` feeds `read_batteries(project)`
+(no checker change; over-broad gate self-catches via AuthoringError — confirmed in T6 bite-proof).
+Tests: forward all-batteries + anti-stale(BATTERY_LOCKED/EXEMPT render) + genuinely-gated(absent in
+baseline) + `test_battery_locked_gating_is_accurate` (per-gate single-battery render + manifest
+assertion). Bite-proofs RED→GREEN: drop compose.sh → forward RED; fake battery entry → anti-stale RED;
+wrong docs.yml gate → AuthoringError RED. Doc edit skipped by design (consumer `what-you-get.md`
+already correct; classes.py header = authoring record). One controller tidy: re-grouped the
+`read_batteries` import in generate.py. FWK29 runtime_coverage green (no new surface). Full gate
+(`pytest -q --ignore=tests/acceptance`): **1009 passed / 3 skipped**; ruff/format/mypy clean. Commits
+81050f4 (T1) · 498fb91 (T2) · f7d370d (T3) · 6e42cdf (T4) · 83e86fa (T5+T6) + this close. Branch-end
+Sonnet-spec + Opus-quality reviews next, then PR (master protected). Test/integrity-infra only → no
+release; the battery-locking manifest behavior ships on the next cut.
