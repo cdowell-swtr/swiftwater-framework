@@ -2198,3 +2198,14 @@ FWK9 task 3/6: seeded the stateful PI + Committed-Memory files into the template
 `_archive/` stubs — plus `_skip_if_exists` (6 rendered paths) so `upgrade` never clobbers a consumer's
 plan. mypy/ruff clean; 2 tests green. Sonnet impl + Sonnet spec (✅) + Opus quality (APPROVE; applied
 the minor seed-log wording fix — empty `Next` → future tense).
+
+#### #0183 · note · FWK9 · 2026-06-18
+FWK9 task 4/6: wired the two validator-bearing conventions into the generated pre-commit config —
+public `conventional-pre-commit` @v3.6.0 (commit-msg stage) + `default_install_hook_types`
+[pre-commit, commit-msg]; vendored the docs-layout zero-dep validator to
+`template/scripts/docs_layout_check.sh` (provenance comment; patterns is private so cannot be
+pre-commit-cloned) as a `local` hook; Taskfile `hooks:` installs both stages; README optional-
+registration note. Opus quality CONFIRMED the validator passes on a FRESH render (baseline +
+all-batteries, exit 0). Sonnet impl + Sonnet spec (fixed dropped `uv run`) + Opus quality (APPROVE;
+applied `stages: [pre-commit]` to stop the docs-layout hook double-firing). Follow-up noted: no guard
+detects an upstream docs-layout/v2 (re-vendor drift).

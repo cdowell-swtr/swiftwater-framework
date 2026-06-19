@@ -4261,3 +4261,22 @@ def test_render_date_is_injected_into_seed_log(tmp_path: Path):
     render_project(dest, {**DATA, "render_date": "2026-01-02"})
     log = (dest / "ACTION_LOG.md").read_text()
     assert "2026-01-02" in log
+
+
+def test_render_precommit_adds_convention_hooks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    cfg = (dest / ".pre-commit-config.yaml").read_text()
+    assert "conventional-pre-commit" in cfg
+    assert "commit-msg" in cfg
+    assert "default_install_hook_types" in cfg
+    assert "docs-layout" in cfg
+    assert (dest / "scripts" / "docs_layout_check.sh").is_file()
+
+
+def test_render_docs_layout_validator_is_zero_dep_bash(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    script = (dest / "scripts" / "docs_layout_check.sh").read_text()
+    assert script.startswith("#!/usr/bin/env bash")
+    assert "vendored from cdowell-swtr/patterns" in script

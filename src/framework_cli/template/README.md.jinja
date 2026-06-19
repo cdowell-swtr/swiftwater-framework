@@ -132,3 +132,11 @@ This project uses [Pact](https://docs.pact.io/) for consumer-driven contract tes
 
 **Pact Broker (opt-in):** set `PACT_BROKER_URL` + `PACT_BROKER_TOKEN` (GitHub repo secrets) to publish pacts and verify against a real broker. Without those secrets the `contracts` CI job uses local pact files only (`scripts/pact-publish.sh` no-ops). The multi-repo flow — consumer publishes, provider verifies broker pacts, `pact-broker can-i-deploy` gates releases — is documented in the script.
 {%- endif %}
+
+## Conventions
+
+This project adopts the [`cdowell-swtr/patterns`](https://github.com/cdowell-swtr/patterns)
+convention roster (Planning Instrument, Committed Memory, docs layout, git, superpowers model
+routing) — see `AGENTS.md` and `CLAUDE.md`. Registering this repo in the patterns implementer
+registries is **optional**; if you want it tracked there, append a row per each convention's
+adoption runbook.
