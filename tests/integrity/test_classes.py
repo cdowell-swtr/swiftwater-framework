@@ -135,3 +135,29 @@ def test_pi_memory_state_files_are_intentionally_unlocked():
     ):
         assert rel not in LOCKED_TRACKED
         assert rel in INTENTIONALLY_UNLOCKED
+
+
+def test_baseline_escapees_are_locked():
+    """FWK7: framework-owned files that render in a baseline project but had escaped the
+    locked registry (a PORT_OFFSET wrapper + 4 static obs configs)."""
+    from framework_cli.integrity.classes import LOCKED_TRACKED
+
+    for rel in (
+        "scripts/compose.sh",
+        "infra/observability/grafana/dashboards/otel-collector.json",
+        "infra/observability/grafana/dashboards/prometheus.json",
+        "infra/observability/prometheus/alerts/otel_collector_alerts.yml",
+        "infra/observability/prometheus/alerts/prometheus_alerts.yml",
+    ):
+        assert rel in LOCKED_TRACKED, (
+            f"{rel} should be locked (baseline framework infra)"
+        )
+
+
+def test_gitkeep_placeholders_are_exempt():
+    """FWK7: empty .gitkeep dir-placeholders have no checksummable content."""
+    from framework_cli.integrity.classes import EXEMPT, LOCKED_TRACKED
+
+    for rel in ("infra/traefik/certs/.gitkeep", "infra/tls/ca/.gitkeep"):
+        assert rel in EXEMPT
+        assert rel not in LOCKED_TRACKED

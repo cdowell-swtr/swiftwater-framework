@@ -50,15 +50,20 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "infra/observability/prometheus/alerts/slo_alerts.yml",
     "infra/observability/prometheus/alerts/postgres_alerts.yml",
     "infra/observability/prometheus/alerts/alertmanager_alerts.yml",
+    "infra/observability/prometheus/alerts/otel_collector_alerts.yml",
+    "infra/observability/prometheus/alerts/prometheus_alerts.yml",
     "infra/observability/promtail/promtail-config.yml",
     "infra/observability/tempo/tempo.yml",
     "infra/observability/grafana/dashboards/slo.json",
     "infra/observability/grafana/dashboards/postgres.json",
+    "infra/observability/grafana/dashboards/otel-collector.json",
+    "infra/observability/grafana/dashboards/prometheus.json",
     "infra/observability/grafana/provisioning/dashboards/provider.yml",
     "infra/observability/grafana/provisioning/datasources/loki.yml",
     "infra/observability/grafana/provisioning/datasources/prometheus.yml",
     "infra/observability/grafana/provisioning/datasources/tempo.yml",
     "scripts/check_migrations.py",
+    "scripts/compose.sh",
     "scripts/coverage.sh",
     "scripts/dev_summary.sh",
     "scripts/docs_layout_check.sh",
@@ -84,6 +89,15 @@ INTENTIONALLY_UNLOCKED: tuple[str, ...] = (
     "MEMORY.md",  # FWK9: committed-memory index — seeded once, consumer-owned
     "_archive/ARCHIVED_PLAN.md",  # FWK9: PI archive stub — consumer-owned
     "_archive/ARCHIVED_ACTION_LOG.md",  # FWK9: PI archive stub — consumer-owned
+)
+
+# Framework-shipped placeholders with no checksummable content: empty .gitkeep files that only
+# exist to keep an otherwise-empty directory in git. Recorded explicitly (like INTENTIONALLY_UNLOCKED)
+# so the FWK7 reverse-coverage check can distinguish "deliberately uncovered" from "a framework file
+# that escaped classification".
+EXEMPT: tuple[str, ...] = (
+    "infra/traefik/certs/.gitkeep",  # local-TLS cert dir placeholder
+    "infra/tls/ca/.gitkeep",  # FWK6 CA-bundle dir placeholder
 )
 
 # Gitignored + existence-only: a framework-managed file legitimately absent from a fresh
