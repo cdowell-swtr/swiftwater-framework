@@ -2243,3 +2243,14 @@ seed-once integrity. Full gate: ruff/format/mypy clean, 984 passed / 3 skipped (
 2 new uv+git acceptance tests green (docker tier runs in CI). No release (ships on the next cut).
 Follow-up filed: FWK40 (docs-layout re-vendor drift guard). Plan doc committed with the branch.
 Next: open a PR (master protected) → merge.
+
+#### #0187 · note · FWK40 · 2026-06-18
+Brainstormed + wrote the FWK40 design spec
+(`docs/superpowers/specs/2026-06-18-fwk40-vendored-freshness-design.md`). FWK9 follow-up: the docs-
+layout validator is vendored at `docs-layout/v1` with provenance-only — nothing detects an upstream
+`v2`. Decision: a LOCAL auth-gated pytest check (NOT a scheduled workflow + PAT — that would re-couple
+automation to the private patterns repo, the thing FWK9 designed out). Where patterns is reachable
+(maintainer machine), two checks: (1) staleness — hard FAIL if a newer `docs-layout/v*` tag exists
+(local-only, CI skips so it never blocks PRs); (2) fidelity — vendored == upstream @ pin (minus the
+provenance line). Pure helpers (parse_pinned_tag / latest_version / strip_provenance) unit-tested; thin
+gh wiring live-only. Out of scope: the root-vendored pi/memory docs (HEAD-pinned, different model).
