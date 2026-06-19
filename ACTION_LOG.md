@@ -2265,3 +2265,21 @@ APPROVE-WITH-NITS (broadened the probe except → OSError; docstring typo). Non-
 authed box (pin→v0 fails staleness `assert 1<=0`; body `# drift` fails fidelity; validator restored).
 10/10 green; ruff/format/mypy clean. No release/template-payload change. Branch `fwk40-vendored-
 freshness` → PR next (master protected).
+
+#### #0189 · note · FWK7 · 2026-06-18
+FWK7 brainstorm → spec committed: `docs/superpowers/specs/2026-06-18-fwk7-reverse-integrity-coverage-
+design.md`. Full reverse integrity-coverage check + battery-infra classification. Grounded on a live
+all-batteries render: the deferral-era "23 unclassified" is now **29** (more batteries; FWK6
+`tls/ca/.gitkeep`; FWK31 `compose.sh`). Split: **5 baseline escapees → LOCKED_TRACKED** (incl.
+`scripts/compose.sh` — the genuine escapee the check exists to catch — + 4 static otel/prometheus obs
+files), **22 battery-conditional → new `BATTERY_LOCKED: dict[path, gate-batteries]`** (lock applies
+when any gating battery active; gates transcribed from the jinja conditionals), **2 `.gitkeep` → new
+`EXEMPT`**. Mechanism: `rules(batteries=())` gains a battery param (empty default = unchanged
+baseline); `build_manifest` feeds it `read_batteries(project)` (no checker change — manifest-driven;
+over-broad gate self-catches via AuthoringError). Reverse check = pure `integrity/coverage.py` +
+`gate`-tier `test_coverage.py` over `_SURFACE_ROOTS=(infra,scripts,.github/workflows)` extensibility
+seam (scope C: tight-now-plus-seam). Includes `test_battery_locked_gating_is_accurate` (per-gate
+single-battery render — the under-lock guard; user explicitly requested). Corrected the v0.2.4 spec's
+premise: battery obs files are hand-authored static `.jinja` (only slo is gen'd), so lockable like
+their locked postgres siblings. Test/integrity-infra only → no standalone release. Awaiting user spec
+review before writing-plans.
