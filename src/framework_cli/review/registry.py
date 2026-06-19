@@ -50,6 +50,10 @@ class AgentSpec:
     # reviews_template: on the framework target, receive the template-INCLUSIVE diff
     # (pr_diff) instead of framework_diff()'s template-excluding one.
     reviews_template: bool = False
+    # Override the output-contract severity enum (default derives from block_threshold:
+    # advisory → low|info, blocking → high|medium|low|info). Set only for the bespoke
+    # cases (e.g. dependency's high|low|info — advisory but allows high).
+    severity_enum: tuple[str, ...] | None = None
 
 
 def _prompt(name: str) -> str:
@@ -265,6 +269,7 @@ _SPECS: dict[str, AgentSpec] = {
                 "uv.lock",
             ),
         ),
+        severity_enum=("high", "low", "info"),
     ),
     "api-design": AgentSpec(
         "review-api-design",
@@ -341,6 +346,16 @@ def get_agent(name: str) -> AgentSpec:
 
 def agent_names() -> list[str]:
     return sorted(_SPECS)
+
+
+def composed_prompt(spec: AgentSpec) -> str:
+    """The full system prompt: shared preamble (rubric + output contract) + the agent's
+    domain block (`spec.prompt`, loaded from agents/<name>.md)."""
+    from framework_cli.review.preamble import (
+        build_preamble,
+    )  # local: avoid import cycle
+
+    return f"{build_preamble(spec)}\n\n{spec.prompt}"
 
 
 def active_agents(event: str, batteries: Sequence[str] = ()) -> list[str]:

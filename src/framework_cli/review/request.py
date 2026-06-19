@@ -6,7 +6,7 @@ from typing import Any
 
 from framework_cli.review.context import Bundle
 from framework_cli.review.decisions import Decision, render_decisions_block
-from framework_cli.review.registry import AgentSpec
+from framework_cli.review.registry import AgentSpec, composed_prompt
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,7 @@ def build_review_request(
         system.append(
             {"type": "text", "text": block, "cache_control": {"type": "ephemeral"}}
         )
-    system.append({"type": "text", "text": spec.prompt})
+    system.append({"type": "text", "text": composed_prompt(spec)})
     return ReviewRequest(
         model=spec.model,
         system=system,
@@ -122,7 +122,7 @@ def build_agentic_request(
         system.append(
             {"type": "text", "text": block, "cache_control": {"type": "ephemeral"}}
         )
-    system.append({"type": "text", "text": spec.prompt})
+    system.append({"type": "text", "text": composed_prompt(spec)})
     return ReviewRequest(
         model=spec.model,
         system=system,
