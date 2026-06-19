@@ -2346,3 +2346,24 @@ from `block_threshold`** (advisory→`low|info`). Build = 4 phases (0 centraliza
 checkpoint · 1 brief+orchestrator+audit · 2 reconciliation+adversarial · 3 apply-preview+runbook),
 subagent-driven TDD, reusing `backend.py`/`checkpoint.py`. Test/maintainer-tooling only → no release,
 no template payload. Plan (writing-plans) next.
+
+#### #0194 · note · FWK4 · 2026-06-19
+FWK4 implementation plan written + committed: `docs/superpowers/plans/2026-06-19-fwk4-reviewer-self-audit.md`.
+**4 phases / 22 tasks**, subagent-driven TDD, complete inline code per step. **P0 (runtime-assembly
+rubric centralization, independently mergeable):** new canonical `review/rubric.md` + `preamble.py`
+(`build_preamble`/`severity_enum_for`, advisory cap + output-contract enum derived from
+`block_threshold`, `AgentSpec.severity_enum` override for dependency's bespoke `high|low|info`);
+`composed_prompt` accessor composed at the `request.py` system-prompt seam; trim all 21 `agents/*.md`
+to domain-only (worked example + structural drift guard `test_domain_files_do_not_redefine_centralized_sections`);
+eval re-confirm sweep is the behavior-preservation oracle. Empirical note baked in: the "shared" rubric
+is per-agent *tailored* not verbatim (only Severity ladder + Output contract are byte-identical), so P0
+centralizes the full canonical rubric and re-confirms via eval. **P1:** `audit/` pkg — typed
+`changelist.py` (ProposedEdit/AgentChange/Verdict + `vetted()`), `brief.py` (target composed-prompt +
+fixtures + baseline findings + full-roster bars = consistency oracle), `orchestrator.py` (checkpointed
+work-queue reusing `checkpoint.py`), `stages.audit_agent` (Stage 1, Opus). **P2:** `stages.reconcile`
+(Stage 2 cross-agent) + `stages.refute` (Stage 3 adversarial, default-to-refuted, majority-survives) +
+`pipeline.run_audit` (refuted excluded from `changelist.json`, retained in `changelist-full.json`).
+**P3:** `preview.render_patch` (git-applyable), `framework reviewer-audit` CLI (mirrors `eval` backend
+resolution; skip-neutral w/o key), runbook + mkdocs nav. All LLM-stage tests use a `StubBackend`
+(`.messages.create`-shaped) → no key/quota. Self-review: spec coverage ✓, no placeholders, type
+consistency across stages ✓. Ready to execute (subagent-driven recommended).
