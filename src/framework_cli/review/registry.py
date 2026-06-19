@@ -334,6 +334,7 @@ _SPECS: dict[str, AgentSpec] = {
         context=ContextPolicy("agentic"),
         framework_only=True,
         reviews_template=True,
+        severity_enum=("high", "medium", "low", "info"),
     ),
 }
 

@@ -5,6 +5,7 @@ from framework_cli.review.registry import (
     AgentSpec,
     DEFAULT_MODEL,
     active_agents,
+    composed_prompt,
     get_agent,
     _prompt,
 )
@@ -37,9 +38,7 @@ def test_active_agents_excludes_framework_only_agents(monkeypatch):
 
 
 def test_coverage_gap_prompt_loads_and_demands_json():
-    p = _prompt("coverage-gap")
-    assert p.strip()
-    assert "JSON" in p
+    assert "JSON" in composed_prompt(get_agent("coverage-gap"))
 
 
 def test_coverage_gap_prompt_states_its_boundaries_and_registry_defer():

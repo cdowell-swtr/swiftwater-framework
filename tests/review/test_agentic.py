@@ -5,7 +5,7 @@ import pytest
 from framework_cli.review.agentic import _run_tool, run_agent_agentic
 from framework_cli.review.decisions import Decision
 from framework_cli.review.findings import Finding
-from framework_cli.review.registry import get_agent
+from framework_cli.review.registry import composed_prompt, get_agent
 
 
 def _tree(root: Path) -> None:
@@ -268,7 +268,7 @@ def test_agentic_decisions_block_inserted_before_prompt(tmp_path):
     assert "acknowledged:" in decisions_block["text"]
     assert decisions_block["cache_control"] == {"type": "ephemeral"}
     # Prompt must remain the last block
-    assert system[2]["text"] == get_agent("architecture").prompt
+    assert system[2]["text"] == composed_prompt(get_agent("architecture"))
 
 
 def test_agentic_no_decisions_block_when_empty(tmp_path):
@@ -289,7 +289,7 @@ def test_agentic_no_decisions_block_when_empty(tmp_path):
     # Must be exactly diff + prompt — no extra block
     assert len(system) == 2
     assert system[0]["text"].startswith("Review this unified diff:")
-    assert system[1]["text"] == get_agent("architecture").prompt
+    assert system[1]["text"] == composed_prompt(get_agent("architecture"))
 
 
 def test_cli_dispatches_agentic_strategy(monkeypatch, tmp_path):

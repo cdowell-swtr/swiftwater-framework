@@ -1,7 +1,7 @@
 from framework_cli.review.context import Bundle
 from framework_cli.review.decisions import Decision
 from framework_cli.review.findings import Finding
-from framework_cli.review.registry import get_agent
+from framework_cli.review.registry import composed_prompt, get_agent
 from framework_cli.review.runner import _max_retries, run_agent
 
 
@@ -99,7 +99,7 @@ def test_diff_only_bundle_sends_two_blocks_diff_first():
     assert system[0]["text"].startswith("Review this unified diff:")
     assert "THE DIFF" in system[0]["text"]
     assert system[0]["cache_control"] == {"type": "ephemeral"}
-    assert system[1]["text"] == get_agent("security").prompt
+    assert system[1]["text"] == composed_prompt(get_agent("security"))
 
 
 def test_bundle_with_context_inserts_cached_context_block():
@@ -111,7 +111,7 @@ def test_bundle_with_context_inserts_cached_context_block():
     assert "src/demo/x.py" in system[1]["text"]
     assert "CONTENT" in system[1]["text"]
     assert system[1]["cache_control"] == {"type": "ephemeral"}
-    assert system[2]["text"] == get_agent("security").prompt
+    assert system[2]["text"] == composed_prompt(get_agent("security"))
 
 
 def test_truncation_note_added_when_truncated():
@@ -146,7 +146,7 @@ def test_run_agent_decisions_block_inserted_before_prompt():
     assert "acknowledged:" in decisions_block["text"]
     assert decisions_block["cache_control"] == {"type": "ephemeral"}
     # Prompt must remain the last block
-    assert system[2]["text"] == get_agent("security").prompt
+    assert system[2]["text"] == composed_prompt(get_agent("security"))
 
 
 def test_run_agent_no_decisions_block_when_empty():
@@ -158,4 +158,4 @@ def test_run_agent_no_decisions_block_when_empty():
     # Must be exactly diff + prompt — no extra block
     assert len(system) == 2
     assert system[0]["text"].startswith("Review this unified diff:")
-    assert system[1]["text"] == get_agent("security").prompt
+    assert system[1]["text"] == composed_prompt(get_agent("security"))
