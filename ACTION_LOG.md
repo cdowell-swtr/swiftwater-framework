@@ -2220,3 +2220,15 @@ registry: the 3 new surfaces (conventional-pre-commit / docs-layout hooks + docs
 classified interim _KG with FWK9-prefixed evidence (completeness test requires an EXERCISED entry name a
 REAL test fn; the exerciser lands in task 6 → promote to _EX then). Sonnet impl + Sonnet spec (✅, deviation
 sound) + Opus quality (APPROVE; applied alpha-ordering nit on the 2 hook entries). 60/60 integrity+coverage.
+
+#### #0185 · note · FWK9 · 2026-06-18
+FWK9 task 6/6: acceptance tests proving the born-adopted project works + promoted the 3 FWK29
+surfaces _KG→_EX. `test_rendered_project_adopts_conventions`: fresh render → `pre-commit run
+--all-files` green (exercises the vendored docs-layout validator + conventional-pre-commit) +
+commit-msg gate rejects a malformed message. `test_upgrade_preserves_seeded_plan_and_prefix`: git-
+backed local template source, render→edit PLAN.md→bump v2→`run_update`, proves `_skip_if_exists`
+holds. Sonnet impl + Sonnet spec (✅, non-vacuity confirmed) + Opus quality found the upgrade test was
+VACUOUS (passed even with PLAN.md removed from the skip-list, since PLAN.md.jinja was byte-identical
+v1→v2). Fix (Sonnet): v2 bump appends a marker to PLAN.md.jinja → assert the marker is ABSENT from the
+consumer's PLAN.md (skip honored) + `_commit: v2` landed. Re-proven: FAILS with the skip entry removed,
+PASSES restored. Both tests + runtime_coverage (9) green; ruff/mypy clean.

@@ -106,11 +106,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "hook:conventional-pre-commit",
         ".pre-commit-config.yaml",
-        _KG,
-        # FWK9: git convention — commit-msg hook; a conventional message passes and a
-        # malformed one is rejected on a fresh render. Exercised by
-        # test_rendered_project_adopts_conventions (Task 6, not yet landed).
-        "FWK9: test_rendered_project_adopts_conventions lands in Task 6",
+        _EX,
+        # FWK9: commit-msg hook is installed and a malformed message is rejected on a
+        # fresh render; pre-commit --all-files also confirms the config loads cleanly.
+        "test_rendered_project_adopts_conventions",
     ),
     SurfaceClass(
         "hook:coverage-threshold",
@@ -123,10 +122,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "hook:docs-layout",
         ".pre-commit-config.yaml",
-        _KG,
-        # FWK9: docs-layout convention — vendored local validator, green on the born layout.
-        # Exercised by test_rendered_project_adopts_conventions (Task 6, not yet landed).
-        "FWK9: test_rendered_project_adopts_conventions lands in Task 6",
+        _EX,
+        # FWK9: vendored docs-layout validator runs green on the born layout via
+        # pre-commit --all-files on a fresh render.
+        "test_rendered_project_adopts_conventions",
     ),
     SurfaceClass(
         "hook:end-of-file-fixer",
@@ -427,10 +426,10 @@ REGISTRY: tuple[SurfaceClass, ...] = (
     SurfaceClass(
         "script:scripts/docs_layout_check.sh",
         "scripts/docs_layout_check.sh",
-        _KG,
-        # FWK9: the docs-layout validator script, driven by the docs-layout pre-commit hook.
-        # Exercised by test_rendered_project_adopts_conventions (Task 6, not yet landed).
-        "FWK9: test_rendered_project_adopts_conventions lands in Task 6",
+        _EX,
+        # FWK9: the docs-layout validator script is driven by the docs-layout pre-commit hook,
+        # which fires in pre-commit --all-files on a fresh render.
+        "test_rendered_project_adopts_conventions",
     ),
     SurfaceClass(
         "script:scripts/doctor.sh",
