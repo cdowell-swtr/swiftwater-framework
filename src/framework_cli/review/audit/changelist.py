@@ -61,7 +61,7 @@ class Changelist:
         agents = [
             AgentChange(
                 agent=a["agent"],
-                proposed_block_threshold=a["proposed_block_threshold"],
+                proposed_block_threshold=a.get("proposed_block_threshold"),
                 edits=[_edit(e) for e in a.get("edits", [])],
                 fixture_verdicts=dict(a.get("fixture_verdicts", {})),
             )

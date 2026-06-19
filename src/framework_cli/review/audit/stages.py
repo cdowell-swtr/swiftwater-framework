@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from framework_cli.review.audit.brief import AuditBrief
+from framework_cli.review.audit.changelist import Changelist, ProposedEdit, Verdict
 from framework_cli.review.registry import AGENTIC_MODEL
 
 # Prose context (never re-parsed); a generous, intentionally-lossy cut so a huge
@@ -19,6 +20,10 @@ from framework_cli.review.registry import AGENTIC_MODEL
 _BASELINE_CHAR_BUDGET = 20_000
 # Stage calls share one token ceiling so audit/reconcile/refute stay consistent.
 _MAX_TOKENS = 8000
+# reconcile produces a full consolidated changelist — larger than a single audit report.
+_RECONCILE_MAX_TOKENS = 16000
+# Cap on serialised per-agent reports fed into the reconcile prompt.
+_REPORTS_CHAR_BUDGET = 60_000
 
 _AUDIT_SYSTEM = """You are a reviewer-prompt AUDITOR. You audit ONE framework review agent's
 prompt for severity-bar calibration, scope discipline, hallucination resistance,
@@ -99,3 +104,109 @@ def audit_agent(brief: AuditBrief, backend: Any, *, root: Path) -> dict[str, Any
     if isinstance(bt, str) and bt.strip().lower() in ("null", "none", ""):
         report["proposed_block_threshold"] = None
     return report
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 — cross-agent reconciliation
+# ---------------------------------------------------------------------------
+
+_RECONCILE_SYSTEM = """You are the reviewer-roster RECONCILER. You receive every per-agent
+audit report and the full roster's block_thresholds. Produce ONE consolidated changelist
+that (a) reconciles the severity bar ACROSS agents — the same defect class must not be HIGH
+for one agent and LOW for another; (b) enforces one-owner-per-class scope boundaries;
+(c) proposes refinements to the SHARED rubric (preamble_edits) when a fix belongs in the
+common block rather than one agent.
+
+All per-agent audit reports:
+{reports}
+
+Full roster block_thresholds:
+{roster}
+
+Return JSON ONLY in the Changelist shape (proposed_block_threshold is a severity
+string like "high"/"medium"/… or JSON null for advisory — NOT the string "null"):
+{{"agents": [{{"agent": "..", "proposed_block_threshold": <severity or null>,
+   "edits": [{{"target": "domain_prompt|fixture|block_threshold", "rationale": "..",
+              "before": "..", "after": "..", "path": "<optional>"}}],
+   "fixture_verdicts": {{"<kind>/<case>": "clean|unambiguous|dirty|ambiguous"}}
+}}],
+ "preamble_edits": [{{"target": "rubric", "rationale": "..", "before": "..", "after": ".."}}]}}
+No prose, no code fences."""
+
+
+def reconcile(
+    reports: list[dict[str, Any]], roster: dict[str, Any], backend: Any
+) -> Changelist:
+    system = _RECONCILE_SYSTEM.format(
+        reports=json.dumps(reports, indent=2)[:_REPORTS_CHAR_BUDGET],
+        roster=json.dumps(roster, indent=2, sort_keys=True),
+    )
+    msg = backend.messages.create(
+        model=AGENTIC_MODEL,
+        max_tokens=_RECONCILE_MAX_TOKENS,
+        system=[{"type": "text", "text": system}],
+        messages=[{"role": "user", "content": "Reconcile into one changelist."}],
+    )
+    text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    parsed = _extract_json(text)
+    # Normalize a stringified "null"/"none" threshold to canonical None (as Stage 1 does).
+    for a in parsed.get("agents", []):
+        bt = a.get("proposed_block_threshold")
+        if isinstance(bt, str) and bt.strip().lower() in ("null", "none", ""):
+            a["proposed_block_threshold"] = None
+    return Changelist.from_dict(parsed)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3 — adversarial refutation
+# ---------------------------------------------------------------------------
+
+_REFUTE_SYSTEM = """You are an adversarial SKEPTIC. Your job is to REFUTE the proposed change
+to a reviewer prompt/fixture. Default to refuted=true if uncertain. Refute if the change
+under-flags a defect class, loosens a bar so a `bad` fixture would slip, was tuned against a
+dirty `good` fixture, or makes a bad case ambiguous.
+
+Agent: {agent}
+Proposed change ({target}): {rationale}
+--- before ---
+{before}
+--- after ---
+{after}
+
+Return JSON ONLY: {{"refuted": true|false, "reason": "<one sentence>"}}. No prose, no fences."""
+
+
+def refute(
+    edit: ProposedEdit, agent: str, backend: Any, *, skeptics: int = 3
+) -> Verdict:
+    system = _REFUTE_SYSTEM.format(
+        agent=agent,
+        target=edit.target,
+        rationale=edit.rationale,
+        before=edit.before,
+        after=edit.after,
+    )
+    refutals, survived = [], 0
+    for _ in range(skeptics):
+        msg = backend.messages.create(
+            model=AGENTIC_MODEL,
+            max_tokens=600,
+            system=[{"type": "text", "text": system}],
+            messages=[
+                {"role": "user", "content": "Refute or fail to refute. JSON only."}
+            ],
+        )
+        text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+        try:
+            verdict = _extract_json(text)
+        except Exception:  # noqa: BLE001 — an unparseable skeptic counts as a refutation (default-to-refuted)
+            refutals.append("unparseable skeptic response")
+            continue
+        if verdict.get("refuted", True):
+            refutals.append(str(verdict.get("reason", "")))
+        else:
+            survived += 1
+    refuted = survived < (
+        skeptics // 2 + 1
+    )  # survives only on a strict majority fail-to-refute
+    return Verdict(refuted=refuted, votes=survived, refutation=" | ".join(refutals))
