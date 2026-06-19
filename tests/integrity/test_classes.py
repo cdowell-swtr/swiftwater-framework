@@ -161,3 +161,50 @@ def test_gitkeep_placeholders_are_exempt():
     for rel in ("infra/traefik/certs/.gitkeep", "infra/tls/ca/.gitkeep"):
         assert rel in EXEMPT
         assert rel not in LOCKED_TRACKED
+
+
+def test_battery_locked_covers_the_expected_files():
+    from framework_cli.integrity.classes import BATTERY_LOCKED, LOCKED_TRACKED
+
+    # 22 battery-conditional framework files; none also in the baseline locked set.
+    assert len(BATTERY_LOCKED) == 22
+    for path, gate in BATTERY_LOCKED.items():
+        assert path not in LOCKED_TRACKED, (
+            f"{path} is both baseline-locked and battery-locked"
+        )
+        assert isinstance(gate, tuple) and gate, f"{path} needs a non-empty gate tuple"
+    # spot-check a single-gate, a multi-gate, and a non-obs entry
+    assert BATTERY_LOCKED["infra/observability/grafana/dashboards/redis.json"] == (
+        "redis",
+        "workers",
+    )
+    assert BATTERY_LOCKED["infra/docker/postgres.Dockerfile"] == (
+        "pgvector",
+        "timescaledb",
+        "age",
+    )
+    assert BATTERY_LOCKED[".github/workflows/docs.yml"] == ("docs",)
+
+
+def test_rules_default_is_baseline_only():
+    from framework_cli.integrity.classes import LOCKED_TRACKED, rules
+
+    paths = {r.path for r in rules()}
+    # no battery-conditional path leaks into the default (baseline) rule set
+    assert "infra/observability/grafana/dashboards/redis.json" not in paths
+    assert set(LOCKED_TRACKED) <= paths
+
+
+def test_rules_adds_battery_locked_for_active_batteries():
+    from framework_cli.integrity.classes import rules
+
+    redis_rule = "infra/observability/grafana/dashboards/redis.json"
+    assert redis_rule in {r.path for r in rules(["redis"])}
+    # shared gate: workers also activates the redis dashboards
+    assert redis_rule in {r.path for r in rules(["workers"])}
+    # a non-gating battery activates none of redis's files
+    assert redis_rule not in {r.path for r in rules(["graphql"])}
+    # every activated battery file is a locked/tracked Rule
+    for r in rules(["redis"]):
+        if r.path == redis_rule:
+            assert r.cls == "locked" and r.tier == "tracked"
