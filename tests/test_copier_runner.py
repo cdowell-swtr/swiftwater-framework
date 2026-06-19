@@ -4196,3 +4196,32 @@ def test_dev_logs_and_down_targets(tmp_path: Path):
         "logs -f" in logs and "demo" in logs
     )  # project-scoped follow (slug=demo in DATA)
     assert "down" in down and "-v" not in down, "dev:down must keep volumes (no -v)"
+
+
+def test_render_seeds_agents_md_with_portable_convention_blocks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    agents = (dest / "AGENTS.md").read_text()
+    assert "PI-convention: v2" in agents
+    assert "DOCS-convention: v1" in agents
+    assert "GIT-convention: v1" in agents
+    assert "cdowell-swtr/patterns" in agents
+    from framework_cli.integrity.sections import section_content
+
+    assert section_content(agents) is not None
+    assert "FRAMEWORK:END" in agents
+
+
+def test_render_pi_prefix_defaults_from_slug(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # slug "demo"
+    agents = (dest / "AGENTS.md").read_text()
+    assert "`DEMO`" in agents  # derived default, uppercased slug truncated to 4
+
+
+def test_render_pi_prefix_override(tmp_path: Path):
+    dest = tmp_path / "proj"
+    render_project(dest, {**DATA, "pi_prefix": "MRDN"})
+    agents = (dest / "AGENTS.md").read_text()
+    assert "`MRDN`" in agents
+    assert "MRDN1, MRDN2" in agents

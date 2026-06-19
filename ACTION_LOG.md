@@ -2176,3 +2176,10 @@ default, persisted → stable across upgrade). (4) PI stays **agent-upheld** (no
 PreToolUse hook imposed on consumers). (5) Stateful PI/MEMORY files seeded once
 (`_skip_if_exists` + INTENTIONALLY_UNLOCKED) — upgrade never clobbers a consumer's PLAN.md. Next:
 writing-plans → subagent-driven implementation on branch `fwk9-propagate-conventions`.
+
+#### #0180 · note · FWK9 · 2026-06-18
+FWK9 task 1/6 (subagent-driven): added the `pi_prefix` copier question (derived default
+`(slug|upper|strip -_)[:4]`) + new managed `template/AGENTS.md.jinja` carrying the three PORTABLE
+convention pointer blocks (PI / docs-layout / git), each citing `cdowell-swtr/patterns` @ tag (no
+vendored body). 3 render-level tests green; ruff clean. Sonnet impl + Sonnet spec (✅) + Opus
+quality (APPROVE; AGENTS.md→HYBRID_TRACKED registration deferred to task 5 as planned).

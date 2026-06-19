@@ -19,6 +19,11 @@ python_version:
   help: Python version to target
   default: "3.12"
 
+pi_prefix:
+  type: str
+  help: PI task-ID prefix (short uppercase tag, e.g. FWK, MDN)
+  default: "{{ (project_slug | upper | replace('-', '') | replace('_', ''))[:4] }}"
+
 batteries:
   type: yaml
   help: Active batteries (set via `framework new --with`); not prompted.
