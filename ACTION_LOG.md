@@ -2254,3 +2254,14 @@ automation to the private patterns repo, the thing FWK9 designed out). Where pat
 (local-only, CI skips so it never blocks PRs); (2) fidelity — vendored == upstream @ pin (minus the
 provenance line). Pure helpers (parse_pinned_tag / latest_version / strip_provenance) unit-tested; thin
 gh wiring live-only. Out of scope: the root-vendored pi/memory docs (HEAD-pinned, different model).
+
+#### #0188 · completed · FWK40 · 2026-06-18
+FWK40 DONE — `tests/test_vendored_freshness.py`: local auth-gated freshness check for the vendored
+docs-layout validator. Pure helpers (parse_pinned_tag / latest_version / strip_provenance) + 8 unit
+tests (run in CI) + 2 live tests (staleness hard-FAIL on a newer `docs-layout/v*` tag; fidelity vs
+upstream @ pin) gated behind a `gh api repos/cdowell-swtr/patterns` reachability probe → skip in
+CI/offline/no-auth (never blocks PRs, no secret). Inline executing-plans; branch-end Opus =
+APPROVE-WITH-NITS (broadened the probe except → OSError; docstring typo). Non-vacuity proven on this
+authed box (pin→v0 fails staleness `assert 1<=0`; body `# drift` fails fidelity; validator restored).
+10/10 green; ruff/format/mypy clean. No release/template-payload change. Branch `fwk40-vendored-
+freshness` → PR next (master protected).
