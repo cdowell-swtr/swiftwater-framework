@@ -154,13 +154,44 @@ def test_baseline_escapees_are_locked():
         )
 
 
-def test_gitkeep_placeholders_are_exempt():
-    """FWK7: empty .gitkeep dir-placeholders have no checksummable content."""
+def test_gitkeep_placeholders_are_classified_by_content():
+    """FWK7: a genuinely EMPTY .gitkeep is EXEMPT (nothing to checksum); a .gitkeep carrying
+    guidance content has a stable checksum worth protecting and is LOCKED_TRACKED."""
     from framework_cli.integrity.classes import EXEMPT, LOCKED_TRACKED
 
-    for rel in ("infra/traefik/certs/.gitkeep", "infra/tls/ca/.gitkeep"):
-        assert rel in EXEMPT
-        assert rel not in LOCKED_TRACKED
+    # 0-byte placeholder — exempt, not locked.
+    assert "infra/traefik/certs/.gitkeep" in EXEMPT
+    assert "infra/traefik/certs/.gitkeep" not in LOCKED_TRACKED
+    # carries a CA-bundle hint (non-empty) — locked, not exempt.
+    assert "infra/tls/ca/.gitkeep" in LOCKED_TRACKED
+    assert "infra/tls/ca/.gitkeep" not in EXEMPT
+
+
+def test_classification_categories_are_pairwise_disjoint():
+    """FWK7: a path must fall in exactly one category — the reverse check's set-difference would
+    otherwise mask a double-classified path."""
+    from itertools import combinations
+
+    from framework_cli.integrity.classes import (
+        BATTERY_LOCKED,
+        EXEMPT,
+        GITIGNORED_EXISTENCE,
+        HYBRID_TRACKED,
+        INTENTIONALLY_UNLOCKED,
+        LOCKED_TRACKED,
+    )
+
+    categories = {
+        "LOCKED_TRACKED": set(LOCKED_TRACKED),
+        "HYBRID_TRACKED": set(HYBRID_TRACKED),
+        "GITIGNORED_EXISTENCE": set(GITIGNORED_EXISTENCE),
+        "INTENTIONALLY_UNLOCKED": set(INTENTIONALLY_UNLOCKED),
+        "BATTERY_LOCKED": set(BATTERY_LOCKED),
+        "EXEMPT": set(EXEMPT),
+    }
+    for (a_name, a), (b_name, b) in combinations(categories.items(), 2):
+        overlap = a & b
+        assert overlap == set(), f"{a_name} and {b_name} share paths: {sorted(overlap)}"
 
 
 def test_battery_locked_covers_the_expected_files():

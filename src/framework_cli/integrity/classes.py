@@ -43,6 +43,7 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "infra/docker/Dockerfile",
     "infra/traefik/traefik.yml",
     "infra/traefik/dynamic/tls.yml",
+    "infra/tls/ca/.gitkeep",
     "infra/observability/alertmanager/alertmanager.yml",
     "infra/observability/loki/loki-config.yml",
     "infra/observability/otel/otel-collector.yml",
@@ -76,9 +77,8 @@ LOCKED_TRACKED: tuple[str, ...] = (
 
 # Framework-shipped files deliberately left unmanaged: composition seams the scaffold invites the
 # project to replace. Not checksummed. Recorded here so the unlock is intentional and visible, and
-# so a future reverse-coverage check can distinguish "deliberately unlocked" from "a framework file
-# that escaped classification". (That full reverse scan is a separate slice — an all-batteries
-# render has ~23 unclassified infra files needing a per-file audit; see the design doc.)
+# so the FWK7 reverse-coverage check (tests/integrity/test_coverage.py) can distinguish "deliberately
+# unlocked" from "a framework file that escaped classification".
 INTENTIONALLY_UNLOCKED: tuple[str, ...] = (
     "scripts/seed.py",  # thin entrypoint; the idempotent seed() helper in db/seed.py is the mechanism
     "infra/deploy/notify.sh",  # deploy-notification seam — "wire your channel here"
@@ -91,13 +91,14 @@ INTENTIONALLY_UNLOCKED: tuple[str, ...] = (
     "_archive/ARCHIVED_ACTION_LOG.md",  # FWK9: PI archive stub — consumer-owned
 )
 
-# Framework-shipped placeholders with no checksummable content: empty .gitkeep files that only
-# exist to keep an otherwise-empty directory in git. Recorded explicitly (like INTENTIONALLY_UNLOCKED)
-# so the FWK7 reverse-coverage check can distinguish "deliberately uncovered" from "a framework file
-# that escaped classification".
+# Framework-shipped placeholders with no checksummable content: genuinely EMPTY (0-byte) .gitkeep
+# files that only exist to keep an otherwise-empty directory in git. Recorded explicitly (like
+# INTENTIONALLY_UNLOCKED) so the FWK7 reverse-coverage check can distinguish "deliberately uncovered"
+# from "a framework file that escaped classification". A .gitkeep that carries guidance content is
+# NOT exempt — it has a stable checksum worth protecting and belongs in LOCKED_TRACKED (e.g.
+# infra/tls/ca/.gitkeep, which ships a CA-bundle hint).
 EXEMPT: tuple[str, ...] = (
-    "infra/traefik/certs/.gitkeep",  # local-TLS cert dir placeholder
-    "infra/tls/ca/.gitkeep",  # FWK6 CA-bundle dir placeholder
+    "infra/traefik/certs/.gitkeep",  # 0-byte local-TLS cert dir placeholder
 )
 
 # Battery-conditional framework files: locked, but present only when a gating battery is active.

@@ -2314,3 +2314,15 @@ already correct; classes.py header = authoring record). One controller tidy: re-
 81050f4 (T1) · 498fb91 (T2) · f7d370d (T3) · 6e42cdf (T4) · 83e86fa (T5+T6) + this close. Branch-end
 Sonnet-spec + Opus-quality reviews next, then PR (master protected). Test/integrity-infra only → no
 release; the battery-locking manifest behavior ships on the next cut.
+
+#### #0192 · completed · FWK7 · 2026-06-18
+Branch-end reviews done. Sonnet spec review = **SPEC COMPLIANT** (all 4 goals + appendix split + gate
+table verified). Opus code-quality = **APPROVE-WITH-NITS**, one legitimate Important finding fixed:
+`infra/tls/ca/.gitkeep` is NOT empty (157 bytes of stable CA-bundle guidance) so EXEMPT ("no
+checksummable content") was wrong → moved to **LOCKED_TRACKED** (verified baseline-present + not
+gitignored); `EXEMPT` now holds only the genuinely 0-byte `infra/traefik/certs/.gitkeep`, with the
+contract comment tightened. Also: fixed the stale `INTENTIONALLY_UNLOCKED` "~23 unclassified / separate
+slice" comment (spec reviewer note); added `test_classification_categories_are_pairwise_disjoint` (Opus
+minor — enforces "exactly one category", which the set-difference reverse check would otherwise mask).
+Declined the `len(BATTERY_LOCKED)==22` magic-number and test-local-import nits (intentional / matches
+file style). tests/integrity/ 67 passed; ruff/format/mypy clean. Ready for PR.
