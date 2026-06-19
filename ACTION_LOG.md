@@ -2389,3 +2389,25 @@ roster-as-consistency-oracle, fenced+prose-tolerant JSON; Opus quality fixed the
 `critical` to the threshold enum, `null`→JSON-null not string `"null"` + downstream normalize, baseline/
 max-tokens constants). Commits 713389e→(this). Next: P2 (reconcile + adversarial spine) → pipeline → P3
 (apply-preview + CLI + runbook). No release / no template payload.
+
+#### #0196 · completed · FWK4 · 2026-06-19
+**FWK4 implementation COMPLETE → PR #67.** Phases 2–3 + branch-end. **P2a** `stages.reconcile`
+(cross-agent) + `stages.refute` (adversarial, default-to-refuted, strict-majority-survives); Opus
+review fixed reconcile inheriting the Stage-1 stringified-`null` defect + `from_dict` robustness.
+**P2b** `pipeline.run_audit` (audit→reconcile→refute→vetted `changelist.json` + audit-trail
+`changelist-full.json`); Opus review caught TWO confirmed defects (TDD regressions added): a single
+refute-item failure crashed the run via a `vmap` KeyError (now skips failure records), and resume
+re-ran the un-checkpointed reconcile → Stage-3 desync/silent verdict mis-binding (reconcile output now
+checkpointed to `stage2-reconcile.json` + reused on resume). **P3a** `preview.render_patch`
+(git-applyable; real `git apply --check` test). **P3b** `framework reviewer-audit` CLI (mirrors `eval`
+backend resolution; skip-neutral w/o backend). **P3c** maintainer runbook
+`documentation/contributing/reviewer-audit.md` + mkdocs nav (strict build clean). **P3d** branch-end:
+Sonnet spec review = **SPEC COMPLIANT** (every requirement mapped to real code, no gaps/over-builds);
+Opus whole-branch quality = **APPROVED** (5 Minor follow-ups — 2 folded in: dropped the dead
+`audit_agent(root=...)` param; `render_patch` resolves a path-less rubric edit to `rubric.md` + notes
+any un-renderable edit instead of silently dropping; remaining 3 noted: checkpoint-provenance guard on
+`--resume`, optional DRY of the `null`-normalize / text-extract helpers). Full non-acceptance gate
+**1041 passed/3 skipped**; ruff/format/mypy clean. 13 commits on `fwk4-reviewer-self-audit`.
+Test/maintainer-tooling only → no release, no template payload (rendered projects unaffected). On
+merge: move FWK4 to Done + grep master for a marker ([[verify-master-content-after-pr-merge]]); the
+roadmap `Next` queue is then empty.
