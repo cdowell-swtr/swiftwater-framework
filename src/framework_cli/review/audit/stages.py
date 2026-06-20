@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from typing import Any
 
 from framework_cli.review.audit.brief import AuditBrief
 from framework_cli.review.audit.changelist import Changelist, ProposedEdit, Verdict
-from framework_cli.review.registry import AGENTIC_MODEL
+from framework_cli.review.registry import AGENTIC_MODEL, agent_names
 
 # Prose context (never re-parsed); a generous, intentionally-lossy cut so a huge
 # baseline can't blow the prompt budget.
@@ -51,6 +52,17 @@ Return JSON ONLY — an object:
   "edits": [{{"target": "domain_prompt|fixture|block_threshold|rubric",
              "rationale": "..", "before": "..", "after": "..", "path": "<optional>"}}]}}
 No prose, no code fences."""
+
+
+def _canonical_agent(name: str) -> str | None:
+    """Map a model-emitted agent id to its registry key, or None if unresolvable.
+
+    Strips a leading 'review-' (the AgentSpec.name form) and validates against the
+    roster of known registry keys.
+    """
+    known = set(agent_names())
+    candidate = name[len("review-") :] if name.startswith("review-") else name
+    return candidate if candidate in known else None
 
 
 def _extract_json(text: str) -> Any:
@@ -134,7 +146,11 @@ No prose, no code fences."""
 
 
 def reconcile(
-    reports: list[dict[str, Any]], roster: dict[str, Any], backend: Any
+    reports: list[dict[str, Any]],
+    roster: dict[str, Any],
+    backend: Any,
+    *,
+    log: Callable[[str], None] = lambda _msg: None,
 ) -> Changelist:
     system = _RECONCILE_SYSTEM.format(
         reports=json.dumps(reports, indent=2)[:_REPORTS_CHAR_BUDGET],
@@ -153,6 +169,17 @@ def reconcile(
         bt = a.get("proposed_block_threshold")
         if isinstance(bt, str) and bt.strip().lower() in ("null", "none", ""):
             a["proposed_block_threshold"] = None
+    # Normalize agent identifiers: strip leading 'review-' prefix and drop any that
+    # still don't resolve to a known registry key (logged, never silently dropped).
+    kept = []
+    for a in parsed.get("agents", []):
+        canon = _canonical_agent(str(a.get("agent", "")))
+        if canon is None:
+            log(f"reconcile: dropped change for unknown agent {a.get('agent')!r}")
+            continue
+        a["agent"] = canon
+        kept.append(a)
+    parsed["agents"] = kept
     return Changelist.from_dict(parsed)
 
 

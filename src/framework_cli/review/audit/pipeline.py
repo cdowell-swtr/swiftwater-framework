@@ -62,7 +62,7 @@ def run_audit(
     if resume and recon_path.exists():
         cl = Changelist.from_dict(json.loads(recon_path.read_text()))
     else:
-        cl = reconcile(reports, roster, backend)
+        cl = reconcile(reports, roster, backend, log=log)
         recon_path.write_text(json.dumps(cl.to_dict(), indent=2))
     n_edits = sum(len(a.edits) for a in cl.agents) + len(cl.preamble_edits)
     log(f"Stage 2: reconcile -> {n_edits} edit(s) across {len(cl.agents)} agent(s)")

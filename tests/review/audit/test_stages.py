@@ -148,3 +148,57 @@ def test_refute_majority_refutes_kills_change():
     v = refute(edit, "security", backend, skeptics=3)
     assert v.refuted is True
     assert "x" in v.refutation or "y" in v.refutation
+
+
+def test_reconcile_normalizes_review_prefixed_agent_names():
+    cl_json = json.dumps(
+        {
+            "agents": [
+                {
+                    "agent": "review-application-logic",
+                    "proposed_block_threshold": "info",
+                    "edits": [],
+                    "fixture_verdicts": {},
+                },
+                {
+                    "agent": "security",
+                    "proposed_block_threshold": "high",
+                    "edits": [],
+                    "fixture_verdicts": {},
+                },
+            ],
+            "preamble_edits": [],
+        }
+    )
+    cl = reconcile(
+        [],
+        {"application-logic": "info", "security": "high"},
+        StubBackend([cl_json]),
+    )
+    assert {a.agent for a in cl.agents} == {"application-logic", "security"}
+
+
+def test_reconcile_drops_unknown_agent_with_note():
+    cl_json = json.dumps(
+        {
+            "agents": [
+                {
+                    "agent": "totally-made-up",
+                    "proposed_block_threshold": "high",
+                    "edits": [],
+                    "fixture_verdicts": {},
+                },
+                {
+                    "agent": "security",
+                    "proposed_block_threshold": "high",
+                    "edits": [],
+                    "fixture_verdicts": {},
+                },
+            ],
+            "preamble_edits": [],
+        }
+    )
+    seen: list[str] = []
+    cl = reconcile([], {"security": "high"}, StubBackend([cl_json]), log=seen.append)
+    assert {a.agent for a in cl.agents} == {"security"}
+    assert any("totally-made-up" in m for m in seen)
