@@ -283,3 +283,81 @@ def test_render_patch_all_notes_yields_empty_patch():
     patch, notes = render_patch(cl)
     assert patch == ""  # no hunks → empty string, not comments-only
     assert "rw" in notes
+
+
+def test_render_patch_derives_domain_prompt_path_from_agent(tmp_path):
+    # the model often omits a path on a domain_prompt edit; it must default to the
+    # agent's prompt file (agents/<agent>.md) so the edit lands in the patch, not notes.
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    agent_md = tmp_path / "src/framework_cli/review/agents/security.md"
+    agent_md.parent.mkdir(parents=True)
+    agent_md.write_text("alpha\nbeta\ngamma\n")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    cl = Changelist(
+        agents=[
+            AgentChange(
+                "security",
+                None,
+                edits=[
+                    ProposedEdit(
+                        target="domain_prompt",
+                        rationale="tweak",
+                        before="alpha\nbeta\ngamma\n",
+                        after="alpha\nBETA\ngamma\n",
+                        path=None,  # model omitted it
+                    )
+                ],
+                fixture_verdicts={},
+            )
+        ],
+        preamble_edits=[],
+    )
+    patch, notes = render_patch(cl, root=tmp_path)
+    assert "src/framework_cli/review/agents/security.md" in patch
+    (tmp_path / "p.patch").write_text(patch)
+    assert (
+        subprocess.run(["git", "apply", "--check", "p.patch"], cwd=tmp_path).returncode
+        == 0
+    )
+
+
+def test_render_patch_anchors_partial_before_midfile(tmp_path):
+    # the realistic case: `before` is a single line in the MIDDLE of a multi-line file
+    # (not the whole file). The anchored diff must place it with correct line numbers.
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    f = tmp_path / "agents.md"
+    f.write_text("line one\nline two\nTARGET LINE\nline four\nline five\n")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    cl = Changelist(
+        agents=[
+            AgentChange(
+                "x",
+                None,
+                edits=[
+                    ProposedEdit(
+                        target="domain_prompt",
+                        rationale="reword target",
+                        before="TARGET LINE\n",
+                        after="REWORDED LINE\n",
+                        path="agents.md",
+                    )
+                ],
+                fixture_verdicts={},
+            )
+        ],
+        preamble_edits=[],
+    )
+    patch, notes = render_patch(cl, root=tmp_path)
+    assert "REWORDED LINE" in patch and "TARGET LINE" in patch
+    (tmp_path / "p.patch").write_text(patch)
+    assert (
+        subprocess.run(["git", "apply", "--check", "p.patch"], cwd=tmp_path).returncode
+        == 0
+    )
+    # standalone (no-root) path still produces best-effort output, unchanged
+    patch2, _ = render_patch(cl)
+    assert "REWORDED LINE" in patch2

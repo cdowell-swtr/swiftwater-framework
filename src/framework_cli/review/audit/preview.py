@@ -16,9 +16,12 @@ from framework_cli.review.audit.changelist import Changelist, ProposedEdit
 # nested diff headers that corrupt a unified patch. Route them to notes only.
 _TEXTUAL = {"domain_prompt", "rubric"}
 _RUBRIC_PATH = "src/framework_cli/review/rubric.md"
+_AGENTS_DIR = "src/framework_cli/review/agents"
 
 
 def _diff(edit: ProposedEdit, path: str) -> str:
+    """Best-effort standalone diff of before→after (used only when no repo root is given
+    to anchor against — produces a `@@ -1 +1 @@` hunk that git apply can't reliably place)."""
     before = edit.before.splitlines(keepends=True)
     after = edit.after.splitlines(keepends=True)
     return "".join(
@@ -26,13 +29,41 @@ def _diff(edit: ProposedEdit, path: str) -> str:
     )
 
 
-def _resolved_path(edit: ProposedEdit) -> str | None:
-    """The file an edit applies to, or None if it can't be placed in a patch. A rubric
-    edit defaults to the canonical rubric.md when no explicit path is given."""
+def _anchored_diff(edit: ProposedEdit, path: str, root: Path) -> str | None:
+    """A unified diff that applies `before`→`after` at its REAL location in `root/path`,
+    with surrounding context + correct line numbers, so `git apply` can place it. Returns
+    None when `before` is not a unique exact substring of the file (not found, ambiguous,
+    or the file is absent) — the caller then quarantines the edit to notes. This is what
+    makes a model-proposed prose rewrite into an actually-applyable hunk."""
+    full = root / path
+    if not full.is_file():
+        return None
+    content = full.read_text()
+    if not edit.before or content.count(edit.before) != 1:
+        return None
+    updated = content.replace(edit.before, edit.after, 1)
+    return "".join(
+        difflib.unified_diff(
+            content.splitlines(keepends=True),
+            updated.splitlines(keepends=True),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+        )
+    )
+
+
+def _resolved_path(edit: ProposedEdit, label: str) -> str | None:
+    """The file an edit applies to, or None if it can't be placed in a patch. When the
+    model omits a path: a rubric edit defaults to the canonical rubric.md, and a
+    domain_prompt edit defaults to its agent's prompt file (agents/<agent>.md, derived
+    from the changelist label). A wrong derived path is still caught by the cumulative
+    git-apply check and quarantined to notes."""
     if edit.path:
         return edit.path
     if edit.target == "rubric":
         return _RUBRIC_PATH
+    if edit.target == "domain_prompt" and label and label != "rubric":
+        return f"{_AGENTS_DIR}/{label}.md"
     return None
 
 
@@ -97,7 +128,7 @@ def render_patch(changelist: Changelist, root: Path | None = None) -> tuple[str,
             )
             return
 
-        path = _resolved_path(edit)
+        path = _resolved_path(edit, label)
         if edit.target not in _TEXTUAL or not path:
             # Never silently drop a vetted edit: record it as a note.
             notes.append(
@@ -106,19 +137,23 @@ def render_patch(changelist: Changelist, root: Path | None = None) -> tuple[str,
             )
             return
 
-        raw = _diff(edit, path)
         if root is not None:
-            # Cumulative check: trial = all previously accepted diffs + candidate, so a
+            # Anchor the diff against the real file so git apply can place it, then do a
+            # cumulative check: trial = all previously accepted diffs + candidate, so a
             # same-file edit that conflicts with an earlier one is quarantined rather than
             # combined into a patch that fails as a whole. O(n^2) `git apply --check` calls
             # but n (textual edits per run) is small; negligible vs. the Opus calls.
-            trial = "\n".join(accepted_diffs + [raw])
-            if not _hunk_applies(trial, root):
+            raw = _anchored_diff(edit, path, root)
+            if raw is None or not _hunk_applies(
+                "\n".join(accepted_diffs + [raw]), root
+            ):
                 notes.append(
                     f"# {label}: {edit.target} edit did not apply cleanly to {path} "
                     f"({edit.rationale}) — see changelist-full.json"
                 )
                 return
+        else:
+            raw = _diff(edit, path)
 
         accepted_diffs.append(raw)
         hunks.append(f"# {label}: {edit.rationale}\n{raw}")
