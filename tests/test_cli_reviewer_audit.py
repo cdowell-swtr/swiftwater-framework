@@ -17,7 +17,15 @@ def test_reviewer_audit_writes_changelist_and_preview(tmp_path, monkeypatch):
             return json.dumps(
                 {
                     "agent": "security",
-                    "edits": [],
+                    "edits": [
+                        {
+                            "target": "fixture",
+                            "rationale": "add good pair",
+                            "before": "(no fixture)",
+                            "after": "new fixture content",
+                            "path": "tests/eval/fixtures/security/good/example",
+                        }
+                    ],
                     "proposed_block_threshold": "high",
                     "fixture_verdicts": {},
                 }
@@ -29,14 +37,23 @@ def test_reviewer_audit_writes_changelist_and_preview(tmp_path, monkeypatch):
                         {
                             "agent": "security",
                             "proposed_block_threshold": "high",
-                            "edits": [],
+                            "edits": [
+                                {
+                                    "target": "fixture",
+                                    "rationale": "add good pair",
+                                    "before": "(no fixture)",
+                                    "after": "new fixture content",
+                                    "path": "tests/eval/fixtures/security/good/example",
+                                }
+                            ],
                             "fixture_verdicts": {},
                         }
                     ],
                     "preamble_edits": [],
                 }
             )
-        return "{}"
+        # Refuter: return refuted=false so the edit survives vetted()
+        return json.dumps({"refuted": False, "reason": "change is valid"})
 
     monkeypatch.setattr(climod, "_make_backend", lambda *a, **k: StubBackend(_scripted))
     monkeypatch.setattr(
@@ -49,7 +66,9 @@ def test_reviewer_audit_writes_changelist_and_preview(tmp_path, monkeypatch):
     result = runner.invoke(app, ["reviewer-audit", "security", "--out", str(out)])
     assert result.exit_code == 0, result.output
     assert (out / "changelist.json").exists()
-    assert (out / "apply-preview.patch").exists()
+    # fixture edits route to notes (not patch) — notes.txt is written; patch is absent
+    assert (out / "apply-preview.notes.txt").exists()
+    assert not (out / "apply-preview.patch").exists()
 
 
 def test_reviewer_audit_emits_progress(tmp_path, monkeypatch):

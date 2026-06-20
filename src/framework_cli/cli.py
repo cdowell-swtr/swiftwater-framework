@@ -1374,12 +1374,23 @@ def reviewer_audit(
         log=log,
         concurrency=concurrency,
     )
-    patch = render_patch(cl)
-    (out_dir / "apply-preview.patch").write_text(patch)
+    patch, notes = render_patch(cl, root=Path.cwd())
+    if patch:
+        (out_dir / "apply-preview.patch").write_text(
+            patch if patch.endswith("\n") else patch + "\n"
+        )
+    if notes:
+        (out_dir / "apply-preview.notes.txt").write_text(notes + "\n")
     n = sum(len(a.edits) for a in cl.agents) + len(cl.preamble_edits)
     typer.echo(
         f"reviewer-audit: {n} vetted change(s) across {len(targets)} agent(s) → {out_dir}/"
     )
+    if not patch:
+        typer.echo(
+            f"reviewer-audit: no auto-applicable hunks — see "
+            f"{out_dir}/apply-preview.notes.txt + changelist-full.json",
+            err=True,
+        )
 
 
 def _staged_files() -> list[str]:
