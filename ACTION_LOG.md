@@ -2411,3 +2411,20 @@ any un-renderable edit instead of silently dropping; remaining 3 noted: checkpoi
 Test/maintainer-tooling only → no release, no template payload (rendered projects unaffected). On
 merge: move FWK4 to Done + grep master for a marker ([[verify-master-content-after-pr-merge]]); the
 roadmap `Next` queue is then empty.
+
+#### #0197 · note · FWK4/FWK41 · 2026-06-19
+**FWK4 merged** (PR #67 squash `93c017c`, PR #68 PLAN-close-out `8241aff`); master verified
+(rubric.md/preamble.py/audit pkg/reviewer-audit cmd all present). **Live shakedown run** (`framework
+reviewer-audit` over all 21 reviewers, free subagent backend, reusing last week's Plan-21 baseline at
+`.framework/plan21/baseline-findings`): one clean invocation, ~2h52m, no quota wall, **31 vetted / 3
+refuted of 34 proposed across 9 agents** (12 clean). The adversarial spine did REAL work — the 3 kills
+were sharp+correct (an application-logic edit that'd let its own bad fixture slip; a unanimous 0/3 on a
+data-integrity edit that suppressed grounding; a rubric N+1-routing edit refuted because GraphQL N+1 is
+legitimately both performance+api-design). Surviving rubric edit = a genuine high-leverage severity-
+consistency fix (medium "convention violation" vs high "broken contract" disambiguation). Restraint on
+thresholds (mostly confirming current). **Shakedown surfaced 4 real gaps → FWK41 (hardening, plan
+written, executing this session):** fully serial (~hours), zero stdout instrumentation, inconsistent
+agent ids (`review-X` vs `X`) that break apply mapping, and a CORRUPT apply-preview (`git apply --check`
+exit 128 — the 12 fixture edits carry nested diffs + dir/fabricated paths + paraphrased `before`).
+Non-fixture proposals (17 domain-prompt + 1 rubric + 1 block_threshold) are the trustworthy applyable
+subset. Plan `docs/superpowers/plans/2026-06-19-fwk4-reviewer-audit-hardening.md`.
