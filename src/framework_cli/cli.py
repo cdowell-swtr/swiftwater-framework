@@ -1374,6 +1374,8 @@ def reviewer_audit(
         log=log,
         concurrency=concurrency,
     )
+    # root = the repo we're auditing (run from its root); edits are repo-relative, so this
+    # is where each hunk is validated. Run from a subdir and hunks quarantine to notes.
     patch, notes = render_patch(cl, root=Path.cwd())
     if patch:
         (out_dir / "apply-preview.patch").write_text(

@@ -108,7 +108,10 @@ def render_patch(changelist: Changelist, root: Path | None = None) -> tuple[str,
 
         raw = _diff(edit, path)
         if root is not None:
-            # Cumulative check: trial = all previously accepted diffs + candidate
+            # Cumulative check: trial = all previously accepted diffs + candidate, so a
+            # same-file edit that conflicts with an earlier one is quarantined rather than
+            # combined into a patch that fails as a whole. O(n^2) `git apply --check` calls
+            # but n (textual edits per run) is small; negligible vs. the Opus calls.
             trial = "\n".join(accepted_diffs + [raw])
             if not _hunk_applies(trial, root):
                 notes.append(
