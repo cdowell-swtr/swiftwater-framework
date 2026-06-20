@@ -1337,6 +1337,7 @@ def reviewer_audit(
     resume: bool = typer.Option(
         False, "--resume", help="Resume a prior run from --out."
     ),
+    quiet: bool = typer.Option(False, "--quiet", help="Suppress progress output."),
 ) -> None:
     """Audit reviewer prompts (rubric consistency, severity bar, scope, fixtures) and emit a
     vetted changelist + a dry-run apply-preview patch. No edits are applied (FWK4)."""
@@ -1353,6 +1354,7 @@ def reviewer_audit(
     _backend = _make_backend(res.backend, EVAL_KEY_ENV)  # type: ignore[attr-defined]
     targets = list(agents) if agents else agent_names()
     out_dir = Path(out)
+    log = (lambda _m: None) if quiet else (lambda m: typer.echo(m, err=True))
     cl = run_audit(
         targets,
         backend=_backend,
@@ -1361,6 +1363,7 @@ def reviewer_audit(
         out_dir=out_dir,
         skeptics=skeptics,
         resume=resume,
+        log=log,
     )
     patch = render_patch(cl)
     (out_dir / "apply-preview.patch").write_text(patch)

@@ -30,11 +30,15 @@ def run_stage(
     run_dir: Path,
     item_id: Callable[[Any], str],
     resume: bool = False,
+    label: str = "stage",
+    log: Callable[[str], None] = lambda _msg: None,
 ) -> list[dict[str, Any]]:
     ids = [item_id(it) for it in items]
     if not resume or not (run_dir / "run-state.json").exists():
         init_run(run_dir, planned=ids, git_sha="", dirty_hash="", backend="audit")
     todo = set(pending_items(run_dir))
+    total = len(ids)
+    done = total - len(todo)
     by_id = dict(zip(ids, items))
     for iid in list(todo):
         item = by_id[iid]
@@ -45,5 +49,7 @@ def run_stage(
         except Exception as exc:  # noqa: BLE001 — record the one-off failure, keep going
             record = {"item": iid, "error": f"{type(exc).__name__}: {exc}"}
         append_record(run_dir, iid, record)
-    done = load_state(run_dir)["done"]
-    return [_persisted(run_dir, iid) for iid in ids if iid in done]
+        done += 1
+        log(f"[{label} {done}/{total}] {iid}")
+    completed = load_state(run_dir)["done"]
+    return [_persisted(run_dir, iid) for iid in ids if iid in completed]

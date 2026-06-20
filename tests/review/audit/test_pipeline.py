@@ -205,6 +205,27 @@ def _scripted(system, messages):
     return "{}"
 
 
+def test_run_audit_logs_stage_transitions(tmp_path: Path):
+    """run_audit emits Stage 1 / Stage 2 / Stage 3 + vetted log lines via the log param."""
+    logged: list[str] = []
+
+    run_audit(
+        ["security"],
+        backend=StubBackend(_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=tmp_path / "out",
+        skeptics=1,
+        log=logged.append,
+    )
+
+    joined = "\n".join(logged)
+    assert "Stage 1" in joined
+    assert "Stage 2" in joined
+    assert "Stage 3" in joined
+    assert "vetted" in joined
+
+
 def test_run_audit_produces_vetted_changelist(tmp_path: Path):
     backend = StubBackend(_scripted)
     cl = run_audit(
