@@ -1108,9 +1108,7 @@ def eval_agents(
     known = set(agent_names())
     for a in sorted(by_agent):
         if a not in known:
-            typer.echo(
-                f"warning: fixtures for unknown agent '{a}' (not in registry)", err=True
-            )
+            typer.echo(f"warning: fixtures for unknown agent '{a}' (not in registry)")
 
     targets = [agent] if agent else agent_names()
     failing = 0
@@ -1175,8 +1173,7 @@ def eval_agents(
                     # on a bad fixture) and continue — never crash the whole run.
                     typer.echo(
                         f"\neval: WARNING {spec.name} {fx.kind}/{fx.name} r{i} — "
-                        f"unparseable agent response ({exc}); scoring as no findings",
-                        err=True,
+                        f"unparseable agent response ({exc}); scoring as no findings"
                     )
                     # Mark the persisted record so eval-analyze can tell a parse
                     # failure apart from a genuine clean run (both have 0 findings).

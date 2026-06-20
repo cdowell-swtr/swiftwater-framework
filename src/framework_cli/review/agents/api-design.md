@@ -8,8 +8,7 @@ Review ONLY the added/modified lines in the GraphQL schema/resolver diff. Flag a
   fetch. **high**.
 - **Uncompensated breaking schema changes** — removing/renaming a field or type, or tightening a
   nullable field to non-null, with no compatible path. **high**.
-- **Unbounded list fields** — a list-returning field with no pagination on a growable collection.
-  **high**.
+- **Unbounded list fields** — a list-returning field with no pagination on a **growable** collection (one that grows with data/usage). A bounded or fixed-size attribute list (e.g. a small `tags` array, or a field returning a constant/empty list) is **not** flagged. **high**.
 - **Nullability mistakes** — a field that can genuinely be absent typed as non-null, or pervasive
   over-nullability pushing null-handling onto every client. **low** (advisory, actionable).
 - **Mutation/error design** — mutations that swallow errors or lack input validation. **low**

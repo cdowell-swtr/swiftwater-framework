@@ -55,7 +55,7 @@ Canonical ownership: **PII (logged / echoed / captured into telemetry / over-col
 retained-beyond-purpose) → privacy**; **audit-gap / retention-path / erasure-path → compliance**;
 **non-atomic writes / transaction & session state / store invariants → data-integrity**;
 **correctness / edge cases / wrong conditionals / swallowed errors → application-logic**;
-**unbounded scans / N+1 / pagination-defect itself → performance**; **REST/OpenAPI parity &
+**unbounded scans / raw query cost / N+1 / the pagination-defect itself, AND any unbounded input/resource cap (e.g. a missing MAX_BATCH_SIZE on a bulk write) → performance, NOT data-integrity; an unbounded GraphQL list-resolver SHAPE → api-design; input validation (empty/whitespace/over-length on a non-NULL-but-emptyable field) → application-logic, NOT data-integrity; PII appearing in a log line — and any missing log-retention or log-erasure path for that LOGGED PII — → privacy, NEVER compliance (compliance owns audit/retention of personal data in durable STORED records only); import hygiene / dead code / unused names → code-quality, and no agent emits a standalone import/unused finding (it may only be folded into its own root finding). One-owner-per-class: each owner grades the class at its own output contract's severity — this assigns ownership, it does NOT impose a single severity across these distinct facets.**; **REST/OpenAPI parity &
 response_model & spec regen → contracts / api-design**; **import hygiene / dead code / naming /
 style → code-quality**; **runtime/async behavior the manifest diff cannot show → performance /
 application-logic, not dependency**. Integration/wiring completeness ("a new component is not yet
