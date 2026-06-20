@@ -2456,3 +2456,18 @@ doesn't apply; progress is more useful on stdout where default capture (`>`, tee
 `2>&1`. Also moved the "no auto-applicable hunks" notice to stdout. Test now pins `result.stdout` (click
 8.4 separates stdout/stderr). One-liner; 4 CLI tests pass; ruff/mypy clean. (The running shakedown-v2
 sweep is unaffected — it captured both streams via `2>&1`.)
+
+#### #0200 · completed · FWK42 · 2026-06-20
+**reviewer-audit apply-preview now produces a real applyable patch** (surfaced by the v2 shakedown: the
+patch was empty — 0 hunks — despite 18/22 vetted edits being domain_prompt). Two layered causes fixed in
+`preview.py`: (1) the model omits a `path` on domain_prompt edits → `_resolved_path` now derives
+`agents/<agent>.md` from the changelist label (mirrors the rubric→rubric.md fallback); (2) the deeper one
+— `_diff` diffed the standalone `before`/`after` strings → a `@@ -1 +1 @@` hunk with zero context that
+`git apply` can't place even when `before` matches. New `_anchored_diff` reads the real file, locates the
+UNIQUE exact `before`, replaces in place, and emits a context-anchored full-file diff with correct line
+numbers; returns None (→ quarantine to notes) when `before` is absent/ambiguous. Validated on the real v2
+changelist: **0 → 11 applyable hunks** across 7 agent files + rubric.md, `git apply --check` clean; the
+paraphrased/fixture edits route to notes. Tests: derived-path, partial-before-midfile anchoring (the
+realistic case), + existing 37 stay green (41 total). Test/maintainer-tooling only → no release. (Minor
+follow-up still open: retry-once on an unparseable adversarial skeptic before counting it a refutation —
+env-parity was dropped on 2/3 parse failures.)
