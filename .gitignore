@@ -19,6 +19,8 @@ build/
 .framework/audit/
 # Plan 21 audit-workflow scratch (mirrored to docs/.../plan21-audit/ for durability)
 .framework/plan21/
+# reviewer-audit (FWK4) run outputs — changelist/preview/checkpoints are local diagnostics
+.framework/reviewer-audit*/
 
 # MkDocs build output
 site/
