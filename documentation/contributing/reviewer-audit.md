@@ -38,7 +38,9 @@ framework reviewer-audit coverage-gap security --baseline .framework/eval-baseli
 Audit, reconcile, and skeptic agents run on Opus. The run is resumable across
 quota resets with `--resume` (agent-granularity checkpoints under `--out`,
 including a pinned `stage2-reconcile.json` so a resume can't desync verdicts).
-Without a review backend the command is skip-neutral (exits 0).
+Progress streams to stderr as it runs (`--quiet` to silence); the fan-out stages
+run in parallel — tune with `--concurrency N` (default 4; `1` = serial). Without a
+review backend the command is skip-neutral (exits 0).
 
 ### 3. Inspect
 
@@ -48,8 +50,13 @@ Without a review backend the command is skip-neutral (exits 0).
   its adversarial verdict + refutation log (the kicked-back set, never silently
   dropped).
 - `.framework/reviewer-audit/apply-preview.patch` — a git-applyable patch of the
-  textual edits. `block_threshold` changes appear as comment notes (applied by hand
-  in `registry.py`).
+  validated textual edits (`domain_prompt`/`rubric`). Each hunk is checked with
+  `git apply --check` (cumulatively), so the file always applies; it is written only
+  when at least one hunk applies.
+- `.framework/reviewer-audit/apply-preview.notes.txt` — the edits that are **not**
+  auto-applied: `fixture` rewrites (a fixture's `change.patch` is itself a diff —
+  apply by hand), `block_threshold` changes (edit `registry.py`), and any hunk that
+  did not apply cleanly. Each points back to `changelist-full.json`.
 
 ```bash
 git apply --check .framework/reviewer-audit/apply-preview.patch

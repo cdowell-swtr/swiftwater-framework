@@ -2411,3 +2411,39 @@ any un-renderable edit instead of silently dropping; remaining 3 noted: checkpoi
 Test/maintainer-tooling only → no release, no template payload (rendered projects unaffected). On
 merge: move FWK4 to Done + grep master for a marker ([[verify-master-content-after-pr-merge]]); the
 roadmap `Next` queue is then empty.
+
+#### #0197 · note · FWK4/FWK41 · 2026-06-19
+**FWK4 merged** (PR #67 squash `93c017c`, PR #68 PLAN-close-out `8241aff`); master verified
+(rubric.md/preamble.py/audit pkg/reviewer-audit cmd all present). **Live shakedown run** (`framework
+reviewer-audit` over all 21 reviewers, free subagent backend, reusing last week's Plan-21 baseline at
+`.framework/plan21/baseline-findings`): one clean invocation, ~2h52m, no quota wall, **31 vetted / 3
+refuted of 34 proposed across 9 agents** (12 clean). The adversarial spine did REAL work — the 3 kills
+were sharp+correct (an application-logic edit that'd let its own bad fixture slip; a unanimous 0/3 on a
+data-integrity edit that suppressed grounding; a rubric N+1-routing edit refuted because GraphQL N+1 is
+legitimately both performance+api-design). Surviving rubric edit = a genuine high-leverage severity-
+consistency fix (medium "convention violation" vs high "broken contract" disambiguation). Restraint on
+thresholds (mostly confirming current). **Shakedown surfaced 4 real gaps → FWK41 (hardening, plan
+written, executing this session):** fully serial (~hours), zero stdout instrumentation, inconsistent
+agent ids (`review-X` vs `X`) that break apply mapping, and a CORRUPT apply-preview (`git apply --check`
+exit 128 — the 12 fixture edits carry nested diffs + dir/fabricated paths + paraphrased `before`).
+Non-fixture proposals (17 domain-prompt + 1 rubric + 1 block_threshold) are the trustworthy applyable
+subset. Plan `docs/superpowers/plans/2026-06-19-fwk4-reviewer-audit-hardening.md`.
+
+#### #0198 · completed · FWK41 · 2026-06-19
+**FWK41 reviewer-audit hardening DONE** on branch `fwk4-reviewer-audit-hardening` (5 commits, subagent-
+driven). **H1** progress instrumentation — `run_stage`/`run_audit` `log` callback → per-item
+`[audit 3/21] contracts` + stage-transition + `vetted N/M (K refuted)` lines; CLI stderr default,
+`--quiet`. **H2** bounded `--concurrency` — ThreadPoolExecutor over Stage-1 audits + Stage-3 refutes
+(reconcile serial); all run-state.json mutations + progress under one lock; serial path byte-identical;
+Opus review verified locking/no-corruption by stress repro + caught the exhaustion-doesn't-short-circuit
+regression → fixed with a `threading.Event` (dead backend skips not-yet-started workers); default 4,
+clamped [1,16] (subagent backend has no backoff). **H3** `_canonical_agent` strips `review-` prefix +
+validates vs roster; `reconcile` drops unknowns with a logged note (fixes the shakedown's inconsistent
+ids). **H4** robust apply-preview — `render_patch`→`(patch, notes)`: fixture edits → manual notes (never
+nested-diff hunks), textual hunks validated CUMULATIVELY (a same-file conflicting edit is quarantined,
+not combined into a corrupt patch — the rubric-edits-collapsing case), notes split to
+`apply-preview.notes.txt` so the `.patch` is hunks-only + always applies under plain `git apply`,
+git-absent fail-safe. Opus review = needs-rework (per-hunk isolation broke the always-applies guarantee;
+all-notes patch 128'd under the documented command) → both fixed. Runbook updated (notes file +
+concurrency/progress). Full non-acceptance gate **1058 passed/3 skipped**; ruff/format/mypy + docs-strict
+clean. Test/maintainer-tooling only → no release. Branch-end reviews + PR next.
