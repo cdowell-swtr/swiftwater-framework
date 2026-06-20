@@ -113,7 +113,9 @@ def test_reviewer_audit_emits_progress(tmp_path, monkeypatch):
     out = tmp_path / "audit-out"
     result = runner.invoke(app, ["reviewer-audit", "security", "--out", str(out)])
     assert result.exit_code == 0, result.output
-    assert "Stage 1" in result.output
+    # progress goes to STDOUT (this is an all-human-facing command; nothing to keep
+    # clean on stdout, and progress should land where default capture grabs it).
+    assert "Stage 1" in result.stdout
 
 
 def test_run_audit_passes_concurrency_to_fanout(tmp_path, monkeypatch):

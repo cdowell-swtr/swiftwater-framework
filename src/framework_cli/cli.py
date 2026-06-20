@@ -1362,7 +1362,10 @@ def reviewer_audit(
     _backend = _make_backend(res.backend, EVAL_KEY_ENV)  # type: ignore[attr-defined]
     targets = list(agents) if agents else agent_names()
     out_dir = Path(out)
-    log = (lambda _m: None) if quiet else (lambda m: typer.echo(m, err=True))
+    # Progress → stdout: this is an all-human-facing maintainer command (its real outputs
+    # are files), so there is no machine-data on stdout to keep clean, and progress is most
+    # useful where default capture (`>`, tee) grabs it.
+    log = (lambda _m: None) if quiet else (lambda m: typer.echo(m))
     cl = run_audit(
         targets,
         backend=_backend,
@@ -1390,8 +1393,7 @@ def reviewer_audit(
     if not patch:
         typer.echo(
             f"reviewer-audit: no auto-applicable hunks — see "
-            f"{out_dir}/apply-preview.notes.txt + changelist-full.json",
-            err=True,
+            f"{out_dir}/apply-preview.notes.txt + changelist-full.json"
         )
 
 
