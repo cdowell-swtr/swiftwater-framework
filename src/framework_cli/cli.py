@@ -1338,6 +1338,14 @@ def reviewer_audit(
         False, "--resume", help="Resume a prior run from --out."
     ),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress progress output."),
+    concurrency: int = typer.Option(
+        4,
+        "--concurrency",
+        min=1,
+        max=16,
+        help="Parallel audit/refute calls (1 = serial). The free subagent backend has no "
+        "backoff, so keep this modest on one subscription.",
+    ),
 ) -> None:
     """Audit reviewer prompts (rubric consistency, severity bar, scope, fixtures) and emit a
     vetted changelist + a dry-run apply-preview patch. No edits are applied (FWK4)."""
@@ -1364,6 +1372,7 @@ def reviewer_audit(
         skeptics=skeptics,
         resume=resume,
         log=log,
+        concurrency=concurrency,
     )
     patch = render_patch(cl)
     (out_dir / "apply-preview.patch").write_text(patch)

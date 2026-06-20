@@ -31,6 +31,7 @@ def run_audit(
     skeptics: int = 3,
     resume: bool = False,
     log: Callable[[str], None] = lambda _msg: None,
+    concurrency: int = 1,
 ) -> Changelist:
     out_dir.mkdir(parents=True, exist_ok=True)
     roster = {n: get_agent(n).block_threshold for n in agent_names()}
@@ -50,6 +51,7 @@ def run_audit(
         resume=resume,
         label="audit",
         log=log,
+        concurrency=concurrency,
     )
 
     # Stage 2 — cross-agent reconciliation (single call). Checkpoint its output so a
@@ -91,6 +93,7 @@ def run_audit(
         resume=resume,
         label="refute",
         log=log,
+        concurrency=concurrency,
     )
     vmap = {
         (r["agent"], r["idx"]): r["verdict"]
