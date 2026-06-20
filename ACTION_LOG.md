@@ -2471,3 +2471,27 @@ paraphrased/fixture edits route to notes. Tests: derived-path, partial-before-mi
 realistic case), + existing 37 stay green (41 total). Test/maintainer-tooling only → no release. (Minor
 follow-up still open: retry-once on an unparseable adversarial skeptic before counting it a refutation —
 env-parity was dropped on 2/3 parse failures.)
+
+#### #0201 · completed · FWK43 · 2026-06-20
+**First tooled reviewer-tuning pass — eval-gated, on branch `reviewer-tuning-v2`.** Took the v2
+`framework reviewer-audit` sweep's vetted changelist (22 adversarially-vetted edits) and applied the 11
+auto-applyable hunks (regenerated against master via the FWK42 anchored-diff renderer; `git apply
+--check` clean): **7 reviewer domain blocks** (accessibility severity-split + grounding guard; api-design
+bounded-list exclusion; application-logic scope list + behaviourally-identical-conditional clarifier;
+compliance ×2 PII-in-logs→privacy boundary + retention-scoped-to-stored-records; coverage-gap
+test-quality boundary; data-integrity ×2 **factual fix** [`expire_on_commit` does NOT populate
+`created_at` — named `RETURNING`/`eager_defaults`, foreclosed the dialect-rationalization] + scope
+boundary; dependency ×2 no-fabricated-CVE drop-rule + manifest-local justification) + the **roster-wide
+`rubric.md`** one-owner-per-class line. **Eval gate (free subagent backend, reviewers at prod models):
+`--repeat 1` whole-roster → 18/18 scorable agents PASS 1.00/0.00** (all 7 edited + both rubric-ownership
+gainers performance/privacy — confirms the roster-wide rubric edit regressed nobody); **`--repeat 3` on
+the 7 edited → all PASS, stable** (data-integrity held fp 0.00 across 3 rolls = the factual fix worked;
+dependency 1.00/1.00 PASS = advisory surfacing within band, not a regression). **0 regressions.**
+Deferred (documented, NOT applied): 3 fixture edits + 6 paraphrased-`before` domain edits → in
+`apply-preview.notes.txt`. **Also:** moved `eval`'s two in-run warnings stderr→stdout (user feedback;
+fatal-error paths stay stderr); 26 eval tests pass. **Surfaced 3 process gaps → task #19:** ≥3 eval
+fixtures (`documentation`, `env-parity`, `observability-infra`) drifted from the template → `git apply`
+fails in `realize_cached` (so those agents can't be scored; `test_fixtures_are_wellformed` misses it); a
+single bad fixture ABORTS the whole eval run (no record-and-continue); `eval` has no `--concurrency`
+(fully serial, ~10 min/agentic-agent). Worked around by evaluing agents individually. Scorecard
+`docs/superpowers/eval-scorecards/2026-06-20-reviewer-tuning-v2.md`. Branch-end review + PR next.

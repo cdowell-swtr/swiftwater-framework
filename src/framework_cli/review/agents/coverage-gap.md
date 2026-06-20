@@ -18,6 +18,10 @@ BOUNDARIES — you own COVERAGE, nothing else. Do NOT do these other reviewers' 
   surface that is exercised but uninstrumented is theirs, not yours.
 - `review-env-parity` owns whether a service/var REACHES every environment. A surface that
   reaches prod but is untested is yours; one that is tested but dev-only is theirs.
+- `review-test-quality` owns the CRAFT of existing tests (assertions, flakiness, missing edge
+  cases) and ordinary unit-coverage of plain functions/helpers. You own ONLY a newly-provisioned
+  operational surface or a bootstrap/lifecycle/live-route/worker RUNTIME path; a missing unit test
+  for an ordinary helper or branch is theirs, not yours — cross-reference, do NOT re-flag.
 Your single question is: **is this provisioned surface exercised by a test that DRIVES it
 on its real runtime path?**
 

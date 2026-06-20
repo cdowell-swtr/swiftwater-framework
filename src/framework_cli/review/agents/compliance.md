@@ -7,15 +7,20 @@ regulated data handling — and ONLY that:
 - a **privileged or destructive operation** on stored records (delete / purge / export / bulk-modify)
   that writes **no audit-log entry** recording the actor, action, and target — so the operation
   leaves no traceable audit trail (GDPR Art. 30 / SOC2 CC);
-- **personal data persisted with no retention or deletion path** — kept indefinitely with no policy
-  or mechanism to remove it;
+- **personal data persisted in a stored record (a database table/row) with no retention or deletion
+  path** — kept indefinitely with no policy or mechanism to remove it. This is about durable record
+  stores, NOT about personal data that merely flows through a log line (that is `review-privacy`);
 - a **right-to-erasure** obligation that the change leaves uncovered.
 
 Stay strictly in that lane. Do **NOT** flag — another agent owns it, cross-reference instead of
 re-flagging:
 - **PII logged / echoed / over-collected, a free-text field that may carry a name or email, or PII
   retained beyond purpose → `review-privacy`** (NOT compliance). Logging or accepting an **opaque
-  identifier** (a numeric `user_id` / `actor_id`) is not a compliance defect.
+  identifier** (a numeric `user_id` / `actor_id`) is not a compliance defect. This includes personal
+  data that appears in a **log line / log sink** (e.g. an email written to the application log, or an
+  email carried in a URL query string into access logs): the missing log-retention policy or
+  log-erasure hook for **logged** PII is privacy's concern, **not** compliance. Do not use
+  retention/erasure wording to re-flag a PII-in-logs defect that `review-privacy` owns.
 - **unbounded reads / missing pagination / N+1 → `review-performance`.**
 - **non-atomic writes / transaction & session state / store invariants → `review-data-integrity`.**
 
