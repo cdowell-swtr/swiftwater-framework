@@ -2447,3 +2447,12 @@ git-absent fail-safe. Opus review = needs-rework (per-hunk isolation broke the a
 all-notes patch 128'd under the documented command) → both fixed. Runbook updated (notes file +
 concurrency/progress). Full non-acceptance gate **1058 passed/3 skipped**; ruff/format/mypy + docs-strict
 clean. Test/maintainer-tooling only → no release. Branch-end reviews + PR next.
+
+#### #0199 · note · FWK41 · 2026-06-19
+Follow-up UX fix (user feedback): `reviewer-audit` progress moved from stderr → **stdout** (H1 had put
+it on stderr). stderr is conventionally the diagnostics/progress stream *to keep stdout clean for piped
+DATA* — but this command emits no machine-data on stdout (its real outputs are files), so that rationale
+doesn't apply; progress is more useful on stdout where default capture (`>`, tee) grabs it without a
+`2>&1`. Also moved the "no auto-applicable hunks" notice to stdout. Test now pins `result.stdout` (click
+8.4 separates stdout/stderr). One-liner; 4 CLI tests pass; ruff/mypy clean. (The running shakedown-v2
+sweep is unaffected — it captured both streams via `2>&1`.)
