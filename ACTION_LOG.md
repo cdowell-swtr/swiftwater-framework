@@ -2428,3 +2428,22 @@ agent ids (`review-X` vs `X`) that break apply mapping, and a CORRUPT apply-prev
 exit 128 — the 12 fixture edits carry nested diffs + dir/fabricated paths + paraphrased `before`).
 Non-fixture proposals (17 domain-prompt + 1 rubric + 1 block_threshold) are the trustworthy applyable
 subset. Plan `docs/superpowers/plans/2026-06-19-fwk4-reviewer-audit-hardening.md`.
+
+#### #0198 · completed · FWK41 · 2026-06-19
+**FWK41 reviewer-audit hardening DONE** on branch `fwk4-reviewer-audit-hardening` (5 commits, subagent-
+driven). **H1** progress instrumentation — `run_stage`/`run_audit` `log` callback → per-item
+`[audit 3/21] contracts` + stage-transition + `vetted N/M (K refuted)` lines; CLI stderr default,
+`--quiet`. **H2** bounded `--concurrency` — ThreadPoolExecutor over Stage-1 audits + Stage-3 refutes
+(reconcile serial); all run-state.json mutations + progress under one lock; serial path byte-identical;
+Opus review verified locking/no-corruption by stress repro + caught the exhaustion-doesn't-short-circuit
+regression → fixed with a `threading.Event` (dead backend skips not-yet-started workers); default 4,
+clamped [1,16] (subagent backend has no backoff). **H3** `_canonical_agent` strips `review-` prefix +
+validates vs roster; `reconcile` drops unknowns with a logged note (fixes the shakedown's inconsistent
+ids). **H4** robust apply-preview — `render_patch`→`(patch, notes)`: fixture edits → manual notes (never
+nested-diff hunks), textual hunks validated CUMULATIVELY (a same-file conflicting edit is quarantined,
+not combined into a corrupt patch — the rubric-edits-collapsing case), notes split to
+`apply-preview.notes.txt` so the `.patch` is hunks-only + always applies under plain `git apply`,
+git-absent fail-safe. Opus review = needs-rework (per-hunk isolation broke the always-applies guarantee;
+all-notes patch 128'd under the documented command) → both fixed. Runbook updated (notes file +
+concurrency/progress). Full non-acceptance gate **1058 passed/3 skipped**; ruff/format/mypy + docs-strict
+clean. Test/maintainer-tooling only → no release. Branch-end reviews + PR next.
