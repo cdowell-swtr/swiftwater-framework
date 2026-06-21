@@ -1,9 +1,11 @@
+diff --git a/infra/compose/observability.yml b/infra/compose/observability.yml
+index 8a58925..a579461 100644
 --- a/infra/compose/observability.yml
 +++ b/infra/compose/observability.yml
-@@ -91,6 +91,15 @@ services:
-       postgres:
-         condition: service_healthy
-
+@@ -88,6 +88,15 @@ services:
+     ports:
+       - "${POSTGRES_EXPORTER_HOST_PORT:-9187}:9187"
+ 
 +  redis-exporter:
 +    image: oliver006/redis_exporter:v1.62.0
 +    environment:

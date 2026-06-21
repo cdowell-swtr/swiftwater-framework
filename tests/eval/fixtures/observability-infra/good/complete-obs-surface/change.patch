@@ -1,8 +1,8 @@
 diff --git a/infra/compose/dev.yml b/infra/compose/dev.yml
-index 950f2a2..4fe06b3 100644
+index 21658a0..a678cb7 100644
 --- a/infra/compose/dev.yml
 +++ b/infra/compose/dev.yml
-@@ -63,5 +63,14 @@ services:
+@@ -66,5 +66,14 @@ services:
        GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
        GF_AUTH_DISABLE_LOGIN_FORM: "true"
  
@@ -18,12 +18,12 @@ index 950f2a2..4fe06b3 100644
  volumes:
    pgdata: {}
 diff --git a/infra/compose/observability.yml b/infra/compose/observability.yml
-index 0edac1e..07f4ab1 100644
+index 8a58925..7b48016 100644
 --- a/infra/compose/observability.yml
 +++ b/infra/compose/observability.yml
-@@ -91,6 +91,15 @@ services:
-       postgres:
-         condition: service_healthy
+@@ -88,6 +88,15 @@ services:
+     ports:
+       - "${POSTGRES_EXPORTER_HOST_PORT:-9187}:9187"
  
 +  redis-exporter:
 +    image: oliver006/redis_exporter:v1.62.0
@@ -38,15 +38,13 @@ index 0edac1e..07f4ab1 100644
    promdata: {}
    lokidata: {}
 diff --git a/infra/compose/services.yml b/infra/compose/services.yml
-index 70bbdf6..2c28de9 100644
+index 1acd428..b6bf36e 100644
 --- a/infra/compose/services.yml
 +++ b/infra/compose/services.yml
-@@ -3,3 +3,18 @@
- # the battery data stores + worker/beat for prod/staging (dev keeps its own build-based, profiled
- # copies in dev.yml). Managed alternative: point APP_MONGO_URL / APP_REDIS_URL / APP_CELERY_* at a
- # managed instance and omit the data-store services here (worker/beat stay self-hosted).
-+
-+services:
+@@ -41,5 +41,17 @@ services:
+       postgres:
+         condition: service_healthy
+ 
 +  redis:
 +    image: redis:7
 +    restart: unless-stopped
@@ -58,7 +56,8 @@ index 70bbdf6..2c28de9 100644
 +      timeout: 3s
 +      retries: 10
 +
-+volumes:
+ volumes:
+   pgdata: {}
 +  redisdata: {}
 diff --git a/infra/observability/grafana/dashboards/redis.json b/infra/observability/grafana/dashboards/redis.json
 new file mode 100644
@@ -101,16 +100,13 @@ index 0000000..7ebad30
 +    annotations:
 +      summary: Redis exporter target is down — redis unreachable or exporter crashed
 diff --git a/infra/observability/prometheus/prometheus.yml b/infra/observability/prometheus/prometheus.yml
-index 045420b..d596bba 100644
+index 045420b..a81a51e 100644
 --- a/infra/observability/prometheus/prometheus.yml
 +++ b/infra/observability/prometheus/prometheus.yml
-@@ -18,6 +18,9 @@ scrape_configs:
-   - job_name: prometheus
+@@ -24,3 +24,6 @@ scrape_configs:
+   - job_name: postgres
      static_configs:
-       - targets: ["localhost:9090"]
+       - targets: ["postgres-exporter:9187"]
 +  - job_name: redis
 +    static_configs:
 +      - targets: ["redis-exporter:9121"]
-   - job_name: otel-collector
-     static_configs:
-       - targets: ["otel-collector:8888"]
