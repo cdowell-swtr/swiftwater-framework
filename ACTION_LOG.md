@@ -2506,3 +2506,13 @@ so drift was invisible; (3) wrap the unwrapped `realize_cached` call in the eval
 instead of aborting the whole run (CalledProcessError currently uncaught); (4) `eval --concurrency N`
 (default 4, clamped [1,16]) — pre-render bases serially then ThreadPoolExecutor over per-agent scoring,
 FWK41 H2 thread-safety + exhaustion-stop. Build order 3→2→1→4. No release/template payload. Plan next.
+
+#### #0203 · note · FWK44 · 2026-06-21
+FWK44 implementation plan written: `docs/superpowers/plans/2026-06-21-eval-robustness.md` (phases A–E,
+build order 3→2→1→4, subagent-driven TDD). A: wrap `realize_cached` in the eval loop → skip+warn+exit 5.
+B: gate-tier `test_every_fixture_realizes` (RED on current tree). C: re-anchor the 4 drifted fixtures
+(mechanical render→regen-change.patch procedure + per-fixture intent; turns B green) + bite-proof. D:
+extract `_score_one_agent` (characterization-tested pure refactor) → `--concurrency` (pre-render bases
+serially, then bounded ThreadPoolExecutor over per-agent scoring; FWK41 H2 stop-on-exhaustion). E: gate +
+branch-end review + PR. Self-review: spec coverage ✓, no placeholders (Phase-C patch content is genuinely
+execution-time render-dependent → procedure given), signature consistency ✓. Ready to execute.
