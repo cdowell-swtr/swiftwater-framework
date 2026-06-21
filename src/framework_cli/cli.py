@@ -484,6 +484,15 @@ def realize_cached(fx: object, cache: dict, base_dir: object) -> tuple:
     return _rc(fx, cache, base_dir)  # type: ignore[arg-type]
 
 
+def prerender_base(fx: object, cache: dict, base_dir: object) -> None:
+    """Thin seam delegating to evals.prerender_base so tests can monkeypatch it. Warms
+    the per-combo base cache WITHOUT the per-fixture copytree — eval's serial pre-render
+    pass uses this so concurrent realize_cached() only reads the cache."""
+    from framework_cli.review.evals import prerender_base as _pb
+
+    _pb(fx, cache, base_dir)  # type: ignore[arg-type]
+
+
 def _review_diff() -> str:
     return pr_diff()
 
@@ -1228,13 +1237,12 @@ def eval_agents(
             err=True,
         )
 
-    # Pre-render bases serially so the thread pool never races on _combo_cache population.
+    # Pre-render bases serially (base cache only — NOT per-fixture realize) so the thread
+    # pool only ever READS _combo_cache and never renders/copytrees concurrently. A drifted
+    # fixture's git-apply failure happens later, during per-agent scoring (recorded there).
     for a in targets:
         for fx in by_agent.get(a, []):
-            try:
-                realize_cached(fx, _combo_cache, _base_dir)
-            except subprocess.CalledProcessError:
-                pass  # recorded per-agent during scoring
+            prerender_base(fx, _combo_cache, _base_dir)
 
     def _run(a: str) -> "_AgentEvalResult":
         return _score_one_agent(

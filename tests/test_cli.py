@@ -10,6 +10,16 @@ from framework_cli.integrity.manifest import Manifest
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _noop_eval_prerender(monkeypatch):
+    """eval's serial pre-render pass warms REAL template bases (~30s render). Default the
+    `prerender_base` seam to a no-op so the stub-backed eval CLI tests stay fast; the
+    real-realize regression test overrides this back to the genuine function."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "prerender_base", lambda fx, c, b: None, raising=False)
+
+
 def test_new_creates_project(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["new", "My App"])
@@ -1146,6 +1156,43 @@ def test_eval_concurrency_stops_on_exhaustion(tmp_path, monkeypatch):
         ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "3"],
     )
     assert result.exit_code == 4, result.output
+
+
+def test_eval_real_realize_path_does_not_crash(tmp_path, monkeypatch):
+    """Regression: eval's pre-render pass + per-agent scoring must NOT both copytree the
+    same per-fixture work dir (FileExistsError). Exercises the REAL prerender_base +
+    realize_cached over a real fixture (stubs only the backend) — the integration path every
+    other eval test stubs away. Renders a real base, so it's slower than the stub tests."""
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.evals import (
+        prerender_base as real_prerender,
+        realize_cached as real_realize,
+    )
+
+    monkeypatch.setattr(
+        cli_mod, "prerender_base", real_prerender
+    )  # override autouse no-op
+    monkeypatch.setattr(cli_mod, "realize_cached", real_realize)
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "_eval_run", lambda *a, **k: [])
+
+    result = runner.invoke(
+        app,
+        [
+            "eval",
+            "security",
+            "--fixtures",
+            "tests/eval/fixtures",
+            "--backend",
+            "api",
+            "--concurrency",
+            "1",
+        ],
+    )
+    # The command must COMPLETE (no FileExistsError traceback). Any clean exit is fine
+    # (0/1/5 depending on scoring); a crash would be a nonzero exit with a traceback.
+    assert result.exit_code in (0, 1, 5), result.output
+    assert "review-security" in result.output
 
 
 def test_eval_concurrency_surfaces_unexpected_worker_error(tmp_path, monkeypatch):

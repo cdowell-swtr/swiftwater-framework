@@ -185,6 +185,41 @@ def realize_fixture(
     return root, diff
 
 
+def _base_cache_key(fx: Fixture) -> tuple[str, ...]:
+    """The `cache` key for `fx`'s base — a sentinel for framework-shaped agents, else its
+    battery combo."""
+    return ("__framework__",) if fx.agent in _FRAMEWORK_SHAPED_AGENTS else fx.batteries
+
+
+def prerender_base(
+    fx: Fixture, cache: dict[tuple[str, ...], Path], base_dir: Path
+) -> None:
+    """Ensure `fx`'s per-combo (or framework-shaped) BASE is rendered, committed, and cached
+    in `cache` — WITHOUT the per-fixture copytree+`git apply`. A caller warms the cache
+    serially with this so that concurrent `realize_cached` calls only ever READ `cache` and
+    never race on base population (which renders + writes the shared dict). Idempotent."""
+    key = _base_cache_key(fx)
+    if key in cache:
+        return
+    if fx.agent in _FRAMEWORK_SHAPED_AGENTS:
+        base = base_dir / "framework-base"
+        base.mkdir(parents=True, exist_ok=True)
+        _framework_base(base)
+        cache[key] = base
+        return
+    base = base_dir / ("base-" + ("-".join(fx.batteries) or "none")) / "demo"
+    render_project(base, {**_FIXTURE_ANSWERS, "batteries": list(fx.batteries)})
+    subprocess.run(["git", "init", "-q"], cwd=base, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=base, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"],
+        cwd=base,
+        check=True,
+    )
+    _freeze_git_base(base)  # pack loose objects so per-fixture copytree can't race a GC
+    cache[key] = base
+
+
 def realize_cached(
     fx: Fixture, cache: dict[tuple[str, ...], Path], base_dir: Path
 ) -> tuple[Path, str]:
@@ -195,18 +230,13 @@ def realize_cached(
     framework's own source subtrees (template payload + FWK29 registry) rather than
     a rendered project.
     """
+    prerender_base(fx, cache, base_dir)
+    work = base_dir / f"fx-{fx.agent}-{fx.kind}-{fx.name}"
+    shutil.copytree(cache[_base_cache_key(fx)], work)
+    subprocess.run(
+        ["git", "apply", "-"], cwd=work, input=fx.patch, text=True, check=True
+    )
     if fx.agent in _FRAMEWORK_SHAPED_AGENTS:
-        cache_key: tuple[str, ...] = ("__framework__",)
-        if cache_key not in cache:
-            base = base_dir / "framework-base"
-            base.mkdir(parents=True, exist_ok=True)
-            _framework_base(base)
-            cache[cache_key] = base
-        work = base_dir / f"fx-{fx.agent}-{fx.kind}-{fx.name}"
-        shutil.copytree(cache[cache_key], work)
-        subprocess.run(
-            ["git", "apply", "-"], cwd=work, input=fx.patch, text=True, check=True
-        )
         # Stage so newly-added files (a new operational surface — exactly what coverage-gap
         # hunts) appear in the seed diff, matching production pr_diff() which shows committed
         # new files. A bare `git diff` would omit untracked additions.
@@ -218,39 +248,10 @@ def realize_cached(
             text=True,
             check=True,
         ).stdout
-        return work, diff
-
-    if fx.batteries not in cache:
-        base = base_dir / ("base-" + ("-".join(fx.batteries) or "none")) / "demo"
-        render_project(base, {**_FIXTURE_ANSWERS, "batteries": list(fx.batteries)})
-        subprocess.run(["git", "init", "-q"], cwd=base, check=True)
-        subprocess.run(["git", "add", "-A"], cwd=base, check=True)
-        subprocess.run(
-            [
-                "git",
-                "-c",
-                "user.email=t@t",
-                "-c",
-                "user.name=t",
-                "commit",
-                "-qm",
-                "base",
-            ],
-            cwd=base,
-            check=True,
-        )
-        _freeze_git_base(
-            base
-        )  # pack loose objects so per-fixture copytree can't race a GC
-        cache[fx.batteries] = base
-    work = base_dir / f"fx-{fx.agent}-{fx.kind}-{fx.name}"
-    shutil.copytree(cache[fx.batteries], work)
-    subprocess.run(
-        ["git", "apply", "-"], cwd=work, input=fx.patch, text=True, check=True
-    )
-    diff = subprocess.run(
-        ["git", "diff"], cwd=work, capture_output=True, text=True, check=True
-    ).stdout
+    else:
+        diff = subprocess.run(
+            ["git", "diff"], cwd=work, capture_output=True, text=True, check=True
+        ).stdout
     return work, diff
 
 
