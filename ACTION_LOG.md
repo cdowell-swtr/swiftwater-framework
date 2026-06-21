@@ -2495,3 +2495,14 @@ fails in `realize_cached` (so those agents can't be scored; `test_fixtures_are_w
 single bad fixture ABORTS the whole eval run (no record-and-continue); `eval` has no `--concurrency`
 (fully serial, ~10 min/agentic-agent). Worked around by evaluing agents individually. Scorecard
 `docs/superpowers/eval-scorecards/2026-06-20-reviewer-tuning-v2.md`. Branch-end review + PR next.
+#### #0202 · note · FWK44 · 2026-06-21
+Brainstormed task #19 → design spec `docs/superpowers/specs/2026-06-21-eval-robustness-design.md` on branch
+`fwk44-eval-robustness`. **`framework eval` robustness + speed**, 4 pieces (user-confirmed scope = all 4;
+gate-tier guard; Piece-3 exit non-zero; local thread pool not run_stage-reuse): (1) re-anchor the 4
+drifted fixtures (authoritative no-backend realize sweep = 57 OK / 4 drift on README.md/.env.example/
+observability.yml/services.yml); (2) gate-tier `test_every_fixture_realizes` — the existing guards
+(`test_fixtures_are_wellformed`, `validate_patch_hunks`) only check STRUCTURE, never render+`git apply`,
+so drift was invisible; (3) wrap the unwrapped `realize_cached` call in the eval loop → skip+warn+exit 5
+instead of aborting the whole run (CalledProcessError currently uncaught); (4) `eval --concurrency N`
+(default 4, clamped [1,16]) — pre-render bases serially then ThreadPoolExecutor over per-agent scoring,
+FWK41 H2 thread-safety + exhaustion-stop. Build order 3→2→1→4. No release/template payload. Plan next.
