@@ -2495,3 +2495,27 @@ fails in `realize_cached` (so those agents can't be scored; `test_fixtures_are_w
 single bad fixture ABORTS the whole eval run (no record-and-continue); `eval` has no `--concurrency`
 (fully serial, ~10 min/agentic-agent). Worked around by evaluing agents individually. Scorecard
 `docs/superpowers/eval-scorecards/2026-06-20-reviewer-tuning-v2.md`. Branch-end review + PR next.
+#### #0202 · note · FWK44 · 2026-06-21
+Brainstormed task #19 → design spec `docs/superpowers/specs/2026-06-21-eval-robustness-design.md` on branch
+`fwk44-eval-robustness`. **`framework eval` robustness + speed**, 4 pieces (user-confirmed scope = all 4;
+gate-tier guard; Piece-3 exit non-zero; local thread pool not run_stage-reuse): (1) re-anchor the 4
+drifted fixtures (authoritative no-backend realize sweep = 57 OK / 4 drift on README.md/.env.example/
+observability.yml/services.yml); (2) gate-tier `test_every_fixture_realizes` — the existing guards
+(`test_fixtures_are_wellformed`, `validate_patch_hunks`) only check STRUCTURE, never render+`git apply`,
+so drift was invisible; (3) wrap the unwrapped `realize_cached` call in the eval loop → skip+warn+exit 5
+instead of aborting the whole run (CalledProcessError currently uncaught); (4) `eval --concurrency N`
+(default 4, clamped [1,16]) — pre-render bases serially then ThreadPoolExecutor over per-agent scoring,
+FWK41 H2 thread-safety + exhaustion-stop. Build order 3→2→1→4. No release/template payload. Plan next.
+
+#### #0203 · note · FWK44 · 2026-06-21
+FWK44 implementation plan written: `docs/superpowers/plans/2026-06-21-eval-robustness.md` (phases A–E,
+build order 3→2→1→4, subagent-driven TDD). A: wrap `realize_cached` in the eval loop → skip+warn+exit 5.
+B: gate-tier `test_every_fixture_realizes` (RED on current tree). C: re-anchor the 4 drifted fixtures
+(mechanical render→regen-change.patch procedure + per-fixture intent; turns B green) + bite-proof. D:
+extract `_score_one_agent` (characterization-tested pure refactor) → `--concurrency` (pre-render bases
+serially, then bounded ThreadPoolExecutor over per-agent scoring; FWK41 H2 stop-on-exhaustion). E: gate +
+branch-end review + PR. Self-review: spec coverage ✓, no placeholders (Phase-C patch content is genuinely
+execution-time render-dependent → procedure given), signature consistency ✓. Ready to execute.
+
+#### #0204 · completed · FWK44 · 2026-06-21
+**FWK44 eval robustness + speed DONE** on branch `fwk44-eval-robustness` (subagent-driven, phases A→B+C→D1→D2). **A** wrap `realize_cached` in the eval loop → FIXTURE-ERROR skip + exit 5 (was an uncaught CalledProcessError aborting the whole run). **B+C** gate-tier `test_every_fixture_realizes` (renders+git-applies every fixture — the durable drift guard the structural checks missed) + re-anchored the 4 drifted fixtures; spec review verified seeded intent preserved byte-for-byte. **D1** extracted `_score_one_agent` (characterization-tested, behavior-preserving). **D2** `--concurrency N` (default 4, [1,16]; pre-render bases serially → ThreadPoolExecutor over per-agent scoring; stop-Event on exhaustion). **The reviews caught what the stub-backed suite could not:** D2 Opus quality = swallowed-exception false-green (unexpected worker exc → no `.result()` → exit 0; fixed w/ catch-all + regression test); **branch-end Opus ran the REAL realize_cached and found a Critical** — the D2 pre-render loop double-realized each fixture (realize_cached `copytree` has no dirs_exist_ok) → `FileExistsError` → real `framework eval` crashed on fixture 1, serial AND concurrent, breaking agent-evals.yml; suite stayed green ONLY because every eval test stubs `realize_cached`. Fixed per spec: new `evals.prerender_base` (warms per-combo base cache, NO per-fixture copytree) + `realize_cached` refactored to call it (DRY) + a `prerender_base` cli seam + autouse no-op (keeps stub tests fast) + `test_eval_real_realize_path_does_not_crash` exercising the unstubbed path. Lesson: a green suite built on stubs can hide a totally-broken real path. Full gate **1068 passed/3 skipped**; ruff/format/mypy clean. No release. PR next.

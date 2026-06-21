@@ -305,3 +305,26 @@ def test_realize_cached_reuses_base_render(tmp_path):
 
     # The two work-trees must be distinct paths
     assert root1 != root2
+
+
+def test_every_fixture_realizes():
+    """Every golden fixture's change.patch must apply to a fresh render of the current
+    template — the durable guard against fixture/template drift the structural checks miss.
+    No backend; Copier render + `git apply` only."""
+    import subprocess
+    import tempfile
+
+    from framework_cli.review.evals import load_fixtures, realize_cached
+
+    base = Path(tempfile.mkdtemp(prefix="fixture-realize-"))
+    cache: dict = {}
+    failures: list[str] = []
+    for fx in load_fixtures(_FIXTURES_ROOT):
+        try:
+            realize_cached(fx, cache, base)
+        except subprocess.CalledProcessError:
+            failures.append(f"{fx.agent}/{fx.kind}/{fx.name}")
+    assert not failures, (
+        "fixtures drifted from the template (change.patch no longer applies) — "
+        f"re-anchor: {failures}"
+    )

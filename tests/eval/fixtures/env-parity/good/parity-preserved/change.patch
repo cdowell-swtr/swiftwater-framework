@@ -1,5 +1,5 @@
 diff --git a/.env.example b/.env.example
-index 27db54c..3769b19 100644
+index 15887b0..cd77164 100644
 --- a/.env.example
 +++ b/.env.example
 @@ -16,6 +16,8 @@ APP_DATABASE_URL=postgresql+psycopg://app:app@localhost:5432/app
@@ -8,11 +8,11 @@ index 27db54c..3769b19 100644
  APP_ALERT_WEBHOOK_URL=
 +# Widget service base URL (set per environment).
 +APP_WIDGET_API_URL=http://widget:9000
- # FRAMEWORK:END
- 
- # Your app's config below.
+ # --- Local dev host ports (FWK31) ---
+ # Each dev/observability service publishes on these host ports. Override any of them, or
+ # set PORT_OFFSET to shift ALL of them at once, to run a second stack alongside this one.
 diff --git a/src/demo/config/settings.py b/src/demo/config/settings.py
-index e6fb558..2140afd 100644
+index 2e74eac..948c95a 100644
 --- a/src/demo/config/settings.py
 +++ b/src/demo/config/settings.py
 @@ -19,6 +19,9 @@ class Settings(BaseSettings):

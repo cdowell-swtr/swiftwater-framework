@@ -1,14 +1,17 @@
 diff --git a/README.md b/README.md
-index de37419..77632f7 100644
+index d9eee28..9eeb11f 100644
 --- a/README.md
 +++ b/README.md
-@@ -75,3 +75,4 @@ separate, ephemeral Postgres (`postgres-test`, reset every run) for the full E2E
+@@ -105,6 +105,7 @@ separate, ephemeral Postgres (`postgres-test`, reset every run) for the full E2E
  - `GET /health` — readiness + SLO status
  - `GET /metrics` — Prometheus metrics
  - `GET /items` — example DB-backed listing (seeded data; paginated via `?limit=&offset=`)
 +- `GET /items/count` — total items in the catalogue (typed response)
+ 
+ ## Conventions
+ 
 diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
-index fa242f4..19f245e 100644
+index fa242f4..15b91b8 100644
 --- a/src/demo/routes/items.py
 +++ b/src/demo/routes/items.py
 @@ -22,6 +22,12 @@ class ItemRead(BaseModel):
@@ -24,11 +27,10 @@ index fa242f4..19f245e 100644
  @router.get("/items", response_model=list[ItemRead])
  def get_items(
      session: SessionDep,
-@@ -34,3 +40,13 @@ def get_items(
+@@ -34,3 +40,12 @@ def get_items(
      repository clamps it. FastAPI serializes the ORM objects through ItemRead.
      """
      return list_items(session, limit=limit, offset=offset)
-+
 +
 +@router.get("/items/count", response_model=ItemCount)
 +def count_items(session: SessionDep) -> ItemCount:

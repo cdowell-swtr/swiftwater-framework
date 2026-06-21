@@ -10,6 +10,16 @@ from framework_cli.integrity.manifest import Manifest
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _noop_eval_prerender(monkeypatch):
+    """eval's serial pre-render pass warms REAL template bases (~30s render). Default the
+    `prerender_base` seam to a no-op so the stub-backed eval CLI tests stay fast; the
+    real-realize regression test overrides this back to the genuine function."""
+    import framework_cli.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "prerender_base", lambda fx, c, b: None, raising=False)
+
+
 def test_new_creates_project(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["new", "My App"])
@@ -971,6 +981,64 @@ def test_eval_aborts_loudly_on_litellm_api_error(tmp_path, monkeypatch):
     assert "ABORTED" in result.output
 
 
+def test_eval_records_and_continues_on_unrealizable_fixture(tmp_path, monkeypatch):
+    """A fixture whose change.patch fails `git apply` must NOT abort the whole run:
+    eval skips it (loud warning), scores the rest, and exits 5.
+
+    Uses monkeypatched realize_cached: raises CalledProcessError for the
+    architecture/good/broken fixture, returns (tmp_path, "diff") for all others.
+    This tests the record-and-continue logic directly without render specifics.
+    """
+    import subprocess
+
+    import framework_cli.cli as cli_mod
+
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+    _make_fixture(
+        tmp_path,
+        "architecture",
+        "good",
+        "broken",
+        "--- a/zzz-nonexistent.py\n+++ b/zzz-nonexistent.py\n@@ -1 +1 @@\n-x\n+y\n",
+    )
+
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "_eval_run", lambda *a, **k: [])
+
+    def _selective_realize(fx, cache, base_dir):
+        if fx.agent == "architecture" and fx.name == "broken":
+            raise subprocess.CalledProcessError(1, "git apply")
+        return (tmp_path, "diff")
+
+    monkeypatch.setattr(cli_mod, "realize_cached", _selective_realize)
+
+    result = runner.invoke(
+        app, ["eval", "--fixtures", str(tmp_path), "--backend", "api"]
+    )
+    assert result.exit_code == 5, result.output
+    assert "FIXTURE-ERROR" in result.output
+    assert "architecture" in result.output
+    # security must still have been scored (its fixture was realizable)
+    assert "review-security" in result.output
+
+
+def test_eval_serial_scores_each_agent(tmp_path, monkeypatch):
+    """Characterization: eval scores each target agent and exits 0 when all pass.
+    Guards the _score_one_agent extraction against any behavior change."""
+    import framework_cli.cli as cli_mod
+
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+    _make_fixture(tmp_path, "architecture", "good", "g1", "+++ b/a.py\n# clean\n")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", lambda fx, c, b: (tmp_path, "diff"))
+    monkeypatch.setattr(cli_mod, "_eval_run", lambda *a, **k: [])
+    result = runner.invoke(
+        app, ["eval", "--fixtures", str(tmp_path), "--backend", "api"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "review-security" in result.output and "review-architecture" in result.output
+
+
 def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     assert (
@@ -1010,6 +1078,142 @@ def test_eval_unknown_agent_errors(monkeypatch):
     result = runner.invoke(app, ["eval", "nonsense-agent", "--backend", "api"])
     assert result.exit_code == 1
     assert "unknown review agent" in result.output
+
+
+# ---------------------------------------------------------------------------
+# --concurrency tests (FWK44-D2)
+# ---------------------------------------------------------------------------
+
+
+def test_eval_concurrency_matches_serial(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+
+    for ag in ("security", "architecture", "compliance"):
+        _make_fixture(tmp_path, ag, "good", "g1", "+++ b/a.py\n# clean\n")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", lambda fx, c, b: (tmp_path, "diff"))
+    monkeypatch.setattr(cli_mod, "_eval_run", lambda *a, **k: [])
+    serial = runner.invoke(
+        app,
+        ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "1"],
+    )
+    par = runner.invoke(
+        app,
+        ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "3"],
+    )
+    assert serial.exit_code == 0 and par.exit_code == 0, (serial.output, par.output)
+    for ag in ("review-security", "review-architecture", "review-compliance"):
+        assert ag in serial.output and ag in par.output
+
+
+def test_eval_concurrency_is_actually_parallel(tmp_path, monkeypatch):
+    import threading
+    import time
+
+    import framework_cli.cli as cli_mod
+
+    for ag in ("security", "architecture", "compliance", "performance"):
+        _make_fixture(tmp_path, ag, "good", "g1", "+++ b/a.py\n# clean\n")
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def slow_eval(*a, **k):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+        return []
+
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", lambda fx, c, b: (tmp_path, "diff"))
+    monkeypatch.setattr(cli_mod, "_eval_run", slow_eval)
+    runner.invoke(
+        app,
+        ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "4"],
+    )
+    assert peak >= 2
+
+
+def test_eval_concurrency_stops_on_exhaustion(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.backend import BackendExhausted
+
+    for ag in ("security", "architecture", "compliance"):
+        _make_fixture(tmp_path, ag, "good", "g1", "+++ b/a.py\n# clean\n")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", lambda fx, c, b: (tmp_path, "diff"))
+
+    def boom(*a, **k):
+        raise BackendExhausted("limit")
+
+    monkeypatch.setattr(cli_mod, "_eval_run", boom)
+    result = runner.invoke(
+        app,
+        ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "3"],
+    )
+    assert result.exit_code == 4, result.output
+
+
+def test_eval_real_realize_path_does_not_crash(tmp_path, monkeypatch):
+    """Regression: eval's pre-render pass + per-agent scoring must NOT both copytree the
+    same per-fixture work dir (FileExistsError). Exercises the REAL prerender_base +
+    realize_cached over a real fixture (stubs only the backend) — the integration path every
+    other eval test stubs away. Renders a real base, so it's slower than the stub tests."""
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.evals import (
+        prerender_base as real_prerender,
+        realize_cached as real_realize,
+    )
+
+    monkeypatch.setattr(
+        cli_mod, "prerender_base", real_prerender
+    )  # override autouse no-op
+    monkeypatch.setattr(cli_mod, "realize_cached", real_realize)
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "_eval_run", lambda *a, **k: [])
+
+    result = runner.invoke(
+        app,
+        [
+            "eval",
+            "security",
+            "--fixtures",
+            "tests/eval/fixtures",
+            "--backend",
+            "api",
+            "--concurrency",
+            "1",
+        ],
+    )
+    # The command must COMPLETE (no FileExistsError traceback). Any clean exit is fine
+    # (0/1/5 depending on scoring); a crash would be a nonzero exit with a traceback.
+    assert result.exit_code in (0, 1, 5), result.output
+    assert "review-security" in result.output
+
+
+def test_eval_concurrency_surfaces_unexpected_worker_error(tmp_path, monkeypatch):
+    """An unexpected exception in a worker must NOT be swallowed into a false-green run —
+    it propagates to a non-zero exit just like the serial path (catch-all in _task)."""
+    import framework_cli.cli as cli_mod
+
+    for ag in ("security", "architecture", "compliance"):
+        _make_fixture(tmp_path, ag, "good", "g1", "+++ b/a.py\n# clean\n")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", lambda fx, c, b: (tmp_path, "diff"))
+
+    def boom(*a, **k):
+        raise ValueError("unexpected scoring bug")
+
+    monkeypatch.setattr(cli_mod, "_eval_run", boom)
+    result = runner.invoke(
+        app,
+        ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "3"],
+    )
+    assert result.exit_code != 0, result.output  # NOT a false green
 
 
 # ---------------------------------------------------------------------------
