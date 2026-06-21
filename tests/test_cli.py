@@ -1012,6 +1012,23 @@ def test_eval_records_and_continues_on_unrealizable_fixture(tmp_path, monkeypatc
     assert "review-security" in result.output
 
 
+def test_eval_serial_scores_each_agent(tmp_path, monkeypatch):
+    """Characterization: eval scores each target agent and exits 0 when all pass.
+    Guards the _score_one_agent extraction against any behavior change."""
+    import framework_cli.cli as cli_mod
+
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+    _make_fixture(tmp_path, "architecture", "good", "g1", "+++ b/a.py\n# clean\n")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", lambda fx, c, b: (tmp_path, "diff"))
+    monkeypatch.setattr(cli_mod, "_eval_run", lambda *a, **k: [])
+    result = runner.invoke(
+        app, ["eval", "--fixtures", str(tmp_path), "--backend", "api"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "review-security" in result.output and "review-architecture" in result.output
+
+
 def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     assert (

@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import typer
@@ -1026,6 +1027,92 @@ def review_agents(
     typer.echo(json.dumps(active_agents(resolved, batteries)))
 
 
+# ---------------------------------------------------------------------------
+# eval helpers
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _AgentEvalResult:
+    agent: str
+    line: str  # the per-agent result/echo line
+    passed: bool
+    unrealizable: list[str] = field(default_factory=list)
+    no_fixtures: bool = False
+
+
+def _score_one_agent(
+    a: str,
+    *,
+    by_agent: dict,
+    thresholds: dict,
+    repeat: int,
+    backend: object,
+    findings_out: str,
+    combo_cache: dict,
+    base_dir: object,
+) -> "_AgentEvalResult":
+    """Score one agent over its fixtures, returning an _AgentEvalResult.
+
+    Raises BackendExhausted / openai.APIError to the caller (which handles
+    stop-and-exit).  Catches per-fixture CalledProcessError and per-repeat
+    FindingsParseError internally.
+    """
+    from framework_cli.review.evals import (
+        DEFAULT_THRESHOLDS,
+        flags,
+        score_agent,
+    )
+    from framework_cli.review.findings import FindingsParseError
+
+    spec = get_agent(a)
+    fx_list = by_agent.get(a, [])
+    if not fx_list:
+        return _AgentEvalResult(
+            a, f"{spec.name}    no fixtures (skipped)", True, no_fixtures=True
+        )
+
+    bad_rates: list[float] = []
+    good_rates: list[float] = []
+    unrealizable: list[str] = []
+
+    for fx in fx_list:
+        try:
+            rroot, rdiff = realize_cached(fx, combo_cache, base_dir)
+        except subprocess.CalledProcessError:
+            unrealizable.append(f"{a} {fx.kind}/{fx.name}")
+            continue
+        hits = 0
+        for i in range(repeat):
+            report: dict | None = {} if findings_out else None
+            try:
+                found = _eval_run(rdiff, rroot, spec, report=report, backend=backend)
+            except FindingsParseError as exc:
+                typer.echo(
+                    f"\neval: WARNING {spec.name} {fx.kind}/{fx.name} r{i} — "
+                    f"unparseable agent response ({exc}); scoring as no findings"
+                )
+                if report is not None:
+                    report["parse_error"] = str(exc)
+                found = []
+            if findings_out:
+                _write_findings(Path(findings_out), fx, i, found, report or {})
+            blocked = (
+                flags(found, spec, file=fx.seeded_file)
+                if fx.kind == "bad"
+                else flags(found, spec)
+            )
+            hits += 1 if blocked else 0
+        (bad_rates if fx.kind == "bad" else good_rates).append(hits / repeat)
+
+    score = score_agent(a, bad_rates, good_rates, thresholds.get(a, DEFAULT_THRESHOLDS))
+    status = "PASS" if score.passed else f"FAIL ({score.reason})"
+    line = (
+        f"{spec.name}    recall {score.recall:.2f}  fp {score.fp_rate:.2f}    {status}"
+    )
+    return _AgentEvalResult(a, line, score.passed, unrealizable=unrealizable)
+
+
 @app.command(name="eval")
 def eval_agents(
     agent: str = typer.Argument(
@@ -1064,13 +1151,7 @@ def eval_agents(
     ``--findings-out``); only an ``openai.APIError`` (litellm's error base) aborts
     the whole run.
     """
-    from framework_cli.review.evals import (
-        DEFAULT_THRESHOLDS,
-        flags,
-        load_fixtures,
-        load_thresholds,
-        score_agent,
-    )
+    from framework_cli.review.evals import load_fixtures, load_thresholds
 
     res = _resolve_review_backend(flag=backend or None, key_env=EVAL_KEY_ENV)
     if res.backend is None:  # type: ignore[attr-defined]
@@ -1094,7 +1175,6 @@ def eval_agents(
     import openai
 
     from framework_cli.review.backend import BackendExhausted
-    from framework_cli.review.findings import FindingsParseError
 
     _backend = _make_backend(res.backend, EVAL_KEY_ENV)  # type: ignore[attr-defined]
     root = Path(fixtures)
@@ -1116,97 +1196,63 @@ def eval_agents(
     unrealizable: list[str] = []
     for a in targets:
         try:
-            spec = get_agent(a)
+            res = _score_one_agent(
+                a,
+                by_agent=by_agent,
+                thresholds=thresholds,
+                repeat=repeat,
+                backend=_backend,
+                findings_out=findings_out,
+                combo_cache=_combo_cache,
+                base_dir=_base_dir,
+            )
         except KeyError as exc:
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(1) from exc
-        fx_list = by_agent.get(a, [])
-        if not fx_list:
+        except BackendExhausted as exc:
+            # Subscription/session limit (free subagent backend). Stop cleanly —
+            # findings written so far are preserved; re-run after the reset to
+            # continue (a per-agent driver can skip already-scored agents).
+            agent_name = get_agent(a).name
+            typer.echo(
+                f"\neval: STOPPED at {agent_name} — backend exhausted: {exc}",
+                err=True,
+            )
+            typer.echo(
+                "Findings written so far are preserved; re-run after the limit "
+                "resets to continue.",
+                err=True,
+            )
+            raise typer.Exit(4) from exc
+        except openai.APIError as exc:
+            # The API path routes through litellm, whose error types all derive
+            # from openai.APIError (the real common ancestor — litellm.exceptions
+            # .APIError is only a sibling). Catch that so a non-rate-limit API
+            # failure (auth, 5xx, connection, bad request) aborts cleanly instead
+            # of crashing uncaught. litellm RateLimitError already arrives as
+            # BackendExhausted (handled above).
+            agent_name = get_agent(a).name
+            typer.echo(
+                f"\neval: ABORTED at {agent_name} — API error "
+                f"({type(exc).__name__}): {exc}",
+                err=True,
+            )
+            typer.echo(
+                "An API/credit/rate-limit failure is not a non-detection; "
+                "scores so far are unreliable. Resolve the API issue and re-run.",
+                err=True,
+            )
+            raise typer.Exit(3) from exc
+        for label in res.unrealizable:
+            typer.echo(
+                f"eval: FIXTURE-ERROR {label} — could not realize "
+                f"(git apply failed; fixture likely drifted from the template); skipping"
+            )
+        typer.echo(res.line)
+        unrealizable.extend(res.unrealizable)
+        if res.no_fixtures:
             missing.append(a)
-            typer.echo(f"{spec.name}    no fixtures (skipped)")
-            continue
-        bad_rates: list[float] = []
-        good_rates: list[float] = []
-        for fx in fx_list:
-            try:
-                rroot, rdiff = realize_cached(fx, _combo_cache, _base_dir)
-            except subprocess.CalledProcessError:
-                label = f"{a} {fx.kind}/{fx.name}"
-                typer.echo(
-                    f"eval: FIXTURE-ERROR {label} — could not realize "
-                    f"(git apply failed; fixture likely drifted from the template); skipping"
-                )
-                unrealizable.append(label)
-                continue
-            hits = 0
-            for i in range(repeat):
-                report: dict | None = {} if findings_out else None
-                try:
-                    found = _eval_run(
-                        rdiff, rroot, spec, report=report, backend=_backend
-                    )
-                except BackendExhausted as exc:
-                    # Subscription/session limit (free subagent backend). Stop cleanly —
-                    # findings written so far are preserved; re-run after the reset to
-                    # continue (a per-agent driver can skip already-scored agents).
-                    typer.echo(
-                        f"\neval: STOPPED at {spec.name} — backend exhausted: {exc}",
-                        err=True,
-                    )
-                    typer.echo(
-                        "Findings written so far are preserved; re-run after the limit "
-                        "resets to continue.",
-                        err=True,
-                    )
-                    raise typer.Exit(4) from exc
-                except openai.APIError as exc:
-                    # The API path routes through litellm, whose error types all derive
-                    # from openai.APIError (the real common ancestor — litellm.exceptions
-                    # .APIError is only a sibling). Catch that so a non-rate-limit API
-                    # failure (auth, 5xx, connection, bad request) aborts cleanly instead
-                    # of crashing uncaught. litellm RateLimitError already arrives as
-                    # BackendExhausted (handled above).
-                    typer.echo(
-                        f"\neval: ABORTED at {spec.name} — API error "
-                        f"({type(exc).__name__}): {exc}",
-                        err=True,
-                    )
-                    typer.echo(
-                        "An API/credit/rate-limit failure is not a non-detection; "
-                        "scores so far are unreliable. Resolve the API issue and re-run.",
-                        err=True,
-                    )
-                    raise typer.Exit(3) from exc
-                except FindingsParseError as exc:
-                    # A malformed agent response is the agent's fault, not an
-                    # infra failure: score this single run as no findings (a miss
-                    # on a bad fixture) and continue — never crash the whole run.
-                    typer.echo(
-                        f"\neval: WARNING {spec.name} {fx.kind}/{fx.name} r{i} — "
-                        f"unparseable agent response ({exc}); scoring as no findings"
-                    )
-                    # Mark the persisted record so eval-analyze can tell a parse
-                    # failure apart from a genuine clean run (both have 0 findings).
-                    if report is not None:
-                        report["parse_error"] = str(exc)
-                    found = []
-                if findings_out:
-                    _write_findings(Path(findings_out), fx, i, found, report or {})
-                blocked = (
-                    flags(found, spec, file=fx.seeded_file)
-                    if fx.kind == "bad"
-                    else flags(found, spec)
-                )
-                hits += 1 if blocked else 0
-            (bad_rates if fx.kind == "bad" else good_rates).append(hits / repeat)
-        score = score_agent(
-            a, bad_rates, good_rates, thresholds.get(a, DEFAULT_THRESHOLDS)
-        )
-        status = "PASS" if score.passed else f"FAIL ({score.reason})"
-        typer.echo(
-            f"{spec.name}    recall {score.recall:.2f}  fp {score.fp_rate:.2f}    {status}"
-        )
-        if not score.passed:
+        elif not res.passed:
             failing += 1
 
     if unrealizable:
