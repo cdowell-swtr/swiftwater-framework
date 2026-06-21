@@ -1356,6 +1356,11 @@ def eval_agents(
         summary += f" · {len(unrealizable)} unrealizable"
     typer.echo(summary)
     coverage_fail = bool(missing) and require_fixtures
+    # Exit 5 (drifted fixtures) takes priority over a threshold FAIL (1): a partially
+    # un-realizable harness is the more urgent "fix me first" signal. The FAIL is NOT
+    # hidden — `failing` is still tallied and printed in the summary above; both codes are
+    # non-zero so any binary CI gate still fails. (A consumer branching on the exact code
+    # should treat 5 as "harness drift", not "all scorable agents passed".)
     if unrealizable:
         raise typer.Exit(5)
     raise typer.Exit(1 if failing or coverage_fail else 0)
