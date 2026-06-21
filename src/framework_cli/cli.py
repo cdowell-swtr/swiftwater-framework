@@ -1143,6 +1143,13 @@ def eval_agents(
         help="Model backend: 'api' (paid) or 'subagent' (free claude -p). "
         "Default None: resolves from FRAMEWORK_REVIEW_BACKEND env or review.toml config.",
     ),
+    concurrency: int = typer.Option(
+        4,
+        "--concurrency",
+        min=1,
+        max=16,
+        help="Parallel per-agent scoring (1 = serial). The subagent backend has no backoff; keep modest.",
+    ),
 ) -> None:
     """Run golden fixtures through the review agents and score recall/precision (spec §20).
 
@@ -1194,55 +1201,129 @@ def eval_agents(
     failing = 0
     missing: list[str] = []
     unrealizable: list[str] = []
+
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, wait as _futures_wait
+
+    def _echo_exhausted(agent_name: str, exc: object) -> None:
+        typer.echo(
+            f"\neval: STOPPED at {agent_name} — backend exhausted: {exc}",
+            err=True,
+        )
+        typer.echo(
+            "Findings written so far are preserved; re-run after the limit "
+            "resets to continue.",
+            err=True,
+        )
+
+    def _echo_api_error(agent_name: str, exc: object) -> None:
+        typer.echo(
+            f"\neval: ABORTED at {agent_name} — API error "
+            f"({type(exc).__name__}): {exc}",
+            err=True,
+        )
+        typer.echo(
+            "An API/credit/rate-limit failure is not a non-detection; "
+            "scores so far are unreliable. Resolve the API issue and re-run.",
+            err=True,
+        )
+
+    # Pre-render bases serially so the thread pool never races on _combo_cache population.
     for a in targets:
-        try:
-            res = _score_one_agent(
-                a,
-                by_agent=by_agent,
-                thresholds=thresholds,
-                repeat=repeat,
-                backend=_backend,
-                findings_out=findings_out,
-                combo_cache=_combo_cache,
-                base_dir=_base_dir,
-            )
-        except KeyError as exc:
-            typer.echo(f"Error: {exc}", err=True)
-            raise typer.Exit(1) from exc
-        except BackendExhausted as exc:
-            # Subscription/session limit (free subagent backend). Stop cleanly —
-            # findings written so far are preserved; re-run after the reset to
-            # continue (a per-agent driver can skip already-scored agents).
-            agent_name = get_agent(a).name
-            typer.echo(
-                f"\neval: STOPPED at {agent_name} — backend exhausted: {exc}",
-                err=True,
-            )
-            typer.echo(
-                "Findings written so far are preserved; re-run after the limit "
-                "resets to continue.",
-                err=True,
-            )
-            raise typer.Exit(4) from exc
-        except openai.APIError as exc:
-            # The API path routes through litellm, whose error types all derive
-            # from openai.APIError (the real common ancestor — litellm.exceptions
-            # .APIError is only a sibling). Catch that so a non-rate-limit API
-            # failure (auth, 5xx, connection, bad request) aborts cleanly instead
-            # of crashing uncaught. litellm RateLimitError already arrives as
-            # BackendExhausted (handled above).
-            agent_name = get_agent(a).name
-            typer.echo(
-                f"\neval: ABORTED at {agent_name} — API error "
-                f"({type(exc).__name__}): {exc}",
-                err=True,
-            )
-            typer.echo(
-                "An API/credit/rate-limit failure is not a non-detection; "
-                "scores so far are unreliable. Resolve the API issue and re-run.",
-                err=True,
-            )
-            raise typer.Exit(3) from exc
+        for fx in by_agent.get(a, []):
+            try:
+                realize_cached(fx, _combo_cache, _base_dir)
+            except subprocess.CalledProcessError:
+                pass  # recorded per-agent during scoring
+
+    def _run(a: str) -> "_AgentEvalResult":
+        return _score_one_agent(
+            a,
+            by_agent=by_agent,
+            thresholds=thresholds,
+            repeat=repeat,
+            backend=_backend,
+            findings_out=findings_out,
+            combo_cache=_combo_cache,
+            base_dir=_base_dir,
+        )
+
+    results: dict[str, _AgentEvalResult] = {}
+    if concurrency <= 1 or len(targets) <= 1:
+        # Serial path — preserves original stop-on-error semantics.
+        for a in targets:
+            try:
+                results[a] = _run(a)
+            except KeyError as exc:
+                typer.echo(f"Error: {exc}", err=True)
+                raise typer.Exit(1) from exc
+            except BackendExhausted as exc:
+                # Subscription/session limit (free subagent backend). Stop cleanly —
+                # findings written so far are preserved; re-run after the reset to
+                # continue (a per-agent driver can skip already-scored agents).
+                _echo_exhausted(get_agent(a).name, exc)
+                raise typer.Exit(4) from exc
+            except openai.APIError as exc:
+                # The API path routes through litellm, whose error types all derive
+                # from openai.APIError (the real common ancestor — litellm.exceptions
+                # .APIError is only a sibling). Catch that so a non-rate-limit API
+                # failure (auth, 5xx, connection, bad request) aborts cleanly instead
+                # of crashing uncaught. litellm RateLimitError already arrives as
+                # BackendExhausted (handled above).
+                _echo_api_error(get_agent(a).name, exc)
+                raise typer.Exit(3) from exc
+    else:
+        # Concurrent path — thread pool over per-agent scoring.
+        # _combo_cache is read-only here (warmed by the pre-render loop above).
+        # findings_out writes are per-(agent,fixture,repeat) files — already independent.
+        stop = threading.Event()
+        err: list[tuple] = []
+        lock = threading.Lock()
+
+        def _task(a: str) -> None:
+            if stop.is_set():
+                return
+            try:
+                r = _run(a)
+            except (BackendExhausted, openai.APIError, KeyError) as exc:
+                stop.set()
+                with lock:
+                    err.append((a, exc))
+                return
+            except Exception as exc:  # noqa: BLE001 — a worker exception must NOT vanish:
+                # `wait()` never calls `.result()`, so without this an unexpected crash
+                # would be silently swallowed and the run report a false green (the serial
+                # path lets it propagate to Exit 1). Record it so the `if err:` tail re-raises.
+                stop.set()
+                with lock:
+                    err.append((a, exc))
+                return
+            with lock:
+                results[a] = r
+
+        with ThreadPoolExecutor(max_workers=concurrency) as ex:
+            _futures_wait([ex.submit(_task, a) for a in targets])
+
+        if err:
+            # First worker to fail wins (scheduling order, not targets order). All of
+            # BackendExhausted/APIError/unexpected are "stop and re-run" verdicts, so the
+            # exact one re-raised on a mixed-failure run is advisory, not load-bearing.
+            a_err, exc_err = err[0]
+            nm = get_agent(a_err).name
+            if isinstance(exc_err, BackendExhausted):
+                _echo_exhausted(nm, exc_err)
+                raise typer.Exit(4) from exc_err
+            if isinstance(exc_err, openai.APIError):
+                _echo_api_error(nm, exc_err)
+                raise typer.Exit(3) from exc_err
+            typer.echo(f"Error: {exc_err}", err=True)
+            raise typer.Exit(1) from exc_err
+
+    # Echo + tally in stable target order.
+    for a in targets:
+        res = results.get(a)
+        if res is None:
+            continue
         for label in res.unrealizable:
             typer.echo(
                 f"eval: FIXTURE-ERROR {label} — could not realize "

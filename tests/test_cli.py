@@ -1071,6 +1071,105 @@ def test_eval_unknown_agent_errors(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# --concurrency tests (FWK44-D2)
+# ---------------------------------------------------------------------------
+
+
+def test_eval_concurrency_matches_serial(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+
+    for ag in ("security", "architecture", "compliance"):
+        _make_fixture(tmp_path, ag, "good", "g1", "+++ b/a.py\n# clean\n")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", lambda fx, c, b: (tmp_path, "diff"))
+    monkeypatch.setattr(cli_mod, "_eval_run", lambda *a, **k: [])
+    serial = runner.invoke(
+        app,
+        ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "1"],
+    )
+    par = runner.invoke(
+        app,
+        ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "3"],
+    )
+    assert serial.exit_code == 0 and par.exit_code == 0, (serial.output, par.output)
+    for ag in ("review-security", "review-architecture", "review-compliance"):
+        assert ag in serial.output and ag in par.output
+
+
+def test_eval_concurrency_is_actually_parallel(tmp_path, monkeypatch):
+    import threading
+    import time
+
+    import framework_cli.cli as cli_mod
+
+    for ag in ("security", "architecture", "compliance", "performance"):
+        _make_fixture(tmp_path, ag, "good", "g1", "+++ b/a.py\n# clean\n")
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def slow_eval(*a, **k):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+        return []
+
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", lambda fx, c, b: (tmp_path, "diff"))
+    monkeypatch.setattr(cli_mod, "_eval_run", slow_eval)
+    runner.invoke(
+        app,
+        ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "4"],
+    )
+    assert peak >= 2
+
+
+def test_eval_concurrency_stops_on_exhaustion(tmp_path, monkeypatch):
+    import framework_cli.cli as cli_mod
+    from framework_cli.review.backend import BackendExhausted
+
+    for ag in ("security", "architecture", "compliance"):
+        _make_fixture(tmp_path, ag, "good", "g1", "+++ b/a.py\n# clean\n")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", lambda fx, c, b: (tmp_path, "diff"))
+
+    def boom(*a, **k):
+        raise BackendExhausted("limit")
+
+    monkeypatch.setattr(cli_mod, "_eval_run", boom)
+    result = runner.invoke(
+        app,
+        ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "3"],
+    )
+    assert result.exit_code == 4, result.output
+
+
+def test_eval_concurrency_surfaces_unexpected_worker_error(tmp_path, monkeypatch):
+    """An unexpected exception in a worker must NOT be swallowed into a false-green run —
+    it propagates to a non-zero exit just like the serial path (catch-all in _task)."""
+    import framework_cli.cli as cli_mod
+
+    for ag in ("security", "architecture", "compliance"):
+        _make_fixture(tmp_path, ag, "good", "g1", "+++ b/a.py\n# clean\n")
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "realize_cached", lambda fx, c, b: (tmp_path, "diff"))
+
+    def boom(*a, **k):
+        raise ValueError("unexpected scoring bug")
+
+    monkeypatch.setattr(cli_mod, "_eval_run", boom)
+    result = runner.invoke(
+        app,
+        ["eval", "--fixtures", str(tmp_path), "--backend", "api", "--concurrency", "3"],
+    )
+    assert result.exit_code != 0, result.output  # NOT a false green
+
+
+# ---------------------------------------------------------------------------
 # --backend flag tests
 # ---------------------------------------------------------------------------
 
