@@ -1113,6 +1113,7 @@ def eval_agents(
     targets = [agent] if agent else agent_names()
     failing = 0
     missing: list[str] = []
+    unrealizable: list[str] = []
     for a in targets:
         try:
             spec = get_agent(a)
@@ -1127,7 +1128,16 @@ def eval_agents(
         bad_rates: list[float] = []
         good_rates: list[float] = []
         for fx in fx_list:
-            rroot, rdiff = realize_cached(fx, _combo_cache, _base_dir)
+            try:
+                rroot, rdiff = realize_cached(fx, _combo_cache, _base_dir)
+            except subprocess.CalledProcessError:
+                label = f"{a} {fx.kind}/{fx.name}"
+                typer.echo(
+                    f"eval: FIXTURE-ERROR {label} — could not realize "
+                    f"(git apply failed; fixture likely drifted from the template); skipping"
+                )
+                unrealizable.append(label)
+                continue
             hits = 0
             for i in range(repeat):
                 report: dict | None = {} if findings_out else None
@@ -1199,11 +1209,20 @@ def eval_agents(
         if not score.passed:
             failing += 1
 
+    if unrealizable:
+        typer.echo(
+            f"eval: {len(unrealizable)} fixture(s) could not be realized "
+            f"(drifted from the template): {', '.join(unrealizable)}"
+        )
     summary = f"{len(targets)} agent(s) · {failing} failing"
     if missing:
         summary += f" · {len(missing)} without fixtures"
+    if unrealizable:
+        summary += f" · {len(unrealizable)} unrealizable"
     typer.echo(summary)
     coverage_fail = bool(missing) and require_fixtures
+    if unrealizable:
+        raise typer.Exit(5)
     raise typer.Exit(1 if failing or coverage_fail else 0)
 
 

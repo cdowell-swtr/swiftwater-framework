@@ -971,6 +971,47 @@ def test_eval_aborts_loudly_on_litellm_api_error(tmp_path, monkeypatch):
     assert "ABORTED" in result.output
 
 
+def test_eval_records_and_continues_on_unrealizable_fixture(tmp_path, monkeypatch):
+    """A fixture whose change.patch fails `git apply` must NOT abort the whole run:
+    eval skips it (loud warning), scores the rest, and exits 5.
+
+    Uses monkeypatched realize_cached: raises CalledProcessError for the
+    architecture/good/broken fixture, returns (tmp_path, "diff") for all others.
+    This tests the record-and-continue logic directly without render specifics.
+    """
+    import subprocess
+
+    import framework_cli.cli as cli_mod
+
+    _make_fixture(tmp_path, "security", "good", "g1", "+++ b/a.py\n# clean\n")
+    _make_fixture(
+        tmp_path,
+        "architecture",
+        "good",
+        "broken",
+        "--- a/zzz-nonexistent.py\n+++ b/zzz-nonexistent.py\n@@ -1 +1 @@\n-x\n+y\n",
+    )
+
+    monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
+    monkeypatch.setattr(cli_mod, "_eval_run", lambda *a, **k: [])
+
+    def _selective_realize(fx, cache, base_dir):
+        if fx.agent == "architecture" and fx.name == "broken":
+            raise subprocess.CalledProcessError(1, "git apply")
+        return (tmp_path, "diff")
+
+    monkeypatch.setattr(cli_mod, "realize_cached", _selective_realize)
+
+    result = runner.invoke(
+        app, ["eval", "--fixtures", str(tmp_path), "--backend", "api"]
+    )
+    assert result.exit_code == 5, result.output
+    assert "FIXTURE-ERROR" in result.output
+    assert "architecture" in result.output
+    # security must still have been scored (its fixture was realizable)
+    assert "review-security" in result.output
+
+
 def test_eval_no_fixtures_skipped_unless_required(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_EVAL_API_KEY", "x")
     assert (
