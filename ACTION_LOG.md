@@ -2579,3 +2579,24 @@ contracts (un-park published-sdk + Pact + shared-schema), shared-auth service-vs
 enablers (flags + api-versioning + Pact + per-sibling CI). Added a dedicated section + DAG root + a
 Meridian-response question to the prioritization draft so Meridian's seed is front-and-centre in what they
 respond to. Docs/plan only → no code/release.
+
+#### #0209 · inserted · FWK56 reframe + FWK57 · 2026-06-22
+**Meridian's local-builds response received + integrated (one pass).** Recorded verbatim at
+`docs/superpowers/assessments/2026-06-22-meridian-local-builds-response.md`. Held the
+evidence-vs-advocacy line (fold their battle-tested facts; weigh, don't obey, their advocacy — same
+owner of both repos is exactly when a framework gets colonized). Operator decisions: (1) accept
+product-vs-substrate correction; (2) accept de-fork reframe + their generic/specific boundary, but
+epistemic-governance stays Meridian-local (not generalized); (3a) yes to a decomposition-discipline
+brainstorm BUT purpose-general (Meridian's framing is shaped by its purpose — don't push Meridian onto
+non-Meridian consumers); (3b) reference not absorb Meridian's instrument. **FWK56 reframed:** two
+categories — shared SUBSTRATE (identity/tenancy/obs — shared, not composed) vs product-siblings
+(shape-axis applies here only); substrate batteries are a DE-FORK target (extract generic core to
+Meridian's validated shape; their impl = reference + validation oracle); generic = identity/session/
+tenant-provisioning/physical-routing + authz-spine mechanism; Meridian-local = RBAC policy +
+epistemic-governance; colonization guard (multitenant-consumer-shaped, not Meridian-shaped); +3 DAG
+edges off tenant-physical-routing (connection budgeting, plane-aware migrate/deploy/rollback,
+secrets-backing — MDN47/59). **FWK57 added:** decomposition discipline (decision-contracts vs Pact
+interface-contracts; boundary-erosion detection; decomposition-precedes-parallelism), purpose-general,
+references Meridian's EDR/decision-graph as one instantiation, not absorbed. Re-weights folded into the
+draft (secrets earlier, api-versioning Wave-1, audit-log split, agents reserve-trending, external-id
+stays). Docs/plan only → no code/release.
