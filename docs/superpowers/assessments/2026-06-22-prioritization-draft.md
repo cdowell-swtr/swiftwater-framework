@@ -32,6 +32,7 @@ identity-principal (shared-auth) ─┬─ authz-spine ─── api-keys (also 
                                   ├─ agent-tool-permission
                                   └─ frontend-auth-storage
 tenant-data-model ────────────────── (tenant cluster above; tenant_id is the base-model precondition)
+tenant-physical-routing ──────────── per-tenant-connection-budget · plane-aware-migrate/deploy/rollback · secrets-backing  [Meridian-paid: MDN47/59]
 secrets-backing ──────────────────── api-keys · field-encryption
 money ────────────────────────────── ledger(parked)
 durable-agent-state ──────────────── human-approval(HITL) · genai-trace · agent-eval · agent-memory
@@ -48,6 +49,10 @@ billing needs multitenancy+audit-log+authz+webhook-inbox. **(Meridian: add edges
 ---
 
 ## Composability / sibling-products — the cross-cutting concern (Meridian's seed)
+
+> ⚠ **Reframed by Meridian's response (2026-06-22)** — the substrate-vs-product correction + the
+> de-fork target in "Meridian responded — what changed" (below) supersede this section's table: the
+> shape-axis applies to product-*siblings*, NOT to substrate (identity / tenancy / observability).
 
 This is the architectural posture that **started this thread** ("sub-products as isolated composable
 components + more parallel building streams"), and the retrofit scan structurally **under-weighted**
@@ -69,6 +74,49 @@ enablers ride on the contracts. Shared-auth's service-vs-library choice *is itse
 (auth-as-service = a headless service sibling; auth-as-library = a library-shape sibling). Tracked as
 **FWK56** (promoted from Horizon); gets its own brainstorm — the paused shape-axis → auth-as-service →
 auth-as-library sequence.
+
+---
+
+## Meridian responded — what changed (2026-06-22)
+
+Meridian's full response: `2026-06-22-meridian-local-builds-response.md`. The deltas, integrated:
+
+**Product vs substrate (corrects the Composability table above).** Identity / tenant-provisioning /
+observability are **shared SUBSTRATE** — the plane every sibling sits on; you *share* it (one
+obs/Traefik/network/store), you don't *compose* it as a peer. The **shape axis** applies only to genuine
+**product-siblings** (Meridian's Judgment engine = service · ingestion = worker · frontend = web), NOT to
+substrate. Treating substrate as a sibling is how you get a distributed monolith.
+
+**De-fork, not scaffold-early.** Meridian already built identity/authz/tenant (DONE, ~2-day agent-dev),
+so the substrate batteries' target is **extract the generic core to Meridian's validated shape so they
+can delete their fork** (their impl = reference + a ready validation oracle). **Generic core** (battery):
+identity · session · tenant-provisioning · physical-routing (`resolve_tenant_dsn`) + the authz-spine
+*mechanism* (default-deny chokepoint). **Stays Meridian-local, NOT generalized:** their specific RBAC
+policy + epistemic-governance compartmentalization. Guard: the battery ships
+**multitenant-consumer-shaped, not Meridian-shaped**.
+
+**Three DAG edges added** (off `tenant-physical-routing` — Meridian paid all three): per-tenant
+connection/pool budgeting (DB-per-tenant ≠ connection isolation; MDN47) · plane-aware
+migrate/deploy/rollback (single `alembic upgrade head` is wrong with control+tenant DBs; MDN59/46) ·
+→ secrets-backing (per-tenant DSNs carry creds).
+
+**Re-weights:** secrets-backing earlier (per-tenant DSN creds) · api-versioning confirmed Wave-1
+one-liner · audit-log **split** (scoped-authz-audit cheap-early / general activity-trail / retention-GDPR)
+· agents (`durable-state` + `genai-trace` + `agent-eval`) reserve-but-trending-foundational (Meridian's
+layered-judge panel + traceability sidecar) · i18n out / frontend deferred-but-coming · `external-id`
+**stays** Wave-1 (base-model gap; Meridian routing around it with opaque ids ≠ "drop it").
+
+**Meridian's near-term shape map:** Judgment engine → service · EDR kernel → library · agentic ingestion
+→ worker (later) · frontend → web (later) · identity/tenancy/obs → **shared substrate (NOT siblings)**.
+shared-auth lean: **library over the canonical store** (avoids a network hop on every 401/404/403 chain).
+
+**New concern — FWK57 (decomposition discipline), purpose-general.** Meridian's deepest point: we shipped
+composition *mechanics* but not the *discipline* of decomposition (a principle for
+sibling-vs-substrate-vs-tangle; *decision*-contracts vs Pact's *interface*-contracts; boundary-erosion
+detection). True generally — *decomposition precedes parallelism*; *the binding constraint is
+decision-stability, not build-order*. Spun out as FWK57, **referencing** Meridian's instrument (EDR /
+decision-graph / product-identity lens) as one instantiation shaped by their epistemic-governance
+*purpose* — **not absorbed**; a different purpose may derive different principles.
 
 ---
 
