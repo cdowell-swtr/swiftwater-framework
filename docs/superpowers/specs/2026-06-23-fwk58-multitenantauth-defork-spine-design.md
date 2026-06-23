@@ -209,8 +209,11 @@ All paths under `src/framework_cli/template/`, battery-conditional on `multitena
   `TenantRoleAssignment` (CHECK `role_domain='tenant'` + composite FK), `PlatformRoleAssignment`,
   **`ResourceRoleAssignment`** (`membership_id` + opaque `resource_id` + role; CHECK
   `role_domain='resource'` + composite FK), `AuthzEvent` (append-only grant/revoke audit). `tenant`:
-  `Tenant` (registry; opaque `dsn`; `status` provisioning→active→suspended; `tenant.status` CHECK —
-  MDN48 cheap item), `TenantMembership`. Domain set: `role.domain ∈ {tenant, platform, resource}`.
+  `Tenant` (registry — **opaque immutable `id`** = PK/routing/per-tenant-DB-name key, decoupled from a
+  **mutable DNS-safe `slug`** = URL/subdomain label; opaque `dsn`; `status` provisioning→active→suspended
+  + CHECK), `TenantSlugHistory` (retired slug → tenant, with a `reserved_until` cooling window for 301s +
+  anti-squat — MDN registry-shape addendum 2026-06-23), `TenantMembership` (keys on the opaque `id`).
+  Domain set: `role.domain ∈ {tenant, platform, resource}`.
 - **Service layer** — authn: signup-founder, login (verify + rehash-on-login), logout, invite/accept.
   authz: `assign/revoke/change_role`, `add/remove_membership`, `add_platform_role`,
   `assign/revoke_resource_role`; the ≥1-admin invariant; `AuthzEvent` audit with idempotent-no-phantom
@@ -367,6 +370,17 @@ output. Plus:
 - **MDN48 hardening (deferred half)** — obs/SLO on the control hot path; `authz_event` FK-ondelete +
   GDPR-erasure + retention indexes. (The cheap half — `tenant.status` CHECK, cross-domain
   `role_permission` enforcement — is folded into Phase 1.)
+- **Meridian's existing-control-DB adoption migration (sec-review OPS-F2 → Meridian co-design)** — the
+  battery ships generic separate-control-DB *support* (the target DB must pre-exist), but migrating
+  Meridian's *populated* fork control DB onto the battery schema (`product`→`resource`, opaque-`id`/`slug`
+  split, `alembic stamp` onto the named version table) is a Meridian-specific data migration, co-designed
+  at adoption — not baked into the battery (colonization guard). The URL-uses-slug + subdomain resolution
+  + 301 behavior pairs with the multi-host work (Phase 2); Phase 1 ships the decoupled model + registry.
+
+> **Review method (per Meridian's adversarial-security-review):** Phase 1 was hardened by a Layer-1
+> design panel — security + authZ (the §security-review ledger in the plan) + data-model/migrations +
+> ops/deploy + plan-quality (the §Layer-1 Hardening). Pre-merge runs the Layer-2 stance×focus attacker
+> matrix (plan §Layer-2 pre-merge gate). The plan's Layer-1 Hardening section governs on conflict.
 
 ---
 

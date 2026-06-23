@@ -119,6 +119,44 @@ A-F9 empty-allowlist) → resolved by the fail-closed default (Global Constraint
 
 ---
 
+## Layer-1 Hardening — design panel (data-model · ops · plan-quality) + MDN registry-shape addendum
+
+> Per Meridian's two-layer adversarial-security-review method, the first review (above) was a *partial*
+> Layer-1 panel (security + authZ). This completes Layer 1 with the **data-model/migrations**,
+> **operations/deploy**, and **plan-quality** lenses. **This hardening section GOVERNS the task bodies
+> where they conflict** (the structural blockers below are already folded into the named tasks; this is
+> the authoritative record + the remaining build-notes). Layer 2 (the stance×focus attacker matrix) runs
+> pre-merge — see "Layer-2 pre-merge gate" below.
+
+**Blockers (fixed in the named tasks):**
+| ID | Finding | Fixed in |
+|----|---------|----------|
+| PQ-C1/C2 | No `authn/service.py` in the reference — signup/login/etc. are route handlers in `routes/auth.py`; Task 13 mislabeled it a "port", cited a nonexistent test source, and depended on routes built later | Task 13 reframed = authn **routes + `cookies.py`** (run after Task 14); Task 16 narrowed to tenant/role routes + wiring + fitness |
+| OPS-F1 | The control vocabulary/role seed is never invoked at boot → fresh container boots healthy but first signup fails | Task 8 adds the control-seed step to the LOCKED `entrypoint.sh` (after both chains); Task 17 `seed.py` gets a `__main__` |
+| DM-F1 | Named version table isolates bookkeeping, NOT autogenerate → co-located `alembic --autogenerate` proposes dropping the other chain's tables | Task 7 adds `include_*` scoping to BOTH env files (incl. the previously-untasked `migrations/env.py.jinja`) + a co-located `alembic check` test |
+| OPS-F2 | Separate-control-DB cutover unspecified; Meridian's existing control DB collides on the version table | **Operator decision:** ship generic separate-DB support (target DB must pre-exist — documented); the existing-control-DB adoption migration is **deferred to Meridian co-design** (Task 12 ops note) |
+| MDN addendum | tenant registry must decouple **opaque immutable `id`** (PK/routing/DB-name key) from **mutable DNS-safe `slug`** (URL label) + slug-history/cooling — don't inherit `id == slug` | Tasks 6 (models) + 12 (registry) |
+
+**Build-notes (fold into the named task during execution):**
+- **DM-F2** Task 7 — flip the c0003 `role_domain` `server_default="product"`→`"resource"` explicitly + a positive test (insert without `role_domain` → persists `'resource'`).
+- **DM-F3** Tasks 5/7 — the domain-CHECK `'product'`-removal is a **four-site** coupled edit (model `ck_role_domain` + `ck_permission_domain` + migration c0002 ×2); the reject-`'product'` test must run against the **migration-built** schema.
+- **DM-F4** Task 19/a framework guard — assert `set(Base.metadata.tables) & set(ControlBase.metadata.tables) == set()` (co-located table-name disjointness).
+- **DM-F5** Task 11/16 — map an `IntegrityError` on the idempotent-grant race to 409/idempotent-success (else a concurrent first-time duplicate grant 500s). Non-blocking.
+- **DM-F6** Task 7 — preserve the c0002 "NEVER run downgrade with real auth data" docstring warning (irreversible data loss); echo the rollback-by-redeploy guidance in the README.
+- **OPS-F4** Tasks 2/3 — the co-located default runs two pools on one Postgres; either add `control_pool_size`/`control_max_overflow` settings (small) or document the connection budget in `.env.example`/README so an operator can size `max_connections`.
+- **OPS-F5** Task 8/health — consider a battery-conditional `/ready` control-schema probe (port Meridian's `control_schema_ready` = `SELECT 1 FROM permission LIMIT 1`) so the `APP_RUN_MIGRATIONS=false` multi-host path holds traffic until schema+seed land.
+- **OPS-F6** Task 12/README — document that in Phase 1 the tenant `dsn` is forward-compat metadata (never connected to) and `provisioning→active` is registry-state only until Phase-2 routing.
+- **OPS-F7** Task 16 — `verify_runtime` must be called at the TOP of `create_app()` (before router includes); a misconfigured prod/staging container crash-loops at boot (correct fail-closed — note in the deploy runbook). (Folded into Task 16.)
+- **PQ-P2** Task 13 — the B-F11 change-password/session-invalidation note has a landing home (Task 13 README step). (Folded.)
+- **PQ-P3** Task 21 — bring the live stack up with `APP_ENVIRONMENT=dev` for the signup leg (fail-closed default 403s in staging) + add a negative `staging`+empty→403 assertion.
+- **PQ-P4** Self-review — `control_session_factory` is consumed only in Task 14 (not "7/14"); Task 7 consumes `control_database_url` + `ControlBase.metadata`. (Corrected in the self-review below.)
+- **PQ-P5** Tasks 4–6 — author `models/__init__.py` re-exports incrementally (Task 4 = authn classes only; Tasks 5/6 extend) so no task imports a not-yet-created model.
+- **I1** Task 1 — `gates_agents=("security",)` is harmless-redundant (`security` is `active_when="always"`); keep as documentation or drop.
+
+**Confirmed sound by the panel (do not re-open):** FK creation ordering c0001→c0003; Phase-1 migrations are expand-only (rolling-safe); downgrades topologically correct; the ≥1-admin `FOR UPDATE` TOCTOU lock; full index coverage for every authz hot-path query; `AuthzEvent` FK-ondelete deferral (no Phase-1 tenant/user/role delete route); the security-review transformations all verify against the pinned reference; placeholder scan clean.
+
+---
+
 ## Phase A — Control-plane foundation & battery skeleton
 
 ### Task 1: Register the `multitenantauth` battery + package skeleton
@@ -231,6 +269,7 @@ class ControlBase(DeclarativeBase):
 lazy singleton so a non-multitenantauth render is unaffected and tests can rebind):
 
 ```python
+import threading
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from {{package_name}}.config.settings import get_settings
@@ -238,25 +277,32 @@ from {{package_name}}.db.engine import build_engine, build_session_factory
 
 _control_engine: Engine | None = None
 _control_factory: "sessionmaker[Session] | None" = None
+_control_lock = threading.Lock()   # double-checked lock (sec-review OPS-F3): FastAPI runs sync deps in a
+                                   # threadpool, so a cold-start burst must not orphan a second engine/pool.
 
 def control_engine() -> Engine:
     global _control_engine
     if _control_engine is None:
-        _control_engine = build_engine(get_settings().control_database_url)
+        with _control_lock:
+            if _control_engine is None:
+                _control_engine = build_engine(get_settings().control_database_url)
     return _control_engine
 
 def control_session_factory() -> "sessionmaker[Session]":
     global _control_factory
     if _control_factory is None:
-        _control_factory = build_session_factory(control_engine())
+        with _control_lock:
+            if _control_factory is None:
+                _control_factory = build_session_factory(control_engine())
     return _control_factory
 
 def dispose_control_engine() -> None:
     global _control_engine, _control_factory
-    if _control_engine is not None:
-        _control_engine.dispose()
-    _control_engine = None
-    _control_factory = None
+    with _control_lock:
+        if _control_engine is not None:
+            _control_engine.dispose()
+        _control_engine = None
+        _control_factory = None
 ```
 
 - [ ] **Step 4: PASS.** `ruff format --check`.
@@ -323,15 +369,37 @@ a residual `'product'` silently re-admits a Meridian-policy role-domain into a g
 > renamed constraint set; that the domain CHECK is `('tenant','platform','resource')` with `'product'`
 > **removed** (not merely `'resource'` added); and that no `product`/EDR reference leaked in (A-F5).
 
-### Task 6: Tenant models
+### Task 6: Tenant models (opaque id + mutable slug — MDN registry-shape addendum)
 
 **Files:** Create `.../db/control/models/tenant.py`; test ports `test_tenancy.py` (model portion).
-**Port** `tenant.py` verbatim (`Tenant`, `TenantMembership`) + **add** the `Tenant.status` CHECK (MDN48).
+**Port** `tenant.py` (`Tenant`, `TenantMembership`) + the `Tenant.status` CHECK (MDN48), **with the
+MDN de-fork registry-shape addendum (2026-06-23) — do NOT inherit Meridian's `id == slug` smell:**
 
-- [ ] **Step 1:** Test: membership uniqueness `(user_id, tenant_id)`; `Tenant.status` rejects a junk value.
-  RED.
-- [ ] **Step 2:** Port + add CHECK. GREEN.
-- [ ] **Step 3:** Commit (`feat(multitenantauth): tenant registry models`).
+- **`Tenant.id`** = **opaque, immutable** — PK, routing key, and the **per-tenant DB-name key** (Phase 2).
+  Generate it (uuid-hex or an opaque token), NOT from the slug. Keep the `String(64)` + `^[a-z0-9_]+$`
+  charset (it must be a safe DB-identifier component for Phase-2 `CREATE DATABASE`).
+- **`Tenant.slug`** = **mutable, unique, DNS-label-safe** — the URL/subdomain label ONLY. Add a CHECK for
+  an RFC-1123 label (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`, ≤63 chars) + a UNIQUE constraint. NEVER used as a
+  routing/DB key.
+- New `TenantSlugHistory` model — `(slug PK or unique, tenant_id FK, retired_at, reserved_until)`: maps a
+  retired slug → its tenant (for 301 redirects) and holds it in a **cooling/reserved** state so a rename
+  can't be immediately squatted. A slug is claimable only if it is neither a live `tenant.slug` nor a
+  history row whose `reserved_until` is in the future.
+- `TenantMembership.tenant_id` FKs the **opaque `tenant.id`** (unchanged — grants key on the immutable id).
+
+Rationale: a workspace rebrand (common) must never touch the physical DB or break links; changing a
+PK + DB-naming scheme after tenants exist is the irreversible migration this exercise targets. (The
+URL-uses-slug + subdomain resolution behavior pairs with the multi-host work and is Phase 2; Phase 1
+ships the *decoupled model* + registry mechanism so the irreversible decision is correct from row #1.)
+
+- [ ] **Step 1:** Test: `tenant.id` is opaque (not derived from slug); `slug` UNIQUE + the DNS-label CHECK
+  rejects `Bad_Slug`/`-x`/uppercase; `status` rejects a junk value; membership uniqueness
+  `(user_id, tenant_id)`; a `TenantSlugHistory` row maps an old slug → tenant. RED.
+- [ ] **Step 2:** Port + add the slug/history models + CHECKs. GREEN.
+- [ ] **Step 3:** Commit (`feat(multitenantauth): tenant registry models — opaque id + mutable slug`).
+
+> **Reviewers:** confirm `tenant.id` is never derived from or coupled to `slug` anywhere (grep), the slug
+> CHECK is a strict DNS label, and `TenantMembership`/grants key on the opaque `id`, not the slug.
 
 ### Task 7: `migrations_control` chain with a NAMED version table (novel — load-bearing)
 
@@ -339,7 +407,20 @@ a residual `'product'` silently re-admits a Meridian-policy role-domain into a g
 - Create: `template/{{ 'alembic_control.ini' if 'multitenantauth' in batteries else '' }}.jinja`
 - Create: `template/{% if "multitenantauth" in batteries %}migrations_control{% endif %}/env.py.jinja`,
   `script.py.mako`, `versions/c0001_*.py`, `c0002_*.py`, `c0003_*.py`
+- **Modify (sec-review DM-F1): `template/migrations/env.py.jinja`** — the APP chain's env. It is in NO
+  other task and is the other half of the autogenerate fix below.
 - Test: `template/tests/unit/{{ 'test_control_migrations.py' if ... }}.jinja`
+
+> **Sec-review DM-F1 (PLAN-BLOCKER, fixed here): the named version table isolates version *bookkeeping*,
+> NOT autogenerate.** In the co-located default (one DB, both chains), the consumer's documented `alembic
+> revision --autogenerate` reflects the WHOLE database — so the app chain (`Base.metadata`) sees the
+> control tables and emits `op.drop_table()` for each, and the control chain symmetrically proposes
+> dropping `item`/battery tables. A data-destroying footgun the framework's own `upgrade head` tests stay
+> green through. **Fix:** add an `include_name`/`include_object` to BOTH env files so each chain's
+> autogenerate/`check` sees only its OWN metadata's tables — the control `env.py` filters to
+> `ControlBase.metadata.tables` (and ignores the app's `version_table`), and the app
+> `migrations/env.py.jinja` filters OUT the control tables (battery-conditional: when `multitenantauth`
+> is active, exclude `ControlBase.metadata.tables` + `alembic_version_multitenantauth`).
 
 **Novel — the named version table.** Meridian's `migrations_control/env.py` uses the default
 `alembic_version` because its chains live in separate DBs. The battery co-locates by default → the
@@ -393,27 +474,41 @@ removed** (sec-review A-F5; must match the models in Task 5, else resource inser
 `'product'` role-domain silently survives). `alembic_control.ini` mirrors `template/alembic.ini` with
 `script_location = migrations_control`.
 
-- [ ] **Step 1:** Test — apply BOTH chains against ONE Postgres URL and assert two distinct version
+- [ ] **Step 1:** Test — (a) apply BOTH chains against ONE Postgres URL and assert two distinct version
   tables exist (`alembic_version` and `alembic_version_multitenantauth`), all control tables created, no
-  collision. Then a second test: apply the control chain against a SEPARATE `control_database_url` and
-  assert the app DB has no control tables (Meridian's override). RED.
-- [ ] **Step 2:** Author env/ini + port migrations. GREEN.
-- [ ] **Step 3:** Commit (`feat(multitenantauth): migrations_control chain + named version table`).
+  collision; (b) apply the control chain against a SEPARATE `control_database_url` and assert the app DB
+  has no control tables (Meridian's override); (c) **autogenerate guard (DM-F1): with both chains applied
+  co-located, `alembic check` on the app chain AND on the control chain each report "no changes" — i.e.
+  neither proposes dropping the other's tables.** RED (without `include_*`, (c) emits spurious drops).
+- [ ] **Step 2:** Author env/ini (incl. the `include_*` scoping on both env files) + port migrations. GREEN.
+- [ ] **Step 3:** Commit (`feat(multitenantauth): migrations_control chain + named version table + autogen scoping`).
 
-> **Reviewers:** verify the named version table truly isolates the chains in the co-located case, and that
-> a downgrade of one chain can't touch the other's table.
+> **Reviewers:** verify the named version table isolates version bookkeeping AND the `include_*` scoping
+> isolates autogenerate (the co-located `alembic check` reports no changes for either chain); a downgrade
+> of one chain can't touch the other's table.
 
-### Task 8: Entrypoint runs both chains + control-engine lifespan
+### Task 8: Entrypoint runs both chains + seeds the control vocabulary + control-engine lifespan
 
-**Files:** Modify `template/scripts/entrypoint.sh` (or `.jinja`) — conditional second `alembic -c
-alembic_control.ini upgrade head`; modify `main.py.jinja` lifespan to `dispose_control_engine()` on
-shutdown. Test: a render assertion + the live docker test (Task 21) covers runtime.
+> **Sec-review OPS-F1 (PLAN-BLOCKER, fixed here): the control seed MUST be wired into boot.** Task 17
+> *builds* `authz/seed.py` but nothing invokes it at startup, and the rendered consumer-owned `seed.py`
+> seeds `Item`s, not the control vocabulary — so a fresh `--with multitenantauth` container boots healthy
+> but with an empty `permission`/`role` catalog and **the first founder signup fails at runtime** (it
+> needs the seeded `admin_role_name`). The LOCKED `entrypoint.sh` is the correct injection vector
+> (the consumer `seed.py` can't be relied on). This also makes Task 21's live e2e passable.
 
-- [ ] **Step 1:** Render-guard test: with `multitenantauth`, `entrypoint.sh` contains the control
-  `alembic upgrade head`; without it, it doesn't. RED.
-- [ ] **Step 2:** Add the conditional region (run the control chain BEFORE the app chain; both gated on
-  `APP_RUN_MIGRATIONS`). Wire `dispose_control_engine()` into the existing shutdown path. GREEN.
-- [ ] **Step 3:** Commit (`feat(multitenantauth): run control migrations + dispose control engine`).
+**Files:** Modify `template/scripts/entrypoint.sh` (`.jinja`) — a battery-conditional region that, after
+**both** `alembic upgrade head` chains, runs the control seed `python -m
+{{package_name}}.multitenantauth.authz.seed` (so `authz/seed.py` needs a `__main__` / idempotent
+`seed()` entry — note this in Task 17); modify `main.py.jinja` lifespan to `dispose_control_engine()` on
+shutdown. Test: render assertions + the live docker test (Task 21) covers runtime.
+
+- [ ] **Step 1:** Render-guard test: with `multitenantauth`, `entrypoint.sh` contains BOTH the control
+  `alembic upgrade head` AND the control-seed invocation (ordered after both chains); without the battery,
+  neither appears. RED.
+- [ ] **Step 2:** Add the conditional region — run the control chain, then the app chain, then the
+  control seed; all gated on `APP_RUN_MIGRATIONS` (idempotent re-run safe). Wire `dispose_control_engine()`
+  into the existing shutdown path. GREEN.
+- [ ] **Step 3:** Commit (`feat(multitenantauth): run control migrations + seed vocabulary + dispose engine`).
 
 ---
 
@@ -509,46 +604,73 @@ this upstream to Meridian as a bug).
 **Files:** Create `.../multitenantauth/tenancy/registry.py` + `.../db/control/repository.py`. Tests: port
 the control-registry portion of `meridian tests/unit/test_provisioning.py` + `test_tenancy.py`.
 
-**Port** ONLY the control-registry half of `db/tenancy/provision.py`: `register_tenant(name, *, tenant_id,
-dsn, status="provisioning")` (row insert via `control_repo.add_tenant`), `activate_tenant(tenant_id)`
-(status→active), `get_tenant`/`get_tenant_dsn`. **Keep** the `_TENANT_ID_RE = ^[a-z0-9_]+$` charset guard.
-**Drop** `create_database`, `_migrate_tenant`, `seed_base_vocabulary`, `invalidate_dsn_cache`,
-`build_engine(dsn)` — all physical/EDR/Phase-2. The registry **never connects to `dsn`** (routing-agnostic
-— Meridian's load-bearing assumption).
+**Port** ONLY the control-registry half of `db/tenancy/provision.py`, **adapted to the opaque-id +
+mutable-slug shape (Task 6):** `register_tenant(name, *, slug, dsn, status="provisioning")` — **generates
+the opaque `tenant_id`** (does NOT take it from the slug), validates the slug is DNS-safe + claimable
+(not a live slug, not a cooling history row), inserts via `control_repo.add_tenant`; `activate_tenant(id)`
+(status→active); `get_tenant(id)`/`get_tenant_dsn(id)`; plus the slug mechanism: `rename_slug(id,
+new_slug)` (validate DNS-safe + claimable, move the old slug to `TenantSlugHistory` with a
+`reserved_until` cooling window, set the new slug) and `resolve_slug(slug) → (tenant_id, redirect: bool)`
+(a live slug → its id; a retired history slug → its id + `redirect=True` for a 301; reserved/unknown →
+None). **Keep** the `^[a-z0-9_]+$` charset guard for the opaque id (it's a Phase-2 DB-identifier
+component). **Drop** `create_database`, `_migrate_tenant`, `seed_base_vocabulary`, `invalidate_dsn_cache`,
+`build_engine(dsn)` — physical/EDR/Phase-2. The registry **never connects to `dsn`** (routing-agnostic —
+Meridian's load-bearing assumption).
 
-- [ ] **Step 1:** Test — `register_tenant` writes a `provisioning` row with an opaque dsn and **opens no
-  connection to it**; `activate_tenant` flips to `active`; invalid tenant_id charset raises;
+- [ ] **Step 1:** Test — `register_tenant` mints an opaque id **not equal to / not derived from** the
+  slug, writes a `provisioning` row, **opens no connection to the dsn**; `activate_tenant` flips to
+  `active`; an invalid opaque-id charset and a non-DNS-safe slug both raise; `rename_slug` moves the old
+  slug to history with a future `reserved_until` and rejects a still-cooling slug; `resolve_slug` returns
+  the live id, returns `(id, redirect=True)` for a retired slug, and `None` for a reserved/unknown one;
   `get_tenant_dsn` returns the stored opaque string. RED.
 - [ ] **Step 2:** Implement the registry + repository. GREEN.
-- [ ] **Step 3:** Commit (`feat(multitenantauth): routing-agnostic tenant registry`).
+- [ ] **Step 3:** Commit (`feat(multitenantauth): routing-agnostic tenant registry + slug lifecycle`).
 
-> **Reviewers:** confirm no code path connects to a tenant `dsn` (grep for `create_engine`/`tenant_session`
-> in the battery → none); the two-step seam (register→activate) leaves physical provisioning to the consumer.
+> **Reviewers:** confirm no code path connects to a tenant `dsn` (grep `create_engine`/`tenant_session`
+> in the battery → none); the opaque `id` is minted independent of `slug`; the two-step seam
+> (register→activate) leaves physical provisioning to the consumer; a rename can't squat a cooling slug.
 
-### Task 13: AuthN service (signup / login / logout / invite)
+> **Ops note (sec-review OPS-F2, operator-decided):** the battery ships generic separate-control-DB
+> *support* (set `APP_CONTROL_DATABASE_URL`; the target DB must already exist — document in
+> `.env.example`/README + the cutover note). Adopting an **existing populated** control DB (Meridian's
+> fork → battery schema: `product`→`resource`, `id`/`slug` split, `alembic stamp` onto the named version
+> table) is a Meridian-specific data migration → **deferred to Meridian co-design**, not the battery.
 
-**Files:** Create `.../multitenantauth/authn/service.py`. Tests: port
-`meridian tests/functional/test_auth_service.py` (authn portion) + `test_auth_signup_security.py`.
+### Task 13: AuthN routes + session helpers (signup / login / logout / set-password / me)
 
-**Port** the authn flows: signup-founder (create `AppUser(born='signup')` + `register_tenant`+`activate`
-+ `add_membership` with `admin_role_name` + mint session), login (`verify_password` + rehash-on-login +
-**a FRESH `mint()` session** — no pre-auth session ⇒ session-fixation is structurally prevented; keep
-it), logout (delete session), invite/accept (`InviteToken` redemption — set password, stamp
-`accepted_at`, mark `used_at`, and **delete all of the user's sessions** on set-password). **Signup
-gating — TWO security-critical transformations (sec-review B-F1 + A-F9, operator decision A):** (1)
-remap env tokens — `environment == "prod"` → 404 (off); the dev/stage allowlist gate becomes
-`environment in {"dev","staging"}` (NOT Meridian's `{"dev","stage"}`); (2) **fail-closed default** —
-flip the reference's "empty allowlist = unrestricted": ship `prod` off, **`staging` with an empty
-allowlist = DENY (403)**, open only in `dev`. A consumer opts into public signup by populating
-`signup_allowlist`. Document this loudly in the rendered `.env.example` + README.
+> **Plan-quality fix (sec-review PQ-C1/C2): there is NO `authn/service.py` in the reference.** The authn
+> flows are **route handlers inline in `meridian routes/auth.py`** (signup L116, login, logout,
+> set-password, `/auth/me`) plus the private helpers `_issue_session`, `_set_session_cookie`,
+> `_allowlisted`, `_dummy_hash`. This task extracts those **routes + helpers** — a *novel extraction from
+> route handlers*, not a port of a service module. **Sequencing: execute AFTER Task 14 (the deps chain) —
+> login/logout/me consume `current_user`/`control_session`; signup consumes Tasks 9/11/12.**
 
-- [ ] **Step 1:** Port the authn + signup-security tests, ADAPTED to the new defaults: founder gets admin;
-  duplicate email → generic 409 (no enumeration); disabled user can't login; login mints a fresh token
-  (fixation); set-password invalidates all sessions; invite single-use; **signup in `prod` → 404**;
-  **signup in `staging` with empty allowlist → 403 (fail-closed)**; signup in `staging` with a matching
-  allowlist entry → 201; signup in `dev` → 201. RED.
-- [ ] **Step 2:** Port + apply both transformations. GREEN.
-- [ ] **Step 3:** Commit (`feat(multitenantauth): fail-closed authn signup/login/invite service`).
+**Files:** Create `.../multitenantauth/routes/auth.py` + `.../multitenantauth/cookies.py` (the
+`set_session_cookie` helper, promoted from the reference's private `_set_session_cookie` — this is the
+ONE home for it; Task 15 no longer creates it). Tests: port `meridian tests/functional/test_auth_routes.py`
+(authn routes) + `test_auth_signup_security.py`.
+
+**Extract** the authn route handlers + helpers: signup-founder (create `AppUser(born='signup')` +
+`register_tenant`(slug)+`activate` + `add_membership` with `admin_role_name` + `_issue_session`), login
+(`verify_password` + rehash-on-login + **a FRESH `mint()` session** — no pre-auth session ⇒ fixation
+structurally prevented), logout (delete session), set-password / invite-accept (`InviteToken` redemption
+— set password, stamp `accepted_at`, mark `used_at`, **delete all of the user's sessions**), `/auth/me`
+(authenticated-self via `current_user`). `set_session_cookie` lands in `cookies.py` (httponly + secure +
+samesite=lax + `domain=session_cookie_domain`). **Signup gating — TWO security-critical transformations
+(sec-review B-F1 + A-F9, operator decision A):** (1) remap env tokens — `environment == "prod"` → 404
+(off); the gate becomes `environment in {"dev","staging"}` (NOT Meridian's `{"dev","stage"}`); (2)
+**fail-closed default** — flip the reference's "empty allowlist = unrestricted": `prod` off, **`staging`
++ empty allowlist = DENY (403)**, open only in `dev`. Document loudly in the rendered `.env.example` +
+README — **and add the B-F11 note** there: a consumer adding a logged-in change-password/disable flow
+must replicate `delete Session where user_id` (set-password already does).
+
+- [ ] **Step 1:** Port the route + signup-security tests (TestClient, real mounted routes), ADAPTED to the
+  new defaults: founder gets admin; duplicate email/slug → generic 409 (no enumeration); disabled user
+  can't login; login mints a fresh token (fixation); set-password invalidates all sessions; invite
+  single-use; **signup in `prod` → 404**; **`staging` + empty allowlist → 403 (fail-closed)**; `staging`
+  + matching allowlist → 201; `dev` → 201. RED.
+- [ ] **Step 2:** Extract routes + helpers + apply both transformations. GREEN.
+- [ ] **Step 3:** Commit (`feat(multitenantauth): fail-closed authn routes + session helpers`).
 
 ---
 
@@ -609,9 +731,9 @@ def _resource_grant(name: str, path: dict[str, str]) -> bool:
 
 ### Task 15: CSRF middleware + cookie delivery (security-critical, MDN multi-host shape)
 
-**Files:** Create `.../multitenantauth/csrf.py`; create `.../multitenantauth/cookies.py` (the
-`set_session_cookie` helper). Tests: port `meridian` CSRF tests (find via `git grep -l CSRF tests/`) +
-new shape tests.
+**Files:** Create `.../multitenantauth/csrf.py` (the CSRF middleware ONLY — `cookies.py` with
+`set_session_cookie` is created in Task 13; sec-review PQ-C2). Tests: port `meridian` CSRF tests (find
+via `git grep -l CSRF tests/`, e.g. `test_csrf.py`) + new shape tests.
 
 **Port** `middleware/csrf.py` with the **MDN §5.1 transformation** — replace the hardcoded single-host
 comparison with the configurable allowlist:
@@ -626,14 +748,14 @@ if source and not allowed:
     return JSONResponse({"detail": "CSRF check failed"}, status_code=403)
 ```
 
-`cookies.py` `set_session_cookie(response, raw)` — `httponly=True`, `secure=session_cookie_secure`
-(defaults True), `samesite="lax"`, **`domain=session_cookie_domain`** (None = host-only). **Sec-review
-B-F3/B-F4 — the multi-host knobs widen the trust boundary; the battery ships exact-match + safe defaults
-and DOCUMENTS the risk, it does not implement subdomain support.** Add a module docstring + the §5.1
-invariants: a parent-domain session cookie discloses the raw token to every subdomain's server (only
-enable where every subdomain is equally trusted); `SameSite=Lax` gives no cross-tenant protection between
-sibling subdomains, so the exact-match allowlist is the only cross-tenant CSRF defense — wildcards are
-forbidden.
+(The cookie helper itself — `set_session_cookie`, `httponly=True`, `secure=session_cookie_secure` default
+True, `samesite="lax"`, **`domain=session_cookie_domain`** None=host-only — lives in Task 13's
+`cookies.py`.) **Sec-review B-F3/B-F4 — the multi-host knobs widen the trust boundary; the battery ships
+exact-match + safe defaults and DOCUMENTS the risk, it does not implement subdomain support.** Add the
+§5.1 invariants to the `csrf.py` + `cookies.py` module docstrings: a parent-domain session cookie
+discloses the raw token to every subdomain's server (only enable where every subdomain is equally
+trusted); `SameSite=Lax` gives no cross-tenant protection between sibling subdomains, so the exact-match
+allowlist is the only cross-tenant CSRF defense — wildcards are forbidden.
 
 - [ ] **Step 1:** Tests — (a) same-origin POST passes; (b) cross-origin cookie-auth POST → 403; (c)
   Bearer-only (no cookie) cross-origin → passes (exempt); **(c2) a junk `Authorization: Bearer …` header
@@ -652,17 +774,19 @@ forbidden.
 > `secure=True` + `httponly` defaults are retained; and the parent-domain-cookie + sibling-subdomain-Lax
 > risks are documented in §5.1 (B-F3/B-F4).
 
-### Task 16: Routes + main.py wiring + authz-fitness (security-critical)
+### Task 16: Tenant/role routes + main.py wiring + authz-fitness (security-critical)
 
-**Files:** Create `.../multitenantauth/routes/{auth,tenants,roles}.py`; modify `main.py.jinja`
-(conditional router includes + `app.add_middleware(CSRFMiddleware)` + **wire `verify_runtime(settings)`
-into `create_app()`** — Task 2/9). Tests: port `meridian tests/functional/test_auth_routes.py` +
+> **Sequencing/scope (sec-review PQ-C1/P1): the AUTHN routes are Task 13** — this task is the
+> tenants/roles routes + app wiring + the fitness suite. Execute after Tasks 13/14/15.
+
+**Files:** Create `.../multitenantauth/routes/{tenants,roles}.py`; modify `main.py.jinja` (conditional
+router includes for ALL of auth[Task13]/tenants/roles + `app.add_middleware(CSRFMiddleware)` + **wire
+`verify_runtime(settings)` at the TOP of `create_app()`, before any router include** — Task 2/9,
+sec-review OPS-F7). Tests: port `meridian tests/functional/test_auth_routes.py` (tenant/role portions) +
 **`test_authz_fitness.py`**.
 
-**Port** the route handlers (auth: `POST /auth/signup|login|logout`, set-password/invite-accept,
-`GET /auth/me`; tenants: `POST /tenants`, `GET /tenants/{tenant_id}/members`, manage-members; roles:
-grant/revoke) — each guarded with the appropriate `guard(Perm(...))`. The routes set the session cookie
-via `set_session_cookie`.
+**Port** the tenant/role route handlers (tenants: `POST /tenants`, `GET /tenants/{tenant_id}/members`,
+manage-members; roles: grant/revoke) — each guarded with the appropriate `guard(Perm(...))`.
 
 **Port the authz-fitness suite by its REAL tests (sec-review A-F2) — there are six, not "T1–T4":**
 - `test_T1_no_unguarded_route` — deny-by-default allowlist;
@@ -795,15 +919,43 @@ with-other-batteries combo); run the release-readiness renders locally.
 
 ---
 
-## Branch-end review (before merge)
+## Layer-2 pre-merge gate — stance × focus matrix (Meridian method, white-box)
 
-1. **Spec-compliance review** (Sonnet) — every spec §1–§15 requirement has a landing task.
-2. **Code-quality review** (Opus) — whole branch.
-3. **Framework `security` agent over the rendered battery** — scoped to "Phase 1 standalone"
-   (deferred Phase-2 seams = by-design, not defects); triage Phase-2 findings as known-deferred.
-4. **Explicit `/security-review`** on the full diff.
-5. Reconcile against Meridian's original security-review spec (provided separately) — confirm every
-   threat it covers maps to a battery test or an explicit deferral.
+Run against the **implemented, green, pushed branch**, before merge — the attacker-oriented half of the
+two-layer method (Layer 1 was the design panels above). Per the method:
+
+**Baseline first:** `/code-review` + the framework `security` agent + an explicit `/security-review` over
+the rendered battery (scoped "Phase-1 standalone"; Phase-2 seams = by-design) + the Sonnet spec-compliance
++ Opus whole-branch reviews. Fold their findings into the synthesis.
+
+**Then the matrix.** Populate only the relevant cells (~10–14), each a white-box agent with a concrete
+brief; offence findings (Break-in/Damage) carry a **concrete repro or downgrade**; every Critical/High is
+**independently verified, default-to-refuted**; fix-loop (repro → failing test → fix → re-run the
+affected stance) **until K rounds are dry**. Stances × focus (F1 authn/sessions · F2 authz/RBAC · F3
+tenant isolation · F4 data/migrations/concurrency · F5 cutover/ops):
+
+```
+              F1 authn/session   F2 authz/RBAC     F3 isolation        F4 data/concur        F5 cutover/ops
+Break-in      session forge/      404→403 leak;     cross-tenant via    —                     —
+              fixate/replay;      guard bypass;     opaque-id/slug
+              CSRF multi-host     wildcard/subtree  desync; resolve_slug
+              (parent-domain,     allow-leak        history→wrong tenant
+              sibling-Lax)
+Harden        pepper/verify_      seed cross-domain  —                  CHECK/composite-FK    verify_runtime gate;
+              runtime gate;       bundle; default-                      domain integrity;     entrypoint seed/order;
+              fail-closed signup  deny completeness                     autogen include_*     /ready; conn-budget
+Disrupt       signup→tenant       —                 —                   ≥1-admin lock          two-pool exhaustion;
+              creation DoS                                              contention; slug-     idempotent-grant race
+              (fail-closed)                                             cooling growth
+Damage        —                   —                 cross-tenant        audit-trail tamper;   control-chain
+                                                     bleed; slug-squat   migration drop/      downgrade data loss;
+                                                     after rename        rollback             autogen drop_table
+```
+
+**Merge gate: zero open Critical/High** — each fixed-with-a-regression-test or explicitly
+refuted-with-reason. Record the run + confirmed findings in `ACTION_LOG.md`. Orchestrate as a
+fan-out → verify → synthesise → fix-loop workflow (a deterministic multi-agent runner is ideal). Also
+reconcile against Meridian's own prior security-review of this code (their threat-model oracle).
 
 ---
 
@@ -817,5 +969,10 @@ with-other-batteries combo); run the release-readiness renders locally.
   novel code is shown in full. The one open reconcile (`hash_version`/`pepper_version`) is a *decide-one*
   in Task 9, not a placeholder.
 - **Type consistency:** `resource_role_assignment`/`resource_id`/`resource_grant` used consistently from
-  Task 5 through Task 14; `control_session_factory` (Task 3) consumed in Tasks 7/14; `admin_role_name`
-  (Task 2) consumed in Task 11; `csrf_allowed_origins`/`session_cookie_domain` (Task 2) consumed in Task 15.
+  Task 5 through Task 14; `control_session_factory` (Task 3) consumed in **Task 14** (Task 7's `env.py`
+  consumes `control_database_url` + `ControlBase.metadata`, not the factory — PQ-P4); `admin_role_name`
+  (Task 2) consumed in Tasks 11/13; `csrf_allowed_origins`/`session_cookie_domain` (Task 2) consumed in
+  Task 15; `set_session_cookie`/`cookies.py` (Task 13) consumed by Task 13's authn routes.
+- **Layer-1 hardening applied (2026-06-23):** the two-agent security review + the 3-lens design panel
+  (data-model/ops/plan-quality) per Meridian's method; see the "Security-review ledger" + "Layer-1
+  Hardening" sections. Pre-merge = the Layer-2 stance×focus matrix.

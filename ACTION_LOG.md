@@ -2692,5 +2692,30 @@ add `'resource'`, else a Meridian role-domain silently survives). Build-notes fo
 discrete path params to `resource_grant`, don't re-parse — improves on the reference), A-F4 (fix the
 `add_platform_role` phantom-audit upstream bug), A-F6/A-F8/A-F10/A-F7/B-F6/B-F7/B-F9/B-F10. Full ledger
 in the plan ("Security-review ledger"); reviewed via [[receiving-code-review]] (verified each against the
-reference before applying). Plan+spec revised; no code → no release. **Next: execution-choice handoff
-(subagent-driven vs inline), then the build.**
+reference before applying). Plan+spec revised; no code → no release.
+
+#### #0215 · amended · FWK58 plan (Layer-1 panel + addenda) · 2026-06-23
+**Completed Meridian's two-layer adversarial-security-review method on the plan; applied 5 more blockers +
+2 MDN addenda.** Meridian shared their methodology (`gh cdowell-swtr/meridian/_docs/methods/adversarial-security-review.md`):
+Layer 1 = an N-lens design panel pre-execution (security · authz · data-model/migrations · ops/deploy ·
+plan-quality) folded into a binding Hardening section; Layer 2 = a stance×focus attacker matrix pre-merge.
+My earlier 2-agent review was a PARTIAL Layer 1 (security+authz) → ran the 3 missing lenses (Opus,
+read-only). **5 new blockers, all applied:** PQ-C1/C2 (the reference has NO `authn/service.py` — signup/
+login/etc. are route handlers in `routes/auth.py`; Task 13 mislabeled a novel extraction as a port, cited
+a nonexistent test source, and depended on routes built later → reframed Task 13 = authn routes + cookies.py
+run-after-deps, narrowed Task 16); OPS-F1 (the control vocabulary/role seed was never wired into boot → a
+fresh container boots healthy but the first signup fails → added a control-seed step to the LOCKED
+entrypoint, Task 8); DM-F1 (the named version table isolates version bookkeeping but NOT autogenerate → in
+the co-located default `alembic --autogenerate` proposes `drop_table` for the other chain's tables, a
+data-destroying footgun the `upgrade head` tests stay green through → added `include_*` scoping to BOTH
+env files incl. the previously-untasked app `migrations/env.py.jinja` + a co-located `alembic check` test);
+OPS-F2 (separate-control-DB cutover unspecified + Meridian's populated control DB collides on the version
+table → operator-decided: ship generic separate-DB support, defer the existing-DB adoption migration to
+Meridian co-design); + ~14 build-notes (double-checked lock OPS-F3, connection budget OPS-F4, /ready probe
+OPS-F5, c0003 server_default + 4-site domain-CHECK DM-F2/F3, etc.). **MDN registry-shape addendum:** tenant
+**opaque immutable id** (PK/routing/DB-name key) decoupled from a **mutable DNS-safe slug** (URL label) +
+TenantSlugHistory with cooling/reserved anti-squat — the irreversible PK/DB-naming decision this exercise
+targets (Tasks 6/12). Recorded the binding "Layer-1 Hardening" section (governs body on conflict) + the
+"Layer-2 pre-merge gate" stance×focus matrix in the plan. Validation: the 3 skipped lenses found exactly
+the data/ops/plan defects the 2 security lenses structurally couldn't, incl. 2 build-derailers — vindicates
+the full method. Plan+spec revised; no code → no release. **Next: execution mode (subagent-driven vs inline), then build.**
