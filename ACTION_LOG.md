@@ -2642,3 +2642,18 @@ run when Phase 1 is done, *before* Meridian adopts. **Spawned:** FWK59 (`--with 
 cookie+bearer+JWT) + FWK60 (`tenant-data-model`/`tenant-context-propagation`, logical tenant_id
 scoping). Spec `docs/superpowers/specs/2026-06-23-fwk58-multitenantauth-defork-spine-design.md`. On
 branch `fwk58-multitenantauth-spine`; design commit only (no template payload yet → no release).
+
+#### #0212 · amended · FWK58 · 2026-06-23
+**Folded MDN's session-cookie + CSRF multi-host shape addendum into the FWK58 spec (§5.1).** MDN
+surfaced (for the auth layer) that they'll later support subdomain-per-tenant via a pure edge host→path
+rewrite — transparent to routing but NOT to cookies/CSRF (browser scopes cookies + stamps Origin by the
+real host; the edge preserves Host) — so the battery's session/CSRF must be **multi-host-shaped now** to
+avoid re-touching audited security code later. Caught that my first draft **omitted CSRF entirely** —
+a real gap for a cookie-auth battery (Meridian's reference HAS `middleware/csrf.py`: Origin/Referer
+check on mutating cookie-auth requests, Bearer/unauth exempt). Folded in: port `CSRFMiddleware` (generic
+mechanism) + two **shape constraints, safe single-host defaults** (no behavior change today): (1)
+`session_cookie_domain` (default `None` = host-only) threaded into `set_cookie(domain=…)`; (2)
+`csrf_allowed_origins` (set/pattern, default empty ⇒ today's strict same-origin) replacing the
+reference's hardcoded single-host comparison (`netloc == Host OR netloc ∈ allowlist`). Full subdomain
+support (parent-domain choice, allowlist population, double-submit-token) stays consumer/deferred —
+"don't preclude it." Spec §3/§5.1/§7/§9/§10/§15 updated. Still design-only (no payload → no release).

@@ -55,7 +55,11 @@ Each phase is reviewed before *its* adoption (a real consumer must not run un-re
 ### In (Phase 1)
 
 - **Identity / session** — signup (founder), login, logout, invite + accept/set-password; opaque
-  server-side sessions (cookie + bearer).
+  server-side sessions (cookie + bearer). **CSRF defence** for cookie-authenticated state-changing
+  requests (Origin/Referer check; Bearer + unauthenticated exempt) — required because the battery ships
+  cookie auth. **Multi-host-shaped** per MDN's de-fork addendum (§5.1): the cookie `Domain` and the CSRF
+  allowlist are *configurable* (safe single-host defaults), so subdomain-per-tenant later needs no
+  re-touch of this security-critical shared code.
 - **Tenant registry + membership** — `Tenant` (registry, opaque `dsn` routing key — **never connected
   to** in Phase 1), `TenantMembership`; register/activate/get APIs; the provisioning **two-step seam**
   (battery owns the row + `provisioning→active` status lifecycle; physical create is a consumer hook).
@@ -129,6 +133,26 @@ which nodes are sealed/hidden*.**
 - **Meridian plugs back in (Phase 2):** `candidate_grant_nodes` (hierarchy + sealed/hidden + tenant-DB
   routing) *behind* the generic `resource_grant` / `subtree_exists` hooks.
 
+### 5.1 Session-cookie + CSRF multi-host shape (MDN de-fork addendum, 2026-06-23)
+
+Meridian is path-based today and stays so, but intends subdomain-per-tenant later via a pure **edge
+host→path rewrite**. That rewrite is transparent to *routing* but **not** to cookies/CSRF — the browser
+scopes cookies and stamps `Origin` by the *real* host, and the edge preserves `Host`, so the battery's
+session/CSRF sees the multi-host reality regardless. The `Session` model is already identity-only / not
+tenant-bound, so this is purely **cookie-delivery + origin-policy *shape*** — two constraints so we never
+re-touch audited security code later. Both keep **single-host-safe defaults** (no behavior change today):
+
+1. **Cookie `Domain` configurable** — `session_cookie_domain` setting, default `None` (host-only);
+   settable to a parent domain so one session spans tenant subdomains. Threaded into `set_cookie(domain=…)`.
+2. **CSRF Origin/Referer allowlist configurable** — `csrf_allowed_origins` (a set/pattern), default empty
+   ⇒ today's strict **same-origin** rule (`Origin/Referer netloc == Host`). The reference middleware
+   hardcodes the single-host comparison; the battery replaces it with `netloc == Host OR netloc ∈
+   csrf_allowed_origins`.
+
+Full subdomain support (choosing the parent domain, populating the allowlist, the double-submit-token
+flow) stays consumer/deferred — this is only **"don't preclude it."** Generic mechanism + safe defaults
+ship in the battery; the multi-host *policy* is consumer config (colonization guard intact).
+
 ---
 
 ## 6. Architecture & layout
@@ -186,9 +210,16 @@ All paths under `src/framework_cli/template/`, battery-conditional on `multitena
 - **Routes** — auth (signup/login/logout/invite-accept), tenants (create/list-members/manage-members),
   roles (grant/revoke). The guarded example: `GET /tenants/{tenant_id}/members` behind
   `guard(Perm("tenant:manage-members", on="tenant:{tenant_id}"))`.
+- **Middleware** — `CSRFMiddleware` (ported): on mutating methods (POST/PUT/PATCH/DELETE), a request
+  carrying the session cookie is CSRF-checked — `Origin`/`Referer` netloc must equal `Host` **or** be in
+  `csrf_allowed_origins` (else 403); Bearer-only and unauthenticated requests are exempt; absent
+  Origin+Referer is allowed (lenient, same-origin/non-browser). Registered in `main.py`.
 - **Settings (Pydantic)** — `control_database_url` (`APP_CONTROL_DATABASE_URL`, default = app DB);
-  `session_cookie_name`; `session_pepper` (SecretStr); `password_pepper` (SecretStr) + argon2 cost
-  params (`argon2_time_cost`/`memory_cost`/`parallelism`); `admin_role_name`; session TTL.
+  `session_cookie_name`; `session_cookie_secure`; **`session_cookie_domain`** (default `None` =
+  host-only — §5.1); **`csrf_allowed_origins`** (set/pattern, default empty = same-origin — §5.1);
+  `session_pepper` (SecretStr); `password_pepper` (SecretStr) + argon2 cost params
+  (`argon2_time_cost`/`memory_cost`/`parallelism`); `admin_role_name`; session TTL. The session cookie
+  is set httpOnly + `secure` + `samesite="lax"` + `domain=session_cookie_domain`.
 - **Passwords / tokens** — argon2id (`argon2-cffi`) over an **HMAC-SHA256 pepper pre-hash**, per-row
   salt in the PHC string, a version column for rotation, `needs_rehash` + rehash-on-login. Tokens:
   `secrets.token_urlsafe(32)`, store only `HMAC-SHA256(token, session_pepper)` (opaque; the hash lookup
@@ -222,7 +253,9 @@ All paths under `src/framework_cli/template/`, battery-conditional on `multitena
 - **404-before-403** — unknown / inactive / non-member tenant → 404; existence is never leaked; `guard`
   re-checks the membership precondition before any 403, so a policy-leaking 403 can never precede the
   existence check.
-- **403** — opaque forbidden detail when the permission expression is unsatisfied.
+- **403 (authz)** — opaque forbidden detail when the permission expression is unsatisfied.
+- **403 (CSRF)** — `"CSRF check failed"` on a cross-origin, cookie-authenticated, mutating request whose
+  `Origin`/`Referer` is neither same-host nor in `csrf_allowed_origins`.
 - **Domain mismatch** — `DomainMismatchError` on assigning a wrong-domain role (also structurally
   blocked by the composite FK — belt and suspenders); `LastAdminError` on the ≥1-admin invariant;
   unknown role/membership → `ValueError`. Mapped to HTTP codes at the route layer.
@@ -242,7 +275,9 @@ Port Meridian's **~2,360-line suite as the behavioral spec** (`tests/unit/{auth,
   audit), deps (the 401/404/403 chain + 404-before-403), authz-seed (catalog/role reconciliation),
   **authz-fitness (T1–T4 — the crown jewels: every guarded route has a coherent `__authorized__`
   contract, never serialized)**, routes, signup-security, tenancy (registry + membership), resource-role
-  (renamed from product-role; flat grant).
+  (renamed from product-role; flat grant), **CSRF** (same-origin pass / cross-origin 403 / Bearer +
+  unauthenticated exempt / absent-Origin+Referer lenient; plus the §5.1 shape: `csrf_allowed_origins`
+  admits a configured cross-origin, and `session_cookie_domain` is emitted on the cookie).
 - **e2e** — signup → login → guarded route.
 
 Adaptations: rename `product`→`resource`, strip EDR/product vocabulary, drop routing/`tenant_db` tests
@@ -332,8 +367,10 @@ output. Plus:
 ## 15. Validation-oracle reference (Meridian, `@e0cf9cf`)
 
 Generic → extract: `db/control/models/{authn,authz,tenant}.py`; `auth/{service,deps,expr,resolution,
-permissions,roles,passwords,tokens,email_norm,errors}.py`; the `control_session_factory` half of
-`db/engine.py`; `migrations_control/{env.py,versions/c0001,c0002,c0003}`; `alembic_control.ini`. Tests:
+permissions,roles,passwords,tokens,email_norm,errors}.py`; `middleware/csrf.py` + its `main.py`
+registration; the auth `routes/auth.py` (signup/login/logout/invite + the cookie-set); the
+`control_session_factory` half of `db/engine.py`; `migrations_control/{env.py,versions/c0001,c0002,
+c0003}`; `alembic_control.ini`. Tests:
 `tests/unit/auth/*`, `tests/unit/test_{provisioning,settings_auth}.py`, `tests/functional/test_auth_*`,
 `test_authz_*`, `test_tenancy.py`, `test_product_role_*`, `tests/e2e/test_auth_tenancy_e2e.py`.
 
