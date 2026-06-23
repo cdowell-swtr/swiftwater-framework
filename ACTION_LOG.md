@@ -2553,3 +2553,16 @@ items) — the larger first-class concerns with their seam-ladders (composabilit
 logical→physical, AI-agent-harness, i18n, experimentation, product-analytics, AI-retrieval, CMS, secrets)
 + the full parked enumeration. Authoritative record: `docs/superpowers/assessments/2026-06-22-retrofit-cost-horizon-scan.md`
 (plan + findings) + `retrofit-scan/` per-agent files. Brainstorm/scan only → no code/release.
+
+#### #0207 · note · FWK49–55 prioritization · 2026-06-22
+**Prioritization draft for Meridian.** Ran a 3-ranker panel (247k tokens, run `wf_df7d303d-45d`) —
+each independently tiered the whole board through the retrofit lens with a distinct tiebreak
+(irreversibility/blast-radius · foundational-unlock-order · scaffold-asymmetry/net-new) — then built the
+inter-item dependency DAG from the scan's own `overlaps` edges and overlaid it to turn tiers into
+build-order **waves**. Strong consensus: Wave-1 foundations = identity-principal · external-id ·
+tenant-data-model · money · object-storage (all 3 rankers Tier-1 AND DAG roots); all 3 promoted
+`outbound-idempotency` off parked (the outbox's client-facing twin). Conditional foundations
+(string-externalization, durable-agent-state) gate on whether i18n/agents are in Meridian's scope. Draft
+formatted for Meridian's "local builds" response (per-item build?/when? columns + cross-cluster-edge ask).
+Artifacts: `docs/superpowers/assessments/2026-06-22-prioritization-draft.md` + `retrofit-scan/prioritization-*.md`.
+Going to a PR so Meridian reads it via `gh`, not the local fs. Planning only → no code/release.
