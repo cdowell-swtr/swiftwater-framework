@@ -2519,3 +2519,37 @@ execution-time render-dependent → procedure given), signature consistency ✓.
 
 #### #0204 · completed · FWK44 · 2026-06-21
 **FWK44 eval robustness + speed DONE** on branch `fwk44-eval-robustness` (subagent-driven, phases A→B+C→D1→D2). **A** wrap `realize_cached` in the eval loop → FIXTURE-ERROR skip + exit 5 (was an uncaught CalledProcessError aborting the whole run). **B+C** gate-tier `test_every_fixture_realizes` (renders+git-applies every fixture — the durable drift guard the structural checks missed) + re-anchored the 4 drifted fixtures; spec review verified seeded intent preserved byte-for-byte. **D1** extracted `_score_one_agent` (characterization-tested, behavior-preserving). **D2** `--concurrency N` (default 4, [1,16]; pre-render bases serially → ThreadPoolExecutor over per-agent scoring; stop-Event on exhaustion). **The reviews caught what the stub-backed suite could not:** D2 Opus quality = swallowed-exception false-green (unexpected worker exc → no `.result()` → exit 0; fixed w/ catch-all + regression test); **branch-end Opus ran the REAL realize_cached and found a Critical** — the D2 pre-render loop double-realized each fixture (realize_cached `copytree` has no dirs_exist_ok) → `FileExistsError` → real `framework eval` crashed on fixture 1, serial AND concurrent, breaking agent-evals.yml; suite stayed green ONLY because every eval test stubs `realize_cached`. Fixed per spec: new `evals.prerender_base` (warms per-combo base cache, NO per-fixture copytree) + `realize_cached` refactored to call it (DRY) + a `prerender_base` cli seam + autouse no-op (keeps stub tests fast) + `test_eval_real_realize_path_does_not_crash` exercising the unstubbed path. Lesson: a green suite built on stubs can hide a totally-broken real path. Full gate **1068 passed/3 skipped**; ruff/format/mypy clean. No release. PR next.
+
+#### #0205 · inserted · FWK45–FWK48 · 2026-06-22
+Converted the reviewer-audit arc's open follow-ups from PLAN-prose into tracked `Next`
+tasks (they were floating as a parenthetical + a "Deferred (documented)" note inside the
+FWK43/FWK4 Done entries). **FWK45** — apply FWK43's deferred remainder (3 fixture rewrites
++ 6 paraphrased-`before` domain-block edits the auto-applier couldn't render; eval-gated).
+**FWK46** — reviewer-audit retries an unparseable Stage-3 skeptic instead of silently
+dropping its vote (env-parity dropped on 2/3 parse failures in FWK43; strict-majority can
+flip on a dropped vote). **FWK47** — `--resume` checkpoint-provenance guard (resume has no
+input-fingerprint check, so a stale checkpoint can bind to the wrong brief/roster/code).
+**FWK48** — audit the review agents shipped INTO rendered projects (today reviewer-audit
+only calibrates the framework's own agents); the big one, needs its own brainstorm. None
+blocking; each gets a brainstorm/design doc when picked up (PLAN holds stubs, not designs).
+
+#### #0206 · inserted · FWK49–FWK55 + Horizon · 2026-06-22
+**Retrofit-cost horizon scan → PLAN.** Ran a 76-agent deep web-research workflow (3.67M tokens,
+~47 min, run `wf_93876f54-0ff`) to escape our own vantage on "what's genuinely useful / brutal to
+retrofit." Smoke-tested the fan-out path first (a general-purpose workflow subagent CAN ToolSearch-load
+the deferred WebSearch/WebFetch + Write to the space-containing path). 16 Phase-1 agents (10 domain +
+3 comparative-scaffold + 3 breadth-first guards) → 105 findings → synthesis (deduped 76 candidates) →
+perspective-diverse adversarial (2 lenses × 29 new) → completeness critic. Controller ran the
+authoritative code-validation pass vs `batteries.py`+template. **Headline:** the lens pruned as much as
+it found — the `genuine-high-retrofit` skeptic correctly separated high-STAKES from high-RETROFIT-COST
+(ledger/billing/sbom/backfill/published-sdk/test-factories/storybook = real but cheaply addable-late →
+parked). **Recorded as FWK49–55** (code-confirmed scaffold-early seams): object/blob storage lifecycle
+(the completeness MISS); data-correctness base-model seams (external-id/money/time-future); frontend
+foundations (headless-primitive/typed-data-layer/perf-budget); transactional-outbox (closes the gap
+`handler.py.jinja:17-20` already documents); API-contract early seams (api-versioning namespace + cursor
+envelope); ops/supply-chain gates (license-policy + backup-restore-drill); retrofit-guard reviewers.
+**Horizon block** added to PLAN to preserve everything not stubbed (per user: don't discard non-grouped
+items) — the larger first-class concerns with their seam-ladders (composability/shared-auth, multitenancy
+logical→physical, AI-agent-harness, i18n, experimentation, product-analytics, AI-retrieval, CMS, secrets)
++ the full parked enumeration. Authoritative record: `docs/superpowers/assessments/2026-06-22-retrofit-cost-horizon-scan.md`
+(plan + findings) + `retrofit-scan/` per-agent files. Brainstorm/scan only → no code/release.
