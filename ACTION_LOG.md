@@ -2657,3 +2657,18 @@ mechanism) + two **shape constraints, safe single-host defaults** (no behavior c
 reference's hardcoded single-host comparison (`netloc == Host OR netloc ∈ allowlist`). Full subdomain
 support (parent-domain choice, allowlist population, double-submit-token) stays consumer/deferred —
 "don't preclude it." Spec §3/§5.1/§7/§9/§10/§15 updated. Still design-only (no payload → no release).
+
+#### #0213 · note · FWK58 plan · 2026-06-23
+**FWK58 implementation plan written (22 tasks, 8 phases).** `docs/superpowers/plans/2026-06-23-fwk58-multitenantauth-defork-spine.md`.
+An **extraction** plan (port-vs-novel standard: "port `<path>`" = copy from `meridian@e0cf9cf` + listed
+transformations; novel/security-critical/integration code given in full). Phases: A control-plane
+foundation + battery skeleton (BatterySpec, settings, ControlBase/control_session_factory); B models +
+the `migrations_control` chain with the NAMED version table; C pure mechanism (passwords/tokens/expr/
+resolution); D services (authz grant/revoke + ≥1-admin TOCTOU, routing-agnostic registry, authn
+signup/login/invite); E deps (404-before-403) + CSRF (MDN multi-host shape) + routes + authz-fitness;
+F minimal-generic seed (UNLOCKED); G obs/integrity/FWK29; H acceptance + live docker + render-matrix.
+Each security-critical task carries an explicit reviewer note. Branch-end review = spec(Sonnet) +
+quality(Opus) + framework `security` agent scoped to "Phase-1 standalone" + explicit `/security-review`
++ reconcile vs Meridian's original security-review spec. **Next: per-user, security-review the PLAN
+before implementation** (Meridian did this on their original impl; their security spec = threat-model
+oracle). Plan only → no code/release.
