@@ -25,6 +25,7 @@ below). We then overlaid the dependency DAG to turn tiers (rank) into **waves** 
 Foundations (left) must precede their dependents (right):
 
 ```
+shape-axis / headlessness ────────── workspace-shared-infra · sibling-interface-contracts · (auth-as-service ↔ auth-as-library)
 identity-principal (shared-auth) ─┬─ authz-spine ─── api-keys (also needs secrets-backing)
                                   ├─ enterprise-SSO/SCIM
                                   ├─ tenant-context ── tenant-rls / tenant-physical-routing / tenant-fairness
@@ -43,6 +44,31 @@ external-id ──────────────────────�
 ```
 Cross-cluster: tenant-context needs identity-principal · api-keys needs identity+authz+secrets ·
 billing needs multitenancy+audit-log+authz+webhook-inbox. **(Meridian: add edges we can't see.)**
+
+---
+
+## Composability / sibling-products — the cross-cutting concern (Meridian's seed)
+
+This is the architectural posture that **started this thread** ("sub-products as isolated composable
+components + more parallel building streams"), and the retrofit scan structurally **under-weighted**
+it: a seam-hunting scan finds discrete seams, but composability is the *substrate* those seams sit on.
+Splitting a web monolith into siblings late is exactly the brutal-retrofit Meridian is facing — so by
+the lens's own logic it belongs near the top, not buried as a single auth row. Decomposed:
+
+| Facet | What it is | Status / placement |
+|---|---|---|
+| **shape axis / headlessness** | `framework new --shape {web\|worker\|library\|cli}`; headless = no app/route/heartbeat. The meta-foundation — a sibling can be a worker, library, CLI, or service. Today `main.py` is unconditional (web-only). | **NEW — Wave 1 *if* going multi-product** |
+| **workspace / shared-infra** | N siblings share ONE obs/Traefik/network/canonical-store, not N full 8-service stacks | **NEW — Wave 2 (rides shape-axis + FWK6)** |
+| **sibling-interface contracts** | the hard boundary between streams: a published typed client (un-park `published-sdk` here) + Pact `consumers` (exists) + a shared-schema package | **Wave 2** |
+| **shared-auth** (service vs library) | the service-vs-library-over-canonical-store decision | **Wave 1** (`identity-principal` + auth cluster) — the open architectural call |
+| **shared canonical store** | siblings → one `APP_DATABASE_URL` | **DONE (FWK6)** |
+| **parallel-streams enablers** | flag-gated trunk dev (`experimentation`) + api-versioning + Pact + per-sibling CI | **pull together** so incomplete work merges safely |
+
+Build-order: **shape-axis is the root** → workspace + sibling-contracts ride on it → parallel-streams
+enablers ride on the contracts. Shared-auth's service-vs-library choice *is itself* a shape-axis choice
+(auth-as-service = a headless service sibling; auth-as-library = a library-shape sibling). Tracked as
+**FWK56** (promoted from Horizon); gets its own brainstorm — the paused shape-axis → auth-as-service →
+auth-as-library sequence.
 
 ---
 
@@ -126,3 +152,7 @@ Please fill the **"Meridian: build? / when?"** columns above, and answer:
 3. **Cross-cluster edges we can't see** — e.g. does your multitenancy hard-require shared-auth first, or
    are they parallel? Any Meridian seam that hard-blocks another?
 4. **Anything mis-ranked for your reality** — a parked item you'd promote, or a Wave-1 item you'd defer.
+5. **Sibling / parallel split (your seed — FWK56)** — which sub-products become siblings, and in what
+   *shape* (worker / library / cli / service)? Is shared-auth a **service** or a **library over the
+   canonical store**? Do you want **workspace/shared-infra** mode (one obs/Traefik/network across
+   siblings)? This is the concern the scan under-weighted — your answer here re-weights the whole board.
