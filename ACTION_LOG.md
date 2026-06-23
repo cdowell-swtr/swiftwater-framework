@@ -2719,3 +2719,11 @@ targets (Tasks 6/12). Recorded the binding "Layer-1 Hardening" section (governs 
 "Layer-2 pre-merge gate" stance×focus matrix in the plan. Validation: the 3 skipped lenses found exactly
 the data/ops/plan defects the 2 security lenses structurally couldn't, incl. 2 build-derailers — vindicates
 the full method. Plan+spec revised; no code → no release. **Next: execution mode (subagent-driven vs inline), then build.**
+
+#### #0216 · build · FWK58 (subagent-driven; per-task detail in `.superpowers/sdd/progress.md`) · 2026-06-23
+**Task 1 — register `multitenantauth` battery + empty package skeleton.** BatterySpec (obs=in-process,
+gates security) in `batteries.py`; conditional `multitenantauth/__init__.py`; `test_batteries` +
+`test_copier_runner` render guards. TDD RED→GREEN; ruff/format/mypy clean. (Build commits are per-task on
+branch `fwk58-multitenantauth-spine`; this log carries a one-line marker per task, the ledger the detail.)
+Task-1 review (Sonnet) caught the implementer silently deleting a `docs_layout` provenance assertion
+(mislabeled an "editor artifact") → fix-wave restored it + strengthened the new test (gates assertion).

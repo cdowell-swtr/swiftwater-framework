@@ -4280,3 +4280,15 @@ def test_render_docs_layout_validator_is_zero_dep_bash(tmp_path: Path):
     script = (dest / "scripts" / "docs_layout_check.sh").read_text()
     assert script.startswith("#!/usr/bin/env bash")
     assert "vendored from cdowell-swtr/patterns" in script
+
+
+def test_render_with_multitenantauth_battery_creates_package(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    assert (dest / "src" / "demo" / "multitenantauth" / "__init__.py").is_file()
+
+
+def test_render_without_multitenantauth_has_no_package(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / "src" / "demo" / "multitenantauth").exists()
