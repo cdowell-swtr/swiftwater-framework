@@ -2566,3 +2566,16 @@ tenant-data-model · money · object-storage (all 3 rankers Tier-1 AND DAG roots
 formatted for Meridian's "local builds" response (per-item build?/when? columns + cross-cluster-edge ask).
 Artifacts: `docs/superpowers/assessments/2026-06-22-prioritization-draft.md` + `retrofit-scan/prioritization-*.md`.
 Going to a PR so Meridian reads it via `gh`, not the local fs. Planning only → no code/release.
+
+#### #0208 · inserted · FWK56 · 2026-06-22
+**Elevated composability/sibling-products to first-class.** Review caught that the retrofit scan
+structurally under-weighted the theme that SEEDED this thread (Meridian's "sub-products as composable
+siblings + parallel build streams") — a seam-hunting scan finds discrete seams, but composability is the
+architectural posture/substrate they sit on, so only its auth facet (identity-principal) surfaced while
+shape-axis/headlessness, workspace/shared-infra, and sibling-interface contracts were buried in a Horizon
+title or parked. Promoted to **FWK56** (Next) with full decomposition: shape-axis/headlessness
+(`framework new --shape`, the meta-foundation), workspace/shared-infra (rides FWK6), sibling-interface
+contracts (un-park published-sdk + Pact + shared-schema), shared-auth service-vs-library, parallel-streams
+enablers (flags + api-versioning + Pact + per-sibling CI). Added a dedicated section + DAG root + a
+Meridian-response question to the prioritization draft so Meridian's seed is front-and-centre in what they
+respond to. Docs/plan only → no code/release.
