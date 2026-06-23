@@ -2600,3 +2600,17 @@ interface-contracts; boundary-erosion detection; decomposition-precedes-parallel
 references Meridian's EDR/decision-graph as one instantiation, not absorbed. Re-weights folded into the
 draft (secrets earlier, api-versioning Wave-1, audit-log split, agents reserve-trending, external-id
 stays). Docs/plan only → no code/release.
+
+#### #0210 · inserted · FWK58 (committed) · 2026-06-22
+**Committed the de-fork substrate to Meridian: ship by 2026-06-24/25 (2–3 days).** Operator chose to
+commit on a date (not "intent, no date") since Meridian is a real consumer with a validated shape and a
+freeze that shouldn't drag. Carved **FWK58** out of FWK56's substrate facet as the dated deliverable:
+identity · session · tenant-provisioning · physical-routing (`resolve_tenant_dsn`) **with its intrinsic
+ops** (per-tenant connection budgeting MDN47 + plane-aware migrate/deploy/rollback MDN59/46) + the
+authz-spine *mechanism*, built **as a library over the canonical store** (Meridian's lean) to their
+validated shape. Excludes Meridian-local (RBAC policy + epistemic-governance). Colonization guard:
+multitenant-consumer-shaped. secrets-backing flagged to Meridian as immediate-follow (not in-window).
+Framework→Meridian report updated to the dated commitment + a 48–72h two-sided ask (their reference impl
++ co-design up front; our build). FWK56 keeps the non-substrate facets (shape-axis/workspace, brainstorm).
+Report `docs/superpowers/assessments/2026-06-22-framework-response-to-meridian.md`. Template payload →
+FWK58 ships a release when built (this commit is plan/report only).
