@@ -2614,3 +2614,31 @@ Framework→Meridian report updated to the dated commitment + a 48–72h two-sid
 + co-design up front; our build). FWK56 keeps the non-substrate facets (shape-axis/workspace, brainstorm).
 Report `docs/superpowers/assessments/2026-06-22-framework-response-to-meridian.md`. Template payload →
 FWK58 ships a release when built (this commit is plan/report only).
+
+#### #0211 · inserted · FWK58 design + FWK59/FWK60 · 2026-06-23
+**FWK58 design approved (brainstorm); split into two phases; +2 deferred stubs.** Meridian delivered
+everything the commitment waited on — reference impl on `meridian@e0cf9cf` (the MDN53 per-domain split =
+the extraction map), generic/local line confirmed (3 buckets), MDN48 hardening list as requirements
+input, secrets/freeze/co-design confirmed — and answered the in-window scope question: **adopt
+incrementally, spine-first** (the spine is routing-independent; `current_user→active_tenant→guard` runs
+on the control session only). Operator **de-pressurized the date** (single maintainer of both repos, no
+external dependency) → build it properly with full TDD/dual-review discipline. **Decisions locked via
+brainstorm:** (Q1) one battery `--with multitenantauth` (internal authn/authz/tenancy modules; a
+single-tenant `--with auth` deferred → FWK59); (Q2) control plane **logically-separate-always,
+physically-co-located-by-default-overridable** (`ControlBase`+`control_session_factory`+`migrations_control`
+with a **named version table** — battery-specific, NOT in Meridian's reference, required because the
+battery co-locates two chains in one DB by default; `APP_CONTROL_DATABASE_URL` defaults to the app DB);
+(Q3) **self-contained** Phase 1 — the existing `Item` demo untouched (so FWK59's `--with auth` can share
+an unscoped demo); (C) **Option-1 generic resource-scope** (`resource` role-domain; Meridian collapses
+`ProductRoleAssignment` onto it → *full* de-fork). **Colonization line drawn precisely from the code:**
+mechanism (recursive expr evaluator + guards, domain-split resolution, service layer + ≥1-admin
+invariant, the 3+1 assignment domains, deps chain) ships LOCKED + a *minimal generic* seed catalog
+(UNLOCKED); Meridian's RBAC *policy* + the **sealed/hidden resource-tree resolver** (`product_access.py`
+— triply local: EDR + physical routing + absolute-seal/MDN36) stay theirs, plugged in behind an inert
+`resource_grant`/`subtree_exists` hook. The flat generic `resource_grant` ships live in Phase 1.
+**Phase 2 deferred:** physical routing + ops. **Validation oracle:** port Meridian's ~2,360-line
+auth/tenancy suite (authz-fitness T1–T4 = crown jewels). **Reviewers** (security + `/security-review`)
+run when Phase 1 is done, *before* Meridian adopts. **Spawned:** FWK59 (`--with auth` single-tenant,
+cookie+bearer+JWT) + FWK60 (`tenant-data-model`/`tenant-context-propagation`, logical tenant_id
+scoping). Spec `docs/superpowers/specs/2026-06-23-fwk58-multitenantauth-defork-spine-design.md`. On
+branch `fwk58-multitenantauth-spine`; design commit only (no template payload yet → no release).
