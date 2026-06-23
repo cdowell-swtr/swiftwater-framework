@@ -2672,3 +2672,25 @@ quality(Opus) + framework `security` agent scoped to "Phase-1 standalone" + expl
 + reconcile vs Meridian's original security-review spec. **Next: per-user, security-review the PLAN
 before implementation** (Meridian did this on their original impl; their security spec = threat-model
 oracle). Plan only → no code/release.
+
+#### #0214 · amended · FWK58 plan (security review) · 2026-06-23
+**Two-agent pre-implementation security review of the plan → 22 findings, all applied.** Lens A
+(authZ/tenant-isolation, Opus) + lens B (authN/session/CSRF/crypto, Opus), read-only over plan+spec+
+reference, distinct lenses. **Convergent headline:** both independently flagged **signup as a fail-open
+zone** — B-F1 (Meridian gates on the literal `stage`; the framework token is `staging`, so a verbatim
+port disables the `prod` 404 gate path AND skips the allowlist in `staging`, AND the `environment`
+validator rejects `staging`) + A-F9 (empty `signup_allowlist` = unrestricted is fail-open for a generic
+scaffold). Operator chose **fail-closed by default**: `prod` off / `staging` empty-allowlist = deny /
+`dev` open. Other blockers fixed: B-F2 (peppers default-empty + port the unmentioned `verify_runtime`
+fail-fast guard into `create_app`), B-F4 (CSRF allowlist exact-match, wildcards forbidden — struck
+"pattern" from spec §5.1), B-F3 (parent-domain cookie = raw-token disclosure → documented invariant),
+A-F2 (the "T1–T4" fitness paraphrase was wrong — real suite is T1/T1b/T2/T3/T4/T4b; T1b is the
+load-bearing tenant-data-must-be-guarded test), A-F3 (the `PUBLIC`/`INLINE_AUTHZ` fitness allowlists
+hardcode Meridian/EDR routes — a stale entry = silent authz hole → rebuilt for the battery surface +
+added to the generic/local transform list), A-F5 (the role-domain CHECK must REMOVE `'product'`, not just
+add `'resource'`, else a Meridian role-domain silently survives). Build-notes folded in: A-F1 (pass
+discrete path params to `resource_grant`, don't re-parse — improves on the reference), A-F4 (fix the
+`add_platform_role` phantom-audit upstream bug), A-F6/A-F8/A-F10/A-F7/B-F6/B-F7/B-F9/B-F10. Full ledger
+in the plan ("Security-review ledger"); reviewed via [[receiving-code-review]] (verified each against the
+reference before applying). Plan+spec revised; no code → no release. **Next: execution-choice handoff
+(subagent-driven vs inline), then the build.**

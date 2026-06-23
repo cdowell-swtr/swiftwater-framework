@@ -144,10 +144,25 @@ re-touch audited security code later. Both keep **single-host-safe defaults** (n
 
 1. **Cookie `Domain` configurable** — `session_cookie_domain` setting, default `None` (host-only);
    settable to a parent domain so one session spans tenant subdomains. Threaded into `set_cookie(domain=…)`.
-2. **CSRF Origin/Referer allowlist configurable** — `csrf_allowed_origins` (a set/pattern), default empty
-   ⇒ today's strict **same-origin** rule (`Origin/Referer netloc == Host`). The reference middleware
-   hardcodes the single-host comparison; the battery replaces it with `netloc == Host OR netloc ∈
-   csrf_allowed_origins`.
+2. **CSRF Origin/Referer allowlist configurable** — `csrf_allowed_origins`, a set of **exact** netlocs
+   (`host[:port]`) — **NO wildcards/patterns** (security-review B-F4). Default empty ⇒ today's strict
+   **same-origin** rule (`Origin/Referer netloc == Host`). The reference middleware hardcodes the
+   single-host comparison; the battery replaces it with `netloc == Host OR netloc ∈ csrf_allowed_origins`.
+
+**Security invariants on these knobs (security-review B-F3/B-F4/B-F5) — the multi-host shape widens the
+trust boundary, so the battery documents the constraints and ships exact-match + safe defaults; it does
+not implement subdomain support:**
+- A **parent-domain session cookie discloses the raw session token to every subdomain's server** — a full
+  cross-tenant session-hijack primitive (`httponly` does not help; it blocks JS read, not transmission).
+  Only set `session_cookie_domain` to a parent where **every** subdomain is equally trusted; never where
+  tenants control their subdomain.
+- `SameSite=Lax` is computed on the registrable domain, so sibling subdomains (`a.example.com`,
+  `b.example.com`) are **same-site** — `Lax` gives **no** cross-tenant CSRF protection between them. In a
+  multi-host deployment the **exact-match** `csrf_allowed_origins` is the only cross-tenant defense;
+  wildcards (`*.example.com`) would re-admit attacker-controlled subdomains and are forbidden.
+- The "absent `Origin` AND `Referer` → allow" lenient branch is sound **only because** `SameSite=Lax`
+  independently blocks the cross-site cookie; any move to `SameSite=None` (to share a session across
+  sibling subdomains) must first pair with the deferred double-submit-token flow.
 
 Full subdomain support (choosing the parent domain, populating the allowlist, the double-submit-token
 flow) stays consumer/deferred — this is only **"don't preclude it."** Generic mechanism + safe defaults
@@ -207,23 +222,31 @@ All paths under `src/framework_cli/template/`, battery-conditional on `multitena
   `__authorized__` for the fitness tests; never serialized to a client.
 - **Seed (UNLOCKED policy)** — `permissions.py` (`PermDef` catalog, minimal generic) + `roles.py`
   (built-in bundles + one custom-DB-role proving the seam) + a seed runner with a reconciliation check.
-- **Routes** — auth (signup/login/logout/invite-accept), tenants (create/list-members/manage-members),
-  roles (grant/revoke). The guarded example: `GET /tenants/{tenant_id}/members` behind
-  `guard(Perm("tenant:manage-members", on="tenant:{tenant_id}"))`.
+- **Routes** — auth (signup/login/logout/set-password/invite-accept, `/auth/me`), tenants
+  (create/list-members/manage-members), roles (grant/revoke). The guarded example: `GET
+  /tenants/{tenant_id}/members` behind `guard(Perm("tenant:manage-members", on="tenant:{tenant_id}"))`.
+  **Signup is fail-closed by default** (security-review A-F9): `prod` off (404); `staging` with an empty
+  `signup_allowlist` = deny (403); open only in `dev`; env tokens are the framework set
+  `{dev,test,staging,prod}` (security-review B-F1, not Meridian's `stage`).
 - **Middleware** — `CSRFMiddleware` (ported): on mutating methods (POST/PUT/PATCH/DELETE), a request
-  carrying the session cookie is CSRF-checked — `Origin`/`Referer` netloc must equal `Host` **or** be in
-  `csrf_allowed_origins` (else 403); Bearer-only and unauthenticated requests are exempt; absent
-  Origin+Referer is allowed (lenient, same-origin/non-browser). Registered in `main.py`.
+  carrying the session cookie is CSRF-checked — `Origin`/`Referer` netloc must equal `Host` **or** be an
+  **exact** entry in `csrf_allowed_origins` (no wildcards — §5.1; else 403); Bearer-only and
+  unauthenticated requests are exempt; absent Origin+Referer is allowed (lenient, backstopped by
+  `SameSite=Lax`). Registered in `main.py`.
 - **Settings (Pydantic)** — `control_database_url` (`APP_CONTROL_DATABASE_URL`, default = app DB);
-  `session_cookie_name`; `session_cookie_secure`; **`session_cookie_domain`** (default `None` =
-  host-only — §5.1); **`csrf_allowed_origins`** (set/pattern, default empty = same-origin — §5.1);
-  `session_pepper` (SecretStr); `password_pepper` (SecretStr) + argon2 cost params
-  (`argon2_time_cost`/`memory_cost`/`parallelism`); `admin_role_name`; session TTL. The session cookie
-  is set httpOnly + `secure` + `samesite="lax"` + `domain=session_cookie_domain`.
+  `session_cookie_name`; `session_cookie_secure` (**default `True`**); **`session_cookie_domain`**
+  (default `None` = host-only — §5.1); **`csrf_allowed_origins`** (set of **exact** netlocs, default
+  empty = same-origin — §5.1); `session_pepper` / `password_pepper` (SecretStr, **default empty**; the
+  fail-fast `verify_runtime` guard requires them non-empty in `prod`/`staging` — security-review B-F2) +
+  argon2 cost params with **floor validators** (`time≥3`, `memory≥65536`, `parallelism≥4` — B-F10);
+  `pepper_version`/`hash_version` (forward-compat only — no live rotation in Phase 1); `admin_role_name`;
+  `signup_allowlist`; session/invite TTLs; the `environment` validator admits `{dev,test,staging,prod}`.
+  The session cookie is set httpOnly + `secure` + `samesite="lax"` + `domain=session_cookie_domain`.
 - **Passwords / tokens** — argon2id (`argon2-cffi`) over an **HMAC-SHA256 pepper pre-hash**, per-row
-  salt in the PHC string, a version column for rotation, `needs_rehash` + rehash-on-login. Tokens:
-  `secrets.token_urlsafe(32)`, store only `HMAC-SHA256(token, session_pepper)` (opaque; the hash lookup
-  IS the check). **New dependency: `argon2-cffi`.**
+  salt in the PHC string, `needs_rehash` + rehash-on-login. The version columns are a **forward-compat
+  seam only — no live pepper rotation in Phase 1** (rotating the single pepper would mass-lock; B-F8).
+  Tokens: `secrets.token_urlsafe(32)`, store only `HMAC-SHA256(token, session_pepper)` (opaque; the hash
+  lookup IS the check); login mints a fresh token (no session fixation). **New dependency: `argon2-cffi`.**
 
 ---
 
@@ -351,9 +374,20 @@ output. Plus:
 
 - **Extraction source pinned** — extract from `cdowell-swtr/meridian@e0cf9cf` (origin/main, 2026-06-23),
   not a moving branch ([[verify-master-content-after-pr-merge]]).
-- **Password version column naming** — the `AppUser` model uses `hash_version`; `passwords.py`'s
-  rotation story references `pepper_version`/`APP_PEPPER_VERSION`. Reconcile to one rotation column +
-  setting during the build.
+- **Env-token remap (security-review B-F1, resolved)** — Meridian gates on `stage`; the framework token
+  is `staging`. Every ported env comparison (signup gates, `verify_runtime`, the `environment` validator
+  set) maps to `{dev,test,staging,prod}`. A verbatim port fails signup/pepper gates open — see Global
+  Constraints + Tasks 2/13.
+- **Pepper rotation (security-review B-F8, resolved)** — the `pepper_version`/`hash_version` columns are
+  **forward-compat seams only**; Phase 1 ships NO live pepper rotation (the single-pepper `_peppered`
+  would mass-lock on rotation). Peppers default empty; safety is the `verify_runtime` fail-fast guard in
+  `prod`/`staging` (B-F2). No "rotation without lockout" is claimed.
+- **The named version table is battery-specific** — not in Meridian's reference (their chains are in
+  separate DBs). It is the load-bearing mechanism for co-located two-chain migrations; test it
+  explicitly (both the co-located and separate-control-DB cases).
+- **Signup fail-closed default (security-review A-F9, operator decision A)** — diverges from Meridian's
+  empty-allowlist=unrestricted; the battery ships `prod` off / `staging` empty=deny / `dev` open.
+  Meridian restores its behavior by setting the allowlist.
 - **The named version table is battery-specific** — not in Meridian's reference (their chains are in
   separate DBs). It is the load-bearing mechanism for co-located two-chain migrations; test it
   explicitly (both the co-located and separate-control-DB cases).
