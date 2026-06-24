@@ -1,0 +1,159 @@
+"""AuthN control-plane model tests: schema constraints for AppUser and Session.
+
+Ported from meridian tests/functional/test_auth_models.py (AuthN portion only).
+InviteToken is imported and re-exported but not schema-tested here — its FK to
+tenant_membership lands in Task 6 (tenant models).
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+import pytest
+from sqlalchemy import Engine, create_engine, inspect, make_url, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+from {{ package_name }}.db.control.base import ControlBase
+
+
+# ── fixtures ──────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def control_engine(pg_url: str) -> Engine:
+    """A control-plane engine with only the AuthN tables created.
+
+    InviteToken is excluded because its FK to tenant_membership (Task 6) does
+    not exist yet — create_all on the full metadata would fail.
+    """
+    _ctrl_db = "{{ package_name }}_control_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    # Only create tables that have no unresolved FKs at this task boundary.
+    ControlBase.metadata.create_all(
+        engine,
+        tables=[m.AppUser.__table__, m.Session.__table__],
+    )
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean(control_engine: Engine) -> None:  # type: ignore[return]
+    """Truncate AuthN tables after each test (tests commit rows; no rollback isolation)."""
+    yield
+    with control_engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE session, app_user CASCADE"))
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _user(s: Session, email: str, *, born: str = "operator") -> m.AppUser:
+    u = m.AppUser(email=email, email_canonical=email.lower(), born=born)
+    s.add(u)
+    s.flush()
+    return u
+
+
+# ── tests ─────────────────────────────────────────────────────────────────────
+
+
+def test_authn_tables_exist(control_engine: Engine) -> None:
+    names = set(inspect(control_engine).get_table_names())
+    assert {"app_user", "session"} <= names
+
+
+def test_email_canonical_unique(control_engine: Engine) -> None:
+    with Session(control_engine) as s:
+        _user(s, "a@x.com")
+        s.commit()
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        s.add(
+            m.AppUser(email="a+tag@x.com", email_canonical="a@x.com", born="operator")
+        )
+        s.commit()
+
+
+def test_email_canonical_must_be_lowercase(control_engine: Engine) -> None:
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        s.add(
+            m.AppUser(email="B@x.com", email_canonical="B@x.com", born="operator")
+        )  # not lower
+        s.commit()
+
+
+def test_born_signup_requires_signed_up_at(control_engine: Engine) -> None:
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        s.add(
+            m.AppUser(email="c@x.com", email_canonical="c@x.com", born="signup")
+        )  # no signed_up_at
+        s.commit()
+
+
+def test_born_signup_with_signed_up_at_succeeds(control_engine: Engine) -> None:
+    with Session(control_engine) as s:
+        s.add(
+            m.AppUser(
+                email="d@x.com",
+                email_canonical="d@x.com",
+                born="signup",
+                signed_up_at=datetime.now(timezone.utc),
+            )
+        )
+        s.commit()  # must not raise
+
+
+def test_non_signup_born_rejects_signed_up_at(control_engine: Engine) -> None:
+    """The xor invariant in the other direction: a non-signup birth must NOT carry
+    signed_up_at (born != 'signup' but signed_up_at IS NOT NULL violates the CHECK)."""
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        s.add(
+            m.AppUser(
+                email="g@x.com",
+                email_canonical="g@x.com",
+                born="operator",
+                signed_up_at=datetime.now(timezone.utc),
+            )
+        )
+        s.commit()
+
+
+def test_born_enum_rejects_unknown_value(control_engine: Engine) -> None:
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        s.add(m.AppUser(email="e@x.com", email_canonical="e@x.com", born="bogus"))
+        s.commit()
+
+
+def test_session_is_identity_only() -> None:
+    """Session must carry no tenant column — identity-only by schema."""
+    col_names = set(m.Session.__table__.columns.keys())
+    assert col_names == {"token_hash", "user_id", "expires_at", "created_at"}
+    assert "tenant" not in " ".join(col_names)
+
+
+def test_session_insert_and_fk(control_engine: Engine) -> None:
+    with Session(control_engine) as s:
+        u = _user(s, "f@x.com")
+        s.commit()
+        uid = u.id
+    with Session(control_engine) as s:
+        tok = m.Session(
+            token_hash="a" * 64,
+            user_id=uid,
+            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        s.add(tok)
+        s.commit()  # must not raise

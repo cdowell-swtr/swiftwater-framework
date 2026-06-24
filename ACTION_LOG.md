@@ -2742,3 +2742,8 @@ it): `control_session_factory` called `control_engine()` INSIDE the non-reentran
 on first call. Fixed (resolve the engine before the lock) + plan code corrected. Review = Approved
 (deadlock-free form verified; distinct-metadata test non-vacuous); Minors→final review. Real
 testcontainers; 3 control-engine tests green.
+**Task 4 — AuthN models** (`AppUser`/`Session`/`InviteToken` ported verbatim; import adapted `...base`→
+`..base` for the framework's deeper nesting; `models/__init__.py` re-exports authn-only per PQ-P5;
+InviteToken schema-test deferred to Task 6 since it FKs `tenant_membership`). Review = Approved; one
+Important gap fixed (the `born`-xor invariant was only half-tested → added the non-signup-with-signed_up_at
+reject case). Real Postgres; 9 model tests green.
