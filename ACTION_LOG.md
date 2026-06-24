@@ -2939,3 +2939,13 @@ treats a concurrent duplicate-grant `IntegrityError` as the idempotent 204 no-op
 (finding B). Password `max_length` comment reworded — input-size bound, not cost protection (the pepper
 HMAC collapses any length to 32B pre-argon2). +4 route regression tests (A/C/D). Controller-verified:
 326 rendered tests, ruff/format clean.
+
+#### #0220 · docs · FWK58 Layer-2 hardening 3/3 (ops docs) · 2026-06-24
+**Ops-doc fixes in `.env.example`.** OPS-F4 connection-budget note corrected: the co-located default runs
+TWO QueuePools (app + control), each 5+10=15, so ~30 conns/process — was under-documented as ~15 (finding
+M); size Postgres `max_connections` accordingly. Added a login/set-password **rate-limiting** note: not
+enforced at the app layer (argon2id makes each attempt costly, but online-guessing/concurrency bounds are
+an infra concern) — enforce per-IP/per-account limits + a connection cap at the reverse proxy / LB (finding
+G, maintainer decision: leave to the proxy/LB). Phase-2 preconditions for Meridian + the next-pass coverage
+gaps (migration data-safety cell, id↔slug-desync cell) are recorded in the scorecard. Closes the Layer-2
+hardening arc — merge gate already satisfied (0 Crit/High); remaining: Option-B decision, merge, release cut.
