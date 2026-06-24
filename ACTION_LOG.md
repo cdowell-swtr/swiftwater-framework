@@ -2865,3 +2865,11 @@ separate-control-DB isolation, and schema-matches-models (resource-role round-tr
 + non-DNS slug rejected) + all model suites. **⏚ branch-end: comprehensive CHECK-name audit** (the test
 covers the load-bearing domain+slug CHECKs; confirm email-lowercase/born/status/action CHECKs are all in
 the migrations too).
+**Task 8 (un-deferred) — entrypoint: both alembic chains + control seed + dispose** (OPS-F1). Converted
+`entrypoint.sh`→`.jinja`; battery-conditional region (gated on `APP_RUN_MIGRATIONS`) runs app-alembic →
+control-alembic → **control seed (`python -m …authz.seed`)** → consumer Item seed; `main.py` lifespan
+disposes the control engine; render-guards (mt has both control steps ordered; baseline has neither).
+Review = Approved; one defensive reorder applied (control-seed BEFORE the consumer seed — robust if a
+consumer adds control-dependent seed data). Also folded a `ruff format` regression fix to
+`integrity/classes.py` (a Task-18 edit left it format-dirty — CI gate runs `format --check`).
+**Tasks 7+8 are now DONE — nothing is deferred.** Remaining: 20 (FWK29), 21 (acceptance+live-e2e), 22.

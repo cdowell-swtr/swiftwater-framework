@@ -25,6 +25,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from {{ package_name }}.db.engine import dispose_engine
 
     dispose_engine()
+{%- if "multitenantauth" in batteries %}
+    from {{ package_name }}.db.control.engine import dispose_control_engine
+
+    dispose_control_engine()
+{%- endif %}
     log.info("graceful_shutdown")
 
 

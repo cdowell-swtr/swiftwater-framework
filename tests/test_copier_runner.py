@@ -4373,3 +4373,41 @@ def test_render_without_multitenantauth_env_example_lacks_auth_vars(tmp_path: Pa
     env_example = (dest / ".env.example").read_text()
     assert "APP_SESSION_PEPPER" not in env_example
     assert "APP_PASSWORD_PEPPER" not in env_example
+
+
+def test_render_multitenantauth_entrypoint_runs_control_chain_and_seed(tmp_path: Path):
+    """With multitenantauth, entrypoint.sh must run the control alembic chain then the
+    authz seed, both after the app chain, all gated on APP_RUN_MIGRATIONS."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    entry = (dest / "scripts" / "entrypoint.sh").read_text()
+    # App chain still present.
+    assert "alembic upgrade head" in entry
+    # Control chain present with explicit config flag.
+    assert "alembic -c alembic_control.ini upgrade head" in entry
+    # Control seed present.
+    assert "python -m demo.multitenantauth.authz.seed" in entry
+    # Ordering: app chain → control chain → control seed → consumer seed (within the
+    # migrations block). The control vocabulary must be seeded BEFORE the consumer seed so
+    # any consumer data depending on the authz vocabulary always finds it present.
+    app_chain_pos = entry.index("alembic upgrade head")
+    control_chain_pos = entry.index("alembic -c alembic_control.ini upgrade head")
+    control_seed_pos = entry.index("python -m demo.multitenantauth.authz.seed")
+    consumer_seed_pos = entry.index("python scripts/seed.py")
+    assert app_chain_pos < control_chain_pos < control_seed_pos < consumer_seed_pos
+    # All within the APP_RUN_MIGRATIONS gate.
+    assert "APP_RUN_MIGRATIONS" in entry
+
+
+def test_render_without_multitenantauth_entrypoint_has_no_control_chain_or_seed(
+    tmp_path: Path,
+) -> None:
+    """Without multitenantauth, entrypoint.sh must not contain the control chain or authz seed."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    entry = (dest / "scripts" / "entrypoint.sh").read_text()
+    # Baseline app chain is still present.
+    assert "alembic upgrade head" in entry
+    # Control-chain and seed must be absent.
+    assert "alembic_control.ini" not in entry
+    assert "multitenantauth.authz.seed" not in entry
