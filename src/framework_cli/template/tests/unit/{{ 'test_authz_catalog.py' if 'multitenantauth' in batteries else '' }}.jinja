@@ -1,0 +1,124 @@
+"""AuthZ catalog vocabulary guard (unit / pure-code, no DB).
+
+Ported from meridian tests/unit/auth/test_product_vocabulary.py — INVERTED for the
+minimal generic catalog:
+
+  - The framework catalog ships exactly 3 permissions: tenant:read,
+    tenant:manage-members, platform:provision-tenant.
+  - No Meridian / EDR / product-domain vocabulary is present.
+  - platform.admin bundles exactly platform:provision-tenant.
+
+These tests run without a DB and catch accidental catalog drift or Meridian-vocab
+leaks at the earliest possible point (import time).
+"""
+
+from __future__ import annotations
+
+from {{ package_name }}.multitenantauth.authz.permissions import ALL_NAMES, CATALOG, LIVE_NAMES
+from {{ package_name }}.multitenantauth.authz.roles import BUILTIN_BUNDLES, BUILTIN_DOMAINS
+
+
+# ── Exact catalog shape ────────────────────────────────────────────────────────
+
+
+def test_catalog_contains_exactly_the_expected_permissions() -> None:
+    """The shipped catalog has exactly 3 permissions — no accidental extras."""
+    assert ALL_NAMES == {
+        "tenant:read",
+        "tenant:manage-members",
+        "platform:provision-tenant",
+    }
+
+
+def test_all_catalog_permissions_are_live() -> None:
+    """All 3 shipped permissions are active (no forward-declared perms in the starter catalog)."""
+    assert LIVE_NAMES == ALL_NAMES
+
+
+# ── tenant-domain permissions ─────────────────────────────────────────────────
+
+
+def _by_name(name: str) -> object:
+    return next(p for p in CATALOG if p.name == name)
+
+
+def test_tenant_read_is_live_and_tenant_domain() -> None:
+    p = _by_name("tenant:read")
+    assert p.domain == "tenant"  # type: ignore[union-attr]
+    assert p.is_active is True  # type: ignore[union-attr]
+    assert p.name in LIVE_NAMES  # type: ignore[union-attr]
+
+
+def test_tenant_manage_members_is_live_and_tenant_domain() -> None:
+    p = _by_name("tenant:manage-members")
+    assert p.domain == "tenant"  # type: ignore[union-attr]
+    assert p.is_active is True  # type: ignore[union-attr]
+
+
+# ── platform-domain permissions ───────────────────────────────────────────────
+
+
+def test_platform_provision_tenant_is_live_and_platform_domain() -> None:
+    """platform:provision-tenant is present, live, and platform-domain.
+
+    Required by POST /tenants (Task 16a — platform:provision-tenant guard).
+    """
+    p = _by_name("platform:provision-tenant")
+    assert p.domain == "platform"  # type: ignore[union-attr]
+    assert p.is_active is True  # type: ignore[union-attr]
+
+
+# ── Built-in role bundles ─────────────────────────────────────────────────────
+
+
+def test_builtin_tenant_roles_defined() -> None:
+    assert BUILTIN_DOMAINS["tenant.admin"] == "tenant"
+    assert BUILTIN_DOMAINS["tenant.member"] == "tenant"
+    assert BUILTIN_BUNDLES["tenant.admin"] == {"tenant:read", "tenant:manage-members"}
+    assert BUILTIN_BUNDLES["tenant.member"] == {"tenant:read"}
+
+
+def test_platform_admin_role_defined_and_bundles_provision_perm() -> None:
+    """platform.admin is platform-domain and bundles exactly platform:provision-tenant."""
+    assert BUILTIN_DOMAINS["platform.admin"] == "platform"
+    assert BUILTIN_BUNDLES["platform.admin"] == {"platform:provision-tenant"}
+
+
+# ── No Meridian / EDR / product vocabulary ────────────────────────────────────
+
+
+def test_no_meridian_product_vocabulary_in_catalog() -> None:
+    """The shipped catalog must not contain any Meridian-specific or product-domain vocab.
+
+    Reviewers: this test is the definitive guard against EDR/product vocab leakage.
+    """
+    forbidden_names = {
+        "product:view",
+        "product:manage",
+        "tenant:manage-products",
+        "platform-tenant:provision",  # Meridian's name (hyphen, not colon)
+        "platform-user:create",
+        "platform-financial:view",
+        "platform-tenant:impersonate",
+        "tenant:write",
+        "tenant:run",
+    }
+    assert ALL_NAMES.isdisjoint(forbidden_names), (
+        f"Meridian/product vocabulary leaked into catalog: {ALL_NAMES & forbidden_names}"
+    )
+
+
+def test_no_product_domain_in_catalog() -> None:
+    """No permission in the catalog uses the 'product' domain."""
+    product_domain_perms = [p for p in CATALOG if p.domain == "product"]
+    assert product_domain_perms == [], (
+        f"product-domain permissions in catalog: {product_domain_perms}"
+    )
+
+
+def test_no_product_domain_roles() -> None:
+    """No built-in role uses the 'product' domain."""
+    product_roles = {k: v for k, v in BUILTIN_DOMAINS.items() if v == "product"}
+    assert product_roles == {}, (
+        f"product-domain roles in BUILTIN_DOMAINS: {product_roles}"
+    )

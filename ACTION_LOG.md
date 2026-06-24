@@ -2829,3 +2829,10 @@ Fixed at source (fresh authorized agent): de-literalized route docstrings, made 
 **verified non-vacuous** (re-injecting a token → T4 fails). All suites green (fitness 6/6, routes 24+13).
 **The security-critical core (Tasks 3–16) is COMPLETE.** ⏚ Task-17: wire T4 vocab to permissions.ALL_NAMES
 + roles.BUILTIN_BUNDLES once the seed catalog ships.
+**Task 17 — minimal generic seed catalog (POLICY, ships UNLOCKED)** (`permissions.py` 3-perm catalog incl.
+`platform:provision-tenant`; `roles.py` tenant.admin/member + platform.admin + a custom-role example;
+`seed.py` idempotent Postgres upsert + the cross-domain reconciliation guard (MDN48) + `main()` for the
+Task-8 entrypoint). Review = Approved (cross-domain guard + idempotency + no-Meridian-vocab all clean +
+non-vacuous; 18 green). Minors→final/Task-19 cleanup: a literal `{{ package_name }}` in a `seed.py`
+docstring (plain .py, not rendered → ships broken); missing `INTENTIONALLY_UNLOCKED` marker on `seed.py`;
+built-in role descriptions default to the role name; `main()` untested.

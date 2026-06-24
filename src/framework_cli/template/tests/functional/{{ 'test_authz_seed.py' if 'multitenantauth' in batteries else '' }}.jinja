@@ -1,0 +1,261 @@
+"""AuthZ seed + reconciliation: idempotency, reconciliation guards, and the custom-role seam.
+
+Ported from meridian tests/functional/test_authz_seed.py + adapted for the minimal generic
+catalog (no product/EDR vocabulary; platform:provision-tenant not platform-tenant:provision).
+
+The reconciliation tests inject bad bundles as PYTHON ARGUMENTS (not DB rows) to
+avoid triggering the ``role_permission.permission_name`` FK before the guard fires.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+
+import pytest
+from sqlalchemy import Engine, create_engine, make_url, select, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+from {{ package_name }}.db.control.base import ControlBase
+from {{ package_name }}.multitenantauth.authz.permissions import ALL_NAMES
+from {{ package_name }}.multitenantauth.authz.seed import reconcile_authz, seed_authz
+
+
+# ── Fixtures ───────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def control_engine(pg_url: str) -> Iterator[Engine]:
+    """Control-plane engine for seed tests. Creates all control tables (no alembic)."""
+    _ctrl_db = "{{ package_name }}_authz_seed_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(engine)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean_control(control_engine: Engine) -> Iterator[None]:
+    """Truncate all authz tables before each test (tests commit; no rollback isolation)."""
+    yield
+    with control_engine.begin() as conn:
+        conn.execute(
+            text(
+                "TRUNCATE TABLE authz_event, role_permission, role, permission RESTART IDENTITY CASCADE"
+            )
+        )
+
+
+# ── Seed idempotency ───────────────────────────────────────────────────────────
+
+
+def test_seed_is_idempotent_and_complete(control_engine: Engine) -> None:
+    """Running seed_authz twice produces the same rows — no duplicates or errors."""
+    with Session(control_engine) as s:
+        seed_authz(s)
+        s.commit()
+        seed_authz(s)  # second run — must be idempotent
+        s.commit()
+
+    with Session(control_engine) as s:
+        # All catalog permissions are present.
+        assert {p.name for p in s.scalars(select(m.Permission))} == set(ALL_NAMES)
+
+        # Built-in roles are seeded with is_builtin=True.
+        roles = {r.name: r for r in s.scalars(select(m.Role))}
+        assert roles["tenant.admin"].is_builtin is True
+        assert roles["tenant.member"].is_builtin is True
+        assert roles["platform.admin"].is_builtin is True
+
+        # The custom-DB-role seam (tenant.viewer) is seeded with is_builtin=False.
+        assert roles["tenant.viewer"].is_builtin is False
+
+        # Exactly the 3 built-ins + 1 custom DB role.
+        assert set(roles) == {
+            "tenant.admin",
+            "tenant.member",
+            "platform.admin",
+            "tenant.viewer",
+        }
+
+        # Built-in bundles are correct.
+        admin_id = roles["tenant.admin"].id
+        admin_grants = set(
+            s.scalars(
+                select(m.RolePermission.permission_name).where(
+                    m.RolePermission.role_id == admin_id
+                )
+            )
+        )
+        assert admin_grants == {"tenant:read", "tenant:manage-members"}
+
+        platform_admin_id = roles["platform.admin"].id
+        platform_grants = set(
+            s.scalars(
+                select(m.RolePermission.permission_name).where(
+                    m.RolePermission.role_id == platform_admin_id
+                )
+            )
+        )
+        assert platform_grants == {"platform:provision-tenant"}
+
+
+def test_reconcile_passes_after_seed(control_engine: Engine) -> None:
+    """reconcile_authz raises nothing when called immediately after seed_authz."""
+    with Session(control_engine) as s:
+        seed_authz(s)
+        s.commit()
+        reconcile_authz(s)  # must not raise
+
+
+# ── Reconciliation guard: unknown/inactive permission ─────────────────────────
+
+
+def test_reconcile_rejects_bundle_with_unknown_permission(
+    control_engine: Engine,
+) -> None:
+    """A bundle referencing a permission not in the DB is rejected by reconcile_authz.
+
+    The bad bundle is passed as a Python argument — not inserted into the DB — to avoid
+    triggering the role_permission.permission_name FK before the guard can fire.
+    """
+    with Session(control_engine) as s:
+        seed_authz(s)
+        s.commit()
+        with pytest.raises(RuntimeError, match="unknown"):
+            reconcile_authz(
+                s,
+                bundles={"tenant.admin": {"tenant:read", "bogus:nonexistent"}},
+                domains={"tenant.admin": "tenant"},
+                custom={},
+            )
+
+
+def test_reconcile_rejects_bundle_with_inactive_permission(
+    control_engine: Engine,
+) -> None:
+    """A bundle referencing an inactive (forward-declared) permission is rejected.
+
+    We temporarily mark a permission as inactive via a direct UPDATE (not deleting it,
+    since it may be referenced by an existing role_permission row) so the guard triggers.
+    """
+    with Session(control_engine) as s:
+        seed_authz(s)
+        s.commit()
+        # Mark tenant:read inactive to simulate a forward-declared (not-yet-live) state.
+        s.execute(
+            m.Permission.__table__.update()
+            .where(m.Permission.name == "tenant:read")
+            .values(is_active=False)
+        )
+        s.commit()
+        with pytest.raises(RuntimeError, match="inactive"):
+            reconcile_authz(
+                s,
+                bundles={"tenant.member": {"tenant:read"}},
+                domains={"tenant.member": "tenant"},
+                custom={},
+            )
+
+
+# ── Reconciliation guard: cross-domain bundle ─────────────────────────────────
+
+
+def test_reconcile_rejects_cross_domain_bundle_tenant_role_with_platform_perm(
+    control_engine: Engine,
+) -> None:
+    """A tenant-domain role bundling a platform-domain permission is rejected (MDN48).
+
+    The bad bundle is passed as a Python argument — not a DB row.
+    """
+    with Session(control_engine) as s:
+        seed_authz(s)
+        s.commit()
+        with pytest.raises(RuntimeError, match="cross-domain"):
+            reconcile_authz(
+                s,
+                bundles={"tenant.admin": {"tenant:read", "platform:provision-tenant"}},
+                domains={"tenant.admin": "tenant"},
+                custom={},
+            )
+
+
+def test_reconcile_rejects_cross_domain_bundle_in_custom_roles(
+    control_engine: Engine,
+) -> None:
+    """Cross-domain guard also covers CUSTOM_DB_ROLES (not just built-in bundles)."""
+    with Session(control_engine) as s:
+        seed_authz(s)
+        s.commit()
+        with pytest.raises(RuntimeError, match="cross-domain"):
+            reconcile_authz(
+                s,
+                bundles={},
+                domains={},
+                custom={
+                    "tenant.evil": {
+                        "domain": "tenant",
+                        "description": "Bad custom role",
+                        "grants": {"platform:provision-tenant"},  # wrong domain
+                    }
+                },
+            )
+
+
+# ── Custom-role seam ──────────────────────────────────────────────────────────
+
+
+def test_custom_db_role_seeded_with_is_builtin_false(control_engine: Engine) -> None:
+    """The custom-DB-role seam: tenant.viewer is seeded with is_builtin=False."""
+    with Session(control_engine) as s:
+        seed_authz(s)
+        s.commit()
+        role = s.scalar(select(m.Role).where(m.Role.name == "tenant.viewer"))
+        assert role is not None
+        assert role.is_builtin is False
+        assert role.domain == "tenant"
+
+        grants = set(
+            s.scalars(
+                select(m.RolePermission.permission_name).where(
+                    m.RolePermission.role_id == role.id
+                )
+            )
+        )
+        assert grants == {"tenant:read"}
+
+
+def test_shadow_guard_raises_on_custom_role_shadowing_builtin(
+    control_engine: Engine,
+) -> None:
+    """seed_authz raises ValueError if a custom role name collides with a built-in.
+
+    We patch ``CUSTOM_DB_ROLES`` in the seed module's own namespace (where it was
+    imported via ``from .roles import CUSTOM_DB_ROLES``), not in the roles module.
+    """
+    from unittest.mock import patch
+
+    from {{ package_name }}.multitenantauth.authz import seed as seed_mod
+
+    bad_custom = {
+        "tenant.admin": {  # shadows the built-in
+            "domain": "tenant",
+            "description": "Shadow attempt",
+            "grants": {"tenant:read"},
+        }
+    }
+    with Session(control_engine) as s:
+        with patch.object(seed_mod, "CUSTOM_DB_ROLES", bad_custom):
+            with pytest.raises(ValueError, match="shadow"):
+                seed_authz(s)
