@@ -2888,3 +2888,25 @@ in `seed.py`** (`grants` reused → `custom_grants`), **F401 unused imports** ac
 **Jinja blank-line in `migrations/env.py.jinja`** that rendered 3 blank lines (ruff-format). All fixed →
 fresh render is ruff/format/mypy clean + **first pre-commit clean**. ⏚ branch-end: run the smoke/live tier
 against an actual `task dev` stack (the docker-image acceptance + the comprehensive CHECK-name audit).
+**Task 22 — render-matrix combos + release readiness** (the FINAL build task). Added `multitenantauth`
+(standalone) + `multitenantauth+workers` (composed) to `devmatrix.py:representative_combos()` (the dynamic
+render-matrix source; +`test_devmatrix` updated). **Release-readiness GREEN: baseline / multitenantauth-alone
+/ all-16-batteries renders all pass ruff + format + mypy** (the [[release-readiness-needs-render-not-local-gate]]
+check). Zero release blockers.
+
+#### #0217 · milestone · FWK58 Phase-1 build COMPLETE · 2026-06-24
+**All 22 FWK58 Phase-1 tasks built, reviewed, and committed (branch `fwk58-multitenantauth-spine`).** The
+full `--with multitenantauth` de-fork spine: control plane (separate `ControlBase`/`control_session`/
+`migrations_control` named-version-table chain) · authn/authz/tenant models with composite-FK integrity +
+the generic resource-scope + the opaque-id/mutable-slug addendum · argon2 passwords + opaque tokens · the
+recursive permission-expression evaluator (all A-F6 props) · the authz service (≥1-admin TOCTOU + A-F4 fix)
+· the routing-agnostic tenant registry + slug lifecycle · the request chain (404-before-403, no-IDOR flat
+`resource_grant`) · fail-closed authn routes + cookies · exact-match CSRF (multi-host-shaped) · tenant/role
+routes + main wiring + the real authz-fitness suite · the minimal generic seed · in-process obs · integrity
+(convention, Option-A) · the entrypoint (both chains + control seed) · acceptance e2e + release readiness.
+**Subagent-driven (agent authors, controller verifies on real docker); per-task review caught a real defect
+on nearly every task** (a deleted assertion, a deadlock in the plan's own code, half-tested invariants,
+vacuous tests, an env=test signup FAIL-OPEN, a world-readable OpenAPI vocab leak, a migration FK-ordering
+bug, a slug-history PK collision, a shipped mypy `[no-redef]`). **Pending operator items:** the Option-B
+integrity-lock-src decision; branch-end = the Layer-2 stance×focus attacker matrix + `/security-review` +
+reconcile-vs-Meridian's-method, then merge + the release cut. Template payload → ships a release.
