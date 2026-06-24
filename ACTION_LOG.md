@@ -2763,3 +2763,13 @@ mutable/unique with an RFC-1123 DNS-label CHECK + `char_length<=63` on a `String
 Closed the Task-5 cross-task follow-up (replaced the raw tenant-stub seeds with real ORM models — all 5
 integrity assertions preserved). Review = Approved (decoupling + CHECKs + non-vacuous tests verified; 22
 tests green). Minors→final review (history-slug CHECK hardening, an imprecise test comment).
+**Tasks 7+8 DEFERRED** to before Task 21: the control migrations need careful CHECK-preserving hand-port
+(autogenerate drops CHECKs), agents stream-idle on the dual-alembic testcontainer loop 4×, and migrations
+are only needed by the entrypoint+live-e2e (every other task uses `create_all`). Resumed the build at
+Task 9. **Execution mode shift:** unattended overnight; agents author + the CONTROLLER runs docker
+verification on its own bash (agents stream-idle on long docker loops; controller bash doesn't).
+**Task 9 — passwords/tokens/email-norm** (port argon2id-over-HMAC-pepper + opaque HMAC tokens; conditional
+`argon2-cffi` dep; version columns forward-compat only per B-F8). Full agent (no DB → no timeout); review
+= Approved (exact crypto fidelity, tight 3-exception contract, non-vacuous algorithm-pinning tests; 27
+green). Minors→final review (undertested VerificationError branch, loose token entropy floor, plan-IDs in
+a shipped docstring to strip).
