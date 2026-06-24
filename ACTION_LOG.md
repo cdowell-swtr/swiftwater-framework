@@ -2854,3 +2854,14 @@ obs infra is classified (Task 18, 67 integrity green); the colonization guard is
 Task-17 Minor (literal `{{ package_name }}` shipping unrendered in seed.py docstrings).** **⚑ Option B
 (extend integrity to lock the auth-mechanism src/ — real de-fork value) recorded as a pending operator
 decision for Chris (see `.superpowers/sdd/progress.md`).**
+**Task 7 (un-deferred) — `migrations_control` chain + named version table + DM-F1 autogen scoping**
+(combined 7a+7b). The dual-alembic chain that timed agents out 4× — authored via the proven
+author-first/no-docker framing (agent writes, controller verifies on its own bash). `alembic_control.ini`
++ `migrations_control/env.py.jinja` (`ControlBase.metadata`, `version_table="alembic_version_multitenantauth"`
+in both modes, `include_object` control-only) + the app `env.py.jinja` DM-F1 exclusion + c0001/c0002/c0003
+(FK-ordering fix: `tenant_membership`→c0002; domain CHECK `('tenant','platform','resource')`). **Controller
+verification GREEN: a real render → uv sync → 36 tests pass** — two version tables co-located no collision,
+separate-control-DB isolation, and schema-matches-models (resource-role round-trip + `'product'` rejected
++ non-DNS slug rejected) + all model suites. **⏚ branch-end: comprehensive CHECK-name audit** (the test
+covers the load-bearing domain+slug CHECKs; confirm email-lowercase/born/status/action CHECKs are all in
+the migrations too).
