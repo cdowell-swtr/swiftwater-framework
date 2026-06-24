@@ -2927,3 +2927,15 @@ fail-closed 403 (finding F, maintainer-approved). Controller-verified: 322 rende
 + ruff/format clean. **Posture calls (maintainer):** F tightened now; G (login rate-limit) left to the proxy/LB.
 **Phase-2 preconditions recorded for Meridian:** DB-level ≥1-admin guard · `AuthzEvent.resource_id` + resource-grant
 audit completeness · slug-history reaping. Commits 2 (error-surface 4xx correctness) + 3 (docs + records) follow.
+
+#### #0219 · fix · FWK58 Layer-2 hardening 2/3 (error-surface 4xx correctness) · 2026-06-24
+**Error-surface correctness fixes (no behaviour change to the happy paths).** `provision_tenant` now
+pre-checks the slug (mirroring signup): a taken slug → a GENERIC 409 that never echoes the colliding
+tenant's opaque id (finding A), a bad-charset slug → 400 (finding C), a TOCTOU slug race → 409 not 500
+(finding P). `add_member`/`grant_role` now catch `DomainMismatchError` (an `AuthError`, not a `ValueError`)
++ unknown-role `ValueError` → 400 instead of an uncaught 500 (finding D, most-reported); `grant_role` also
+treats a concurrent duplicate-grant `IntegrityError` as the idempotent 204 no-op (finding N). `logout`
+`delete_cookie` now mirrors the set-cookie domain/secure so a parent-domain cookie is actually cleared
+(finding B). Password `max_length` comment reworded — input-size bound, not cost protection (the pepper
+HMAC collapses any length to 32B pre-argon2). +4 route regression tests (A/C/D). Controller-verified:
+326 rendered tests, ruff/format clean.

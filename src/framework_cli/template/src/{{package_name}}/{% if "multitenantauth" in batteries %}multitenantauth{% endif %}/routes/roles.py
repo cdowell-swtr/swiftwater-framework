@@ -19,13 +19,14 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...db.control import models as m
 from ..authz.expr import Perm
 from ..authz.service import assign_role, revoke_role
 from ..deps import control_session, current_user, guard
-from ..errors import LastAdminError
+from ..errors import DomainMismatchError, LastAdminError
 
 router = APIRouter(prefix="/tenants")
 
@@ -68,8 +69,16 @@ def grant_role(
             s, membership_id=membership_id, role_name=body.role_name, actor_id=user.id
         )
         s.commit()
-    except ValueError as exc:
+    except (ValueError, DomainMismatchError) as exc:
+        # Unknown role (ValueError) or wrong-domain role (DomainMismatchError, which is an
+        # AuthError not a ValueError) → 400, not an uncaught 500 (Layer-2 finding D).
+        s.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except IntegrityError:
+        # A concurrent duplicate grant raced the SELECT-then-INSERT; the unique constraint
+        # held, so this is the idempotent no-op the single-threaded path already is → 204
+        # (Layer-2 finding N).
+        s.rollback()
 
 
 @router.delete(
@@ -103,5 +112,7 @@ def revoke_role_route(
         s.commit()
     except LastAdminError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ValueError as exc:
+    except (ValueError, DomainMismatchError) as exc:
+        # Unknown role (ValueError) or wrong-domain role (DomainMismatchError) → 400, not an
+        # uncaught 500 (Layer-2 finding D).
         raise HTTPException(status_code=400, detail=str(exc)) from exc

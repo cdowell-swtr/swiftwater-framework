@@ -596,3 +596,79 @@ def test_revoke_role_succeeds_for_admin(probe: TestClient, tr_engine: Engine) ->
         headers=_headers(admin_cookie),
     )
     assert r.status_code == 204
+
+
+# ── Layer-2 error-surface regressions ─────────────────────────────────────────
+
+
+def test_provision_tenant_duplicate_slug_is_generic_409(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """A duplicate slug → a GENERIC 409 that never reveals the colliding tenant's opaque id
+    (Layer-2 finding A)."""
+    _, cookie = _signup_and_login(probe, "dupadmin@prov.com", "dupadmin")
+    _grant_platform_admin(tr_engine, "dupadmin@prov.com")
+    r1 = probe.post(
+        "/tenants",
+        headers=_headers(cookie),
+        json={"name": "First", "slug": "dup-slug"},
+    )
+    assert r1.status_code == 201, r1.text
+    first_id = r1.json()["tenant_id"]
+    r2 = probe.post(
+        "/tenants",
+        headers=_headers(cookie),
+        json={"name": "Second", "slug": "dup-slug"},
+    )
+    assert r2.status_code == 409
+    assert first_id not in r2.text  # the colliding tenant's opaque id must NOT leak
+    assert r2.json()["detail"] == "Tenant slug unavailable"
+
+
+def test_provision_tenant_bad_charset_slug_is_400(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """A bad-charset slug → 400 (not 409), generic message (Layer-2 finding C)."""
+    _, cookie = _signup_and_login(probe, "charsetadmin@prov.com", "charsetadmin")
+    _grant_platform_admin(tr_engine, "charsetadmin@prov.com")
+    r = probe.post(
+        "/tenants",
+        headers=_headers(cookie),
+        json={"name": "Bad", "slug": "UPPERCASE"},
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Invalid request"
+
+
+def test_add_member_unknown_role_is_400(probe: TestClient, tr_engine: Engine) -> None:
+    """add_member with an unknown role_name → 400, not an uncaught 500 (Layer-2 finding D)."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "rdadmin@kappa2.com", "rdadmin")
+    _signup_and_login(probe, "rdnew@lambda2.com", "rdnew")
+    new_uid = _user_id(tr_engine, "rdnew@lambda2.com")
+    r = probe.post(
+        f"/tenants/{admin_tid}/members",
+        headers=_headers(admin_cookie),
+        json={"user_id": str(new_uid), "role_name": "no-such-role"},
+    )
+    assert r.status_code == 400
+
+
+def test_grant_role_wrong_domain_is_400(probe: TestClient, tr_engine: Engine) -> None:
+    """Granting a platform-domain role via the tenant role route → 400 (DomainMismatchError),
+    not an uncaught 500 (Layer-2 finding D)."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "wdadmin@rho2.com", "wdadmin")
+    _signup_and_login(probe, "wdmem@sigma2.com", "wdmem")
+    new_uid = _user_id(tr_engine, "wdmem@sigma2.com")
+    r_add = probe.post(
+        f"/tenants/{admin_tid}/members",
+        headers=_headers(admin_cookie),
+        json={"user_id": str(new_uid), "role_name": "tenant.member"},
+    )
+    assert r_add.status_code == 201
+    mid = r_add.json()["membership_id"]
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{mid}/roles",
+        headers=_headers(admin_cookie),
+        json={"role_name": "platform.admin"},  # platform-domain role on a tenant route
+    )
+    assert r.status_code == 400

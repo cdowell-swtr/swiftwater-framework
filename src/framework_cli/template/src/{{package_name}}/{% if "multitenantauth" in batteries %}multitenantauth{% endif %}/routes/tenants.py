@@ -23,20 +23,26 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...db.control import models as m
 from ..authz.expr import Perm
 from ..authz.service import add_membership, remove_member
 from ..deps import control_session, current_user, guard
-from ..errors import LastAdminError
-from ..tenancy.registry import activate_tenant, register_tenant
+from ..errors import DomainMismatchError, LastAdminError
+from ..tenancy.registry import activate_tenant, register_tenant, resolve_slug
 
 router = APIRouter(prefix="/tenants")
 
 # A routing-agnostic Phase-1 placeholder DSN. The registry NEVER connects to it (Phase 2 wires
 # physical per-tenant routing); it only persists the string. Mirrors routes/auth.py.
 _PLACEHOLDER_DSN = "postgresql+psycopg://unprovisioned/placeholder"
+
+# Generic error details — never echo the registry's raw message (it can name the colliding
+# tenant's opaque id; Layer-2 finding A). Mirrors routes/auth.py's _GENERIC_* constants.
+_GENERIC_BAD_REQUEST = "Invalid request"
+_GENERIC_SLUG_TAKEN = "Tenant slug unavailable"
 
 # ── request/response models ────────────────────────────────────────────────────
 
@@ -76,16 +82,27 @@ def provision_tenant(
     Guarded: requires the platform-level provisioning permission. Registers +
     activates the tenant in the control plane (routing-agnostic; never connects to a
     tenant DB). Returns the OPAQUE, auto-generated tenant id.
-    A bad-charset / taken slug surfaces as a generic 400/409.
+    A taken slug surfaces as a GENERIC 409 (never the colliding tenant's id); a bad-charset
+    slug as a generic 400.
     """
+    # Pre-check the slug collision (live OR cooling) → a generic 409 that never reveals the
+    # colliding tenant's opaque id (Layer-2 finding A). This leaves register_tenant's only
+    # residual ValueError the bad-charset case → a deterministic 400 below (Layer-2 finding C).
+    if resolve_slug(s, body.slug) is not None:
+        raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN)
     try:
         tenant = register_tenant(s, body.name, slug=body.slug, dsn=_PLACEHOLDER_DSN)
         s.flush()
         activate_tenant(s, tenant.id)
         s.commit()
-    except ValueError as exc:
+    except ValueError:
         s.rollback()
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=_GENERIC_BAD_REQUEST) from None
+    except IntegrityError:
+        # TOCTOU race against the pre-check: the slug column is DB-UNIQUE → 409, never a 500
+        # (Layer-2 finding P).
+        s.rollback()
+        raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN) from None
     return {"tenant_id": tenant.id, "slug": body.slug}
 
 
@@ -148,15 +165,21 @@ def add_member(
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    membership = add_membership(
-        s,
-        user_id=body.user_id,
-        tenant_id=tenant_id,
-        role_name=body.role_name,
-        actor_id=user.id,
-        invited=True,
-    )
-    s.commit()
+    try:
+        membership = add_membership(
+            s,
+            user_id=body.user_id,
+            tenant_id=tenant_id,
+            role_name=body.role_name,
+            actor_id=user.id,
+            invited=True,
+        )
+        s.commit()
+    except (ValueError, DomainMismatchError) as exc:
+        # Unknown role (ValueError) or wrong-domain role (DomainMismatchError) → 400, not an
+        # uncaught 500 — mirrors grant_role (Layer-2 finding D / add_member 500s).
+        s.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"membership_id": str(membership.id)}
 
 
