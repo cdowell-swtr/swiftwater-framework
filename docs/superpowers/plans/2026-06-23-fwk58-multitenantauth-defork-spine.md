@@ -291,9 +291,10 @@ def control_engine() -> Engine:
 def control_session_factory() -> "sessionmaker[Session]":
     global _control_factory
     if _control_factory is None:
+        engine = control_engine()   # resolve FIRST — it self-locks; _control_lock is non-reentrant
         with _control_lock:
             if _control_factory is None:
-                _control_factory = build_session_factory(control_engine())
+                _control_factory = build_session_factory(engine)
     return _control_factory
 
 def dispose_control_engine() -> None:

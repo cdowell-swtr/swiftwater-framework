@@ -2736,3 +2736,9 @@ non-discriminating). Controller reverted the implementer's out-of-scope obs+inte
 work, referenced not-yet-final metric names). **Cadence set:** classify infra/operational surfaces
 per-task (integrity+FWK29 stay green); obs at Task 18; implementers run targeted tests not the full
 suite. **Execution: hybrid (operator) — interactive Tasks 3-16 (auth spine), unattended tail 17-22.**
+**Task 3 — `ControlBase` + `control_session_factory`** (separate metadata; double-checked lock;
+`dispose`). The implementer caught a REAL deadlock in the plan's own OPS-F3 code (the controller wrote
+it): `control_session_factory` called `control_engine()` INSIDE the non-reentrant `_control_lock` → hang
+on first call. Fixed (resolve the engine before the lock) + plan code corrected. Review = Approved
+(deadlock-free form verified; distinct-metadata test non-vacuous); Minors→final review. Real
+testcontainers; 3 control-engine tests green.
