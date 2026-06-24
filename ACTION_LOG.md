@@ -2747,3 +2747,12 @@ testcontainers; 3 control-engine tests green.
 InviteToken schema-test deferred to Task 6 since it FKs `tenant_membership`). Review = Approved; one
 Important gap fixed (the `born`-xor invariant was only half-tested → added the non-signup-with-signed_up_at
 reject case). Real Postgres; 9 model tests green.
+**Task 5 — AuthZ models (composite-FK integrity core)** (port `Role`/`Permission`/`RolePermission`/
+`Tenant`+`Platform`RoleAssignment/`AuthzEvent` verbatim; rename `ProductRoleAssignment`→`ResourceRole...`
+with the exact `rra` constraint names; **A-F5: `'product'` REMOVED from both domain CHECKs → `('tenant',
+'platform','resource')`**). The implementer self-caught a VACUOUS test (raw DDL didn't exercise the model
+CHECKs — corrupting the CHECK left it green) → rewrote to ORM + proved non-vacuity by mutation-litmus.
+Opus review = Approved (byte-for-byte fidelity + 'product' removal + 4 non-vacuous assertions verified).
+**⏚ Task-6 follow-up (cross-task):** this test's raw `tenant`/`tenant_membership` seed inserts will go red
+when Task 6 adds the real schema (status CHECK / slug NOT-NULLs) — Task 6 must supply the new required
+columns or seed via the ORM models.

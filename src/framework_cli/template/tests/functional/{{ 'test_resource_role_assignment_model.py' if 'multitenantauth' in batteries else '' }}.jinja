@@ -1,0 +1,255 @@
+"""AuthZ resource-role assignment model: domain-integrity enforcement.
+
+The composite FK `(role_id, role_domain) → role(id, domain)` + `CHECK(role_domain = 'resource')`
+is the ONLY mechanism preventing a wrong-domain role from landing in `resource_role_assignment`.
+This test suite is the functional proof of that invariant.
+
+Ported from meridian tests/functional/test_product_role_assignment_model.py (MDN36) with the
+ProductRoleAssignment→ResourceRoleAssignment rename and the 'product' rejection assertion added
+(sec-review A-F5: 'product' must NOT be a valid domain in the generic battery).
+
+Implementation note: `Tenant`/`TenantMembership` ORM models land in Task 6 and are not on
+`ControlBase.metadata` yet. We register minimal `Table` stubs for them so that
+`ControlBase.metadata.create_all()` can resolve string FKs in
+`ResourceRoleAssignment.membership_id` and `TenantRoleAssignment.membership_id` without
+needing the full models. The stubs carry only the columns the FKs reference.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+import pytest
+from sqlalchemy import (
+    Column,
+    Engine,
+    ForeignKey,
+    String,
+    Table,
+    Uuid,
+    create_engine,
+    make_url,
+    text,
+)
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+from {{ package_name }}.db.control.base import ControlBase
+
+
+# ── fixture ───────────────────────────────────────────────────────────────────
+
+
+def _register_tenant_stubs() -> None:
+    """Register minimal `tenant` + `tenant_membership` Table objects on ControlBase.metadata.
+
+    These are stub tables — only the columns referenced by string FKs in the ORM
+    models.  Task 6 adds the full ORM-backed Tenant/TenantMembership models; the
+    guard `if "tenant" not in ControlBase.metadata.tables` prevents double-registration
+    when both modules are loaded together.
+    """
+    md = ControlBase.metadata
+    if "tenant" not in md.tables:
+        Table("tenant", md, Column("id", String(64), primary_key=True))
+    if "tenant_membership" not in md.tables:
+        Table(
+            "tenant_membership",
+            md,
+            Column("id", Uuid, primary_key=True),
+            Column("user_id", Uuid, ForeignKey("app_user.id", ondelete="CASCADE")),
+            Column(
+                "tenant_id", String(64), ForeignKey("tenant.id", ondelete="CASCADE")
+            ),
+        )
+
+
+@pytest.fixture(scope="module")
+def control_engine(pg_url: str) -> Engine:  # type: ignore[return]
+    """Control-plane engine for resource-role integrity tests.
+
+    Registers minimal tenant/tenant_membership stubs on ControlBase.metadata so
+    that `create_all` can resolve string FKs in the real ORM models, then creates
+    the required subset of tables.
+    """
+    _ctrl_db = "{{ package_name }}_rra_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    _register_tenant_stubs()
+    engine = create_engine(ctrl_url)
+
+    # Create the tables whose FKs are fully resolvable at this task boundary.
+    # app_user must come before tenant_membership (FK source).
+    ControlBase.metadata.create_all(
+        engine,
+        tables=[
+            m.AppUser.__table__,
+            ControlBase.metadata.tables["tenant"],
+            ControlBase.metadata.tables["tenant_membership"],
+            m.Role.__table__,
+            m.Permission.__table__,
+            m.ResourceRoleAssignment.__table__,
+        ],
+    )
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean(control_engine: Engine) -> None:  # type: ignore[return]
+    """Truncate tables after each test (tests commit rows; no rollback isolation)."""
+    yield
+    with control_engine.begin() as conn:
+        conn.execute(
+            text(
+                "TRUNCATE TABLE resource_role_assignment, tenant_membership, "
+                "app_user, role, permission, tenant CASCADE"
+            )
+        )
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _seed(s: Session) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
+    """Insert a tenant, user, membership, and one role per domain.
+
+    Returns (membership_id, resource_role_id, tenant_role_id, platform_role_id).
+    """
+    s.execute(text("INSERT INTO tenant (id) VALUES ('acme')"))
+    u = m.AppUser(email="a@x.io", email_canonical="a@x.io", born="operator")
+    s.add(u)
+    resource_role = m.Role(
+        name="resource.admin", domain="resource", description="resource admin"
+    )
+    tenant_role = m.Role(
+        name="tenant.admin", domain="tenant", description="tenant admin"
+    )
+    platform_role = m.Role(
+        name="platform.admin", domain="platform", description="platform admin"
+    )
+    s.add_all([resource_role, tenant_role, platform_role])
+    s.flush()
+    s.execute(
+        text(
+            "INSERT INTO tenant_membership (id, user_id, tenant_id) "
+            "VALUES (:mid, :uid, 'acme')"
+        ),
+        {"mid": (membership_id := uuid.uuid4()), "uid": u.id},
+    )
+    s.flush()
+    return membership_id, resource_role.id, tenant_role.id, platform_role.id
+
+
+# ── tests ─────────────────────────────────────────────────────────────────────
+
+
+def test_resource_grant_round_trips(control_engine: Engine) -> None:
+    """(d) A resource-domain role CAN be assigned at resource grain — the happy path."""
+    with Session(control_engine) as s:
+        membership_id, resource_role_id, _, _ = _seed(s)
+        rra = m.ResourceRoleAssignment(
+            membership_id=membership_id,
+            resource_id="widget-42",
+            role_id=resource_role_id,
+        )
+        s.add(rra)
+        s.commit()
+        rra_id = rra.id
+
+    with Session(control_engine) as s:
+        from sqlalchemy import select
+
+        row = s.scalar(
+            select(m.ResourceRoleAssignment).where(
+                m.ResourceRoleAssignment.id == rra_id
+            )
+        )
+        assert row is not None
+        assert row.resource_id == "widget-42"
+        assert row.role_domain == "resource"
+
+
+def test_tenant_role_rejected_by_resource_assignment(control_engine: Engine) -> None:
+    """(a) A tenant-domain role CANNOT be inserted into resource_role_assignment.
+
+    `role_domain` defaults to 'resource' (client-side default); the composite FK
+    (role_id, 'resource') → role(id, domain) has no matching (tenant_role_id, 'resource')
+    row in `role` → IntegrityError.
+    """
+    with Session(control_engine) as s:
+        membership_id, _, tenant_role_id, _ = _seed(s)
+        s.add(
+            m.ResourceRoleAssignment(
+                membership_id=membership_id,
+                resource_id="widget-99",
+                role_id=tenant_role_id,
+                # role_domain defaults to 'resource'; FK target (tenant_role_id, 'resource')
+                # does not exist in role(id, domain) → composite FK violation.
+            )
+        )
+        with pytest.raises(IntegrityError):
+            s.commit()
+
+
+def test_platform_role_rejected_by_resource_assignment(control_engine: Engine) -> None:
+    """(b) A platform-domain role CANNOT be inserted into resource_role_assignment.
+
+    Symmetric to (a): the composite FK rejects (platform_role_id, 'resource').
+    """
+    with Session(control_engine) as s:
+        membership_id, _, _, platform_role_id = _seed(s)
+        s.add(
+            m.ResourceRoleAssignment(
+                membership_id=membership_id,
+                resource_id="widget-88",
+                role_id=platform_role_id,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            s.commit()
+
+
+def test_product_domain_rejected_by_role_check(control_engine: Engine) -> None:
+    """(c) 'product' is NOT a valid domain in the generic battery's role CHECK.
+
+    ck_role_domain = IN ('tenant','platform','resource') — 'product' was removed
+    (sec-review A-F5) so it cannot silently re-admit a Meridian-specific policy domain.
+    """
+    with Session(control_engine) as s:
+        s.add(
+            m.Role(
+                name="product.admin",
+                domain="product",  # must be rejected by ck_role_domain
+                description="should be rejected",
+            )
+        )
+        with pytest.raises(IntegrityError):
+            s.commit()
+
+
+def test_product_domain_rejected_by_permission_check(control_engine: Engine) -> None:
+    """(c-ext) 'product' is NOT a valid permission domain either (ck_permission_domain).
+
+    ck_permission_domain = IN ('tenant','platform','resource') — same removal (A-F5).
+    """
+    with Session(control_engine) as s:
+        s.add(
+            m.Permission(
+                name="product:read",
+                domain="product",  # must be rejected by ck_permission_domain
+                description="should be rejected",
+                is_active=False,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            s.commit()
