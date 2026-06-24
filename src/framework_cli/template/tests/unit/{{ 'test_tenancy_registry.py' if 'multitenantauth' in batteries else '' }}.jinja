@@ -1,0 +1,582 @@
+"""Unit tests for the tenancy registry service.
+
+Key invariants:
+- register_tenant mints an opaque id NOT equal to / derived from the slug.
+- register_tenant writes a 'provisioning' row and opens NO connection to the dsn.
+- activate_tenant flips status to 'active'.
+- invalid opaque-id charset raises ValueError.
+- non-DNS-safe slug raises ValueError.
+- rename_slug moves old slug to history with future reserved_until.
+- rename_slug rejects a still-cooling (reserved_until in future) slug.
+- resolve_slug: live slug → (id, False); retired cooling slug → (id, True); expired/unknown → None.
+- get_tenant_dsn returns the stored opaque string.
+"""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from sqlalchemy import Engine, create_engine, make_url, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+from {{ package_name }}.db.control.base import ControlBase
+from {{ package_name }}.db.control import repository as control_repo
+from {{ package_name }}.multitenantauth.tenancy import registry
+
+
+# ── fixture ───────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def registry_engine(pg_url: str) -> Engine:  # type: ignore[return]
+    """Control-plane engine for registry tests."""
+    _ctrl_db = "{{ package_name }}_registry_unit_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(
+        engine,
+        tables=[
+            m.Tenant.__table__,
+            m.TenantSlugHistory.__table__,
+        ],
+    )
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean(registry_engine: Engine) -> None:  # type: ignore[return]
+    """Truncate tenancy tables after each test."""
+    yield
+    with registry_engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE tenant_slug_history, tenant CASCADE"))
+
+
+# ── tests: register_tenant ─────────────────────────────────────────────────────
+
+
+def test_register_tenant_mints_opaque_id_not_from_slug(registry_engine: Engine) -> None:
+    """register_tenant must generate an id that is NOT equal to or derived from the slug."""
+    with Session(registry_engine) as s:
+        t = registry.register_tenant(
+            s,
+            name="Acme Inc",
+            slug="acme",
+            dsn="postgresql+psycopg://x:x@127.0.0.1:1/none",
+        )
+        s.commit()
+        tid = t.id
+        tslug = t.slug
+
+    assert tid != tslug, "id must not equal slug"
+    assert tslug not in tid, "id must not contain slug as substring"
+    assert re.fullmatch(r"[a-z0-9_]+", tid), f"id charset violation: {tid!r}"
+
+
+def test_register_tenant_writes_provisioning_status(registry_engine: Engine) -> None:
+    """register_tenant must write a row with status='provisioning' (not 'active')."""
+    with Session(registry_engine) as s:
+        t = registry.register_tenant(
+            s,
+            name="Beta Corp",
+            slug="beta",
+            dsn="postgresql+psycopg://x:x@127.0.0.1:1/none",
+        )
+        s.commit()
+        tid = t.id
+
+    with Session(registry_engine) as s:
+        row = s.get(m.Tenant, tid)
+        assert row is not None
+        assert row.status == "provisioning"
+
+
+def test_register_tenant_does_not_connect_to_dsn(registry_engine: Engine) -> None:
+    """register_tenant must never connect to the tenant dsn (routing-agnostic)."""
+    # An unroutable dsn: if any connection is attempted this will fail.
+    unroutable_dsn = "postgresql+psycopg://x:x@127.0.0.1:1/unreachable"
+    with Session(registry_engine) as s:
+        # If this raises a connection error, the registry is not routing-agnostic.
+        t = registry.register_tenant(
+            s,
+            name="NoConnect Corp",
+            slug="no-connect",
+            dsn=unroutable_dsn,
+        )
+        s.commit()
+        tid = t.id
+
+    # Verify the dsn is stored as-is (opaque string, never dialed)
+    with Session(registry_engine) as s:
+        row = s.get(m.Tenant, tid)
+        assert row is not None
+        assert row.dsn == unroutable_dsn
+
+
+def test_register_tenant_rejects_duplicate_live_slug(registry_engine: Engine) -> None:
+    """register_tenant must raise if the slug is already a live tenant slug."""
+    with Session(registry_engine) as s:
+        registry.register_tenant(
+            s, name="First", slug="taken", dsn="postgresql+psycopg://x/a"
+        )
+        s.commit()
+    with Session(registry_engine) as s:
+        with pytest.raises(ValueError, match="slug.*taken|already"):
+            registry.register_tenant(
+                s, name="Second", slug="taken", dsn="postgresql+psycopg://x/b"
+            )
+
+
+def test_register_tenant_rejects_cooling_slug(registry_engine: Engine) -> None:
+    """register_tenant must raise if the slug is in a cooling TenantSlugHistory row."""
+    # Manually insert a cooling history row for a slug
+    with Session(registry_engine) as s:
+        # First create a tenant so the FK is valid
+        t = registry.register_tenant(
+            s, name="Owner", slug="owner", dsn="postgresql+psycopg://x/x"
+        )
+        s.commit()
+        tenant_id = t.id
+
+    with Session(registry_engine) as s:
+        hist = m.TenantSlugHistory(
+            slug="cooling-slug",
+            tenant_id=tenant_id,
+            reserved_until=datetime.now(timezone.utc) + timedelta(days=30),
+        )
+        s.add(hist)
+        s.commit()
+
+    with Session(registry_engine) as s:
+        with pytest.raises(ValueError, match="cooling|reserved|not.*claimable|slug"):
+            registry.register_tenant(
+                s, name="Squatter", slug="cooling-slug", dsn="postgresql+psycopg://x/y"
+            )
+
+
+# ── tests: activate_tenant ────────────────────────────────────────────────────
+
+
+def test_activate_tenant_flips_status_to_active(registry_engine: Engine) -> None:
+    """activate_tenant must flip the tenant status from 'provisioning' to 'active'."""
+    with Session(registry_engine) as s:
+        t = registry.register_tenant(
+            s, name="Gamma LLC", slug="gamma", dsn="postgresql+psycopg://x/z"
+        )
+        s.commit()
+        tid = t.id
+
+    with Session(registry_engine) as s:
+        activated = registry.activate_tenant(s, tid)
+        s.commit()
+        assert activated.status == "active"
+
+    with Session(registry_engine) as s:
+        row = s.get(m.Tenant, tid)
+        assert row is not None
+        assert row.status == "active"
+
+
+def test_activate_tenant_unknown_id_raises(registry_engine: Engine) -> None:
+    """activate_tenant with a non-existent id must raise LookupError."""
+    with Session(registry_engine) as s:
+        with pytest.raises(LookupError):
+            registry.activate_tenant(s, "does-not-exist")
+
+
+# ── tests: get_tenant / get_tenant_dsn ────────────────────────────────────────
+
+
+def test_get_tenant_returns_row(registry_engine: Engine) -> None:
+    with Session(registry_engine) as s:
+        t = registry.register_tenant(
+            s, name="Delta", slug="delta", dsn="postgresql+psycopg://x/d"
+        )
+        s.commit()
+        tid = t.id
+
+    with Session(registry_engine) as s:
+        fetched = registry.get_tenant(s, tid)
+        assert fetched is not None
+        assert fetched.name == "Delta"
+
+
+def test_get_tenant_unknown_returns_none(registry_engine: Engine) -> None:
+    with Session(registry_engine) as s:
+        assert registry.get_tenant(s, "nope") is None
+
+
+def test_get_tenant_dsn_returns_stored_string(registry_engine: Engine) -> None:
+    """get_tenant_dsn must return the raw DSN string (never dialing it)."""
+    dsn = "postgresql+psycopg://u:secret@custom-host:5432/tenant_db"
+    with Session(registry_engine) as s:
+        t = registry.register_tenant(s, name="Epsilon", slug="epsilon", dsn=dsn)
+        s.commit()
+        tid = t.id
+
+    with Session(registry_engine) as s:
+        stored_dsn = registry.get_tenant_dsn(s, tid)
+        assert stored_dsn == dsn
+
+
+def test_get_tenant_dsn_unknown_raises(registry_engine: Engine) -> None:
+    with Session(registry_engine) as s:
+        with pytest.raises(LookupError):
+            registry.get_tenant_dsn(s, "ghost")
+
+
+# ── tests: input validation ────────────────────────────────────────────────────
+
+
+def test_validate_tenant_id_invalid_charset_raises() -> None:
+    """_validate_tenant_id must raise ValueError for unsafe charset strings."""
+    for bad in ['a"b', "A", "a;drop", "a b", "tenant-id"]:
+        with pytest.raises(ValueError, match="invalid.*tenant_id|must match"):
+            registry._validate_tenant_id(bad)
+
+
+def test_validate_tenant_id_valid_charset_passes() -> None:
+    """_validate_tenant_id must accept valid [a-z0-9_]+ strings."""
+    for good in ["abc", "a1b2c3", "tenant_id_01", "abc_123"]:
+        registry._validate_tenant_id(good)  # must not raise
+
+
+def test_validate_slug_non_dns_safe_raises() -> None:
+    """_validate_slug must raise ValueError for non-DNS-label-safe slugs."""
+    for bad in ["-leading", "trailing-", "Upper", "under_score", "a" * 64, ""]:
+        with pytest.raises(ValueError, match="slug|DNS|invalid"):
+            registry._validate_slug(bad)
+
+
+def test_validate_slug_dns_safe_passes() -> None:
+    """_validate_slug must accept valid DNS-label slugs."""
+    for good in ["acme", "my-tenant", "a1b2", "x" * 63]:
+        registry._validate_slug(good)  # must not raise
+
+
+# ── tests: rename_slug ────────────────────────────────────────────────────────
+
+
+def test_rename_slug_moves_old_to_history(registry_engine: Engine) -> None:
+    """rename_slug must: set the new slug, insert the old slug to TenantSlugHistory
+    with a future reserved_until cooling window."""
+    with Session(registry_engine) as s:
+        t = registry.register_tenant(
+            s, name="Zeta Inc", slug="zeta-old", dsn="postgresql+psycopg://x/z"
+        )
+        s.commit()
+        tid = t.id
+
+    with Session(registry_engine) as s:
+        registry.rename_slug(s, tid, "zeta-new")
+        s.commit()
+
+    with Session(registry_engine) as s:
+        # New slug is live
+        row = s.get(m.Tenant, tid)
+        assert row is not None
+        assert row.slug == "zeta-new"
+
+        # Old slug is in history with future reserved_until
+        hist = s.get(m.TenantSlugHistory, "zeta-old")
+        assert hist is not None
+        assert hist.tenant_id == tid
+        assert hist.reserved_until is not None
+        assert hist.reserved_until > datetime.now(timezone.utc)
+
+
+def test_rename_slug_rejects_still_cooling_target(registry_engine: Engine) -> None:
+    """rename_slug must raise ValueError if the new slug is still in its cooling window
+    (reserved_until in the future) from a previous tenant's rename."""
+    with Session(registry_engine) as s:
+        t1 = registry.register_tenant(
+            s, name="T1", slug="t1-slug", dsn="postgresql+psycopg://x/t1"
+        )
+        t2 = registry.register_tenant(
+            s, name="T2", slug="t2-slug", dsn="postgresql+psycopg://x/t2"
+        )
+        s.commit()
+        t1_id = t1.id
+        t2_id = t2.id
+
+    # T1 renames away from "t1-slug" — it goes into a cooling window.
+    with Session(registry_engine) as s:
+        registry.rename_slug(s, t1_id, "t1-new")
+        s.commit()
+
+    # T2 must NOT be able to claim "t1-slug" while it is still cooling.
+    with Session(registry_engine) as s:
+        with pytest.raises(ValueError, match="cooling|reserved|not.*claimable|slug"):
+            registry.rename_slug(s, t2_id, "t1-slug")
+
+
+def test_rename_slug_allows_expired_history_slug(registry_engine: Engine) -> None:
+    """rename_slug must ALLOW claiming a slug whose reserved_until has passed."""
+    with Session(registry_engine) as s:
+        t1 = registry.register_tenant(
+            s, name="H1", slug="h1-slug", dsn="postgresql+psycopg://x/h1"
+        )
+        t2 = registry.register_tenant(
+            s, name="H2", slug="h2-slug", dsn="postgresql+psycopg://x/h2"
+        )
+        s.commit()
+        t1_id = t1.id
+        t2_id = t2.id
+
+    # Manually insert an EXPIRED history row for "h1-old"
+    with Session(registry_engine) as s:
+        hist = m.TenantSlugHistory(
+            slug="h1-old",
+            tenant_id=t1_id,
+            reserved_until=datetime.now(timezone.utc) - timedelta(days=1),
+        )
+        s.add(hist)
+        s.commit()
+
+    # T2 can now rename to "h1-old" — the cooling window has passed
+    with Session(registry_engine) as s:
+        registry.rename_slug(s, t2_id, "h1-old")
+        s.commit()
+
+    with Session(registry_engine) as s:
+        row = s.get(m.Tenant, t2_id)
+        assert row is not None
+        assert row.slug == "h1-old"
+
+
+def test_rename_slug_rejects_live_slug(registry_engine: Engine) -> None:
+    """rename_slug must raise ValueError if the new slug is already a live tenant slug."""
+    with Session(registry_engine) as s:
+        registry.register_tenant(
+            s, name="Live1", slug="live1", dsn="postgresql+psycopg://x/l1"
+        )
+        t2 = registry.register_tenant(
+            s, name="Live2", slug="live2", dsn="postgresql+psycopg://x/l2"
+        )
+        s.commit()
+        t2_id = t2.id
+
+    with Session(registry_engine) as s:
+        with pytest.raises(ValueError, match="slug.*live1|already|not.*claimable"):
+            registry.rename_slug(s, t2_id, "live1")
+
+
+def test_rename_slug_unknown_tenant_raises(registry_engine: Engine) -> None:
+    with Session(registry_engine) as s:
+        with pytest.raises(LookupError):
+            registry.rename_slug(s, "no-such-id", "newslug")
+
+
+def test_reclaim_then_rename_does_not_collide_on_history_pk(
+    registry_engine: Engine,
+) -> None:
+    """Full reclaim cycle must not hit a TenantSlugHistory PK collision.
+
+    slug history rows are keyed on slug (sole PK). When a slug is retired,
+    its cooling window expires, a NEW tenant reclaims it, and THAT tenant
+    later retires it again, the second history write for the same slug must
+    upsert (not blind-insert → IntegrityError). The row must end up pointing
+    at the most-recent owner with a fresh future reserved_until.
+    """
+    with Session(registry_engine) as s:
+        t1 = registry.register_tenant(
+            s, name="R1", slug="alpha", dsn="postgresql+psycopg://x/r1"
+        )
+        t2 = registry.register_tenant(
+            s, name="R2", slug="r2-home", dsn="postgresql+psycopg://x/r2"
+        )
+        s.commit()
+        t1_id = t1.id
+        t2_id = t2.id
+
+    # T1 renames alpha → beta: history row slug=alpha now cooling, owner=T1.
+    with Session(registry_engine) as s:
+        registry.rename_slug(s, t1_id, "beta")
+        s.commit()
+
+    # Force the alpha cooling window to expire so T2 may reclaim it.
+    with Session(registry_engine) as s:
+        hist = s.get(m.TenantSlugHistory, "alpha")
+        assert hist is not None
+        hist.reserved_until = datetime.now(timezone.utc) - timedelta(days=1)
+        s.commit()
+
+    # T2 reclaims alpha (rename r2-home → alpha) — the slug is live again.
+    with Session(registry_engine) as s:
+        registry.rename_slug(s, t2_id, "alpha")
+        s.commit()
+
+    # T2 now retires alpha (alpha → gamma). This is the SECOND history write
+    # for slug=alpha — must upsert, not collide.
+    before = datetime.now(timezone.utc)
+    with Session(registry_engine) as s:
+        registry.rename_slug(s, t2_id, "gamma")  # must NOT raise IntegrityError
+        s.commit()
+
+    # The alpha history row now points at T2 with a fresh future window.
+    with Session(registry_engine) as s:
+        hist = s.get(m.TenantSlugHistory, "alpha")
+        assert hist is not None
+        assert hist.tenant_id == t2_id
+        assert hist.reserved_until is not None
+        assert hist.reserved_until > before
+
+
+# ── tests: resolve_slug ───────────────────────────────────────────────────────
+
+
+def test_resolve_slug_live_returns_id_no_redirect(registry_engine: Engine) -> None:
+    """resolve_slug on a live slug must return (tenant_id, False)."""
+    with Session(registry_engine) as s:
+        t = registry.register_tenant(
+            s, name="Zeta", slug="zeta-live", dsn="postgresql+psycopg://x/z"
+        )
+        s.commit()
+        tid = t.id
+
+    with Session(registry_engine) as s:
+        result = registry.resolve_slug(s, "zeta-live")
+        assert result is not None
+        tenant_id, redirect = result
+        assert tenant_id == tid
+        assert redirect is False
+
+
+def test_resolve_slug_retired_cooling_returns_redirect(registry_engine: Engine) -> None:
+    """resolve_slug on a slug with future reserved_until (cooling/redirecting) must return (id, True)."""
+    with Session(registry_engine) as s:
+        t = registry.register_tenant(
+            s, name="Redirect Inc", slug="old-slug", dsn="postgresql+psycopg://x/r"
+        )
+        s.commit()
+        tid = t.id
+
+    with Session(registry_engine) as s:
+        registry.rename_slug(s, tid, "new-slug")
+        s.commit()
+
+    # "old-slug" is now cooling (reserved_until in future) — must redirect
+    with Session(registry_engine) as s:
+        result = registry.resolve_slug(s, "old-slug")
+        assert result is not None
+        tenant_id, redirect = result
+        assert tenant_id == tid
+        assert redirect is True
+
+
+def test_resolve_slug_expired_history_returns_none(registry_engine: Engine) -> None:
+    """resolve_slug on a slug with expired reserved_until must return None."""
+    with Session(registry_engine) as s:
+        t = registry.register_tenant(
+            s, name="Expired", slug="current", dsn="postgresql+psycopg://x/e"
+        )
+        s.commit()
+        tid = t.id
+
+    # Manually insert an expired history row
+    with Session(registry_engine) as s:
+        hist = m.TenantSlugHistory(
+            slug="expired-old",
+            tenant_id=tid,
+            reserved_until=datetime.now(timezone.utc) - timedelta(days=1),
+        )
+        s.add(hist)
+        s.commit()
+
+    with Session(registry_engine) as s:
+        result = registry.resolve_slug(s, "expired-old")
+        assert result is None
+
+
+def test_resolve_slug_unknown_returns_none(registry_engine: Engine) -> None:
+    """resolve_slug on an unknown slug must return None."""
+    with Session(registry_engine) as s:
+        result = registry.resolve_slug(s, "no-such-slug")
+        assert result is None
+
+
+def test_resolve_slug_history_none_reserved_until_returns_none(
+    registry_engine: Engine,
+) -> None:
+    """resolve_slug on a history row with reserved_until=None (no cooling) must return None."""
+    with Session(registry_engine) as s:
+        t = registry.register_tenant(
+            s, name="NoCool", slug="no-cool", dsn="postgresql+psycopg://x/nc"
+        )
+        s.commit()
+        tid = t.id
+
+    # Insert history row with no cooling window (reserved_until=None)
+    with Session(registry_engine) as s:
+        hist = m.TenantSlugHistory(
+            slug="nocool-old",
+            tenant_id=tid,
+            reserved_until=None,  # no cooling
+        )
+        s.add(hist)
+        s.commit()
+
+    with Session(registry_engine) as s:
+        result = registry.resolve_slug(s, "nocool-old")
+        assert result is None
+
+
+# ── tests: no create_engine / tenant_session in registry ──────────────────────
+
+
+def test_registry_module_has_no_routing_imports() -> None:
+    """The registry module must not import create_engine or tenant_session (routing-agnostic)."""
+    import ast
+    import pathlib
+
+    registry_path = pathlib.Path(registry.__file__)
+    source = registry_path.read_text()
+    tree = ast.parse(source)
+
+    banned_names = {
+        "create_engine",
+        "tenant_session",
+        "build_engine",
+        "invalidate_dsn_cache",
+    }
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            if isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    if alias.name in banned_names:
+                        found.add(alias.name)
+            else:
+                for alias in node.names:
+                    if alias.name in banned_names:
+                        found.add(alias.name)
+        elif isinstance(node, ast.Name):
+            if node.id in banned_names:
+                found.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            if node.attr in banned_names:
+                found.add(node.attr)
+
+    # Also check repository
+    repo_path = pathlib.Path(control_repo.__file__)
+    source2 = repo_path.read_text()
+    tree2 = ast.parse(source2)
+    for node in ast.walk(tree2):
+        if isinstance(node, ast.Attribute):
+            if node.attr in banned_names:
+                found.add(node.attr)
+
+    assert not found, f"routing imports found in registry/repository: {found}"

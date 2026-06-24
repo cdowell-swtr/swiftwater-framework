@@ -2784,3 +2784,8 @@ follow-up:** Task 14 (which creates the production inert `subtree_exists` site) 
 everywhere; the ≥1-admin TOCTOU `SELECT … FOR UPDATE` over the whole admin set; A-F4 phantom-audit fix in
 `add_platform_role`). Review = Approved (whole-set lock + A-F4 mutation-verified + idempotent-no-phantom on
 all 5 fns + services-never-commit; 11 green incl. a real threaded concurrent-demote test). Minors→final.
+**Task 12 — routing-agnostic tenant registry + slug lifecycle** (`register_tenant` mints an opaque id
+NOT from the slug; `activate`/`get`/`get_dsn`; `rename_slug` with cooling; `resolve_slug` 301 semantics;
+NEVER connects to dsn — AST-guard-tested). Review = Needs-fixes → fixed: an `add_slug_history` PK-collision
+on a reclaim→rename cycle (blind insert on a slug-PK table → upsert; mutation-confirmed RED→GREEN) +
+removed out-of-scope Phase-2 `all_tenant_dsns`. 27 green. Minors→final (yield-fixture annotations).
