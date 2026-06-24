@@ -110,6 +110,25 @@ def metrics(request: Request) -> PlainTextResponse:
 
     body += agent_metrics.render_prometheus()
 {%- endif %}
+{%- if "multitenantauth" in batteries %}
+
+    from {{ package_name }}.multitenantauth.metrics import (
+        auth_metrics,
+        render_active_sessions_gauge,
+    )
+    from {{ package_name }}.db.control import engine as _ctrl_engine
+
+    body += auth_metrics.render_prometheus()
+    try:
+        with _ctrl_engine.control_session_factory()() as _cs:
+            body += render_active_sessions_gauge(_cs)
+    except Exception as _exc:  # control DB unreachable — omit gauge, never 500 /metrics
+        from {{ package_name }}.logging_config import get_logger
+
+        get_logger().warning(
+            "auth_metrics_active_sessions_unavailable", error=str(_exc)
+        )
+{%- endif %}
 {% if "workers" in batteries %}
     from {{ package_name }}.db.engine import SessionLocal
     from {{ package_name }}.tasks import dead_letter as _dead_letter

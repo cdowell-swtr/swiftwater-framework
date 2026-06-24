@@ -118,6 +118,8 @@ BATTERY_LOCKED: dict[str, tuple[str, ...]] = {
     "infra/observability/prometheus/alerts/llm_alerts.yml": ("llm",),
     "infra/observability/grafana/dashboards/mongodb.json": ("mongodb",),
     "infra/observability/prometheus/alerts/mongodb_alerts.yml": ("mongodb",),
+    "infra/observability/grafana/dashboards/multitenantauth.json": ("multitenantauth",),
+    "infra/observability/prometheus/alerts/multitenantauth_alerts.yml": ("multitenantauth",),
     "infra/observability/grafana/dashboards/redis.json": ("redis", "workers"),
     "infra/observability/prometheus/alerts/redis_alerts.yml": ("redis", "workers"),
     "infra/observability/grafana/dashboards/webhooks.json": ("webhooks",),

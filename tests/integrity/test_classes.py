@@ -197,8 +197,8 @@ def test_classification_categories_are_pairwise_disjoint():
 def test_battery_locked_covers_the_expected_files():
     from framework_cli.integrity.classes import BATTERY_LOCKED, LOCKED_TRACKED
 
-    # 22 battery-conditional framework files; none also in the baseline locked set.
-    assert len(BATTERY_LOCKED) == 22
+    # 24 battery-conditional framework files; none also in the baseline locked set.
+    assert len(BATTERY_LOCKED) == 24
     for path, gate in BATTERY_LOCKED.items():
         assert path not in LOCKED_TRACKED, (
             f"{path} is both baseline-locked and battery-locked"

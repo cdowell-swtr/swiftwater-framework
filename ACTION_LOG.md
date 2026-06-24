@@ -2836,3 +2836,12 @@ Task-8 entrypoint). Review = Approved (cross-domain guard + idempotency + no-Mer
 non-vacuous; 18 green). Minors→final/Task-19 cleanup: a literal `{{ package_name }}` in a `seed.py`
 docstring (plain .py, not rendered → ships broken); missing `INTENTIONALLY_UNLOCKED` marker on `seed.py`;
 built-in role descriptions default to the role name; `main()` untested.
+**Task 18 — in-process auth observability** (`metrics.py` AuthMetrics: login success/failure, session
+create + active-sessions DB-gauge, authz allow/deny by domain, grant/revoke; emission wired at the
+call sites in routes/auth.py, deps.py, authz/service.py; `/metrics` block; `multitenantauth_alerts.yml`
++ dashboard; obs-completeness extended; **classify-as-you-go: the 2 obs infra files classified in
+integrity/classes.py** BATTERY_LOCKED). Review = Approved — the CRITICAL check passed: instrumentation is
+observation-only (no auth/authz control-flow change, no mid-request raise) + cardinality-safe labels (no
+user/tenant ids). obs-completeness 17/17, integrity 67/67, full framework suite 794 green. Minors→final
+(counters fire pre-commit (over-count on rollback, standard); the `resource` authz-decision series is
+pre-seeded but never emitted in Phase 1; an inert type:ignore).

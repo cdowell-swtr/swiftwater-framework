@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from ...config.settings import get_settings
 from ...db.control import models as m
 from ..errors import DomainMismatchError, LastAdminError
+from ..metrics import auth_metrics
 
 
 def _resolve_role(s: Session, role_name: str) -> m.Role:
@@ -46,8 +47,9 @@ def _record_event(
     role_id: uuid.UUID,
     tenant_id: str | None,
     action: str,
+    role_domain: str = "tenant",
 ) -> None:
-    """Append an authz audit row (grant/revoke)."""
+    """Append an authz audit row (grant/revoke) and emit a metrics counter."""
     s.add(
         m.AuthzEvent(
             actor_id=actor_id,
@@ -57,6 +59,7 @@ def _record_event(
             action=action,
         )
     )
+    auth_metrics.record_grant(action, role_domain)
 
 
 def _get_membership(s: Session, membership_id: uuid.UUID) -> m.TenantMembership:
@@ -133,6 +136,7 @@ def assign_role(
             role_id=role.id,
             tenant_id=membership.tenant_id,
             action="grant",
+            role_domain="tenant",
         )
 
 
@@ -172,6 +176,7 @@ def revoke_role(
             role_id=role.id,
             tenant_id=membership.tenant_id,
             action="revoke",
+            role_domain="tenant",
         )
 
 
@@ -263,6 +268,7 @@ def remove_member(
             role_id=role_id,
             tenant_id=tenant_id,
             action="revoke",
+            role_domain="tenant",
         )
 
 
@@ -303,6 +309,7 @@ def assign_resource_role(
             role_id=role.id,
             tenant_id=membership.tenant_id,
             action="grant",
+            role_domain="resource",
         )
 
 
@@ -336,6 +343,7 @@ def revoke_resource_role(
             role_id=role.id,
             tenant_id=membership.tenant_id,
             action="revoke",
+            role_domain="resource",
         )
 
 
@@ -374,4 +382,5 @@ def add_platform_role(
             role_id=role.id,
             tenant_id=None,
             action="grant",
+            role_domain="platform",
         )

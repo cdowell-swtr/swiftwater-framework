@@ -44,6 +44,7 @@ from ..authn.tokens import hash_token, mint
 from ..authz.service import add_membership
 from ..cookies import set_session_cookie
 from ..deps import control_session, current_user
+from ..metrics import auth_metrics
 from ..tenancy.registry import activate_tenant, register_tenant, resolve_slug
 
 router = APIRouter()
@@ -100,6 +101,7 @@ def _issue_session(s: Session, user_id: uuid.UUID) -> str:
             expires_at=_now() + timedelta(hours=settings.session_ttl_hours),
         )
     )
+    auth_metrics.record_session_create()
     return raw
 
 
@@ -228,11 +230,13 @@ def login(body: LoginBody, s: Session = Depends(control_session)) -> JSONRespons
     # Constant-ish-time: ALWAYS run a verify so the absent-user path spends comparable CPU.
     if user is None or user.password_hash is None:
         verify_password(body.password, _dummy_hash())  # discard — no enumeration
+        auth_metrics.record_login("failure")
         raise HTTPException(status_code=401, detail=_INVALID_CREDENTIALS)
     if (
         not verify_password(body.password, user.password_hash)
         or user.disabled_at is not None
     ):
+        auth_metrics.record_login("failure")
         raise HTTPException(status_code=401, detail=_INVALID_CREDENTIALS)
 
     if needs_rehash(user.password_hash):
@@ -242,6 +246,7 @@ def login(body: LoginBody, s: Session = Depends(control_session)) -> JSONRespons
     raw = _issue_session(s, user.id)
     s.commit()
 
+    auth_metrics.record_login("success")
     response = JSONResponse({"ok": True}, status_code=200)
     set_session_cookie(response, raw)
     return response

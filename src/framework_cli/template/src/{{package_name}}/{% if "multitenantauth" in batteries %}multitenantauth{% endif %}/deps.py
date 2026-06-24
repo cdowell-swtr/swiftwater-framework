@@ -33,6 +33,7 @@ from .authz.expr import Authorized, Expr
 from .authz.resolution import has_membership, platform_permissions, tenant_permissions
 from .authn.tokens import hash_token
 from .errors import AUTHZ_FORBIDDEN_DETAIL
+from .metrics import auth_metrics
 
 
 def control_session() -> Iterator[Session]:
@@ -159,8 +160,11 @@ def guard(expr: Expr):
             "subtree_exists": lambda name, resource: False,  # inert (Phase 1; A-F10)
             "resource_grant": _resource_grant,
         }
+        _authz_domain = "tenant" if needs_tenant else "platform"
         if not authorized.satisfied(ctx):
+            auth_metrics.record_authz("deny", _authz_domain)
             raise HTTPException(status_code=403, detail=AUTHZ_FORBIDDEN_DETAIL)
+        auth_metrics.record_authz("allow", _authz_domain)
 
     _dep.__authorized__ = authorized  # type: ignore[attr-defined]  # fitness-test introspection hook
     return _dep
