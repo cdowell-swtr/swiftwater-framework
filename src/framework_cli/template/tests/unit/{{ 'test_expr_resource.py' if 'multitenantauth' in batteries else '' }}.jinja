@@ -45,7 +45,9 @@ def test_resource_leaf_denies_when_resolver_false():
 def test_missing_resource_param_denies_not_raises():
     """bind_resource returns None when a param is absent → deny before resource_grant is called."""
     node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
-    ctx = _ctx(lambda n, p: True, {"tenant_id": "acme"})  # no resource_id → bind returns None
+    ctx = _ctx(
+        lambda n, p: True, {"tenant_id": "acme"}
+    )  # no resource_id → bind returns None
     assert evaluate(node, ctx) is False
 
 

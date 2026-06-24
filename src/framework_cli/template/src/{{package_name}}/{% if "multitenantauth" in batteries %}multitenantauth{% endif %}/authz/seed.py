@@ -137,8 +137,8 @@ def reconcile_authz(
 
     for role_name, spec in _custom_roles.items():
         role_domain = spec.get("domain", "")
-        grants: set[str] = spec.get("grants", set())
-        _check_bundle(role_name, role_domain, grants)
+        custom_grants: set[str] = spec.get("grants", set())
+        _check_bundle(role_name, role_domain, custom_grants)
 
 
 def seed_authz(session: Session) -> None:

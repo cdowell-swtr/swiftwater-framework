@@ -2873,3 +2873,18 @@ Review = Approved; one defensive reorder applied (control-seed BEFORE the consum
 consumer adds control-dependent seed data). Also folded a `ruff format` regression fix to
 `integrity/classes.py` (a Task-18 edit left it format-dirty — CI gate runs `format --check`).
 **Tasks 7+8 are now DONE — nothing is deferred.** Remaining: 20 (FWK29), 21 (acceptance+live-e2e), 22.
+**Task 20 — FWK29 runtime-coverage** = no-op (the battery adds no new FWK29-enumerated operational
+surface; `migrations_control/` is a dir, `alembic_control.ini` is root-level, `entrypoint.sh` already
+EXERCISED; in-app code out of scope). Gate green (9), verified via an enumerate-surfaces diff.
+**Task 21 — acceptance + live e2e — the integration proof.** Authored `test_multitenantauth_e2e.py`:
+against a real Postgres, applies BOTH alembic chains + `seed_authz` (simulating the entrypoint boot) then
+asserts the full flow signup-founder→201 → guarded `GET /tenants/{tid}/members`→200 → unauth→401 →
+nonexistent-tenant→404 → logout+login→fresh session. **Controller-verified on a real render: e2e GREEN;
+143 battery tests pass** (the 1 "failure" = `test_smoke::test_heartbeat_is_200`, which needs a live
+`task dev` server — a verification artifact, not a battery bug); coverage≥70%, migration-reversibility,
+docs-layout all pass. **The acceptance pass earned its keep — it caught issues the per-task/framework
+gates structurally miss** (the framework mypy/ruff EXCLUDE template payload): a real **mypy `[no-redef]`
+in `seed.py`** (`grants` reused → `custom_grants`), **F401 unused imports** across 5 test files, and a
+**Jinja blank-line in `migrations/env.py.jinja`** that rendered 3 blank lines (ruff-format). All fixed →
+fresh render is ruff/format/mypy clean + **first pre-commit clean**. ⏚ branch-end: run the smoke/live tier
+against an actual `task dev` stack (the docker-image acceptance + the comprehensive CHECK-name audit).

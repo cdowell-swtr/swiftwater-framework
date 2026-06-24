@@ -30,7 +30,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, make_url, text
 from sqlalchemy.orm import Session
 
-from {{ package_name }}.db.control import models as m
 from {{ package_name }}.db.control.base import ControlBase
 from {{ package_name }}.multitenantauth.deps import control_session
 from {{ package_name }}.multitenantauth.routes.auth import router as auth_router

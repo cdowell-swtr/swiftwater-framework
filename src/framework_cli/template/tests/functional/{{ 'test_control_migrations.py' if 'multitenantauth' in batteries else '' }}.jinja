@@ -22,7 +22,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from {{ package_name }}.db.control import models as m
-from {{ package_name }}.db.control.base import ControlBase
 
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
@@ -111,7 +110,9 @@ def _seed(s: Session) -> tuple[uuid.UUID, uuid.UUID]:
 # ── (a) both chains co-located → two version tables, no collision ─────────────
 
 
-def test_both_chains_produce_two_version_tables(engine: Engine, ctrl_engine: Engine) -> None:
+def test_both_chains_produce_two_version_tables(
+    engine: Engine, ctrl_engine: Engine
+) -> None:
     """After both chains run head, each DB has exactly its own version table."""
     app_tables = set(inspect(engine).get_table_names())
     ctrl_tables = set(inspect(ctrl_engine).get_table_names())
