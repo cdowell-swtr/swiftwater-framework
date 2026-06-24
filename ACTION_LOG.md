@@ -2811,3 +2811,10 @@ cookie-bearing request; empty allowlist reduces to strict same-origin; §5.1 mul
 module docstring). Review = Approved (no bypass path; 11 non-vacuous tests incl. junk-Bearer/empty-allowlist/
 wildcard-rejected). Controller folded in a settings-comment footgun fix (`csrf_allowed_origins` example
 was `https://app.example.com` with a scheme, but the check compares bare netloc → fixed to `app.example.com`).
+**Task 16a — tenant/role routes + main.py wiring** (split from Task 16 after the read-heavy fitness suite
+timed agents out 2×; fresh agent + minimal-reading + author-first framing broke the timeout). `tenants.py`
+(`POST /tenants` platform-guarded provisioning + member CRUD) + `roles.py` (grant/revoke), each
+`guard(Perm(... on="tenant:{tenant_id}"))`; `main.py.jinja` wires routers + `CSRFMiddleware` +
+`verify_runtime` at the TOP of `create_app` (OPS-F7); baseline render stays valid. Review = Needs-fixes →
+fixed: missing spec'd `POST /tenants`, + 6 negative-path tests (403/404), docstring, `list[MemberOut]`.
+24 green. **⏚ recorded: Task 17 seed must add `platform:provision-tenant` + `platform.admin`.**

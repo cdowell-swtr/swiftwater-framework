@@ -1,0 +1,599 @@
+"""Functional tests for tenant/role management routes (Task 16a).
+
+Coverage (each route: unauthenticated → 401; authenticated-but-unauthorized → 403 or 404;
+authorized → success):
+- POST /tenants                              — 401, 403 (non-platform-admin), 201 (platform.admin)
+- GET /tenants/{tenant_id}/members           — 401, 404 (non-member), 200
+- POST /tenants/{tenant_id}/members          — 401, 404 (non-member), 403 (member w/o perm), 201
+- DELETE /tenants/{tenant_id}/members/{id}   — 401, 404 (non-member), 403 (member w/o perm),
+                                               204, 409 (last admin)
+- POST /tenants/{tenant_id}/members/{id}/roles     — 401, 404 (non-member), 403 (member w/o perm), 204
+- DELETE /tenants/{tenant_id}/members/{id}/roles/{r} — 401, 404 (non-member), 403 (member w/o perm),
+                                                       204, 409 (last admin)
+
+The probe app mounts all three routers (auth + tenants + roles) against a real
+test control DB so guards, sessions, and memberships are exercised end-to-end.
+
+Non-member tenant-scoped routes return 404 (not 403) by design — the membership
+precondition inside ``guard`` runs before the permission check, so existence is
+never leaked (A-F8).
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Iterator
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine, create_engine, make_url, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+from {{ package_name }}.db.control.base import ControlBase
+from {{ package_name }}.multitenantauth.deps import control_session
+from {{ package_name }}.multitenantauth.routes.auth import router as auth_router
+from {{ package_name }}.multitenantauth.routes.roles import router as roles_router
+from {{ package_name }}.multitenantauth.routes.tenants import router as tenants_router
+
+pytestmark = pytest.mark.usefixtures("_clean_tr")
+
+# ── control-plane DB + probe app fixtures ──────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def tr_engine(pg_url: str) -> Iterator[Engine]:
+    _ctrl_db = "{{ package_name }}_tr_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(engine)
+    yield engine
+    engine.dispose()
+
+
+_CONTROL_TABLES = (
+    "invite_token, session, authz_event, platform_role_assignment, "
+    "resource_role_assignment, tenant_role_assignment, tenant_membership, "
+    "role_permission, permission, role, app_user, tenant, tenant_slug_history"
+)
+
+
+@pytest.fixture
+def _clean_tr(tr_engine: Engine) -> Iterator[None]:
+    yield
+    with tr_engine.begin() as conn:
+        conn.execute(text(f"TRUNCATE TABLE {_CONTROL_TABLES} CASCADE"))
+
+
+def _seed_vocab(s: Session) -> None:
+    """Seed the minimum roles/permissions the routes need."""
+    from uuid import uuid4
+
+    perms = [
+        ("tenant:read", "tenant"),
+        ("tenant:manage-members", "tenant"),
+        ("platform:provision-tenant", "platform"),
+    ]
+    for name, domain in perms:
+        s.execute(
+            text(
+                "INSERT INTO permission (name, domain, description, is_active) "
+                "VALUES (:name, :domain, :desc, true) ON CONFLICT DO NOTHING"
+            ),
+            {"name": name, "domain": domain, "desc": name},
+        )
+    roles_def = [
+        ("tenant.member", "tenant", {"tenant:read"}),
+        ("tenant.admin", "tenant", {"tenant:read", "tenant:manage-members"}),
+        ("platform.admin", "platform", {"platform:provision-tenant"}),
+    ]
+    role_ids: dict[str, object] = {}
+    for rname, rdomain, _ in roles_def:
+        s.execute(
+            text(
+                "INSERT INTO role (id, name, domain, description, is_builtin) "
+                "VALUES (:id, :name, :domain, :desc, true) ON CONFLICT (name) DO NOTHING"
+            ),
+            {"id": uuid4(), "name": rname, "domain": rdomain, "desc": rname},
+        )
+        role_ids[rname] = s.execute(
+            text("SELECT id FROM role WHERE name=:name"), {"name": rname}
+        ).scalar_one()
+    for rname, _, grants in roles_def:
+        for pname in grants:
+            s.execute(
+                text(
+                    "INSERT INTO role_permission (role_id, permission_name) "
+                    "VALUES (:rid, :pname) ON CONFLICT DO NOTHING"
+                ),
+                {"rid": role_ids[rname], "pname": pname},
+            )
+
+
+def _build_probe(tr_engine: Engine, monkeypatch) -> TestClient:
+    monkeypatch.setenv("APP_ENVIRONMENT", "dev")
+    monkeypatch.setenv("APP_SESSION_PEPPER", "tr-session-pepper")
+    monkeypatch.setenv("APP_PASSWORD_PEPPER", "tr-password-pepper")
+    monkeypatch.setenv("APP_SESSION_COOKIE_SECURE", "false")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    with Session(tr_engine) as s:
+        _seed_vocab(s)
+        s.commit()
+
+    app = FastAPI()
+    app.include_router(auth_router)
+    app.include_router(tenants_router)
+    app.include_router(roles_router)
+
+    def _cs() -> Iterator[Session]:
+        with Session(tr_engine) as s:
+            yield s
+
+    app.dependency_overrides[control_session] = _cs
+    return TestClient(app)
+
+
+@pytest.fixture
+def probe(tr_engine: Engine, monkeypatch) -> Iterator[TestClient]:
+    client = _build_probe(tr_engine, monkeypatch)
+    try:
+        yield client
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _signup_and_login(client: TestClient, email: str, slug: str) -> tuple[str, str]:
+    """Signup a founder+tenant and return (tenant_id, cookie_header)."""
+    r = client.post(
+        "/auth/signup",
+        json={
+            "email": email,
+            "password": "a-secure-password-12",
+            "tenant_name": slug.title(),
+            "slug": slug,
+        },
+    )
+    assert r.status_code == 201, r.text
+    tenant_id: str = r.json()["tenant_id"]
+    cookie = r.headers["set-cookie"].split(";")[0]
+    return tenant_id, cookie
+
+
+def _headers(cookie: str) -> dict:
+    return {"Cookie": cookie}
+
+
+# A no-cookie header dict: overrides the TestClient's persistent cookie jar so the request
+# is treated as unauthenticated (used by the 401 test cases below).
+_NO_COOKIE: dict = {"Cookie": ""}
+
+
+def _user_id(tr_engine: Engine, email_canonical: str) -> object:
+    """Return the app_user.id for *email_canonical*."""
+    with Session(tr_engine) as s:
+        return s.execute(
+            text("SELECT id FROM app_user WHERE email_canonical=:e"),
+            {"e": email_canonical},
+        ).scalar_one()
+
+
+def _grant_platform_admin(tr_engine: Engine, email_canonical: str) -> None:
+    """Grant the seeded ``platform.admin`` role to the user with *email_canonical*."""
+    from {{ package_name }}.multitenantauth.authz.service import add_platform_role
+
+    uid = _user_id(tr_engine, email_canonical)
+    with Session(tr_engine) as s:
+        add_platform_role(s, user_id=uid, role_name="platform.admin", actor_id=None)
+        s.commit()
+
+
+def _make_plain_member(
+    probe: TestClient, admin_cookie: str, tenant_id: str, user_id: object
+) -> str:
+    """Admin adds *user_id* as a plain ``tenant.member`` of *tenant_id*; return membership_id."""
+    r = probe.post(
+        f"/tenants/{tenant_id}/members",
+        headers=_headers(admin_cookie),
+        json={"user_id": str(user_id), "role_name": "tenant.member"},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["membership_id"]
+
+
+# ── POST /tenants (platform-level provisioning) ───────────────────────────────
+
+
+def test_provision_tenant_unauthenticated(probe: TestClient) -> None:
+    r = probe.post(
+        "/tenants",
+        headers=_NO_COOKIE,
+        json={"name": "Provisioned", "slug": "provisioned-1"},
+    )
+    assert r.status_code == 401
+
+
+def test_provision_tenant_non_platform_admin_gets_403(probe: TestClient) -> None:
+    """An authenticated user WITHOUT platform.admin gets 403 on POST /tenants."""
+    _, cookie = _signup_and_login(probe, "plain@prov.com", "prov-plain")
+    r = probe.post(
+        "/tenants",
+        headers=_headers(cookie),
+        json={"name": "Provisioned", "slug": "provisioned-2"},
+    )
+    assert r.status_code == 403
+
+
+def test_provision_tenant_succeeds_for_platform_admin(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    _, cookie = _signup_and_login(probe, "platadmin@prov.com", "prov-admin")
+    _grant_platform_admin(tr_engine, "platadmin@prov.com")
+    r = probe.post(
+        "/tenants",
+        headers=_headers(cookie),
+        json={"name": "Brand New Co", "slug": "brand-new-co"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["tenant_id"]  # opaque, auto-generated — NOT the slug
+    assert body["tenant_id"] != "brand-new-co"
+    assert body["slug"] == "brand-new-co"
+
+
+# ── GET /tenants/{tenant_id}/members ──────────────────────────────────────────
+
+
+def test_list_members_unauthenticated(probe: TestClient, tr_engine: Engine) -> None:
+    tenant_id, _ = _signup_and_login(probe, "admin@alpha.com", "alpha")
+    r = probe.get(f"/tenants/{tenant_id}/members", headers=_NO_COOKIE)
+    assert r.status_code == 401
+
+
+def test_list_members_non_member_gets_404(probe: TestClient, tr_engine: Engine) -> None:
+    """A logged-in user who is NOT a member gets 404, not 403 (no existence leak)."""
+    tenant_id, _ = _signup_and_login(probe, "admin@beta.com", "beta")
+    # Sign up a second user in a different tenant
+    other_tid, other_cookie = _signup_and_login(probe, "other@gamma.com", "gamma")
+    # other user tries to read beta's members — not a member → 404
+    r = probe.get(f"/tenants/{tenant_id}/members", headers=_headers(other_cookie))
+    assert r.status_code == 404
+
+
+def test_list_members_returns_200_for_member(probe: TestClient) -> None:
+    tenant_id, cookie = _signup_and_login(probe, "admin@delta.com", "delta")
+    r = probe.get(f"/tenants/{tenant_id}/members", headers=_headers(cookie))
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 1  # just the founder
+    assert data[0]["roles"] == ["tenant.admin"]
+
+
+# ── POST /tenants/{tenant_id}/members ─────────────────────────────────────────
+
+
+def test_add_member_unauthenticated(probe: TestClient) -> None:
+    tenant_id, _ = _signup_and_login(probe, "admin@epsilon.com", "epsilon")
+    r = probe.post(
+        f"/tenants/{tenant_id}/members",
+        headers=_NO_COOKIE,
+        json={"user_id": str(uuid.uuid4()), "role_name": "tenant.member"},
+    )
+    assert r.status_code == 401
+
+
+def test_add_member_non_member_gets_404(probe: TestClient) -> None:
+    tenant_id, _ = _signup_and_login(probe, "admin@zeta.com", "zeta")
+    _, other_cookie = _signup_and_login(probe, "outsider@eta.com", "eta")
+    r = probe.post(
+        f"/tenants/{tenant_id}/members",
+        headers=_headers(other_cookie),
+        json={"user_id": str(uuid.uuid4()), "role_name": "tenant.member"},
+    )
+    assert r.status_code == 404
+
+
+def test_add_member_missing_perm_gets_403(probe: TestClient, tr_engine: Engine) -> None:
+    """A tenant.member (no manage-members) gets 403 on POST /members."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@theta.com", "theta")
+    # Create a second user in the same tenant with member role
+    member_tid, member_cookie = _signup_and_login(probe, "member@iota.com", "iota")
+    with Session(tr_engine) as s:
+        member_user = s.execute(
+            text("SELECT id FROM app_user WHERE email_canonical='member@iota.com'")
+        ).scalar_one()
+    # Admin adds the other user as a plain member of theta
+    probe.post(
+        f"/tenants/{admin_tid}/members",
+        headers=_headers(admin_cookie),
+        json={"user_id": str(member_user), "role_name": "tenant.member"},
+    )
+    # Now that member tries to add someone else — they lack manage-members → 403
+    r = probe.post(
+        f"/tenants/{admin_tid}/members",
+        headers=_headers(member_cookie),
+        json={"user_id": str(uuid.uuid4()), "role_name": "tenant.member"},
+    )
+    assert r.status_code == 403
+
+
+def test_add_member_succeeds_for_admin(probe: TestClient, tr_engine: Engine) -> None:
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@kappa.com", "kappa")
+    # Create a second user
+    _, _ = _signup_and_login(probe, "newuser@lambda.com", "lambda")
+    with Session(tr_engine) as s:
+        new_user_id = s.execute(
+            text("SELECT id FROM app_user WHERE email_canonical='newuser@lambda.com'")
+        ).scalar_one()
+
+    r = probe.post(
+        f"/tenants/{admin_tid}/members",
+        headers=_headers(admin_cookie),
+        json={"user_id": str(new_user_id), "role_name": "tenant.member"},
+    )
+    assert r.status_code == 201
+    assert "membership_id" in r.json()
+
+    # Verify the member now appears in list
+    r2 = probe.get(f"/tenants/{admin_tid}/members", headers=_headers(admin_cookie))
+    assert r2.status_code == 200
+    assert len(r2.json()) == 2
+
+
+# ── DELETE /tenants/{tenant_id}/members/{id} ──────────────────────────────────
+
+
+def test_remove_member_unauthenticated(probe: TestClient, tr_engine: Engine) -> None:
+    admin_tid, _ = _signup_and_login(probe, "admin@mu.com", "mu")
+    with Session(tr_engine) as s:
+        mid = s.execute(
+            text("SELECT id FROM tenant_membership WHERE tenant_id=:tid"),
+            {"tid": admin_tid},
+        ).scalar_one()
+    r = probe.delete(f"/tenants/{admin_tid}/members/{mid}", headers=_NO_COOKIE)
+    assert r.status_code == 401
+
+
+def test_remove_member_non_member_gets_404(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """A logged-in non-member gets 404 (existence never leaked) on DELETE /members/{id}."""
+    admin_tid, _ = _signup_and_login(probe, "admin@mu404.com", "mu404")
+    _, outsider_cookie = _signup_and_login(probe, "out@mu404o.com", "mu404o")
+    with Session(tr_engine) as s:
+        mid = s.execute(
+            text("SELECT id FROM tenant_membership WHERE tenant_id=:tid"),
+            {"tid": admin_tid},
+        ).scalar_one()
+    r = probe.delete(
+        f"/tenants/{admin_tid}/members/{mid}", headers=_headers(outsider_cookie)
+    )
+    assert r.status_code == 404
+
+
+def test_remove_member_missing_perm_gets_403(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """A plain tenant.member (no manage-members) gets 403 on DELETE /members/{id}."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@mu403.com", "mu403")
+    _, member_cookie = _signup_and_login(probe, "member@mu403m.com", "mu403m")
+    member_uid = _user_id(tr_engine, "member@mu403m.com")
+    member_mid = _make_plain_member(probe, admin_cookie, admin_tid, member_uid)
+    # The plain member tries to remove themselves — lacks manage-members → 403
+    r = probe.delete(
+        f"/tenants/{admin_tid}/members/{member_mid}", headers=_headers(member_cookie)
+    )
+    assert r.status_code == 403
+
+
+def test_remove_member_succeeds_for_admin(probe: TestClient, tr_engine: Engine) -> None:
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@nu.com", "nu")
+    _, _ = _signup_and_login(probe, "todel@xi.com", "xi")
+    with Session(tr_engine) as s:
+        new_user_id = s.execute(
+            text("SELECT id FROM app_user WHERE email_canonical='todel@xi.com'")
+        ).scalar_one()
+
+    r_add = probe.post(
+        f"/tenants/{admin_tid}/members",
+        headers=_headers(admin_cookie),
+        json={"user_id": str(new_user_id), "role_name": "tenant.member"},
+    )
+    assert r_add.status_code == 201
+    member_id = r_add.json()["membership_id"]
+
+    r_del = probe.delete(
+        f"/tenants/{admin_tid}/members/{member_id}", headers=_headers(admin_cookie)
+    )
+    assert r_del.status_code == 204
+
+
+def test_remove_last_admin_gets_409(probe: TestClient, tr_engine: Engine) -> None:
+    admin_tid, admin_cookie = _signup_and_login(probe, "solo@omicron.com", "omicron")
+    with Session(tr_engine) as s:
+        mid = s.execute(
+            text("SELECT id FROM tenant_membership WHERE tenant_id=:tid"),
+            {"tid": admin_tid},
+        ).scalar_one()
+
+    r = probe.delete(
+        f"/tenants/{admin_tid}/members/{mid}", headers=_headers(admin_cookie)
+    )
+    assert r.status_code == 409
+
+
+# ── POST /tenants/{tenant_id}/members/{id}/roles ──────────────────────────────
+
+
+def test_grant_role_unauthenticated(probe: TestClient, tr_engine: Engine) -> None:
+    tid, _ = _signup_and_login(probe, "admin@pi.com", "pi")
+    with Session(tr_engine) as s:
+        mid = s.execute(
+            text("SELECT id FROM tenant_membership WHERE tenant_id=:tid"), {"tid": tid}
+        ).scalar_one()
+    r = probe.post(
+        f"/tenants/{tid}/members/{mid}/roles",
+        headers=_NO_COOKIE,
+        json={"role_name": "tenant.member"},
+    )
+    assert r.status_code == 401
+
+
+def test_grant_role_non_member_gets_404(probe: TestClient, tr_engine: Engine) -> None:
+    """A logged-in non-member gets 404 on POST /members/{id}/roles."""
+    admin_tid, _ = _signup_and_login(probe, "admin@pi404.com", "pi404")
+    _, outsider_cookie = _signup_and_login(probe, "out@pi404o.com", "pi404o")
+    with Session(tr_engine) as s:
+        mid = s.execute(
+            text("SELECT id FROM tenant_membership WHERE tenant_id=:tid"),
+            {"tid": admin_tid},
+        ).scalar_one()
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{mid}/roles",
+        headers=_headers(outsider_cookie),
+        json={"role_name": "tenant.member"},
+    )
+    assert r.status_code == 404
+
+
+def test_grant_role_missing_perm_gets_403(probe: TestClient, tr_engine: Engine) -> None:
+    """A plain tenant.member (no manage-members) gets 403 on POST /members/{id}/roles."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@pi403.com", "pi403")
+    _, member_cookie = _signup_and_login(probe, "member@pi403m.com", "pi403m")
+    member_uid = _user_id(tr_engine, "member@pi403m.com")
+    member_mid = _make_plain_member(probe, admin_cookie, admin_tid, member_uid)
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{member_mid}/roles",
+        headers=_headers(member_cookie),
+        json={"role_name": "tenant.admin"},
+    )
+    assert r.status_code == 403
+
+
+def test_grant_role_succeeds_for_admin(probe: TestClient, tr_engine: Engine) -> None:
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@rho.com", "rho")
+    _, _ = _signup_and_login(probe, "member2@sigma.com", "sigma")
+    with Session(tr_engine) as s:
+        new_uid = s.execute(
+            text("SELECT id FROM app_user WHERE email_canonical='member2@sigma.com'")
+        ).scalar_one()
+
+    r_add = probe.post(
+        f"/tenants/{admin_tid}/members",
+        headers=_headers(admin_cookie),
+        json={"user_id": str(new_uid), "role_name": "tenant.member"},
+    )
+    assert r_add.status_code == 201
+    mid = r_add.json()["membership_id"]
+
+    # Grant admin role to the new member
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{mid}/roles",
+        headers=_headers(admin_cookie),
+        json={"role_name": "tenant.admin"},
+    )
+    assert r.status_code == 204
+
+
+# ── DELETE /tenants/{tenant_id}/members/{id}/roles/{role} ────────────────────
+
+
+def test_revoke_role_unauthenticated(probe: TestClient, tr_engine: Engine) -> None:
+    tid, _ = _signup_and_login(probe, "admin@tau.com", "tau")
+    with Session(tr_engine) as s:
+        mid = s.execute(
+            text("SELECT id FROM tenant_membership WHERE tenant_id=:tid"), {"tid": tid}
+        ).scalar_one()
+    r = probe.delete(
+        f"/tenants/{tid}/members/{mid}/roles/tenant.admin", headers=_NO_COOKIE
+    )
+    assert r.status_code == 401
+
+
+def test_revoke_role_non_member_gets_404(probe: TestClient, tr_engine: Engine) -> None:
+    """A logged-in non-member gets 404 on DELETE /members/{id}/roles/{role}."""
+    admin_tid, _ = _signup_and_login(probe, "admin@tau404.com", "tau404")
+    _, outsider_cookie = _signup_and_login(probe, "out@tau404o.com", "tau404o")
+    with Session(tr_engine) as s:
+        mid = s.execute(
+            text("SELECT id FROM tenant_membership WHERE tenant_id=:tid"),
+            {"tid": admin_tid},
+        ).scalar_one()
+    r = probe.delete(
+        f"/tenants/{admin_tid}/members/{mid}/roles/tenant.admin",
+        headers=_headers(outsider_cookie),
+    )
+    assert r.status_code == 404
+
+
+def test_revoke_role_missing_perm_gets_403(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """A plain tenant.member (no manage-members) gets 403 on DELETE /members/{id}/roles/{role}."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@tau403.com", "tau403")
+    _, member_cookie = _signup_and_login(probe, "member@tau403m.com", "tau403m")
+    member_uid = _user_id(tr_engine, "member@tau403m.com")
+    member_mid = _make_plain_member(probe, admin_cookie, admin_tid, member_uid)
+    r = probe.delete(
+        f"/tenants/{admin_tid}/members/{member_mid}/roles/tenant.member",
+        headers=_headers(member_cookie),
+    )
+    assert r.status_code == 403
+
+
+def test_revoke_last_admin_role_gets_409(probe: TestClient, tr_engine: Engine) -> None:
+    tid, cookie = _signup_and_login(probe, "admin@upsilon.com", "upsilon")
+    with Session(tr_engine) as s:
+        mid = s.execute(
+            text("SELECT id FROM tenant_membership WHERE tenant_id=:tid"), {"tid": tid}
+        ).scalar_one()
+
+    r = probe.delete(
+        f"/tenants/{tid}/members/{mid}/roles/tenant.admin",
+        headers=_headers(cookie),
+    )
+    assert r.status_code == 409
+
+
+def test_revoke_role_succeeds_for_admin(probe: TestClient, tr_engine: Engine) -> None:
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@phi.com", "phi")
+    _, _ = _signup_and_login(probe, "mem3@chi.com", "chi")
+    with Session(tr_engine) as s:
+        new_uid = s.execute(
+            text("SELECT id FROM app_user WHERE email_canonical='mem3@chi.com'")
+        ).scalar_one()
+
+    r_add = probe.post(
+        f"/tenants/{admin_tid}/members",
+        headers=_headers(admin_cookie),
+        json={"user_id": str(new_uid), "role_name": "tenant.admin"},
+    )
+    assert r_add.status_code == 201
+    mid = r_add.json()["membership_id"]
+
+    # Now revoke admin from the new member (2 admins, so invariant is safe)
+    r = probe.delete(
+        f"/tenants/{admin_tid}/members/{mid}/roles/tenant.admin",
+        headers=_headers(admin_cookie),
+    )
+    assert r.status_code == 204
