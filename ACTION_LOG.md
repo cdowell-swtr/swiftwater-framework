@@ -2805,3 +2805,9 @@ flags + B-F11 README/.env note). Review = caught an **Important fail-open**: `en
 APP_ENVIRONMENT token) fell through every signup gate → unrestricted signup ([[app-environment-tokens-never-production]]
 class). Fixed: **`dev` is now the only explicitly-open env; every other non-prod requires the allowlist
 (fail-closed by construction)** + regression test (`test`+empty was 201→ now 403). 20 green; render-validated.
+**Task 15 — CSRF middleware** (port `csrf.py` with the B-F4 EXACT-MATCH allowlist — set `__contains__`,
+no wildcard substring-match; cookie-presence triggers the check so a junk `Bearer` can't exempt a
+cookie-bearing request; empty allowlist reduces to strict same-origin; §5.1 multi-host invariants in the
+module docstring). Review = Approved (no bypass path; 11 non-vacuous tests incl. junk-Bearer/empty-allowlist/
+wildcard-rejected). Controller folded in a settings-comment footgun fix (`csrf_allowed_origins` example
+was `https://app.example.com` with a scheme, but the check compares bare netloc → fixed to `app.example.com`).

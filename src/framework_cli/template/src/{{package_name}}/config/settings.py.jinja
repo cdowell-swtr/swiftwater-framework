@@ -81,7 +81,8 @@ class Settings(BaseSettings):
     session_cookie_domain: str | None = None
 
     # CSRF defence: exact origin allowlist (no wildcards — B-F4). Empty = same-origin only.
-    # Each entry must be a netloc (e.g. "https://app.example.com"), not a pattern.
+    # Each entry must be a bare netloc with NO scheme (e.g. "app.example.com", NOT
+    # "https://app.example.com") — the check compares urlsplit(origin).netloc. No patterns.
     csrf_allowed_origins: set[str] = set()
 
     # Password / session pepper (HMAC-SHA256 pre-hash). Defaults empty — NOT required by the
