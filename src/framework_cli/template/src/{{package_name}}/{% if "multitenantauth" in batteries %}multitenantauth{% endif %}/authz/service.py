@@ -80,6 +80,13 @@ def _assert_not_last_admin(
     """
     admin_role_name = get_settings().admin_role_name
     admin_role_id = s.scalar(select(m.Role.id).where(m.Role.name == admin_role_name))
+    if admin_role_id is None:
+        # Fail CLOSED: if the configured admin role does not resolve to a seeded role, we
+        # cannot evaluate the invariant — refuse rather than degrade to a vacuous count.
+        raise RuntimeError(
+            f"admin role {admin_role_name!r} is not configured; cannot enforce "
+            "the >=1-admin invariant"
+        )
     admin_membership_ids = (
         s.execute(
             select(m.TenantRoleAssignment.membership_id)
@@ -245,15 +252,35 @@ def remove_member(
             )
         )
     )
+    # The membership delete CASCADEs ResourceRoleAssignment rows too — capture them so each
+    # gets a revoke AuthzEvent. Without this the resource grant's last audit word is a
+    # dangling 'grant' (Layer-2 INV-AUDIT-SUPPRESS-RESOURCE-REVOKE).
+    resource_assignments = list(
+        s.scalars(
+            select(m.ResourceRoleAssignment).where(
+                m.ResourceRoleAssignment.membership_id == membership_id
+            )
+        )
+    )
 
     admin_role_name = get_settings().admin_role_name
     admin_role_id = s.scalar(select(m.Role.id).where(m.Role.name == admin_role_name))
+    if admin_role_id is None:
+        # Fail CLOSED: a misconfigured admin_role_name (no seeded role matches) must NOT
+        # silently skip the >=1-admin guard via the `any(... == None)` short-circuit below
+        # (every role_id is non-null, so the check would pass and the last admin become
+        # removable). Refuse the removal loudly instead (Layer-2 finding E).
+        raise RuntimeError(
+            f"admin role {admin_role_name!r} is not configured; refusing member removal "
+            "(cannot verify the >=1-admin invariant)"
+        )
     if any(a.role_id == admin_role_id for a in assignments):
         _assert_not_last_admin(
             s, tenant_id=membership.tenant_id, removing_membership_id=membership_id
         )
 
     held_role_ids = [a.role_id for a in assignments]
+    resource_role_ids = [a.role_id for a in resource_assignments]
     user_id = membership.user_id
     tenant_id = membership.tenant_id
 
@@ -269,6 +296,16 @@ def remove_member(
             tenant_id=tenant_id,
             action="revoke",
             role_domain="tenant",
+        )
+    for role_id in resource_role_ids:
+        _record_event(
+            s,
+            actor_id=actor_id,
+            subject_user_id=user_id,
+            role_id=role_id,
+            tenant_id=tenant_id,
+            action="revoke",
+            role_domain="resource",
         )
 
 

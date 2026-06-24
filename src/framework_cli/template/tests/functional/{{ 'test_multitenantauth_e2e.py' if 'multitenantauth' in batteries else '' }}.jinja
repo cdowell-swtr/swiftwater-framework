@@ -145,7 +145,12 @@ def e2e_client(
 
     app.dependency_overrides[control_session] = _cs
 
-    with TestClient(app) as client:
+    # Simulate a browser: send a same-origin Origin header on every request. The CSRF
+    # middleware fails closed on a cookie-authenticated mutating request that carries NEITHER
+    # Origin nor Referer (Layer-2 F) — a real browser always sends Origin, so the e2e flow
+    # must too, or logout/set-password would 403. urlsplit("http://testserver").netloc ==
+    # the Host header ("testserver"), so this matches same-origin and passes.
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         yield client
 
     get_settings.cache_clear()

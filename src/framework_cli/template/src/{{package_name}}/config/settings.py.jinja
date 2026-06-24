@@ -249,12 +249,16 @@ def get_settings() -> Settings:
 
 
 def verify_runtime(settings: Settings) -> None:
-    """Fail-fast startup guard: in prod/staging, both peppers MUST be set (a missing pepper
-    silently weakens password/session hashing). Dev and test are exempt — empty peppers are
-    fine for local dev. Wire into create_app() BEFORE router includes (OPS-F7).
+    """Fail-fast startup guard for production-like environments. In prod/staging this guard
+    fails CLOSED on three weakened-posture conditions: an empty pepper, a trivially-short
+    pepper, and a Secure-less session cookie. Dev and test are exempt (the local-dev escape
+    hatch). Wire into create_app() BEFORE router includes (OPS-F7).
 
     B-F2: peppers default SecretStr("") — not "required". This guard is the safety mechanism.
     B-F1: env-token remap — checks {"prod","staging"}, NOT {"prod","stage"} (Meridian's token).
+    B-F9: session_cookie_secure defaults True; a prod/staging override to false would serve the
+    session token in cleartext over http — rejected here so the misconfig fails at boot, not
+    silently in production (Layer-2 INV-COOKIE-SECURE-GUARD-GAP).
     """
     if settings.environment in {"prod", "staging"} and (
         settings.session_pepper.get_secret_value() == ""
@@ -263,5 +267,18 @@ def verify_runtime(settings: Settings) -> None:
         raise RuntimeError(
             f"environment={settings.environment!r} requires non-empty "
             "APP_SESSION_PEPPER and APP_PASSWORD_PEPPER"
+        )
+    if settings.environment in {"prod", "staging"} and (
+        len(settings.session_pepper.get_secret_value()) < 16
+        or len(settings.password_pepper.get_secret_value()) < 16
+    ):
+        raise RuntimeError(
+            f"environment={settings.environment!r} requires "
+            "APP_SESSION_PEPPER and APP_PASSWORD_PEPPER of at least 16 bytes"
+        )
+    if settings.environment in {"prod", "staging"} and not settings.session_cookie_secure:
+        raise RuntimeError(
+            f"environment={settings.environment!r} forbids "
+            "APP_SESSION_COOKIE_SECURE=false (cleartext session cookie)"
         )
 {%- endif %}

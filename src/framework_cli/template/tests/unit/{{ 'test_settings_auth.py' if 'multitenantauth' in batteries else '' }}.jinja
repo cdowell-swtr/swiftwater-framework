@@ -108,8 +108,8 @@ def test_verify_runtime_passes_when_peppers_set():
     for env in ("prod", "staging"):
         s = Settings(
             environment=env,
-            session_pepper="s3cr3t",  # type: ignore[arg-type]
-            password_pepper="p4ssw0rd",  # type: ignore[arg-type]
+            session_pepper="s3cr3t-pepper-value-0123456789",  # type: ignore[arg-type]
+            password_pepper="p4ssw0rd-pepper-value-0123456789",  # type: ignore[arg-type]
         )
         verify_runtime(s)  # must not raise
 
@@ -134,6 +134,40 @@ def test_verify_runtime_raises_in_prod_staging_with_empty_password_pepper(env):
     )
     with pytest.raises(RuntimeError, match="APP_PASSWORD_PEPPER"):
         verify_runtime(s)
+
+
+@pytest.mark.parametrize("env", ["prod", "staging"])
+def test_verify_runtime_raises_on_short_pepper(env):
+    """A trivially short pepper (<16 bytes) must be rejected in prod/staging (Layer-2 K)."""
+    s = Settings(
+        environment=env,
+        session_pepper="short",  # type: ignore[arg-type]
+        password_pepper="also-short",  # type: ignore[arg-type]
+    )
+    with pytest.raises(RuntimeError, match="at least 16 bytes"):
+        verify_runtime(s)
+
+
+# ── verify_runtime cookie-secure guard (B-F9 / Layer-2 INV-COOKIE-SECURE-GUARD-GAP) ──
+
+
+@pytest.mark.parametrize("env", ["prod", "staging"])
+def test_verify_runtime_rejects_insecure_cookie_in_prod_staging(env):
+    """A Secure-less session cookie in prod/staging serves the token in cleartext → rejected."""
+    s = Settings(
+        environment=env,
+        session_pepper="s3cr3t-pepper-value-0123456789",  # type: ignore[arg-type]
+        password_pepper="p4ssw0rd-pepper-value-0123456789",  # type: ignore[arg-type]
+        session_cookie_secure=False,
+    )
+    with pytest.raises(RuntimeError, match="COOKIE_SECURE"):
+        verify_runtime(s)
+
+
+def test_verify_runtime_allows_insecure_cookie_in_dev():
+    """Dev keeps the local-dev escape hatch: session_cookie_secure=false is fine."""
+    s = Settings(environment="dev", session_cookie_secure=False)
+    verify_runtime(s)  # must not raise
 
 
 # ── misc ───────────────────────────────────────────────────────────────────────

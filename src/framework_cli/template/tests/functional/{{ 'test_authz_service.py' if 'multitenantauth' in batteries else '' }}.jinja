@@ -444,3 +444,91 @@ def test_concurrent_double_demote_keeps_one_admin(control_engine: Engine) -> Non
             s.query(m.TenantRoleAssignment).filter_by(role_id=admin_role_id).count()
         )
         assert remaining == 1
+
+
+# ── Layer-2 hardening regressions ─────────────────────────────────────────────
+
+
+def test_remove_member_fails_closed_on_unconfigured_admin_role(
+    control_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding E: if admin_role_name resolves to NO seeded role, remove_member must FAIL
+    CLOSED — not silently skip the >=1-admin guard (the `any(role_id == None)` short-circuit)
+    and let the last admin be removed.
+    """
+    from {{ package_name }}.config.settings import Settings
+
+    misconfigured = Settings(admin_role_name="tenant.administrator")  # not seeded
+    monkeypatch.setattr(service, "get_settings", lambda: misconfigured)
+    with Session(control_engine) as s:
+        _seed(s)  # seeds 'tenant.admin', NOT 'tenant.administrator'
+        u = _user(s, "failclosed@x.com")
+        mem = service.add_membership(
+            s,
+            user_id=u.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=None,
+            invited=False,
+        )
+        s.commit()
+        with pytest.raises(RuntimeError, match="not configured"):
+            service.remove_member(s, membership_id=mem.id, actor_id=None)
+
+
+def test_remove_member_audits_resource_role_revoke(control_engine: Engine) -> None:
+    """INV-AUDIT-SUPPRESS-RESOURCE-REVOKE: remove_member CASCADE-deletes ResourceRoleAssignment
+    rows — each must still get a revoke AuthzEvent, or the resource grant's last audit word is
+    a dangling 'grant'.
+    """
+    with Session(control_engine) as s:
+        _seed(s)
+        a = _user(s, "resa@x.com")
+        b = _user(s, "resb@x.com")
+        ma = service.add_membership(
+            s,
+            user_id=a.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=None,
+            invited=False,
+        )
+        service.add_membership(  # second admin so removing the first is permitted
+            s,
+            user_id=b.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=None,
+            invited=False,
+        )
+        service.assign_resource_role(
+            s,
+            membership_id=ma.id,
+            resource_id="doc-42",
+            role_name="resource.admin",
+            actor_id=None,
+        )
+        s.commit()
+        resource_role_id = s.scalar(
+            select(m.Role.id).where(m.Role.name == "resource.admin")
+        )
+        ma_id = ma.id
+        service.remove_member(s, membership_id=ma_id, actor_id=None)
+        s.commit()
+        # the resource assignment CASCADE-deleted ...
+        assert (
+            s.scalars(
+                select(m.ResourceRoleAssignment).where(
+                    m.ResourceRoleAssignment.membership_id == ma_id
+                )
+            ).all()
+            == []
+        )
+        # ... AND a revoke event for the resource role was written.
+        revoke = s.scalar(
+            select(m.AuthzEvent).where(
+                m.AuthzEvent.action == "revoke",
+                m.AuthzEvent.role_id == resource_role_id,
+            )
+        )
+        assert revoke is not None

@@ -7,8 +7,10 @@ Origin/Referer is rejected.
 
 Exemptions: Bearer-authenticated requests without a session cookie are exempt (an attacker
 can't forge the Authorization header cross-site). Unauthenticated requests (no session cookie)
-are also exempt. Absent Origin AND Referer is allowed (lenient) for same-origin / non-browser
-clients; the full double-submit-token flow lands with the browser UI (MDN38).
+are also exempt. A cookie-authenticated mutating request with NEITHER Origin nor Referer is
+REJECTED (fail-closed) — a real browser always sends Origin on a cross-origin mutating request,
+so an absent pair implies a non-browser / header-stripping client. The full double-submit-token
+flow lands with the browser UI (MDN38).
 
 §5.1 security invariants (B-F3/B-F4):
   - A parent-domain ``session_cookie_domain`` discloses the raw session token to every subdomain's
@@ -50,16 +52,23 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             # (no session cookie) are exempt (an attacker can't set that header cross-site).
             if settings.session_cookie_name in request.cookies:
                 source = request.headers.get("origin") or request.headers.get("referer")
-                if source:
-                    host = request.headers.get("host", "")
-                    netloc = urlsplit(source).netloc
-                    # EXACT-MATCH ONLY (B-F4): csrf_allowed_origins holds exact netlocs;
-                    # NO wildcards/patterns — a "*" entry is never treated as a glob.
-                    allowed = (netloc == host) or (
-                        netloc in settings.csrf_allowed_origins
+                if not source:
+                    # B-F3 fail-closed: a cookie-authenticated mutating request with NEITHER
+                    # Origin nor Referer is rejected. A real browser always sends Origin on a
+                    # cross-origin mutating request, so an absent pair implies a non-browser /
+                    # header-stripping client — deny rather than allow. (Layer-2 F: the prior
+                    # lenient pass relied on browsers always sending Origin; the full
+                    # double-submit-token flow is MDN38.)
+                    return JSONResponse(
+                        {"detail": "CSRF check failed"}, status_code=403
                     )
-                    if not allowed:
-                        return JSONResponse(
-                            {"detail": "CSRF check failed"}, status_code=403
-                        )
+                host = request.headers.get("host", "")
+                netloc = urlsplit(source).netloc
+                # EXACT-MATCH ONLY (B-F4): csrf_allowed_origins holds exact netlocs;
+                # NO wildcards/patterns — a "*" entry is never treated as a glob.
+                allowed = (netloc == host) or (netloc in settings.csrf_allowed_origins)
+                if not allowed:
+                    return JSONResponse(
+                        {"detail": "CSRF check failed"}, status_code=403
+                    )
         return await call_next(request)

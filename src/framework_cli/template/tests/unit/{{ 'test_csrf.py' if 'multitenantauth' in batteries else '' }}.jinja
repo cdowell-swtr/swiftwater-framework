@@ -6,7 +6,7 @@ Tests:
   (c) Bearer-only (no cookie) cross-origin → passes (exempt; attacker can't set the header)
   (c2) junk Authorization: Bearer on a cookie-bearing cross-origin POST → 403 (B-F7)
   (d) unauthenticated (no cookie) cross-origin → passes
-  (e) absent Origin AND Referer → passes (lenient)
+  (e) absent Origin AND Referer on a cookie POST → 403 (fail-closed)
   (e2) empty allowlist cross-origin cookie POST still 403s (B-F6)
   (f) exact netloc in csrf_allowed_origins passes
   (f2) a '*'/wildcard entry never substring-matches — cross-origin POST still 403s (B-F4)
@@ -146,17 +146,23 @@ def test_unauthenticated_no_cookie_cross_origin_passes() -> None:
     assert r.status_code == 200
 
 
-# ── (e) absent Origin AND Referer → passes (lenient) ────────────────────────────
+# ── (e) absent Origin AND Referer on a cookie POST → 403 (fail-closed, Layer-2 F) ──
 
 
-def test_absent_origin_and_referer_passes() -> None:
-    """No Origin, no Referer — lenient; allow non-browser / same-origin clients."""
+def test_absent_origin_and_referer_cookie_post_is_403() -> None:
+    """No Origin, no Referer on a cookie-auth mutating request — fail-closed 403.
+
+    A real browser always sends Origin on a cross-origin mutating request; an absent pair
+    implies a non-browser / header-stripping client, so we deny rather than allow (the prior
+    lenient pass relied on browsers always sending Origin). Pure-Bearer / unauthenticated
+    clients are still exempt — see (c)/(d) — because they carry no session cookie.
+    """
     settings = _make_settings()
     app = _make_app_with_settings(settings)
     with _with_settings(settings), TestClient(app) as c:
         c.cookies.set(_COOKIE_NAME, "placeholder")
         r = c.post("/probe")  # no Origin, no Referer
-    assert r.status_code == 200
+    assert r.status_code == 403
 
 
 # ── (e2) empty allowlist cross-origin cookie POST still 403s (B-F6) ─────────────

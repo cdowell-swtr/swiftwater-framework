@@ -2910,3 +2910,20 @@ vacuous tests, an env=test signup FAIL-OPEN, a world-readable OpenAPI vocab leak
 bug, a slug-history PK collision, a shipped mypy `[no-redef]`). **Pending operator items:** the Option-B
 integrity-lock-src decision; branch-end = the Layer-2 stance×focus attacker matrix + `/security-review` +
 reconcile-vs-Meridian's-method, then merge + the release cut. Template payload → ships a release.
+
+#### #0218 · review · FWK58 Layer-2 adversarial security matrix (pre-merge gate) · 2026-06-24
+**Ran the Layer-2 stance×focus attacker matrix (Meridian method) over the rendered `--with multitenantauth`
+battery — the pre-merge gate.** Two passes: a first run put baseline+triage on Sonnet (cells/verify/synth
+were Opus); on maintainer direction re-ran with **all stages Opus** + triage promoting invariant-touching
+items into verify (authoritative run `wf_7fb96f43-7bc`, 23 agents). **Merge gate: 0 confirmed Critical/High
+— mechanism-verified** (the one High — connection-pool exhaustion — refuted to Info; the all-Opus run caught
+a real fail-open Sonnet missed). Scorecard: `docs/superpowers/eval-scorecards/2026-06-24-fwk58-layer2-security-matrix.md`.
+**Commit 1 (security)** lands the 2 confirmed Mediums + the re-confirmed E + 2 latent fixes: cookie-secure
+startup fail-open (`verify_runtime` now rejects `session_cookie_secure=false` in prod/staging + a 16-byte
+pepper floor); resource-revoke audit gap (`remove_member` now revoke-events the CASCADE'd `ResourceRoleAssignment`
+rows); last-admin fail-open (`remove_member`/`_assert_not_last_admin` fail closed when the admin role does
+not resolve); control autogenerate catch-all → `return False`; CSRF lenient no-header branch tightened to
+fail-closed 403 (finding F, maintainer-approved). Controller-verified: 322 rendered tests + 66 fixture-validation
++ ruff/format clean. **Posture calls (maintainer):** F tightened now; G (login rate-limit) left to the proxy/LB.
+**Phase-2 preconditions recorded for Meridian:** DB-level ≥1-admin guard · `AuthzEvent.resource_id` + resource-grant
+audit completeness · slug-history reaping. Commits 2 (error-surface 4xx correctness) + 3 (docs + records) follow.
