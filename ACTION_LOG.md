@@ -2780,3 +2780,7 @@ order wildcard→resource→flat, missing-param→deny-not-500; domain-split res
 (byte-accurate port; A-F6 cases tested non-vacuously with adversarial shapes; 23 green). **⏚ Task-14
 follow-up:** Task 14 (which creates the production inert `subtree_exists` site) owns the
 "exactly-one-inert-construction-site" grep/unit guard (A-F6/A-F10). Minors→final review.
+**Task 11 — authz grant/revoke service** (port with `product`→`resource`; `admin_role_name` from settings
+everywhere; the ≥1-admin TOCTOU `SELECT … FOR UPDATE` over the whole admin set; A-F4 phantom-audit fix in
+`add_platform_role`). Review = Approved (whole-set lock + A-F4 mutation-verified + idempotent-no-phantom on
+all 5 fns + services-never-commit; 11 green incl. a real threaded concurrent-demote test). Minors→final.

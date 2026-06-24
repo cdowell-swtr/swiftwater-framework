@@ -1,0 +1,446 @@
+"""AuthZ grant/revoke service: ≥1-admin TOCTOU invariant, idempotent audit, domain checks.
+
+Ported from meridian tests/functional/test_auth_service.py + test_product_role_service.py
+(MDN34/MDN36) with the following transformations:
+- product_id/assign_product_role/revoke_product_role → resource_id/assign_resource_role/
+  revoke_resource_role (sec-review A-F5: generic battery has no 'product' domain).
+- seed_authz removed — roles are seeded inline (Task 17 deferred).
+- Tenant requires slug + status (framework tenant model differs from Meridian's).
+- admin_role_name read from settings (not a module constant).
+- A-F4 fix verified: repeated add_platform_role records NO second authz_event.
+"""
+
+from __future__ import annotations
+
+import threading
+
+import pytest
+from sqlalchemy import Engine, create_engine, make_url, select, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+from {{ package_name }}.db.control.base import ControlBase
+from {{ package_name }}.multitenantauth.authz import service
+from {{ package_name }}.multitenantauth.errors import DomainMismatchError, LastAdminError
+
+
+# ── fixture ───────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def control_engine(pg_url: str) -> Engine:  # type: ignore[return]
+    """Control-plane engine for authz-service tests.
+
+    Creates the full set of tables needed by the service (all six control tables).
+    No alembic — Task 7 (migrations) is deferred.
+    """
+    _ctrl_db = "{{ package_name }}_authz_service_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(
+        engine,
+        tables=[
+            m.AppUser.__table__,
+            m.Tenant.__table__,
+            m.TenantMembership.__table__,
+            m.Role.__table__,
+            m.Permission.__table__,
+            m.TenantRoleAssignment.__table__,
+            m.PlatformRoleAssignment.__table__,
+            m.ResourceRoleAssignment.__table__,
+            m.AuthzEvent.__table__,
+        ],
+    )
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean_control(control_engine: Engine) -> None:  # type: ignore[return]
+    """Truncate all authz tables after each test (tests commit; no rollback isolation)."""
+    yield
+    with control_engine.begin() as conn:
+        conn.execute(
+            text(
+                "TRUNCATE TABLE authz_event, resource_role_assignment, "
+                "platform_role_assignment, tenant_role_assignment, "
+                "tenant_membership, role, tenant, app_user CASCADE"
+            )
+        )
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _seed(s: Session) -> None:
+    """Seed the minimal role catalog + one tenant (no seed_authz; Task 17 deferred)."""
+    s.add(
+        m.Tenant(
+            id="acme",
+            name="Acme",
+            slug="acme",
+            dsn="postgresql+psycopg://x/acme",
+            status="active",
+        )
+    )
+    # Tenant-domain roles
+    s.add(
+        m.Role(name="tenant.admin", domain="tenant", description="Tenant administrator")
+    )
+    s.add(m.Role(name="tenant.member", domain="tenant", description="Tenant member"))
+    # Platform-domain role
+    s.add(
+        m.Role(
+            name="platform.admin",
+            domain="platform",
+            description="Platform administrator",
+        )
+    )
+    # Resource-domain role
+    s.add(
+        m.Role(
+            name="resource.admin",
+            domain="resource",
+            description="Resource administrator",
+        )
+    )
+    s.flush()
+
+
+def _user(s: Session, email: str) -> m.AppUser:
+    u = m.AppUser(email=email, email_canonical=email, born="operator")
+    s.add(u)
+    s.flush()
+    return u
+
+
+# ── admin invariant tests ─────────────────────────────────────────────────────
+
+
+def test_cannot_revoke_last_admin(control_engine: Engine) -> None:
+    """Revoking the sole admin role raises LastAdminError."""
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "a@x.com")
+        mem = service.add_membership(
+            s,
+            user_id=u.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=u.id,
+            invited=False,
+        )
+        s.commit()
+        with pytest.raises(LastAdminError):
+            service.revoke_role(
+                s, membership_id=mem.id, role_name="tenant.admin", actor_id=u.id
+            )
+
+
+def test_demote_allowed_with_second_admin_and_audited(control_engine: Engine) -> None:
+    """With two admins, demoting one succeeds and records a single revoke event."""
+    with Session(control_engine) as s:
+        _seed(s)
+        a = _user(s, "a@x.com")
+        b = _user(s, "b@x.com")
+        ma = service.add_membership(
+            s,
+            user_id=a.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=a.id,
+            invited=False,
+        )
+        service.add_membership(
+            s,
+            user_id=b.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=a.id,
+            invited=False,
+        )
+        s.commit()
+        service.revoke_role(
+            s, membership_id=ma.id, role_name="tenant.admin", actor_id=a.id
+        )
+        s.commit()
+        assert s.query(m.AuthzEvent).filter_by(action="revoke").count() == 1
+        assert s.query(m.AuthzEvent).filter_by(action="grant").count() == 2
+
+
+def test_remove_member_blocked_if_last_admin(control_engine: Engine) -> None:
+    """remove_member raises LastAdminError when the membership is the sole admin."""
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "rm@x.com")
+        mem = service.add_membership(
+            s,
+            user_id=u.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=None,
+            invited=False,
+        )
+        s.commit()
+        with pytest.raises(LastAdminError):
+            service.remove_member(s, membership_id=mem.id, actor_id=None)
+
+
+# ── idempotent / no-phantom-audit tests ──────────────────────────────────────
+
+
+def test_noop_revoke_appends_no_authz_event(control_engine: Engine) -> None:
+    """Revoking a role the membership never held is a no-op — records NO authz_event.
+
+    Otherwise an admin could fabricate phantom ``revoke`` audit history via a PATCH
+    with an arbitrary from_role the member doesn't hold.
+    """
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "noop@x.com")
+        mem = service.add_membership(
+            s,
+            user_id=u.id,
+            tenant_id="acme",
+            role_name="tenant.member",
+            actor_id=u.id,
+            invited=False,
+        )
+        s.commit()
+        baseline = s.query(m.AuthzEvent).count()
+        # Revoke a role the member does NOT hold — a no-op.
+        service.revoke_role(
+            s, membership_id=mem.id, role_name="tenant.admin", actor_id=u.id
+        )
+        s.commit()
+        assert s.query(m.AuthzEvent).count() == baseline  # no phantom revoke
+
+
+def test_noop_grant_appends_no_authz_event(control_engine: Engine) -> None:
+    """Re-granting an already-held role is idempotent — records NO additional grant event."""
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "noopg@x.com")
+        mem = service.add_membership(
+            s,
+            user_id=u.id,
+            tenant_id="acme",
+            role_name="tenant.member",
+            actor_id=u.id,
+            invited=False,
+        )
+        s.commit()
+        baseline = s.query(m.AuthzEvent).count()
+        service.assign_role(
+            s, membership_id=mem.id, role_name="tenant.member", actor_id=u.id
+        )
+        s.commit()
+        assert s.query(m.AuthzEvent).count() == baseline  # no phantom grant
+
+
+def test_repeated_add_platform_role_no_phantom_audit(control_engine: Engine) -> None:
+    """A-F4 fix: calling add_platform_role twice records exactly ONE grant event.
+
+    The reference implementation (Meridian) placed _record_event OUTSIDE the
+    ``if existing is None`` block, so every idempotent repeat wrote a second audit row.
+    The framework version fixes this — a repeated grant is a structural no-op AND an
+    audit no-op.
+    """
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "plat@x.com")
+        s.commit()
+        user_id = u.id  # capture before session closes
+
+    with Session(control_engine) as s:
+        # Grant once — real state change → one event.
+        service.add_platform_role(
+            s, user_id=user_id, role_name="platform.admin", actor_id=None
+        )
+        s.commit()
+
+    with Session(control_engine) as s:
+        # Grant again (idempotent) — no new assignment, no new event.
+        service.add_platform_role(
+            s, user_id=user_id, role_name="platform.admin", actor_id=None
+        )
+        s.commit()
+        assignments = s.scalars(select(m.PlatformRoleAssignment)).all()
+        events = s.scalars(
+            select(m.AuthzEvent).where(m.AuthzEvent.action == "grant")
+        ).all()
+        assert len(assignments) == 1  # still one row
+        assert len(events) == 1  # exactly one audit event — NOT two (A-F4 fix)
+
+
+# ── domain-mismatch test ──────────────────────────────────────────────────────
+
+
+def test_domain_mismatch_rejected(control_engine: Engine) -> None:
+    """Assigning a tenant-domain role as a platform role raises DomainMismatchError."""
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "c@x.com")
+        s.commit()
+        with pytest.raises(DomainMismatchError):
+            service.add_platform_role(
+                s, user_id=u.id, role_name="tenant.admin", actor_id=u.id
+            )  # tenant role as platform
+
+
+# ── resource-role tests ───────────────────────────────────────────────────────
+
+
+def test_assign_resource_role_is_idempotent_and_audited(control_engine: Engine) -> None:
+    """assign_resource_role is idempotent; repeated call produces one row and one audit event."""
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "d@x.io")
+        mem = m.TenantMembership(user_id=u.id, tenant_id="acme")
+        s.add(mem)
+        s.flush()
+        service.assign_resource_role(
+            s,
+            membership_id=mem.id,
+            resource_id="widget-42",
+            role_name="resource.admin",
+            actor_id=None,
+        )
+        service.assign_resource_role(
+            s,
+            membership_id=mem.id,
+            resource_id="widget-42",
+            role_name="resource.admin",
+            actor_id=None,
+        )
+        s.commit()
+        assigns = s.scalars(select(m.ResourceRoleAssignment)).all()
+        assert len(assigns) == 1
+        events = s.scalars(
+            select(m.AuthzEvent).where(m.AuthzEvent.action == "grant")
+        ).all()
+        assert len(events) == 1  # audited once, only on real change
+
+
+def test_revoke_resource_role_removes_and_audits(control_engine: Engine) -> None:
+    """revoke_resource_role removes the assignment and records a revoke event."""
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "e@x.io")
+        mem = m.TenantMembership(user_id=u.id, tenant_id="acme")
+        s.add(mem)
+        s.flush()
+        service.assign_resource_role(
+            s,
+            membership_id=mem.id,
+            resource_id="widget-42",
+            role_name="resource.admin",
+            actor_id=None,
+        )
+        service.revoke_resource_role(
+            s,
+            membership_id=mem.id,
+            resource_id="widget-42",
+            role_name="resource.admin",
+            actor_id=None,
+        )
+        s.commit()
+        assert s.scalars(select(m.ResourceRoleAssignment)).all() == []
+        assert (
+            s.scalar(select(m.AuthzEvent).where(m.AuthzEvent.action == "revoke"))
+            is not None
+        )
+
+
+def test_assign_resource_role_rejects_non_resource_role(control_engine: Engine) -> None:
+    """assign_resource_role rejects a tenant-domain role (domain guard)."""
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "f@x.io")
+        mem = m.TenantMembership(user_id=u.id, tenant_id="acme")
+        s.add(mem)
+        s.flush()
+        with pytest.raises(DomainMismatchError):
+            service.assign_resource_role(
+                s,
+                membership_id=mem.id,
+                resource_id="widget-99",
+                role_name="tenant.admin",
+                actor_id=None,
+            )
+
+
+# ── TOCTOU concurrent test ────────────────────────────────────────────────────
+
+
+def test_concurrent_double_demote_keeps_one_admin(control_engine: Engine) -> None:
+    """Two admins, two threads each revoking one concurrently — exactly one must fail (LastAdminError);
+    the tenant must retain >=1 admin. Proves the FOR UPDATE lock serializes the check-then-delete."""
+    with Session(control_engine) as s:
+        _seed(s)
+        a = _user(s, "ta@x.com")
+        b = _user(s, "tb@x.com")
+        ma = service.add_membership(
+            s,
+            user_id=a.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=a.id,
+            invited=False,
+        )
+        mb = service.add_membership(
+            s,
+            user_id=b.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=a.id,
+            invited=False,
+        )
+        s.commit()
+        ma_id, mb_id = ma.id, mb.id
+
+    eng = create_engine(
+        control_engine.url.render_as_string(hide_password=False),
+        pool_size=2,
+    )
+    results: list[str] = []
+    barrier = threading.Barrier(2)
+
+    def worker(mid: object) -> None:
+        with Session(eng) as s:
+            barrier.wait()
+            try:
+                service.revoke_role(
+                    s, membership_id=mid, role_name="tenant.admin", actor_id=None
+                )
+                s.commit()
+                results.append("ok")
+            except LastAdminError:
+                s.rollback()
+                results.append("blocked")
+
+    t1 = threading.Thread(target=worker, args=(ma_id,))
+    t2 = threading.Thread(target=worker, args=(mb_id,))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+    eng.dispose()
+
+    assert sorted(results) == ["blocked", "ok"]  # exactly one succeeded
+    with Session(control_engine) as s:
+        admin_role_id = s.scalar(select(m.Role.id).where(m.Role.name == "tenant.admin"))
+        remaining = (
+            s.query(m.TenantRoleAssignment).filter_by(role_id=admin_role_id).count()
+        )
+        assert remaining == 1
