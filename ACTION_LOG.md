@@ -2756,3 +2756,10 @@ Opus review = Approved (byte-for-byte fidelity + 'product' removal + 4 non-vacuo
 **⏚ Task-6 follow-up (cross-task):** this test's raw `tenant`/`tenant_membership` seed inserts will go red
 when Task 6 adds the real schema (status CHECK / slug NOT-NULLs) — Task 6 must supply the new required
 columns or seed via the ORM models.
+**Task 6 — Tenant models (opaque id + mutable slug — MDN registry-shape addendum)** (`Tenant.id` opaque
+immutable via an `_opaque_id` uuid callable, never derived from slug; `status` CHECK; `Tenant.slug`
+mutable/unique with an RFC-1123 DNS-label CHECK + `char_length<=63` on a `String(255)` column;
+`TenantSlugHistory` with `reserved_until` cooling anti-squat; `TenantMembership` keys on the opaque id).
+Closed the Task-5 cross-task follow-up (replaced the raw tenant-stub seeds with real ORM models — all 5
+integrity assertions preserved). Review = Approved (decoupling + CHECKs + non-vacuous tests verified; 22
+tests green). Minors→final review (history-slug CHECK hardening, an imprecise test comment).

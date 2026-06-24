@@ -1,0 +1,346 @@
+"""Tenancy control-plane model tests: Tenant registry, slug history, and membership.
+
+Ported from meridian tests/functional/test_tenancy.py (model-schema portion only;
+provisioning/cross-tenant-isolation tests are Phase 2 and import modules not present
+in this battery).
+
+Key invariants under test:
+- `tenant.id` is opaque and NOT derived from slug.
+- `tenant.slug` is UNIQUE + DNS-label-safe (RFC-1123 label CHECK).
+- `tenant.status` rejects invalid values.
+- `tenant_membership` enforces UNIQUE(user_id, tenant_id).
+- `tenant_slug_history` maps a retired slug to its tenant.
+- `invite_token.membership_id` FK to `tenant_membership` round-trips (Task-4 deferral).
+"""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime, timezone
+
+import pytest
+from sqlalchemy import Engine, create_engine, inspect, make_url, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+from {{ package_name }}.db.control.base import ControlBase
+
+
+# ── fixture ───────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def control_engine(pg_url: str) -> Engine:  # type: ignore[return]
+    """Control-plane engine with all tenancy-related tables created."""
+    _ctrl_db = "{{ package_name }}_tenancy_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(
+        engine,
+        tables=[
+            m.AppUser.__table__,
+            m.Tenant.__table__,
+            m.TenantSlugHistory.__table__,
+            m.TenantMembership.__table__,
+            m.Session.__table__,
+            m.InviteToken.__table__,
+        ],
+    )
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean(control_engine: Engine) -> None:  # type: ignore[return]
+    """Truncate tenancy tables after each test."""
+    yield
+    with control_engine.begin() as conn:
+        conn.execute(
+            text(
+                "TRUNCATE TABLE invite_token, tenant_membership, "
+                "tenant_slug_history, tenant, app_user CASCADE"
+            )
+        )
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _tenant(s: Session, *, slug: str = "acme", name: str = "Acme Inc") -> m.Tenant:
+    t = m.Tenant(name=name, slug=slug, dsn=f"postgresql+psycopg://x/{slug}")
+    s.add(t)
+    s.flush()
+    return t
+
+
+def _user(s: Session, email: str = "a@x.io") -> m.AppUser:
+    u = m.AppUser(email=email, email_canonical=email.lower(), born="operator")
+    s.add(u)
+    s.flush()
+    return u
+
+
+# ── tests — table existence ───────────────────────────────────────────────────
+
+
+def test_tenancy_tables_exist(control_engine: Engine) -> None:
+    names = set(inspect(control_engine).get_table_names())
+    assert {"tenant", "tenant_membership", "tenant_slug_history"} <= names
+
+
+# ── tests — Tenant.id is opaque (not derived from slug) ──────────────────────
+
+
+def test_tenant_id_is_opaque_not_derived_from_slug(control_engine: Engine) -> None:
+    """Tenant.id must be auto-generated and NEVER contain or equal the slug.
+
+    We pass only name+slug (no explicit id) to exercise the generator. The id must:
+    - match the safe charset ^[a-z0-9_]+$ (DB-name component safe)
+    - not equal the slug
+    - not contain the slug as a substring
+    """
+    with Session(control_engine) as s:
+        t = _tenant(s, slug="acme")
+        s.commit()
+        tid, tslug = t.id, t.slug
+
+    assert tid != tslug, "id must not equal slug"
+    assert tslug not in tid, "id must not contain the slug"
+    assert re.fullmatch(r"[a-z0-9_]+", tid), f"id charset violation: {tid!r}"
+
+
+def test_tenant_id_is_immutable_across_slug_change(control_engine: Engine) -> None:
+    """Changing the slug must not affect the id."""
+    with Session(control_engine) as s:
+        t = _tenant(s, slug="original")
+        s.commit()
+        original_id = t.id
+
+    with Session(control_engine) as s:
+        t = s.get(m.Tenant, original_id)
+        assert t is not None
+        t.slug = "renamed"
+        s.commit()
+
+    with Session(control_engine) as s:
+        t = s.get(m.Tenant, original_id)
+        assert t is not None
+        assert t.id == original_id, "id changed after slug rename"
+        assert t.slug == "renamed"
+
+
+# ── tests — Tenant.slug DNS-label CHECK ──────────────────────────────────────
+
+
+def test_slug_unique_constraint(control_engine: Engine) -> None:
+    with Session(control_engine) as s:
+        _tenant(s, slug="acme")
+        s.commit()
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        _tenant(s, slug="acme", name="Acme Dupe")
+        s.commit()
+
+
+def test_slug_rejects_uppercase(control_engine: Engine) -> None:
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        _tenant(s, slug="Acme")
+        s.commit()
+
+
+def test_slug_rejects_underscore_and_bad_chars(control_engine: Engine) -> None:
+    """Bad_Slug has an underscore — valid id charset but invalid DNS label."""
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        _tenant(s, slug="Bad_Slug")
+        s.commit()
+
+
+def test_slug_rejects_leading_hyphen(control_engine: Engine) -> None:
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        _tenant(s, slug="-x")
+        s.commit()
+
+
+def test_slug_rejects_trailing_hyphen(control_engine: Engine) -> None:
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        _tenant(s, slug="x-")
+        s.commit()
+
+
+def test_slug_allows_hyphen_in_middle(control_engine: Engine) -> None:
+    with Session(control_engine) as s:
+        _tenant(s, slug="my-tenant")
+        s.commit()  # must not raise
+
+
+def test_slug_rejects_over_63_chars(control_engine: Engine) -> None:
+    """The DNS-label CHECK enforces ≤63 chars (char_length check, not varchar truncation)."""
+    long_slug = "a" * 64
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        _tenant(s, slug=long_slug)
+        s.commit()
+
+
+# ── tests — Tenant.status CHECK ──────────────────────────────────────────────
+
+
+def test_status_accepts_valid_values(control_engine: Engine) -> None:
+    for status in ("provisioning", "active", "suspended"):
+        with Session(control_engine) as s:
+            t = m.Tenant(
+                name=f"T-{status}",
+                slug=f"t-{status}",
+                dsn=f"postgresql+psycopg://x/{status}",
+                status=status,
+            )
+            s.add(t)
+            s.commit()  # must not raise
+        with control_engine.begin() as conn:
+            conn.execute(text("TRUNCATE TABLE tenant CASCADE"))
+
+
+def test_status_rejects_invalid_value(control_engine: Engine) -> None:
+    with Session(control_engine) as s, pytest.raises(IntegrityError):
+        s.add(
+            m.Tenant(
+                name="Bad Status",
+                slug="bad-status",
+                dsn="postgresql+psycopg://x/bad",
+                status="deleted",  # not in the allowed set
+            )
+        )
+        s.commit()
+
+
+# ── tests — TenantMembership uniqueness ──────────────────────────────────────
+
+
+def test_membership_unique_user_tenant(control_engine: Engine) -> None:
+    """UNIQUE(user_id, tenant_id) — duplicate membership is rejected."""
+    with Session(control_engine) as s:
+        t = _tenant(s)
+        u = _user(s)
+        s.add(m.TenantMembership(user_id=u.id, tenant_id=t.id))
+        s.commit()
+        saved_tid = t.id
+        saved_uid = u.id
+
+    with Session(control_engine) as s:
+        t2 = s.get(m.Tenant, saved_tid)
+        u2 = s.get(m.AppUser, saved_uid)
+        assert t2 is not None and u2 is not None
+        s.add(m.TenantMembership(user_id=u2.id, tenant_id=t2.id))
+        with pytest.raises(IntegrityError):
+            s.commit()
+
+
+def test_membership_allows_same_user_in_different_tenants(
+    control_engine: Engine,
+) -> None:
+    """A user CAN join multiple tenants — only (user_id, tenant_id) pairs must be unique."""
+    with Session(control_engine) as s:
+        t1 = _tenant(s, slug="alpha", name="Alpha")
+        t2 = _tenant(s, slug="beta", name="Beta")
+        u = _user(s)
+        s.add(m.TenantMembership(user_id=u.id, tenant_id=t1.id))
+        s.add(m.TenantMembership(user_id=u.id, tenant_id=t2.id))
+        s.commit()  # must not raise
+
+
+# ── tests — TenantSlugHistory ─────────────────────────────────────────────────
+
+
+def test_slug_history_maps_retired_slug_to_tenant(control_engine: Engine) -> None:
+    """A retired slug row maps back to the tenant that held it (for 301 redirects)."""
+    with Session(control_engine) as s:
+        t = _tenant(s, slug="newslug")
+        s.commit()
+        tenant_id = t.id
+
+    with Session(control_engine) as s:
+        hist = m.TenantSlugHistory(
+            slug="oldslug",
+            tenant_id=tenant_id,
+            reserved_until=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        s.add(hist)
+        s.commit()
+
+    with Session(control_engine) as s:
+        row = s.get(m.TenantSlugHistory, "oldslug")
+        assert row is not None
+        assert row.tenant_id == tenant_id
+        assert row.reserved_until is not None
+
+
+def test_slug_history_retired_at_defaults_to_now(control_engine: Engine) -> None:
+    with Session(control_engine) as s:
+        t = _tenant(s)
+        s.commit()
+        tenant_id = t.id
+
+    with Session(control_engine) as s:
+        hist = m.TenantSlugHistory(slug="old-acme", tenant_id=tenant_id)
+        s.add(hist)
+        s.commit()
+
+    with Session(control_engine) as s:
+        row = s.get(m.TenantSlugHistory, "old-acme")
+        assert row is not None
+        assert row.retired_at is not None
+
+
+# ── tests — InviteToken FK to TenantMembership (Task-4 deferral) ─────────────
+
+
+def test_invite_token_membership_fk_round_trips(control_engine: Engine) -> None:
+    """InviteToken.membership_id (nullable) FKs tenant_membership.id.
+
+    This closes the Task-4 deferral: now that TenantMembership exists, the FK
+    can be exercised end-to-end. Tests the platform (membership_id=None) and
+    tenant-invite (membership_id set) cases.
+    """
+    with Session(control_engine) as s:
+        t = _tenant(s)
+        u = _user(s)
+        s.flush()
+        membership = m.TenantMembership(user_id=u.id, tenant_id=t.id)
+        s.add(membership)
+        s.flush()
+
+        # Platform invite — no membership.
+        platform_tok = m.InviteToken(
+            token_hash="p" * 64,
+            user_id=u.id,
+            membership_id=None,
+            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        # Tenant invite — membership_id set.
+        tenant_tok = m.InviteToken(
+            token_hash="t" * 64,
+            user_id=u.id,
+            membership_id=membership.id,
+            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        s.add_all([platform_tok, tenant_tok])
+        s.commit()  # must not raise
+
+    with Session(control_engine) as s:
+        from sqlalchemy import select
+
+        rows = s.scalars(select(m.InviteToken)).all()
+        assert len(rows) == 2
+        platform_rows = [r for r in rows if r.membership_id is None]
+        tenant_rows = [r for r in rows if r.membership_id is not None]
+        assert len(platform_rows) == 1
+        assert len(tenant_rows) == 1

@@ -8,6 +8,7 @@ from .authz import (
     RolePermission,
     TenantRoleAssignment,
 )
+from .tenant import Tenant, TenantMembership, TenantSlugHistory
 
 __all__ = [
     "AppUser",
@@ -20,4 +21,7 @@ __all__ = [
     "Role",
     "RolePermission",
     "TenantRoleAssignment",
+    "Tenant",
+    "TenantMembership",
+    "TenantSlugHistory",
 ]

@@ -7,12 +7,6 @@ This test suite is the functional proof of that invariant.
 Ported from meridian tests/functional/test_product_role_assignment_model.py (MDN36) with the
 ProductRoleAssignment→ResourceRoleAssignment rename and the 'product' rejection assertion added
 (sec-review A-F5: 'product' must NOT be a valid domain in the generic battery).
-
-Implementation note: `Tenant`/`TenantMembership` ORM models land in Task 6 and are not on
-`ControlBase.metadata` yet. We register minimal `Table` stubs for them so that
-`ControlBase.metadata.create_all()` can resolve string FKs in
-`ResourceRoleAssignment.membership_id` and `TenantRoleAssignment.membership_id` without
-needing the full models. The stubs carry only the columns the FKs reference.
 """
 
 from __future__ import annotations
@@ -21,12 +15,7 @@ import uuid
 
 import pytest
 from sqlalchemy import (
-    Column,
     Engine,
-    ForeignKey,
-    String,
-    Table,
-    Uuid,
     create_engine,
     make_url,
     text,
@@ -41,36 +30,12 @@ from {{ package_name }}.db.control.base import ControlBase
 # ── fixture ───────────────────────────────────────────────────────────────────
 
 
-def _register_tenant_stubs() -> None:
-    """Register minimal `tenant` + `tenant_membership` Table objects on ControlBase.metadata.
-
-    These are stub tables — only the columns referenced by string FKs in the ORM
-    models.  Task 6 adds the full ORM-backed Tenant/TenantMembership models; the
-    guard `if "tenant" not in ControlBase.metadata.tables` prevents double-registration
-    when both modules are loaded together.
-    """
-    md = ControlBase.metadata
-    if "tenant" not in md.tables:
-        Table("tenant", md, Column("id", String(64), primary_key=True))
-    if "tenant_membership" not in md.tables:
-        Table(
-            "tenant_membership",
-            md,
-            Column("id", Uuid, primary_key=True),
-            Column("user_id", Uuid, ForeignKey("app_user.id", ondelete="CASCADE")),
-            Column(
-                "tenant_id", String(64), ForeignKey("tenant.id", ondelete="CASCADE")
-            ),
-        )
-
-
 @pytest.fixture(scope="module")
 def control_engine(pg_url: str) -> Engine:  # type: ignore[return]
     """Control-plane engine for resource-role integrity tests.
 
-    Registers minimal tenant/tenant_membership stubs on ControlBase.metadata so
-    that `create_all` can resolve string FKs in the real ORM models, then creates
-    the required subset of tables.
+    Creates the required subset of tables using the real ORM models (Tenant and
+    TenantMembership are now available from Task 6).
     """
     _ctrl_db = "{{ package_name }}_rra_test"
     base = make_url(pg_url)
@@ -84,17 +49,16 @@ def control_engine(pg_url: str) -> Engine:  # type: ignore[return]
             c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
     maint.dispose()
 
-    _register_tenant_stubs()
     engine = create_engine(ctrl_url)
 
-    # Create the tables whose FKs are fully resolvable at this task boundary.
+    # Create the tables whose FKs are fully resolvable with real ORM models.
     # app_user must come before tenant_membership (FK source).
     ControlBase.metadata.create_all(
         engine,
         tables=[
             m.AppUser.__table__,
-            ControlBase.metadata.tables["tenant"],
-            ControlBase.metadata.tables["tenant_membership"],
+            m.Tenant.__table__,
+            m.TenantMembership.__table__,
             m.Role.__table__,
             m.Permission.__table__,
             m.ResourceRoleAssignment.__table__,
@@ -125,7 +89,13 @@ def _seed(s: Session) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
 
     Returns (membership_id, resource_role_id, tenant_role_id, platform_role_id).
     """
-    s.execute(text("INSERT INTO tenant (id) VALUES ('acme')"))
+    tenant = m.Tenant(
+        id="acme",
+        name="Acme Inc",
+        slug="acme",
+        dsn="postgresql+psycopg://x/acme",
+    )
+    s.add(tenant)
     u = m.AppUser(email="a@x.io", email_canonical="a@x.io", born="operator")
     s.add(u)
     resource_role = m.Role(
@@ -139,15 +109,10 @@ def _seed(s: Session) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
     )
     s.add_all([resource_role, tenant_role, platform_role])
     s.flush()
-    s.execute(
-        text(
-            "INSERT INTO tenant_membership (id, user_id, tenant_id) "
-            "VALUES (:mid, :uid, 'acme')"
-        ),
-        {"mid": (membership_id := uuid.uuid4()), "uid": u.id},
-    )
+    membership = m.TenantMembership(user_id=u.id, tenant_id=tenant.id)
+    s.add(membership)
     s.flush()
-    return membership_id, resource_role.id, tenant_role.id, platform_role.id
+    return membership.id, resource_role.id, tenant_role.id, platform_role.id
 
 
 # ── tests ─────────────────────────────────────────────────────────────────────
