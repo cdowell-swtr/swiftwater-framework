@@ -2,8 +2,8 @@
 
 Endpoints:
 - ``POST /tenants``                       — provision a tenant (PLATFORM-level op;
-  distinct from signup's founder-tenant). Guarded ``platform:provision-tenant``.
-- ``GET /tenants/{tenant_id}/members``    — list members (read-only, guarded tenant:read).
+  distinct from signup's founder-tenant). Requires the platform-provisioning permission.
+- ``GET /tenants/{tenant_id}/members``    — list members (read-only, requires read access).
 - ``POST /tenants/{tenant_id}/members``   — invite a user to a tenant (adds membership + role).
 - ``DELETE /tenants/{tenant_id}/members/{membership_id}`` — remove a member.
 
@@ -11,8 +11,9 @@ The member routes are guarded with the Task-14 ``guard(Perm(...))``; the ``{tena
 path param is ALWAYS bound in the Perm expression — satisfying the T2 fitness-test
 requirement that every ``{tenant_id}`` route binds it.
 
-``tenant:manage-members`` is required for mutating member operations; ``tenant:read``
-for reads; ``platform:provision-tenant`` (a platform-domain grant) for ``POST /tenants``.
+Mutating member operations require the member-management permission; read-only member
+operations require the read permission; tenant provisioning requires the platform-level
+provisioning grant.
 """
 
 from __future__ import annotations
@@ -47,7 +48,7 @@ class ProvisionTenantBody(BaseModel):
 
 class AddMemberBody(BaseModel):
     user_id: uuid.UUID
-    role_name: str = Field(default="tenant.member")
+    role_name: str
 
 
 class MemberOut(BaseModel):
@@ -72,7 +73,7 @@ def provision_tenant(
 ) -> dict:
     """Provision a tenant (PLATFORM-level — distinct from signup's founder-tenant).
 
-    Guarded: requires ``platform:provision-tenant`` on the platform. Registers +
+    Guarded: requires the platform-level provisioning permission. Registers +
     activates the tenant in the control plane (routing-agnostic; never connects to a
     tenant DB). Returns the OPAQUE, auto-generated tenant id.
     A bad-charset / taken slug surfaces as a generic 400/409.
@@ -97,7 +98,7 @@ def list_members(
     s: Session = Depends(control_session),
     user: m.AppUser = Depends(current_user),
 ) -> list[MemberOut]:
-    """List members of *tenant_id*.  Guarded: requires ``tenant:read`` on the tenant."""
+    """List members of *tenant_id*.  Guarded: requires the read permission on the tenant."""
     memberships = s.scalars(
         select(m.TenantMembership).where(m.TenantMembership.tenant_id == tenant_id)
     ).all()
@@ -140,7 +141,7 @@ def add_member(
 ) -> dict:
     """Add *body.user_id* as a member of *tenant_id* with *body.role_name*.
 
-    Guarded: requires ``tenant:manage-members`` on the tenant.
+    Guarded: requires the member-management permission on the tenant.
     The target user must already exist.
     """
     target = s.get(m.AppUser, body.user_id)
@@ -174,7 +175,7 @@ def remove_member_route(
 ) -> None:
     """Remove membership *membership_id* from *tenant_id*.
 
-    Guarded: requires ``tenant:manage-members`` on the tenant.
+    Guarded: requires the member-management permission on the tenant.
     Enforces the ≥1-admin invariant via the service layer (raises ``LastAdminError``
     → 409).
     """

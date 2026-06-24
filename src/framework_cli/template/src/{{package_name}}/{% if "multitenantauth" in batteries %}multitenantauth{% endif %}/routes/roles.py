@@ -6,9 +6,9 @@ Endpoints:
 - ``DELETE /tenants/{tenant_id}/members/{membership_id}/roles/{role_name}``
   — revoke a role from a membership.
 
-Both are guarded with ``tenant:manage-members`` on the tenant (requires the
-actor to be a member with manage-members permission, enforced by the guard
-before any service call).
+Both are guarded with the member-management permission on the tenant (requires the
+actor to be a member with that permission, enforced by the guard before any service
+call).
 
 The ``{tenant_id}`` path param is bound in every Perm expression (T2 fitness).
 """
@@ -55,7 +55,7 @@ def grant_role(
 ) -> None:
     """Grant *body.role_name* to *membership_id* within *tenant_id*.
 
-    Guarded: requires ``tenant:manage-members`` on the tenant.
+    Guarded: requires the member-management permission on the tenant.
     The membership must belong to *tenant_id*.
     Idempotent (repeated grant of a held role is a no-op with no audit row).
     """
@@ -88,7 +88,7 @@ def revoke_role_route(
 ) -> None:
     """Revoke *role_name* from *membership_id* within *tenant_id*.
 
-    Guarded: requires ``tenant:manage-members`` on the tenant.
+    Guarded: requires the member-management permission on the tenant.
     Enforces the ≥1-admin invariant (raises ``LastAdminError`` → 409).
     Idempotent (revoking a role not held is a no-op with no audit row).
     """

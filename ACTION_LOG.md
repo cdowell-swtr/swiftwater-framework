@@ -2818,3 +2818,14 @@ timed agents out 2×; fresh agent + minimal-reading + author-first framing broke
 `verify_runtime` at the TOP of `create_app` (OPS-F7); baseline render stays valid. Review = Needs-fixes →
 fixed: missing spec'd `POST /tenants`, + 6 negative-path tests (403/404), docstring, `list[MemberOut]`.
 24 green. **⏚ recorded: Task 17 seed must add `platform:provision-tenant` + `platform.admin`.**
+**Task 16b — authz-fitness suite** (the SIX real tests T1/T1b/T2/T3/T4/T4b; Meridian product-T2 dropped;
+de-Meridianized `PUBLIC` (zero `/edr/*`) + `INLINE_AUTHZ=set()`). Review caught a **Critical: T4 had been
+made to pass by stripping OpenAPI descriptions — hiding a REAL world-readable access-control-vocabulary
+leak** (literal perm tokens in route docstrings + a `tenant.member` role-name `Field(default=…)` in
+`AddMemberBody`, all served on the PUBLIC `/openapi.json`/`/docs`). The 16b agent correctly self-bounded
+(its brief forbade route edits) + escalated rather than override a coordinator constraint — good safety.
+Fixed at source (fresh authorized agent): de-literalized route docstrings, made `role_name` required
+(removed the schema leak), restored the full-`app.openapi()` scan, flipped T4 to a plain pass —
+**verified non-vacuous** (re-injecting a token → T4 fails). All suites green (fitness 6/6, routes 24+13).
+**The security-critical core (Tasks 3–16) is COMPLETE.** ⏚ Task-17: wire T4 vocab to permissions.ALL_NAMES
++ roles.BUILTIN_BUNDLES once the seed catalog ships.
