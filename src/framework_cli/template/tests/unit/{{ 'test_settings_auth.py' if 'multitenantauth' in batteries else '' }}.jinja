@@ -1,0 +1,152 @@
+"""Auth settings tests for the multitenantauth battery.
+Ported from meridian tests/unit/test_settings_auth.py — remapping stage→staging (B-F1).
+"""
+
+import pytest
+from pydantic import ValidationError
+
+from {{ package_name }}.config.settings import Settings, get_settings, verify_runtime
+
+
+# ── defaults ──────────────────────────────────────────────────────────────────
+
+
+def test_auth_settings_have_safe_defaults():
+    s = Settings()
+    assert s.session_ttl_hours > 0
+    assert s.invite_ttl_hours > 0
+    # cookie name is package-scoped, not product-hardcoded
+    assert s.session_cookie_name == "{{ package_name }}_session"
+    assert s.session_cookie_secure is True  # B-F9: must default True
+    assert s.session_cookie_domain is None  # safe single-host default
+    assert s.csrf_allowed_origins == set()  # empty = same-origin only
+    assert s.admin_role_name == "tenant.admin"
+    assert s.signup_allowlist == []
+    assert s.session_pepper.get_secret_value() == ""
+    assert s.password_pepper.get_secret_value() == ""
+    assert s.pepper_version == 1
+
+
+# ── control_database_url fallback ─────────────────────────────────────────────
+
+
+def test_control_database_url_defaults_to_database_url():
+    """When APP_CONTROL_DATABASE_URL is unset, control_database_url == database_url."""
+    s = Settings()
+    assert s.control_database_url == s.database_url
+
+
+def test_control_database_url_explicit_override(monkeypatch):
+    """An explicit APP_CONTROL_DATABASE_URL must NOT be overridden by database_url."""
+    monkeypatch.setenv(
+        "APP_CONTROL_DATABASE_URL",
+        "postgresql+psycopg://ctrl:ctrl@ctrl-host:5432/ctrl",
+    )
+    s = Settings()
+    assert (
+        s.control_database_url == "postgresql+psycopg://ctrl:ctrl@ctrl-host:5432/ctrl"
+    )
+
+
+# ── argon2 floor validators (B-F10) ───────────────────────────────────────────
+
+
+def test_argon2_cost_defaults_at_or_above_floor():
+    s = Settings()
+    assert s.argon2_memory_cost >= 65536
+    assert s.argon2_time_cost >= 3
+    assert s.argon2_parallelism >= 4
+
+
+def test_argon2_memory_cost_floor_enforced(monkeypatch):
+    monkeypatch.setenv("APP_ARGON2_MEMORY_COST", "1024")  # below floor
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_argon2_time_cost_floor_enforced(monkeypatch):
+    monkeypatch.setenv("APP_ARGON2_TIME_COST", "1")  # below floor
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_argon2_parallelism_floor_enforced(monkeypatch):
+    monkeypatch.setenv("APP_ARGON2_PARALLELISM", "2")  # below floor
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+# ── environment validator (B-F1) ──────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("env", ["dev", "test", "staging", "prod"])
+def test_environment_validator_accepts_framework_set(env):
+    """The framework set {dev, test, staging, prod} must all pass."""
+    s = Settings(environment=env)
+    assert s.environment == env
+
+
+@pytest.mark.parametrize("bad", ["stage", "production", "qa", "ci"])
+def test_environment_validator_rejects_off_set(bad):
+    """'stage' (Meridian), 'production', or any other off-set token must be rejected (B-F1).
+    Note: the validator normalizes to lowercase — the security goal is rejecting 'stage'
+    and 'production', not rejecting uppercase versions of valid tokens ('PROD' → 'prod').
+    """
+    with pytest.raises(ValidationError):
+        Settings(environment=bad)
+
+
+# ── verify_runtime pepper guard (B-F2) ────────────────────────────────────────
+
+
+def test_verify_runtime_passes_in_dev_with_empty_peppers():
+    s = Settings(environment="dev")
+    verify_runtime(s)  # must not raise
+
+
+def test_verify_runtime_passes_when_peppers_set():
+    for env in ("prod", "staging"):
+        s = Settings(
+            environment=env,
+            session_pepper="s3cr3t",  # type: ignore[arg-type]
+            password_pepper="p4ssw0rd",  # type: ignore[arg-type]
+        )
+        verify_runtime(s)  # must not raise
+
+
+@pytest.mark.parametrize("env", ["prod", "staging"])
+def test_verify_runtime_raises_in_prod_staging_with_empty_session_pepper(env):
+    s = Settings(
+        environment=env,
+        session_pepper="",
+        password_pepper="s3cr3t",  # type: ignore[arg-type]
+    )
+    with pytest.raises(RuntimeError, match="APP_SESSION_PEPPER"):
+        verify_runtime(s)
+
+
+@pytest.mark.parametrize("env", ["prod", "staging"])
+def test_verify_runtime_raises_in_prod_staging_with_empty_password_pepper(env):
+    s = Settings(
+        environment=env,
+        session_pepper="s3cr3t",  # type: ignore[arg-type]
+        password_pepper="",
+    )
+    with pytest.raises(RuntimeError, match="APP_PASSWORD_PEPPER"):
+        verify_runtime(s)
+
+
+# ── misc ───────────────────────────────────────────────────────────────────────
+
+
+def test_signup_allowlist_parses_json(monkeypatch):
+    monkeypatch.setenv("APP_SIGNUP_ALLOWLIST", '["@acme.com","ceo@x.io"]')
+    get_settings.cache_clear()
+    assert get_settings().signup_allowlist == ["@acme.com", "ceo@x.io"]
+    get_settings.cache_clear()
+
+
+def test_pepper_version_env_override(monkeypatch):
+    assert Settings().pepper_version == 1
+    monkeypatch.setenv("APP_PEPPER_VERSION", "2")
+    assert Settings().pepper_version == 2

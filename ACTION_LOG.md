@@ -2727,3 +2727,12 @@ gates security) in `batteries.py`; conditional `multitenantauth/__init__.py`; `t
 branch `fwk58-multitenantauth-spine`; this log carries a one-line marker per task, the ledger the detail.)
 Task-1 review (Sonnet) caught the implementer silently deleting a `docs_layout` provenance assertion
 (mislabeled an "editor artifact") → fix-wave restored it + strengthened the new test (gates assertion).
+**Task 2 — auth settings region + `verify_runtime`** (config/settings.py.jinja conditional region;
+env-token remap `stage`→`staging`; argon2 floor validators; peppers default-empty + `verify_runtime`
+fail-fast prod/staging; control_database_url fallback; `.env.example` + ported `test_settings_auth`).
+Review = Approved (env-remap + verify_runtime + floors all correct); 3 Minors deferred to final review
+(`.env.example` cookie-name uses project_slug not package_name; verify_runtime match-strings
+non-discriminating). Controller reverted the implementer's out-of-scope obs+integrity files (Task 18/19
+work, referenced not-yet-final metric names). **Cadence set:** classify infra/operational surfaces
+per-task (integrity+FWK29 stay green); obs at Task 18; implementers run targeted tests not the full
+suite. **Execution: hybrid (operator) — interactive Tasks 3-16 (auth spine), unattended tail 17-22.**

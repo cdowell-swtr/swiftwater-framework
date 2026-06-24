@@ -4292,3 +4292,84 @@ def test_render_without_multitenantauth_has_no_package(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     assert not (dest / "src" / "demo" / "multitenantauth").exists()
+
+
+def test_render_multitenantauth_settings_has_auth_fields(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    settings = (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    # All required auth fields must be present in the multitenantauth render.
+    for field in [
+        "control_database_url",
+        "session_cookie_secure",
+        "session_cookie_domain",
+        "csrf_allowed_origins",
+        "session_pepper",
+        "password_pepper",
+        "admin_role_name",
+        "verify_runtime",
+        "argon2_time_cost",
+        "argon2_memory_cost",
+        "argon2_parallelism",
+    ]:
+        assert field in settings, f"missing auth field: {field}"
+    # environment validator must reference the framework set (staging, not stage).
+    # The allowed set must contain "staging" and must NOT contain a bare "stage" token
+    # (B-F1 env-token remap). Check the allowed set literal in the validator.
+    # environment validator must reference the framework set (staging, not stage) — B-F1 remap.
+    # Check the exact allowed-set literal in the validator.
+    assert '{"dev", "test", "staging", "prod"}' in settings
+    # The Meridian allowed-set literal (using "stage") must NOT be present.
+    assert '{"dev", "test", "stage", "prod"}' not in settings
+
+
+def test_render_without_multitenantauth_settings_has_no_auth_fields(tmp_path: Path):
+    """A non-multitenantauth render must not contain any auth-battery fields."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # no batteries → no multitenantauth
+    settings = (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    for field in [
+        "control_database_url",
+        "session_cookie_secure",
+        "session_cookie_domain",
+        "csrf_allowed_origins",
+        "session_pepper",
+        "password_pepper",
+        "admin_role_name",
+        "verify_runtime",
+    ]:
+        assert field not in settings, f"auth field leaked into non-mt render: {field}"
+
+
+def test_render_multitenantauth_test_file_is_created(tmp_path: Path):
+    """The conditional test file must be rendered when multitenantauth is active."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    assert (dest / "tests" / "unit" / "test_settings_auth.py").is_file()
+
+
+def test_render_without_multitenantauth_test_file_is_absent(tmp_path: Path):
+    """The conditional test file must NOT be rendered without the battery."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / "tests" / "unit" / "test_settings_auth.py").exists()
+
+
+def test_render_multitenantauth_env_example_has_auth_vars(tmp_path: Path):
+    """The .env.example must document the multitenantauth vars when the battery is active."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    env_example = (dest / ".env.example").read_text()
+    assert "APP_SESSION_PEPPER" in env_example
+    assert "APP_PASSWORD_PEPPER" in env_example
+    assert "APP_CONTROL_DATABASE_URL" in env_example
+    assert "APP_SIGNUP_ALLOWLIST" in env_example
+
+
+def test_render_without_multitenantauth_env_example_lacks_auth_vars(tmp_path: Path):
+    """A non-multitenantauth render must not expose auth vars in .env.example."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    env_example = (dest / ".env.example").read_text()
+    assert "APP_SESSION_PEPPER" not in env_example
+    assert "APP_PASSWORD_PEPPER" not in env_example

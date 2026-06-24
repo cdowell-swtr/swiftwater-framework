@@ -1,8 +1,12 @@
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-{%- if "llm" in batteries %}
+{%- if "llm" in batteries and "multitenantauth" in batteries %}
+from pydantic import BaseModel, SecretStr, field_validator, model_validator
+{%- elif "llm" in batteries %}
 from pydantic import BaseModel, SecretStr
+{%- elif "multitenantauth" in batteries %}
+from pydantic import SecretStr, field_validator, model_validator
 {%- endif %}
 
 
@@ -58,6 +62,51 @@ class Settings(BaseSettings):
     # via APP_DATABASE_URL; host tooling (alembic) uses the localhost form; tests use a
     # testcontainers Postgres (overridden per session).
     database_url: str = "postgresql+psycopg://app:app@postgres:5432/app"
+{%- if "multitenantauth" in batteries %}
+
+    # ── multitenantauth: control-plane + auth settings ────────────────────────
+    # Control-plane database. Defaults to database_url (co-located); set APP_CONTROL_DATABASE_URL
+    # to separate the control-plane onto its own Postgres instance (the target DB must pre-exist).
+    # OPS-F4: the co-located default runs two SQLAlchemy pools on one Postgres — see .env.example
+    # for the connection-budget note so operators can size max_connections appropriately.
+    # Sentinel "": model_validator fills from database_url when APP_CONTROL_DATABASE_URL is unset.
+    control_database_url: str = ""
+
+    # Session cookie configuration.
+    # session_cookie_name: scoped to this service so multi-app setups don't collide.
+    session_cookie_name: str = "{{ package_name }}_session"
+    # B-F9: safe default — always True; override only for local dev (never in prod/staging).
+    session_cookie_secure: bool = True
+    # None = single-host default (safe); set to a parent domain for multi-subdomain deployments.
+    session_cookie_domain: str | None = None
+
+    # CSRF defence: exact origin allowlist (no wildcards — B-F4). Empty = same-origin only.
+    # Each entry must be a netloc (e.g. "https://app.example.com"), not a pattern.
+    csrf_allowed_origins: set[str] = set()
+
+    # Password / session pepper (HMAC-SHA256 pre-hash). Defaults empty — NOT required by the
+    # model; safety is the verify_runtime() startup guard below (raises in prod/staging if empty).
+    # B-F8: pepper_version is a forward-compat seam ONLY — no live rotation in Phase 1.
+    session_pepper: SecretStr = SecretStr("")
+    password_pepper: SecretStr = SecretStr("")
+    pepper_version: int = 1  # forward-compat only; no live rotation in Phase 1
+
+    # Session / invite expiry (hours). Defaults: 14 days for sessions, 7 days for invites.
+    session_ttl_hours: int = 336
+    invite_ttl_hours: int = 168
+
+    # Argon2id cost parameters (B-F10: floor validators below ensure minimum security).
+    argon2_time_cost: int = 3
+    argon2_memory_cost: int = 65536  # 64 MiB
+    argon2_parallelism: int = 4
+
+    # Role / signup policy.
+    admin_role_name: str = "tenant.admin"
+    # Signup allowlist: list of email addresses or domain suffixes (e.g. "@acme.com").
+    # FAIL-CLOSED by default (unlike the reference) — semantics enforced in routes/auth.py:
+    # prod → 404; staging + empty allowlist → 403; dev → open. Set this to opt into signups.
+    signup_allowlist: list[str] = []
+{%- endif %}
 {%- if "webhooks" in batteries %}
 
     # Webhook ingress: HMAC-SHA256 signing secret (read from APP_WEBHOOK_SIGNING_SECRET).
@@ -132,6 +181,51 @@ class Settings(BaseSettings):
     ]
 {%- endif %}
 
+{%- if "multitenantauth" in batteries %}
+
+    @field_validator("environment")
+    @classmethod
+    def _environment_in_set(cls, v: str) -> str:
+        # Fail-closed: a typo ("stage", "production", "Prod") must NOT silently pass the env
+        # checks that gate the prod pepper guard + tightened posture. The framework set is
+        # {dev, test, staging, prod} — "stage" (Meridian's token) is intentionally excluded
+        # so a verbatim Meridian config fails loudly here (B-F1: env-token remap).
+        normalized = v.strip().lower()
+        allowed = {"dev", "test", "staging", "prod"}
+        if normalized not in allowed:
+            raise ValueError(f"environment must be one of {sorted(allowed)}, got {v!r}")
+        return normalized
+
+    @field_validator("argon2_time_cost")
+    @classmethod
+    def _argon2_time_cost_floor(cls, v: int) -> int:
+        if v < 3:
+            raise ValueError("argon2_time_cost must be >= 3")
+        return v
+
+    @field_validator("argon2_memory_cost")
+    @classmethod
+    def _argon2_memory_cost_floor(cls, v: int) -> int:
+        if v < 65536:
+            raise ValueError("argon2_memory_cost must be >= 65536 (64 MiB)")
+        return v
+
+    @field_validator("argon2_parallelism")
+    @classmethod
+    def _argon2_parallelism_floor(cls, v: int) -> int:
+        if v < 4:
+            raise ValueError("argon2_parallelism must be >= 4")
+        return v
+
+    @model_validator(mode="after")
+    def _fill_control_database_url(self) -> "Settings":
+        # If APP_CONTROL_DATABASE_URL was not set (sentinel ""), fall back to database_url.
+        # This allows the control-plane to co-locate on the same Postgres by default.
+        if not self.control_database_url:
+            self.control_database_url = self.database_url
+        return self
+{%- endif %}
+
     @property
     def resolved_log_level(self) -> str:
         if self.log_level is not None:
@@ -150,3 +244,23 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+{%- if "multitenantauth" in batteries %}
+
+
+def verify_runtime(settings: Settings) -> None:
+    """Fail-fast startup guard: in prod/staging, both peppers MUST be set (a missing pepper
+    silently weakens password/session hashing). Dev and test are exempt — empty peppers are
+    fine for local dev. Wire into create_app() BEFORE router includes (OPS-F7).
+
+    B-F2: peppers default SecretStr("") — not "required". This guard is the safety mechanism.
+    B-F1: env-token remap — checks {"prod","staging"}, NOT {"prod","stage"} (Meridian's token).
+    """
+    if settings.environment in {"prod", "staging"} and (
+        settings.session_pepper.get_secret_value() == ""
+        or settings.password_pepper.get_secret_value() == ""
+    ):
+        raise RuntimeError(
+            f"environment={settings.environment!r} requires non-empty "
+            "APP_SESSION_PEPPER and APP_PASSWORD_PEPPER"
+        )
+{%- endif %}
