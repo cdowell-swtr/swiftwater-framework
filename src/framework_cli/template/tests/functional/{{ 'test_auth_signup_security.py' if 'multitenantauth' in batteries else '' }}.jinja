@@ -1,0 +1,170 @@
+"""Signup security: the FAIL-CLOSED env gate (de-fork B-F1 + A-F9).
+
+prod → 404 (signup off entirely); staging + empty allowlist → 403 (DENY — the flip of the
+reference's "empty = unrestricted"); staging + a matching allowlist → 201; dev → 201 (open).
+
+Reuses the pure probe-client builder ``_build_client`` from ``test_auth_routes`` and stands up its
+own control engine (a distinct test DB) so the modules stay independent. Each test varies only
+``APP_ENVIRONMENT`` / ``APP_SIGNUP_ALLOWLIST``.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+
+import pytest
+from sqlalchemy import Engine, create_engine, make_url, text
+
+from {{ package_name }}.db.control.base import ControlBase
+
+from .test_auth_routes import _build_client, _CONTROL_TABLES
+
+pytestmark = pytest.mark.usefixtures("_clean_control")
+
+
+@pytest.fixture(scope="module")
+def control_engine(pg_url: str) -> Iterator[Engine]:
+    """Control-plane engine for the signup-security tests (its own DB; create_all, no alembic)."""
+    _ctrl_db = "{{ package_name }}_signupsec_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(engine)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def _clean_control(control_engine: Engine) -> Iterator[None]:
+    """Truncate control tables after each test (function-scoped isolation)."""
+    yield
+    with control_engine.begin() as conn:
+        conn.execute(text(f"TRUNCATE TABLE {_CONTROL_TABLES} CASCADE"))
+
+
+_SIGNUP_BODY = {
+    "email": "founder@acme.com",
+    "password": "pw-placeholder",
+    "tenant_name": "Acme",
+    "slug": "acme",
+}
+
+
+def test_signup_in_prod_is_404(control_engine: Engine, monkeypatch):
+    """Fail-closed: signup is OFF in prod — 404 even with a populated allowlist."""
+    monkeypatch.setenv("APP_SIGNUP_ALLOWLIST", '["@acme.com"]')
+    monkeypatch.setenv("APP_SESSION_COOKIE_SECURE", "true")  # prod-like
+    client = _build_client(control_engine, monkeypatch, env="prod")
+    try:
+        r = client.post("/auth/signup", json=_SIGNUP_BODY)
+        assert r.status_code == 404
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()
+
+
+def test_signup_in_staging_with_empty_allowlist_is_403(
+    control_engine: Engine, monkeypatch
+):
+    """Fail-closed flip: staging + EMPTY allowlist → DENY (403), unlike the reference's open default."""
+    monkeypatch.delenv("APP_SIGNUP_ALLOWLIST", raising=False)
+    client = _build_client(control_engine, monkeypatch, env="staging")
+    try:
+        r = client.post("/auth/signup", json=_SIGNUP_BODY)
+        assert r.status_code == 403
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()
+
+
+def test_signup_in_staging_with_matching_allowlist_is_201(
+    control_engine: Engine, monkeypatch
+):
+    """Opt-in: staging + a populated, matching allowlist → 201 (the consumer enabled signups)."""
+    monkeypatch.setenv("APP_SIGNUP_ALLOWLIST", '["@acme.com"]')
+    client = _build_client(control_engine, monkeypatch, env="staging")
+    try:
+        r = client.post("/auth/signup", json=_SIGNUP_BODY)
+        assert r.status_code == 201
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()
+
+
+def test_signup_in_staging_with_nonmatching_allowlist_is_403(
+    control_engine: Engine, monkeypatch
+):
+    """Populated allowlist that does NOT match the email → 403 (allowlist actually gates)."""
+    monkeypatch.setenv("APP_SIGNUP_ALLOWLIST", '["@other.com"]')
+    client = _build_client(control_engine, monkeypatch, env="staging")
+    try:
+        r = client.post("/auth/signup", json=_SIGNUP_BODY)
+        assert r.status_code == 403
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()
+
+
+def test_signup_in_dev_with_empty_allowlist_is_201(control_engine: Engine, monkeypatch):
+    """Dev is open: empty allowlist → 201 (the only environment where empty means open)."""
+    monkeypatch.delenv("APP_SIGNUP_ALLOWLIST", raising=False)
+    client = _build_client(control_engine, monkeypatch, env="dev")
+    try:
+        r = client.post("/auth/signup", json=_SIGNUP_BODY)
+        assert r.status_code == 201
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()
+
+
+def test_signup_in_test_env_with_empty_allowlist_is_403(
+    control_engine: Engine, monkeypatch
+):
+    """Fail-closed for ALL non-dev envs: ``test`` is a valid APP_ENVIRONMENT token, and it must NOT
+    fall through the gate to unrestricted signup — empty allowlist → DENY (403). (Regression guard
+    for the fail-open where only prod/staging/dev were handled explicitly.)"""
+    monkeypatch.delenv("APP_SIGNUP_ALLOWLIST", raising=False)
+    client = _build_client(control_engine, monkeypatch, env="test")
+    try:
+        r = client.post("/auth/signup", json=_SIGNUP_BODY)
+        assert r.status_code == 403
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()
+
+
+def test_signup_in_test_env_with_matching_allowlist_is_201(
+    control_engine: Engine, monkeypatch
+):
+    """``test`` env opts in exactly like staging: a populated, matching allowlist → 201."""
+    monkeypatch.setenv("APP_SIGNUP_ALLOWLIST", '["@acme.com"]')
+    client = _build_client(control_engine, monkeypatch, env="test")
+    try:
+        r = client.post("/auth/signup", json=_SIGNUP_BODY)
+        assert r.status_code == 201
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()

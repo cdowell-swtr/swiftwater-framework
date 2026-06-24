@@ -2797,3 +2797,11 @@ membership-by-(user,tenant)-first, match-(membership,resource)-together, no subs
 on the RENDERED output (no IDOR, no 403-before-404 leak, branch order intact, A-F7 fail-closed; 33 green).
 Minors→final (`active_tenant` is a faithful but dormant/untested Phase-1 port + one misleading test comment;
 cross-tenant resource_id collision safe-by-construction but untested).
+**Task 13 — authn routes + `cookies.py` (fail-closed signup)** (novel extraction from `routes/auth.py` —
+NO authn service module; signup-founder/login/logout/set-password/me + `_issue_session`/`_allowlisted`/
+`_dummy_hash`; `register_tenant(slug)`+activate, opaque id; login mints a FRESH session, set-password
+invalidates ALL sessions; generic-409 no-enumeration + IntegrityError→409 TOCTOU hardening; cookie
+flags + B-F11 README/.env note). Review = caught an **Important fail-open**: `env="test"` (a valid
+APP_ENVIRONMENT token) fell through every signup gate → unrestricted signup ([[app-environment-tokens-never-production]]
+class). Fixed: **`dev` is now the only explicitly-open env; every other non-prod requires the allowlist
+(fail-closed by construction)** + regression test (`test`+empty was 201→ now 403). 20 green; render-validated.
