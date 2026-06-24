@@ -2773,3 +2773,10 @@ verification on its own bash (agents stream-idle on long docker loops; controlle
 = Approved (exact crypto fidelity, tight 3-exception contract, non-vacuous algorithm-pinning tests; 27
 green). Minors→final review (undertested VerificationError branch, loose token entropy floor, plan-IDs in
 a shipped docstring to strip).
+**Task 10 — recursive permission-expression evaluator (`expr.py`) + resolution (`resolution.py`)** (port
+verbatim with `product`→`resource` rename; the security-critical A-F6 properties preserved: recursive
+`_has_wildcard_leaf` ALL-guard, wildcard-ness from the AUTHORED pattern only, exact `evaluate` branch
+order wildcard→resource→flat, missing-param→deny-not-500; domain-split resolution). Review = Approved
+(byte-accurate port; A-F6 cases tested non-vacuously with adversarial shapes; 23 green). **⏚ Task-14
+follow-up:** Task 14 (which creates the production inert `subtree_exists` site) owns the
+"exactly-one-inert-construction-site" grep/unit guard (A-F6/A-F10). Minors→final review.

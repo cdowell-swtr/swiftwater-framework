@@ -1,0 +1,55 @@
+"""A concrete resource:{id} leaf routes through ctx['resource_grant'] (resource-aware), not the
+flat tenant_perms set; the wildcard guards from the expr evaluator still hold."""
+
+import pytest
+from {{ package_name }}.multitenantauth.authz.expr import ALL, Perm, evaluate
+
+
+def _ctx(resource_grant, path):
+    return {
+        "tenant_perms": set(),
+        "platform_perms": set(),
+        "path": path,
+        "subtree_exists": lambda name, resource: False,
+        "resource_grant": resource_grant,
+    }
+
+
+def test_resource_leaf_calls_resource_grant_with_bound_resource():
+    seen = {}
+
+    def rg(name, resource):
+        seen["name"], seen["resource"] = name, resource
+        return True
+
+    node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
+    ctx = _ctx(rg, {"tenant_id": "acme", "resource_id": "widget-42"})
+    assert evaluate(node, ctx) is True
+    assert seen == {
+        "name": "resource:view",
+        "resource": "tenant:acme/resource:widget-42",
+    }
+
+
+def test_resource_leaf_denies_when_resolver_false():
+    node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
+    ctx = _ctx(lambda n, r: False, {"tenant_id": "acme", "resource_id": "widget-42"})
+    assert evaluate(node, ctx) is False
+
+
+def test_missing_resource_param_denies_not_raises():
+    node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
+    ctx = _ctx(lambda n, r: True, {"tenant_id": "acme"})  # no resource_id
+    assert evaluate(node, ctx) is False
+
+
+def test_wildcard_resource_leaf_still_uses_subtree_exists():
+    node = Perm("resource:view", on="tenant:{tenant_id}/resource:*")
+    ctx = _ctx(lambda n, r: True, {"tenant_id": "acme"})
+    # wildcard branch → subtree_exists (False here), never resource_grant
+    assert evaluate(node, ctx) is False
+
+
+def test_wildcard_resource_leaf_rejected_under_ALL():
+    with pytest.raises(ValueError):
+        ALL(Perm("resource:view", on="tenant:{tenant_id}/resource:*"))

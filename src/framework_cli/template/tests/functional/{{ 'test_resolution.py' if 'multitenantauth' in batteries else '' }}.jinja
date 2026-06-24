@@ -1,0 +1,283 @@
+"""Permission resolution: domain-split grant queries for the evaluator.
+
+Tests that platform grants are globally resolved and tenant grants are isolated per
+tenant — and that the domain split prevents a platform grant from satisfying a
+tenant-scoped leaf and vice-versa.
+
+Uses create_all on the full authz/tenancy table set (no migrations; Task 7 is deferred).
+Row construction is inline (no seed_authz; Task 17 is deferred) — Role + Permission +
+RolePermission + the relevant assignment table.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+import pytest
+from sqlalchemy import Engine, create_engine, make_url, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+from {{ package_name }}.db.control.base import ControlBase
+from {{ package_name }}.multitenantauth.authz.resolution import (
+    effective_permissions,
+    effective_permissions_global,
+    has_membership,
+    platform_permissions,
+    tenant_permissions,
+)
+
+
+# ── fixture ───────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def control_engine(pg_url: str) -> Engine:  # type: ignore[return]
+    """Control-plane engine for resolution tests.
+
+    Creates all tables needed for authz resolution (app_user, tenant, tenant_membership,
+    role, permission, role_permission, tenant_role_assignment, platform_role_assignment).
+    No alembic — Task 7 (migrations) is deferred.
+    """
+    _ctrl_db = "{{ package_name }}_resolution_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(
+        engine,
+        tables=[
+            m.AppUser.__table__,
+            m.Tenant.__table__,
+            m.TenantMembership.__table__,
+            m.Role.__table__,
+            m.Permission.__table__,
+            m.RolePermission.__table__,
+            m.TenantRoleAssignment.__table__,
+            m.PlatformRoleAssignment.__table__,
+        ],
+    )
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean(control_engine: Engine) -> None:  # type: ignore[return]
+    """Truncate authz/tenancy tables after each test (tests commit rows; no rollback isolation)."""
+    yield
+    with control_engine.begin() as conn:
+        conn.execute(
+            text(
+                "TRUNCATE TABLE platform_role_assignment, tenant_role_assignment, "
+                "role_permission, role, permission, tenant_membership, tenant, "
+                "app_user CASCADE"
+            )
+        )
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _user(s: Session, email: str) -> m.AppUser:
+    u = m.AppUser(email=email, email_canonical=email.lower(), born="operator")
+    s.add(u)
+    s.flush()
+    return u
+
+
+def _setup(s: Session) -> dict[str, m.Role]:
+    """Seed two tenants and the built-in roles with their permissions.
+
+    Built-in roles (matching the Task 17 seed catalog):
+    - tenant.viewer  (domain=tenant)  → permission "tenant:read"
+    - platform.admin (domain=platform) → permissions "platform-tenant:provision",
+                                                       "platform-user:create"
+    """
+    s.add(
+        m.Tenant(id="acme", name="Acme", slug="acme", dsn="postgresql+psycopg://x/acme")
+    )
+    s.add(
+        m.Tenant(
+            id="other", name="Other", slug="other", dsn="postgresql+psycopg://x/other"
+        )
+    )
+
+    tenant_viewer = m.Role(
+        name="tenant.viewer", domain="tenant", description="Read-only tenant access"
+    )
+    platform_admin = m.Role(
+        name="platform.admin", domain="platform", description="Platform administrator"
+    )
+    s.add_all([tenant_viewer, platform_admin])
+
+    perm_tenant_read = m.Permission(
+        name="tenant:read",
+        domain="tenant",
+        description="Read tenant data",
+        is_active=True,
+    )
+    perm_provision = m.Permission(
+        name="platform-tenant:provision",
+        domain="platform",
+        description="Provision tenants",
+        is_active=True,
+    )
+    perm_user_create = m.Permission(
+        name="platform-user:create",
+        domain="platform",
+        description="Create users",
+        is_active=True,
+    )
+    s.add_all([perm_tenant_read, perm_provision, perm_user_create])
+    s.flush()
+
+    s.add(m.RolePermission(role_id=tenant_viewer.id, permission_name="tenant:read"))
+    s.add(
+        m.RolePermission(
+            role_id=platform_admin.id, permission_name="platform-tenant:provision"
+        )
+    )
+    s.add(
+        m.RolePermission(
+            role_id=platform_admin.id, permission_name="platform-user:create"
+        )
+    )
+    s.flush()
+
+    return {"tenant.viewer": tenant_viewer, "platform.admin": platform_admin}
+
+
+# ── tests ─────────────────────────────────────────────────────────────────────
+
+
+def test_union_and_domain_split(control_engine: Engine) -> None:
+    """tenant_permissions and platform_permissions are strictly domain-split.
+
+    The union (effective_permissions) covers both; a tenant where the user has NO membership
+    yields no tenant grants (only platform), verifying grants don't leak across tenants.
+    """
+    with Session(control_engine) as s:
+        roles = _setup(s)
+        u = _user(s, "x@y.com")
+        mem = m.TenantMembership(user_id=u.id, tenant_id="acme")
+        s.add(mem)
+        s.flush()
+        s.add(
+            m.TenantRoleAssignment(
+                membership_id=mem.id,
+                role_id=roles["tenant.viewer"].id,
+                role_domain="tenant",
+            )
+        )
+        s.add(
+            m.PlatformRoleAssignment(
+                user_id=u.id,
+                role_id=roles["platform.admin"].id,
+                role_domain="platform",
+            )
+        )
+        s.commit()
+        uid = u.id
+
+    with Session(control_engine) as s:
+        assert tenant_permissions(s, uid, "acme") == {"tenant:read"}
+        assert platform_permissions(s, uid) == {
+            "platform-tenant:provision",
+            "platform-user:create",
+        }
+        # union for the active tenant
+        assert effective_permissions(s, uid, "acme") == {
+            "tenant:read",
+            "platform-tenant:provision",
+            "platform-user:create",
+        }
+        # a tenant where the user has NO membership → no tenant grants leak; only platform
+        assert tenant_permissions(s, uid, "other") == set()
+        assert effective_permissions(s, uid, "other") == {
+            "platform-tenant:provision",
+            "platform-user:create",
+        }
+        assert effective_permissions_global(s, uid) == {
+            "platform-tenant:provision",
+            "platform-user:create",
+        }
+
+
+def test_effective_permissions_requires_tenant(control_engine: Engine) -> None:
+    """effective_permissions(None) must RAISE, never silently return platform-only grants."""
+    with Session(control_engine) as s:
+        _setup(s)
+        u = _user(s, "z@y.com")
+        s.commit()
+        uid = u.id
+
+    with Session(control_engine) as s:
+        with pytest.raises(ValueError):
+            effective_permissions(s, uid, None)  # type: ignore[arg-type]
+
+
+def test_has_membership(control_engine: Engine) -> None:
+    """has_membership returns True only for the enrolled tenant."""
+    with Session(control_engine) as s:
+        _setup(s)
+        u = _user(s, "m@y.com")
+        s.add(m.TenantMembership(user_id=u.id, tenant_id="acme"))
+        s.commit()
+        uid = u.id
+
+    with Session(control_engine) as s:
+        assert has_membership(s, uid, "acme") is True
+        assert has_membership(s, uid, "other") is False
+
+
+def test_platform_grant_cannot_satisfy_tenant_leaf(control_engine: Engine) -> None:
+    """A user with platform grants but no tenant membership gets no tenant permissions.
+
+    This verifies the domain-split: platform_permissions is non-empty but
+    tenant_permissions for any tenant is empty — the evaluator cannot use a
+    platform grant to satisfy a tenant-scoped Perm leaf.
+    """
+    with Session(control_engine) as s:
+        roles = _setup(s)
+        u = _user(s, "p@y.com")
+        s.flush()
+        s.add(
+            m.PlatformRoleAssignment(
+                user_id=u.id,
+                role_id=roles["platform.admin"].id,
+                role_domain="platform",
+            )
+        )
+        s.commit()
+        uid = u.id
+
+    with Session(control_engine) as s:
+        assert platform_permissions(s, uid) == {
+            "platform-tenant:provision",
+            "platform-user:create",
+        }
+        # No tenant membership → tenant grants are always empty
+        assert tenant_permissions(s, uid, "acme") == set()
+        assert tenant_permissions(s, uid, "other") == set()
+
+
+def test_no_grants_returns_empty_sets(control_engine: Engine) -> None:
+    """A user with no assignments gets empty sets from both resolvers."""
+    with Session(control_engine) as s:
+        _setup(s)
+        u = _user(s, "n@y.com")
+        s.commit()
+        uid = u.id
+
+    with Session(control_engine) as s:
+        assert platform_permissions(s, uid) == set()
+        assert tenant_permissions(s, uid, "acme") == set()
+        assert effective_permissions_global(s, uid) == set()
