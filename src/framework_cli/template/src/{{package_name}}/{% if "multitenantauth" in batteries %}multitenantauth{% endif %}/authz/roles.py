@@ -1,8 +1,11 @@
 """Role → permission bundles for the authorization seed catalog.
 
-This file ships INTENTIONALLY_UNLOCKED: it is the policy layer, not framework
-infrastructure. Consumers should replace the built-in set with their own role
-taxonomy before going to production.
+This file is consumer-editable POLICY — edit this catalog. It ships
+INTENTIONALLY_UNLOCKED (the framework will not lock or overwrite it): it is the
+policy layer, not framework infrastructure. Consumers should replace the built-in
+set with their own role taxonomy before going to production. (The seed runner
+``authz/seed.py`` that materializes this is mechanism — do not edit that; change the
+policy here.)
 
 **Built-in roles (seeded with ``is_builtin=True``):**
 

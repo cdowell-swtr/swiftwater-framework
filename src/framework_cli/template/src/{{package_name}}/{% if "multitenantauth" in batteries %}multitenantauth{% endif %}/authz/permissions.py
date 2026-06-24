@@ -1,8 +1,11 @@
 """The permission catalog — the SOURCE OF TRUTH for authorization vocabulary.
 
-This file ships INTENTIONALLY_UNLOCKED: it is the policy layer, not framework
-infrastructure. Consumers are expected and encouraged to replace this example
-catalog with their own domain vocabulary before going to production.
+This file is consumer-editable POLICY — edit this catalog. It ships
+INTENTIONALLY_UNLOCKED (the framework will not lock or overwrite it): it is the
+policy layer, not framework infrastructure. Consumers are expected and encouraged
+to replace this example catalog with their own domain vocabulary before going to
+production. (The seed runner ``authz/seed.py`` that materializes this is mechanism —
+do not edit that; change the policy here.)
 
 The catalog is materialized into the ``permission`` table (by ``seed.py``) with a
 reconciliation check that guards against cross-domain bundles.

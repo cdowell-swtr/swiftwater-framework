@@ -1,5 +1,9 @@
 """Seed the authorization vocabulary (permissions + roles + bundles) into the control plane.
 
+This file is MECHANISM — do not edit; it is managed by the framework. The consumer-editable
+POLICY is the catalog in ``authz/permissions.py`` (permissions) and ``authz/roles.py`` (role
+bundles); this runner only materializes what those declare. Change the policy there, not here.
+
 The code catalog (``authz/permissions.py``) and role bundles (``authz/roles.py``) are the
 source of truth. This module materializes them so the control DB's foreign keys have rows
 to point at. It seeds the VOCABULARY only — NOT user grants (those become ``authz_event``
@@ -26,7 +30,7 @@ catalog) so tests can inject bad bundles without triggering DB FK violations.
 
 Entry point::
 
-    python -m {{ package_name }}.multitenantauth.authz.seed
+    python -m <package_name>.multitenantauth.authz.seed
 
 """
 
@@ -210,7 +214,7 @@ def seed_authz(session: Session) -> None:
 def main() -> None:  # pragma: no cover
     """Seed the authz vocabulary into the control DB.
 
-    Invoked by: ``python -m {{ package_name }}.multitenantauth.authz.seed``
+    Invoked by: ``python -m <package_name>.multitenantauth.authz.seed``
 
     The module-level entrypoint for the deferred Task 8 ``python -m <pkg>.authz.seed``
     call. Opens a control session, runs ``seed_authz``, and commits.

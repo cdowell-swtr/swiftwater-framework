@@ -2845,3 +2845,12 @@ observation-only (no auth/authz control-flow change, no mid-request raise) + car
 user/tenant ids). obs-completeness 17/17, integrity 67/67, full framework suite 794 green. Minors→final
 (counters fire pre-commit (over-count on rollback, standard); the `resource` authz-decision series is
 pre-seeded but never emitted in Phase 1; an inert type:ignore).
+**Task 19 — integrity classification (colonization guard)** — the implementer surfaced a real FWK7-scope
+conflict: the integrity lock-system only covers `infra/scripts/.github` (`src/{package_name}/` is
+deliberately builder-owned, never locked), so "mechanism LOCKED" can't happen without a precedent-setting
+extension to lock `src/` code. **Operator-level decision → took Option A (convention-only) overnight; the
+obs infra is classified (Task 18, 67 integrity green); the colonization guard is a documented convention
+(INTENTIONALLY_UNLOCKED markers on permissions.py/roles.py, a mechanism note on seed.py). Also fixed the
+Task-17 Minor (literal `{{ package_name }}` shipping unrendered in seed.py docstrings).** **⚑ Option B
+(extend integrity to lock the auth-mechanism src/ — real de-fork value) recorded as a pending operator
+decision for Chris (see `.superpowers/sdd/progress.md`).**
