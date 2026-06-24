@@ -130,8 +130,8 @@ def evaluate(node: Expr, ctx: dict[str, Any]) -> bool:
 
     `tenant_perms`/`platform_perms` are precomputed sets (domain-split, from `multitenantauth.authz.resolution`);
     `path` is the request path params; `subtree_exists(name, resource)` resolves a wildcard subtree
-    (inert/empty in Phase 1); `resource_grant(name, resource)` resolves a concrete resource-scoped
-    grant. Short-circuits.
+    (inert/empty in Phase 1); `resource_grant(name, path)` resolves a concrete resource-scoped grant
+    using the DISCRETE path-param dict — never re-parsed from the bound string (A-F1). Short-circuits.
     """
     if isinstance(node, Perm):
         if node.on == "platform":
@@ -146,8 +146,13 @@ def evaluate(node: Expr, ctx: dict[str, Any]) -> bool:
             subtree_exists: Callable[[str, str], bool] = ctx["subtree_exists"]
             return subtree_exists(node.name, resource)
         if _is_resource_scoped(node.on):
-            resource_grant: Callable[[str, str], bool] = ctx["resource_grant"]
-            return resource_grant(node.name, resource)
+            # A-F1: pass the discrete path dict, not the bound string — a consumer's
+            # opaque resource_id containing "tenant:" or "/resource:" would mis-slice
+            # if the resolver had to re-parse the concatenated value.
+            resource_grant: Callable[[str, dict[str, Any]], bool] = ctx[
+                "resource_grant"
+            ]
+            return resource_grant(node.name, ctx["path"])
         return node.name in ctx["tenant_perms"]
     if isinstance(node, ALL):
         # `bool(node.children)` backstops an empty-children ALL (only constructable by bypassing

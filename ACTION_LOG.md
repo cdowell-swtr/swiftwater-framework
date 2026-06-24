@@ -2789,3 +2789,11 @@ NOT from the slug; `activate`/`get`/`get_dsn`; `rename_slug` with cooling; `reso
 NEVER connects to dsn — AST-guard-tested). Review = Needs-fixes → fixed: an `add_slug_history` PK-collision
 on a reclaim→rename cycle (blind insert on a slug-PK table → upsert; mutation-confirmed RED→GREEN) +
 removed out-of-scope Phase-2 `all_tenant_dsns`. 27 green. Minors→final (yield-fixture annotations).
+**Task 14 — request auth chain (deps; the authz chokepoint)** (port `control_session`/`current_user`/
+`active_tenant`/`guard`; DROP `tenant_db`+`product_access`; A-F1 flat discrete-args `resource_grant` —
+membership-by-(user,tenant)-first, match-(membership,resource)-together, no substring re-parse; inline
+404-before-403 standing alone A-F8; inert `subtree_exists` + A-F10 single-site guard; modified Task-10
+`expr.py` to pass `ctx["path"]` preserving the A-F6 branch order). **Opus review = Approved** — verified
+on the RENDERED output (no IDOR, no 403-before-404 leak, branch order intact, A-F7 fail-closed; 33 green).
+Minors→final (`active_tenant` is a faithful but dormant/untested Phase-1 port + one misleading test comment;
+cross-tenant resource_id collision safe-by-construction but untested).

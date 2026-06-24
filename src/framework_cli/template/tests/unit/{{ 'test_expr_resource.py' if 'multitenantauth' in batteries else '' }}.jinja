@@ -1,5 +1,9 @@
 """A concrete resource:{id} leaf routes through ctx['resource_grant'] (resource-aware), not the
-flat tenant_perms set; the wildcard guards from the expr evaluator still hold."""
+flat tenant_perms set; the wildcard guards from the expr evaluator still hold.
+
+A-F1: resource_grant receives the DISCRETE path dict, not the bound resource string. This prevents
+a consumer's opaque resource_id (e.g. containing "tenant:" or "/resource:") from being mis-sliced
+by a re-parsing resolver."""
 
 import pytest
 from {{ package_name }}.multitenantauth.authz.expr import ALL, Perm, evaluate
@@ -15,11 +19,12 @@ def _ctx(resource_grant, path):
     }
 
 
-def test_resource_leaf_calls_resource_grant_with_bound_resource():
+def test_resource_leaf_calls_resource_grant_with_discrete_path():
+    """resource_grant receives the full path dict (A-F1), not the bound resource string."""
     seen = {}
 
-    def rg(name, resource):
-        seen["name"], seen["resource"] = name, resource
+    def rg(name, path):
+        seen["name"], seen["path"] = name, path
         return True
 
     node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
@@ -27,25 +32,26 @@ def test_resource_leaf_calls_resource_grant_with_bound_resource():
     assert evaluate(node, ctx) is True
     assert seen == {
         "name": "resource:view",
-        "resource": "tenant:acme/resource:widget-42",
+        "path": {"tenant_id": "acme", "resource_id": "widget-42"},
     }
 
 
 def test_resource_leaf_denies_when_resolver_false():
     node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
-    ctx = _ctx(lambda n, r: False, {"tenant_id": "acme", "resource_id": "widget-42"})
+    ctx = _ctx(lambda n, p: False, {"tenant_id": "acme", "resource_id": "widget-42"})
     assert evaluate(node, ctx) is False
 
 
 def test_missing_resource_param_denies_not_raises():
+    """bind_resource returns None when a param is absent → deny before resource_grant is called."""
     node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
-    ctx = _ctx(lambda n, r: True, {"tenant_id": "acme"})  # no resource_id
+    ctx = _ctx(lambda n, p: True, {"tenant_id": "acme"})  # no resource_id → bind returns None
     assert evaluate(node, ctx) is False
 
 
 def test_wildcard_resource_leaf_still_uses_subtree_exists():
     node = Perm("resource:view", on="tenant:{tenant_id}/resource:*")
-    ctx = _ctx(lambda n, r: True, {"tenant_id": "acme"})
+    ctx = _ctx(lambda n, p: True, {"tenant_id": "acme"})
     # wildcard branch → subtree_exists (False here), never resource_grant
     assert evaluate(node, ctx) is False
 
