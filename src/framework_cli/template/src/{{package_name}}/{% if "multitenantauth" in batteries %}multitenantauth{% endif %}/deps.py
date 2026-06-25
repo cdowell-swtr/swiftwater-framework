@@ -19,7 +19,8 @@ the single-pass request efficiency are co-located here on purpose. Keep them tog
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import logging
+from collections.abc import Callable, Iterator
 from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request
@@ -34,6 +35,90 @@ from .authz.resolution import has_membership, platform_permissions, tenant_permi
 from .authn.tokens import hash_token
 from .errors import AUTHZ_FORBIDDEN_DETAIL
 from .metrics import auth_metrics
+
+logger = logging.getLogger(__name__)
+
+# ── Pluggable authz-resolver seam (DV-5 / FWK62) ─────────────────────────────────
+# The authz evaluator (authz/expr.py) delegates resource-scoped leaves to ctx callables. By
+# DEFAULT the battery wires them flat/inert: a concrete-resource grant resolved via control-DB
+# membership only, and an inert wildcard-subtree resolver that denies (A-F10). A consumer with
+# resource hierarchies / scoped visibility may register a per-request resolver FACTORY from their
+# own (unlocked) startup to supply a richer resource-grant resolver — without editing this
+# integrity-LOCKED file. A deliberate, bounded exception to the Option-B lock: ONE controlled
+# injection point into the GRANT decision.
+#
+#   register_authz_resolver_factory(factory)
+#       factory(control_session, app_user, active_tenant_id) -> {"resource_grant": resolver}
+#
+# The battery honors the resource_grant key only. The per-call resolver is TENANT-FREE:
+#       resource_grant(perm_name, resource_id) -> bool
+# resource_id is the BARE id the battery extracts from the route (it owns the resource:{id}
+# convention); the active tenant binds ONCE, in the factory closure (active_tenant_id), never per
+# call — so a resolver can never trust a raw path tenant. The wildcard-subtree resolver is NOT
+# consumer-overridable in this release: no shipped route uses a wildcard subtree, so it stays the
+# inert default (A-F10), deferred to a real need with a properly-designed shape.
+#
+# SECURITY: a registered resolver participates in the GRANT decision for resource-scoped leaves
+# ONLY — tenant/platform authz (tenant_perms / platform_perms) is untouched, and this
+# registration API and the evaluator both stay locked. The factory is consulted only AFTER the
+# membership-404 precondition passes, so it ALWAYS receives a resolved, membership-gated active
+# tenant — never a raw request value (feeding an unresolved tenant would break cross-tenant
+# compartmentalization: grants match on membership_id AND resource together). Everything fails
+# CLOSED: a factory that raises / returns a non-mapping / omits the resource_grant key, or a
+# resolver that raises, all DENY (403) — never 500, never allow. A registered factory OWNS
+# resource grants: absent ⇒ deny, NOT a fall-back to the flat default (registration is strictly
+# opt-in).
+#
+# A mapping whose resource_grant value is a (perm_name, resource_id) -> bool resolver.
+ResourceResolvers = dict[str, Callable[..., bool]]
+AuthzResolverFactory = Callable[[Session, m.AppUser, str], ResourceResolvers]
+
+_resolver_factory: AuthzResolverFactory | None = None
+
+
+def register_authz_resolver_factory(factory: AuthzResolverFactory | None) -> None:
+    """Register a per-request authz-resolver factory (pass ``None`` to reset to the flat default).
+
+    The battery's ``guard`` calls ``factory(control_session, user, active_tenant_id)`` once per
+    request — only after the membership-404 precondition passes, so ``active_tenant_id`` is the
+    resolved, membership-gated tenant, never a raw request value — and uses the returned
+    ``resource_grant`` resolver (``(perm_name, resource_id) -> bool``, tenant-free) in place of the
+    flat default for resource-scoped leaves. A registered factory OWNS resource grants: if it omits
+    the key, raises, or returns a non-mapping, every resource leaf DENIES (fail-closed) — it does
+    NOT fall back to the flat default. Call this from your own (unlocked) startup, e.g.
+    ``create_app()``. See the module note above for the full security contract.
+    """
+    global _resolver_factory
+    _resolver_factory = factory
+
+
+def _deny(*_args: object, **_kwargs: object) -> bool:
+    """The inert default resolver: deny every resource-scoped leaf (A-F10 / fail-closed)."""
+    return False
+
+
+def _adapt_resource_grant(resolver: Callable[..., bool]) -> Callable[..., bool]:
+    """Adapt a consumer resolver — ``resource_grant(perm_name, resource_id) -> bool`` — to the
+    evaluator's ctx call ``(name, path)``. The battery owns the ``resource:{resource_id}`` route
+    convention, so it extracts the BARE resource id HERE and hands the consumer only
+    ``(perm_name, resource_id)``: the consumer never touches path params or a per-call tenant — the
+    active tenant binds ONCE, in the factory closure. Fails CLOSED: any error (or a missing
+    resource id) DENIES — logs, never 500s, never allows."""
+
+    def _ctx_resource_grant(name: str, path: dict[str, str]) -> bool:
+        resource_id = path.get("resource_id")
+        if resource_id is None:
+            return False
+        try:
+            return bool(resolver(name, resource_id))
+        except Exception:
+            logger.warning(
+                "authz resource_grant resolver raised; denying (fail-closed)",
+                exc_info=True,
+            )
+            return False
+
+    return _ctx_resource_grant
 
 
 def control_session() -> Iterator[Session]:
@@ -107,6 +192,8 @@ def guard(expr: Expr):
     ) -> None:
         path = dict(request.path_params)
         tenant_perms: set[str] = set()
+        # Set ONLY after the membership-404 check below (never a raw request value).
+        active_tenant_id: str | None = None
         if needs_tenant:
             tenant_id = path.get("tenant_id")
             tenant = cs.get(m.Tenant, tenant_id) if tenant_id is not None else None
@@ -120,6 +207,8 @@ def guard(expr: Expr):
                     status_code=404, detail="Not found"
                 )  # 404 before 403 (A-F8)
             tenant_perms = tenant_permissions(cs, user.id, tenant_id)
+            # resolved + membership-gated (never a raw value)
+            active_tenant_id = tenant_id
 
         def _resource_grant(name: str, path: dict[str, str]) -> bool:
             # Flat, control-DB only: does the user (via their (user, tenant) membership) hold a
@@ -153,12 +242,37 @@ def guard(expr: Expr):
             )
             return hit is not None
 
+        # Default = today's flat resolver (unchanged when no factory is registered).
+        resource_grant: Callable[..., bool] = _resource_grant
+        factory = _resolver_factory
+        if factory is not None and active_tenant_id is not None:
+            # A registered factory OWNS resource grants. It runs ONLY here — after the
+            # membership-404 precondition — so it always gets a resolved, membership-gated active
+            # tenant (never a raw value). An absent "resource_grant" key, a non-mapping return, or
+            # a raise all DENY: fail closed, never a 500, never a silent fall-back to the flat
+            # default (registration is strictly opt-in).
+            resource_grant = _deny
+            try:
+                overrides = factory(cs, user, active_tenant_id)
+                consumer_grant = overrides.get("resource_grant")
+            except Exception:
+                logger.warning(
+                    "authz resolver factory failed (raised or returned a non-mapping); "
+                    "denying all resource leaves (fail-closed)",
+                    exc_info=True,
+                )
+            else:
+                if consumer_grant is not None:
+                    resource_grant = _adapt_resource_grant(consumer_grant)
+
         ctx = {
             "tenant_perms": tenant_perms,
             "platform_perms": platform_permissions(cs, user.id),
             "path": path,
-            "subtree_exists": lambda name, resource: False,  # inert (Phase 1; A-F10)
-            "resource_grant": _resource_grant,
+            # Inert: the wildcard-subtree resolver denies and is NOT consumer-overridable in this
+            # release (no shipped route uses it; deferred to a real need — A-F10).
+            "subtree_exists": _deny,
+            "resource_grant": resource_grant,
         }
         _authz_domain = "tenant" if needs_tenant else "platform"
         if not authorized.satisfied(ctx):

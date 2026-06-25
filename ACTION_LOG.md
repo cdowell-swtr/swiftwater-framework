@@ -2992,3 +2992,31 @@ Phase 2 (physical routing + ops) spun out as FWK61 with the recorded preconditio
 chore(release) PR → green CI (render-matrix = proof) → self-merge → tag v0.4.0 → release.yml runs the full
 gate + publishes the GitHub Release. Ships the de-fork spine + the all-Opus Layer-2 hardening (0 Crit/High) +
 the Option-B integrity lock to consumers.
+
+#### #0224 · completed · FWK62 DV-5 — multitenantauth pluggable authz-resolver seam (the core) · 2026-06-25
+Built the DV-5 seam on the integrity-LOCKED `multitenantauth/deps.py`: `register_authz_resolver_factory(factory)`,
+`factory(control_session, app_user, active_tenant_id) -> {"resource_grant": (perm_name, resource_id) -> bool}`,
+defaulting to today's flat resolver. A consumer registers from its own UNLOCKED `create_app()`; the resolver runs
+THROUGH the battery guard (replacing Meridian's parallel-guard stopgap). **MD's two load-bearing refinements
+(reconciliation dialogue, this session) incorporated:** (1) the 3rd factory arg is the membership-gated, 404-safe
+RESOLVED active tenant — consulted ONLY after the membership-404 precondition, so the factory never sees a raw/
+unresolved tenant (a non-member 404s before the factory is built); cross-plane invariant = grants match on
+membership_id AND resource together. (2) The per-call resolver is TENANT-FREE: a battery-side ADAPTER extracts the
+BARE `path["resource_id"]` and calls the consumer's `(perm_name, resource_id)` — tenant binds once in the factory
+closure — delivering MD's contract WITHOUT touching the locked evaluator (`authz/expr.py`) or A-F1. **Scope cut
+(colonization gate + YAGNI, advisor-confirmed):** ship the `resource_grant` override ONLY; `subtree_exists` stays
+the inert default (A-F10) and is NOT consumer-overridable — verified no shipped battery route uses a `resource:*`
+wildcard (provably dead code), which halves the grant surface the focused review must cover; a factory's
+`subtree_exists` key is ignored, pinned by a test. **Fail-closed, all logged via stdlib `logging`:** absent
+`resource_grant` key / factory raise / non-mapping return / resolver raise → deny (403), never 500/allow; a
+registered factory OWNS resource grants (absent ⇒ deny — strictly opt-in, NOT a fall-back to flat). **Discriminator
+confirmed to MD: BARE** (`resource_id` stored verbatim, no tenant segment) → cross-tenant conflation structurally
+impossible; mismatch-assert unneeded. **Verification (canonical `demo` render):** rendered authz suite 80 passed
+against real Postgres (test_auth_deps + authz_fitness + authz_service + authz_seed + expr units); ruff check +
+`ruff format --check` + rendered-project mypy on `deps.py` clean; auth-mechanism-lock integrity 5 passed (the
+locked-file edit keeps the manifest/lock intact). TDD: edit-1 unwired → 6 red, edit-2 wired → green; the 25
+test_auth_deps tests rewritten to the tenant-free `(name, resource_id)` contract incl. a bare-id exact-`==`
+assertion and an absent-key⇒403 flip. Spec DV-5 section updated to the 3-arg + tenant-free + bare-id + resource_grant-only
+contract, with the pattern-awareness + active_tenant_id-None boundaries documented. **Remaining for v0.4.1:** focused
+Opus security review (grant-via-ancestor lens, non-optional) · DV-1/DV-4/DV-6 upgrade-path fixes · DV-2/3 release-note
+FYIs · cut v0.4.1. (FWK62 → PLAN; spec `docs/superpowers/specs/2026-06-25-fwk62-multitenantauth-resolver-seam-and-v041-fixes.md`)
