@@ -3282,3 +3282,15 @@ is `[a-z0-9_]`-only (registry-constrained tenant_id + operator prefix) → safe 
 `classes.py`. Name-swap unit test GREEN (pure, no PG; `create_database` deferred to Task 8 acceptance); lock guard
 RED→GREEN; framework gate clean. Subagent-driven (Sonnet impl; Opus task review next).
 (FWK61 SP1 Task 4 → ledger)
+
+#### #0239 · completed · FWK61 SP1 Task 5 — tenant_session + resolve_dsn seam + DSN cache (locked) · 2026-06-25
+Created `multitenantauth/tenancy/session.py`: the connect-time DSN resolution + per-tenant `Session` routing.
+`register_tenant_dsn_resolver(fn|None)` consumer seam (DV-5 pattern, registered from the unlocked create_app);
+default resolver reads the control-row DSN; `_resolve_dsn` is **fail-closed** — unknown tenant, resolver-raises,
+or non-str/empty return all → `LookupError` (the warning message carries NO DSN); process-wide DSN cache (TTL +
+`invalidate_dsn_cache`), cache-hit skips the resolver; `tenant_session` contextmanager binds a Session via the
+bounded registry; `reset_tenant_engines`. Locked via `classes.py`. 6 rendered seam/cache tests GREEN (fakes, no
+PG) — resolver-raises→deny, non-str→deny, unknown→deny, cache-hit-skips-resolver all confirmed; lock guard
+RED→GREEN; framework gate clean. Subagent-driven (Sonnet impl; Opus security task review next — note: review weighs
+whether `exc_info=True` on a resolver crash could surface a resolver-embedded DSN).
+(FWK61 SP1 Task 5 → ledger)
