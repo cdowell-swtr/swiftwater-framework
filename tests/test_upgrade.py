@@ -137,6 +137,31 @@ def test_upgrade_reports_red_when_tests_fail(tmp_path: Path):
     assert outcome.target == "v2"
 
 
+def test_upgrade_applies_derived_default_for_newly_added_question(tmp_path: Path):
+    """DV-1: a question added after the project was created (no persisted answer) must
+    render with its derived default on upgrade, not empty.
+
+    Reproduces Meridian's pre-FWK9 `pi_prefix` case: the project's answers predate the
+    question, so on upgrade the managed block that uses it would render blank unless the
+    update core supplies the derived default copier computes for a fresh render.
+    """
+    source = _source_repo(tmp_path)
+    proj = _project(tmp_path, source)  # answers have NO pi_prefix (pre-question shape)
+    sub = source / "tmpl"
+    cy = sub / "copier.yml"
+    cy.write_text(
+        cy.read_text() + "pi_prefix:\n  type: str\n"
+        "  default: \"{{ (project_slug | upper | replace('-', '')"
+        " | replace('_', ''))[:4] }}\"\n"
+    )
+    (sub / "prefix_line.txt.jinja").write_text("prefix={{ pi_prefix }}\n")
+    _bump(source, "v2")
+    outcome = upgrade_project(proj, to="v2")
+    assert outcome.status == "green"
+    # project_slug "demo" → derived prefix "DEMO"; must NOT be empty ("prefix=").
+    assert (proj / "prefix_line.txt").read_text() == "prefix=DEMO\n"
+
+
 def test_upgrade_requires_git_tracked(tmp_path: Path):
     from copier import run_copy
 

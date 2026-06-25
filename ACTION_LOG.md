@@ -3048,3 +3048,24 @@ skips the seam) is documentation, not mechanism → added to the spec on this br
 `docs/superpowers/eval-scorecards/2026-06-25-fwk62-dv5-resolver-seam-security-review.md`; updated the spec
 Security section with the outcome + Out-of-scope with the FWK63 follow-up. No locked-file edit; `9db22b7`
 untouched. **Next:** DV-1/DV-4/DV-6 upgrade-path fixes (framework_cli, not the locked mechanism) → cut v0.4.1.
+
+#### #0226 · completed · FWK62 DV-1 — upgrade applies derived defaults for questions a project predates · 2026-06-25
+A project created before a question existed (Meridian: pre-FWK9, no persisted `pi_prefix`) upgrades to a
+template that *uses* it → the managed block rendered with an **empty** value. Root cause (verified empirically,
+copier 9.15.1): copier computes a question's **derived default** only when rendering the template *directory*
+(as `framework new` does — `render_project` runs `run_copy(template_path())` on the bundled subdir), NOT
+through the portable `_subdirectory` source that `copier update` uses. So `_apply_update`'s `run_update`
+left newly-added questions blank. **Fix** (`upskill.py`, shared by `framework upgrade` + `upskill --with`):
+before `run_update`, `_derived_defaults_for_absent_questions` clones the template at `vcs_ref`
+(`gh:owner/repo` → https; `--depth 1`, harmlessly ignored for local sources), renders its **subdirectory**
+into a throwaway dir with the project's identity (mirroring a fresh `new`, which DOES compute defaults), and
+harvests the `{question: value}` copier computed for questions ABSENT from the project's recorded answers —
+forced via `data={…, **derived}`. Native value types preserved (a future bool/int default isn't
+stringified). **Best-effort:** no `_src_path` / clone or render failure → `{}` (today's behavior); the real
+`run_update` stays the source of truth. **TDD:** new `test_upgrade_applies_derived_default_for_newly_added_question`
+(synthetic source that adds a `pi_prefix` question with a derived default + a managed file using it at v2;
+asserts the upgraded project renders `prefix=DEMO`, not `prefix=`) — RED before the fix (empty), GREEN after.
+Investigated three dead ends first (vcs_ref harvest renders empty; `_copier_answers` omits default-valued
+answers; repo-root-with-`_subdirectory` local render also empty) → the working mechanism is rendering the
+subdir directly. ruff/format/mypy clean; `tests/test_upgrade.py` + `tests/test_upskill.py` 20 passed.
+(FWK62 DV-1 → PLAN)
