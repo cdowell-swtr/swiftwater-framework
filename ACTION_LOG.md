@@ -3294,3 +3294,16 @@ PG) — resolver-raises→deny, non-str→deny, unknown→deny, cache-hit-skips-
 RED→GREEN; framework gate clean. Subagent-driven (Sonnet impl; Opus security task review next — note: review weighs
 whether `exc_info=True` on a resolver crash could surface a resolver-embedded DSN).
 (FWK61 SP1 Task 5 → ledger)
+
+#### #0240 · amended · FWK61 SP1 Task 5 — fix wave (Opus review: conditional credential leak in the resolver seam) · 2026-06-25
+Task 5's Opus security review = Needs fixes (fail-closed contract airtight, but a credential leak in the seam
+the Layer-2 pass targets). `_resolve_dsn`'s resolver-crash handler logged `exc_info=True` AND chained
+`raise LookupError(...) from exc` — a custom resolver raising with a DSN in its own message (e.g.
+`RuntimeError(f"connect failed: {dsn}")`) leaked the credential to the log (verified: `SUPERSECRET` appeared in
+`caplog.text` pre-fix) and carried it up the `__cause__` chain to any upstream `exc_info` boundary, violating
+"never log a DSN." Fix: log only `type(exc).__name__` (no exc_info, no str(exc)); `from exc` → `from None` to
+suppress the cause chain — the LOCKED mechanism self-protects rather than trusting callers. New `caplog` test
+`test_resolver_exception_never_logs_or_chains_the_dsn` (RED pre-fix → GREEN: asserts the DSN is in no log record,
+`__cause__ is None`, type preserved) + empty-string-deny test. 8/8 rendered + framework gate clean. Subagent-driven
+(Sonnet fixer; focused Opus re-review next).
+(FWK61 SP1 Task 5 fix → ledger)

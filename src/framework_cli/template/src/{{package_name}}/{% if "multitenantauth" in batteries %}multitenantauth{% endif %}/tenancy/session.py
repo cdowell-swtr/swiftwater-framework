@@ -89,10 +89,15 @@ def _resolve_dsn(tenant_id: str, control_session: Session | None) -> str:
         except LookupError:
             raise
         except Exception as exc:  # a buggy/hostile resolver must DENY, never leak/500
+            # Log only the exception TYPE — never exc_info / str(exc), which can carry a
+            # DSN a resolver embedded in its own message. Suppress the cause chain (from
+            # None) so the DSN-bearing exception is not propagated upward to any logging
+            # boundary. The locked mechanism self-protects; it does not trust callers.
             logger.warning(
-                "tenant DSN resolver raised; denying (fail-closed)", exc_info=True
+                "tenant DSN resolver raised (%s); denying (fail-closed)",
+                type(exc).__name__,
             )
-            raise LookupError(f"DSN resolution failed for {tenant_id!r}") from exc
+            raise LookupError(f"DSN resolution failed for {tenant_id!r}") from None
         if not isinstance(dsn, str) or not dsn:
             raise LookupError(f"DSN resolver returned a non-string for {tenant_id!r}")
         return dsn

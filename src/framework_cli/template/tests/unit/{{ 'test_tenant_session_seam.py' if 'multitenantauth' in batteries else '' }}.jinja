@@ -59,3 +59,30 @@ def test_dsn_cache_hit_skips_resolver(monkeypatch):
     S._resolve_dsn("abc", object())
     S._resolve_dsn("abc", object())
     assert len(calls) == 1  # second call served from cache
+
+
+def test_resolver_exception_never_logs_or_chains_the_dsn(caplog):
+    import logging
+
+    secret_dsn = "postgresql+psycopg://user:SUPERSECRET@db/tenant_x"
+
+    def leaky(tid, *, control_session):
+        raise RuntimeError(f"connect failed for {secret_dsn}")
+
+    S.register_tenant_dsn_resolver(leaky)
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(LookupError) as ei:
+            S._resolve_dsn("abc", object())
+    # the credential must not appear in any log record...
+    assert all("SUPERSECRET" not in r.getMessage() for r in caplog.records)
+    assert "SUPERSECRET" not in caplog.text
+    # ...nor be carried up via the exception cause chain
+    assert ei.value.__cause__ is None
+    # but the exception TYPE is preserved for debugging
+    assert any("RuntimeError" in r.getMessage() for r in caplog.records)
+
+
+def test_resolver_returning_empty_string_denies():
+    S.register_tenant_dsn_resolver(lambda tid, *, control_session: "")
+    with pytest.raises(LookupError):
+        S._resolve_dsn("abc", object())
