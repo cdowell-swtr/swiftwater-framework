@@ -2,11 +2,11 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 {%- if "llm" in batteries and "multitenantauth" in batteries %}
-from pydantic import BaseModel, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 {%- elif "llm" in batteries %}
 from pydantic import BaseModel, SecretStr
 {%- elif "multitenantauth" in batteries %}
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 {%- endif %}
 
 
@@ -113,7 +113,7 @@ class Settings(BaseSettings):
     # control pool + N tenant pools cannot exhaust the shared Postgres max_connections.
     tenant_pool_size: int = 2
     tenant_max_overflow: int = 3
-    max_cached_engines: int = 12
+    max_cached_engines: int = Field(default=12, ge=1)
     control_pool_size: int = 5
     control_max_overflow: int = 10
     # Fraction of a server's live max_connections the app is allowed to plan for (fail-closed budget).

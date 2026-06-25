@@ -85,7 +85,7 @@ endpoint** (`host:port`). Lifted from Meridian's validated core; defaults carrie
 
 - Per-tenant engine pool: `tenant_pool_size=2`, `tenant_max_overflow=3`.
 - Cache bound: `max_cached_engines_per_endpoint=12` (count-driven LRU eviction; soft `Engine.dispose()`; **no idle/TTL tier** — YAGNI, validated without one).
-- Connection budget (`validate_endpoint_budget`, **fail-closed**): probe `SHOW max_connections` once per endpoint, multiply by `db_pool_safety_factor=0.8`; refuse to create an engine that would exceed the endpoint's budget (counting the co-located control pool when on the same endpoint). A probe failure denies, never silently allows.
+- Connection budget (`validate_endpoint_budget`, **fail-closed**): probe `SHOW max_connections` once per endpoint, multiply by `db_pool_safety_factor=0.8`; refuse to create an engine that would exceed the endpoint's budget (counting the control pool only when the endpoint **is the control endpoint** — `endpoint_of(control_database_url)`, NOT `database_url`; the two differ in a split-control deployment, and keying off `database_url` would under-count → fail-OPEN. Corrected vs. Meridian's reference, which co-locates control and so never exercised the split path — see DEC-0004 Drift #2). A probe failure denies, never silently allows.
 - Thread-safe under an `RLock` (FastAPI runs sync deps in a threadpool — same hazard the control engine's double-checked lock addresses).
 - Renders gauges `app_tenant_engines_cached{endpoint}` and `app_tenant_pool_checked_out` (§4.6).
 

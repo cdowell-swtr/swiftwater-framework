@@ -117,7 +117,9 @@ class TenantEngineRegistry:
             # Validate BEFORE caching so a fail-closed BudgetExceeded leaks no engine and the
             # next first-touch re-checks (fail-closed must stay closed).
             if endpoint not in self._validated:
-                includes_control = endpoint == endpoint_of(settings.database_url)
+                includes_control = endpoint == endpoint_of(
+                    settings.control_database_url
+                )
                 try:
                     self._validate(
                         eng, settings=settings, includes_control=includes_control
@@ -141,7 +143,8 @@ class TenantEngineRegistry:
                     break
 
     def cached_count(self, endpoint: str) -> int:
-        return sum(1 for ep in self._endpoints.values() if ep == endpoint)
+        with self._lock:
+            return sum(1 for ep in self._endpoints.values() if ep == endpoint)
 
     def reset(self) -> None:
         with self._lock:

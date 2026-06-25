@@ -59,10 +59,21 @@ Meridian's Phase-2 **write path** is broken against real Postgres, hidden by doc
 - `db/tenancy/provision.py:67-69` calls `add_tenant(...)` with **no `slug`**, but `repository.add_tenant(*, id, name, slug, dsn, status)` requires it → `TypeError`.
 - `db/tenancy/migrate_all.py:13` imports `all_tenant_dsns`, absent from `control.repository` → `ImportError`.
 
-The engine/budget **core is unaffected and validated**. This **strengthens** the promote-up: adoption deletes
-the broken module. A clean inversion of [[meridian-is-the-de-facto-integration-test]] — this round the
-absorber's scrutiny caught the generator's bug. To be relayed to Meridian (operator-gated; absorber does not
-write to the generator's repo unprompted).
+**Drift #2 — fail-OPEN connection budget in the split-control config (caught during SP1 Task 3 build, 2026-06-25).**
+The lifted `engine_registry` computes `includes_control = endpoint == endpoint_of(settings.database_url)`, but the
+control pool connects to `control_database_url`. Meridian's default co-locates control on `database_url`, so the
+bug is latent there; in a **split-control deployment** (`APP_CONTROL_DATABASE_URL` on its own Postgres) the budget
+under-counts the control pool → silent over-subscription (fail-OPEN), violating the very fail-closed invariant the
+budget exists to enforce. The absorber **generalized the fix** (`endpoint_of(settings.control_database_url)`, +
+split-endpoint regression test) because the framework treats control-DB separation as first-class; Meridian should
+adopt the corrected resolution. A second public-API thread-safety nit (`cached_count` read outside the RLock) was
+also hardened.
+
+The engine/budget **core is otherwise validated**; these are edge-config / concurrency latents, not a broken happy
+path. Both drifts **strengthen** the promote-up: adoption deletes the broken write-path module and inherits the
+corrected budget resolution. A clean inversion of [[meridian-is-the-de-facto-integration-test]] — this round the
+absorber's scrutiny caught **two** latent generator bugs. To be relayed to Meridian (operator-gated; absorber does
+not write to the generator's repo unprompted).
 
 ## Generator confirmation (requested)
 

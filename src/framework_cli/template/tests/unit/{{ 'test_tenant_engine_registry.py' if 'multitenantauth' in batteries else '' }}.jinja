@@ -99,3 +99,44 @@ def test_required_connections_includes_control_when_colocated():
         + s.control_pool_size
         + s.control_max_overflow
     )
+
+
+def test_includes_control_keys_off_control_database_url(monkeypatch):
+    """Fix 1: includes_control must key off control_database_url, not database_url.
+
+    When control runs on a DIFFERENT host than the app/tenant host, the budget
+    should only add the control pool overhead on the control host, not on the
+    tenant host.
+    """
+    from {{ package_name }}.config.settings import get_settings
+
+    monkeypatch.setenv(
+        "APP_DATABASE_URL", "postgresql+psycopg://u:p@tenant-host:5432/app"
+    )
+    monkeypatch.setenv(
+        "APP_CONTROL_DATABASE_URL",
+        "postgresql+psycopg://u:p@control-host:5432/ctrl",
+    )
+    get_settings.cache_clear()
+    seen: dict[str, bool] = {}
+
+    def validator(engine, *, settings, includes_control):
+        seen[endpoint_of(str(engine.url))] = includes_control
+
+    def builder(dsn, **kw):
+        return _FakeEngine(dsn)
+
+    reg = TenantEngineRegistry(
+        builder=builder, budget_validator=validator, settings_provider=get_settings
+    )
+    # Tenant co-located with control host → includes_control should be True
+    reg.get("postgresql+psycopg://u:p@control-host:5432/some_tenant")
+    # Tenant on the app/tenant host → includes_control should be False
+    reg.get("postgresql+psycopg://u:p@tenant-host:5432/t1")
+    assert seen["control-host:5432"] is True, (
+        "control pool lives on control-host → must be counted (includes_control=True)"
+    )
+    assert seen["tenant-host:5432"] is False, (
+        "control pool NOT on tenant-host → must not be counted (includes_control=False)"
+    )
+    get_settings.cache_clear()

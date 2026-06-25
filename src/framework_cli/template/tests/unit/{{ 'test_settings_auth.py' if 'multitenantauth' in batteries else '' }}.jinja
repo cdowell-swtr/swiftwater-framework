@@ -208,3 +208,11 @@ def test_tenant_db_name_prefix_env_override(monkeypatch) -> None:
 
     monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "acme_t")
     assert Settings().tenant_db_name_prefix == "acme_t"
+
+
+def test_max_cached_engines_floor_rejects_zero() -> None:
+    """Fix 3: max_cached_engines=0 would make _evict_if_full spin forever; Field(ge=1) prevents it."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Settings(max_cached_engines=0)

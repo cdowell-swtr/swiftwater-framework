@@ -3258,3 +3258,18 @@ tests (1 metrics + 5 registry: caching/LRU-evict/budget-disposes/required-connec
 fakes (no PG); lock guard RED→GREEN; framework ruff/format/`mypy src` clean. Two test-only ruff fixes (unused
 `import threading`, `e1`→`_e1`). Subagent-driven (Sonnet impl; Opus task review next).
 (FWK61 SP1 Task 3 → ledger)
+
+#### #0237 · amended · FWK61 SP1 Task 3 — fix wave (Opus review: fail-open budget drift + cached_count race) · 2026-06-25
+Task 3's Opus code-quality review Approved but flagged two Important findings, **both originating in Meridian's
+ported reference text** (not implementer error): (1) **fail-OPEN budget bug** — `includes_control` keyed off
+`settings.database_url`, but the control pool connects to `control_database_url` (separately configurable via
+`APP_CONTROL_DATABASE_URL`); in a split-control deployment the budget under-counts → silent over-subscription,
+which violates SP1's own fail-closed Global Constraint. Default co-located config is unaffected (the validator
+fills `control_database_url` from `database_url`). **A SECOND latent drift in Meridian's validated core** (after
+provision.py/migrate_all.py) — recorded in DEC-0004, operator-gated relay to Meridian pending. Fixed →
+`endpoint_of(settings.control_database_url)` + a split-endpoint test locking it. (2) **`cached_count` race** —
+public reader iterated `_endpoints` without the RLock → `dictionary changed size during iteration` under
+concurrency; wrapped in `with self._lock:` (reentrant, internal callers unaffected). (3) Minor: `max_cached_engines`
+gained a `Field(ge=1)` floor (0 → infinite RLock-holding spin in `_evict_if_full`). 38 rendered tests (2 new) +
+framework gate clean. Spec §budget + DEC-0004 drift updated. Subagent-driven (Sonnet fixer; focused Opus re-review next).
+(FWK61 SP1 Task 3 fix → ledger)
