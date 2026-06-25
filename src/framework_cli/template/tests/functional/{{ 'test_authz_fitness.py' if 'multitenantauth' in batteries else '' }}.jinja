@@ -53,6 +53,27 @@ PUBLIC = {
     # Scaffold demo route — unguarded by design; remove or guard before going to production.
     # GET only — a POST/PUT /items would also be exempted; guard or remove before production.
     "/items",
+    # ── Sibling-battery routes (contributed by OTHER batteries, not multitenantauth) ──
+    # The auth-fitness suite does NOT assert authz on these: the auth battery doesn't own them and
+    # can't guard them, and each sibling battery carries its own security model (e.g. webhooks
+    # verify an HMAC signature). If one of these handles sensitive data in YOUR app, add your own
+    # guard — the auth battery cannot do it for you. Gated per battery so only the routes that
+    # actually render are exempted.
+{%- if "agents" in batteries %}
+    "/agents/run",
+{%- endif %}
+{%- if "react" in batteries %}
+    "/internal/rum",
+{%- endif %}
+{%- if "graphql" in batteries %}
+    "/graphql",
+{%- endif %}
+{%- if "llm" in batteries %}
+    "/llm/complete",
+{%- endif %}
+{%- if "webhooks" in batteries %}
+    "/webhooks",
+{%- endif %}
 }
 
 # Routes that use an INLINE permission check instead of a guard dependency. Each is a deliberate,

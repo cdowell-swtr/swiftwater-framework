@@ -2968,3 +2968,17 @@ Restore round-trip + policy-stays-editable + baseline-unaffected all tested. **S
 wires into (main.py, settings.py, entrypoint, migrations/env.py, .env.example) stay co-owned/unlocked by
 design.** Verified: 72 integrity tests + whole-repo gate (1085 passed, ruff/format/mypy clean). Completes
 the FWK58 colonization guard ("mechanism ships LOCKED"); Task-19 shipped the convention half (Option A).
+
+#### #0222 · fix · FWK58 — authz-fitness T1 must compose with sibling batteries · 2026-06-25
+**PR #79 CI caught a real battery-composition bug the single-battery renders missed** (exactly what the
+all-batteries "full" render-matrix combo exists for). `test_authz_fitness.py::test_T1_no_unguarded_route`
+scans the WHOLE app, so in a render combining multitenantauth with other route-adding batteries it flagged
+their routes (`/agents/run`, `/internal/rum`, `/graphql`, `/llm/complete`, `/webhooks`) as "unguarded" — the
+auth battery can't guard routes it doesn't own. Left unfixed, a real `framework new --with multitenantauth
+--with agents …` would ship with RED CI on day one. **Fix:** allowlist the sibling-battery routes in the T1
+`PUBLIC` set, GATED per battery (only routes that actually render are exempted), with a comment that the
+auth suite does not assert their authz and the consumer must add their own guard if a route is sensitive
+(strict "require a guard" would ship a broken multi-battery scaffold). Only T1 affected — T1b (active_tenant
+dep) + T4 (auth vocab) don't see sibling routes; both passed in the full combo. Verified: renders gate
+correctly (5 routes in the combo, 0 solo) + a real multitenantauth+webhooks render passes T1/T1b/T2/T3.
+Pre-existing FWK58-build bug (Task 16b fitness suite × Task 22 full combo), not from the Layer-2/Option-B work.
