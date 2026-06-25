@@ -3093,3 +3093,19 @@ notes in the same doc. The upgrade-notes doc is a living, newest-first reference
 release notes from PRs; this holds the upgrader-facing guidance the commit log can't convey). ruff/format/mypy
 clean; `tests/test_upgrade.py` 14 passed, `tests/test_cli.py` 132 passed. **v0.4.1 remaining: cut the release.**
 (FWK62 DV-4/DV-6/DV-2/DV-3 → PLAN)
+
+#### #0228 · milestone · FWK62 — v0.4.1 release cut (chore(release) on branch) · 2026-06-25
+Release-cut commit prepared on `fwk62-resolver-seam-v041` per the release-cut procedure: `pyproject.toml`
+version 0.4.0→0.4.1, `uv lock` refreshed (`framework-cli 0.4.0 → 0.4.1`), `dogfood.py` `DOGFOOD_COMMIT`
+v0.4.0→v0.4.1. Version-consistency guards green (`tests/test_release.py` 4 passed, `tests/test_dogfood.py`
+16 passed); full non-acceptance suite green before the bump (**1089 passed, 3 skipped**); ruff/format/mypy
+clean. **Pre-cut DV-1 honesty check** (advisor-flagged): DV-1 had only ever run against the 7-question
+synthetic fixture, and `_derived_defaults_for_absent_questions` swallows render failures with a broad
+`except → {}`, so a real-template render failure would have silently shipped the empty-`pi_prefix` bug
+untested. Ran the harvest against the **real** bundled template @ `v0.4.0` (raw clone+subdir render AND the
+public helper) → both return `{'pi_prefix': 'DEMO'}`: the seam is real, not a silent no-op. The bump touches
+framework source/lock only — no template payload, so the render is unchanged (DV-5's template change was
+already render-validated at `9db22b7`). **Remaining (outward-facing, user-gated):** push → PR to protected
+`master` → self-merge → verify master tip is the bump commit before tagging ([[verify-master-content-after-pr-merge]])
+→ lightweight tag `v0.4.1` → `release.yml` publishes the GitHub Release.
+(FWK62 v0.4.1 cut → PLAN)
