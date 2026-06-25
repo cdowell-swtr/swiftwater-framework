@@ -3109,3 +3109,27 @@ already render-validated at `9db22b7`). **Remaining (outward-facing, user-gated)
 `master` → self-merge → verify master tip is the bump commit before tagging ([[verify-master-content-after-pr-merge]])
 → lightweight tag `v0.4.1` → `release.yml` publishes the GitHub Release.
 (FWK62 v0.4.1 cut → PLAN)
+
+#### #0229 · completed · FWK64 — adopt cross-repo convention (cross-repo/v4) as the Meridian→Framework auth promote-up absorber · 2026-06-25
+Formally adopted `cdowell-swtr/patterns`' `cross-repo-convention.md` — the seat the implementer registry reserved
+("swiftwater-framework registers as the **absorber** of that promote-up when it adopts (after FWK58)"); FWK58 shipped
+v0.4.0 + FWK62 v0.4.1, so this is the intended moment. The framework↔Meridian de-fork IS the canonical **promote-up**
+the convention codifies (generator=meridian reference impl → absorber=framework generalizes → ships tagged → generator
+adopts + **deletes its fork**, conformance-gated). main HEAD == `cross-repo/v4` (no un-tagged hotfix). **Local (this
+commit):** (1) vendored `cross-repo-convention.md` @ `cross-repo/v4` (annotated tag → commit `8db2c28`) at repo root
+with a provenance line, mirroring the pi/memory vendoring pattern; (2) added the convention's `## Cross-repo
+communication` rule block to `AGENTS.md` (`@AGENTS.md` already imported into CLAUDE.md → autoloaded);
+`grep -rIn "CROSS-REPO-convention:"` now finds us (the convention's own discovery self-check). (3) wrote the
+**Promote-Up Record** at `docs/superpowers/decisions/DEC-0003-multitenantauth-promote-up.md`, mapped to what ACTUALLY
+happened (advisor's honesty-trap warning — not the convention's idealized pre-seeded-suite shape): source=meridian@e0cf9cf;
+what-was-specialized (RBAC policy + epistemic-governance + sealed resource-tree stay Meridian-local); generalization
+decisions (generic resource-scope, control-plane logical-separate/co-located-default, opaque revocable sessions, LOCKED
+mechanism colonization-guard, DV-5 resolver seam); upstream-first sequence; conformance = rendered authz suite (80) +
+mechanism-lock integrity (5) + DV-5 seam tests + Layer-2 matrix + FWK62 focused Opus review. **Status `in-migration`,
+NOT `adopted`** — Meridian hasn't deleted its fork yet; the anti-pattern guard (both copies + PUR=`adopted` = failed)
+is called out in the PUR. Did NOT bundle a freshness test (pi/memory have none → a cross-repo-only one would be
+inconsistent; separate follow-up if wanted). **Remaining (outward, user-gated):** register swiftwater-framework in
+patterns `_docs/cross-repo/implementers.md` via a pure gh-API PR (one row, `v4`, 2026-06-25) per
+[[framework-consumes-patterns-via-github-vendoring]]; flip the PUR to `adopted` only once Meridian's fork-deletion is
+confirmed.
+(FWK64 → PLAN)
