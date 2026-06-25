@@ -3318,3 +3318,13 @@ RED (`TypeError: missing 'dsn'`) → GREEN 29/29 registry tests on real PG (opaq
 lock guard 5/5; framework gate clean. Implementer caught a brief test bug (asserting `t.dsn` after session close →
 DetachedInstanceError) and moved the assert inside the session. Subagent-driven (Sonnet impl; Opus task review next).
 (FWK61 SP1 Task 6 → ledger)
+
+#### #0242 · completed · FWK61 SP1 Task 7 — alembic env.py honors a pre-injected sqlalchemy.url · 2026-06-25
+`migrations/env.py.jinja`: wrapped the unconditional `config.set_main_option("sqlalchemy.url", database_url)` in
+`if not config.get_main_option("sqlalchemy.url"):` so a per-tenant `command.upgrade` (Task 8) that pre-sets the
+url targets the tenant DB instead of being clobbered to the app DB. Universal payload (all renders); the normal
+CLI/control path is unchanged (app `alembic.ini` has no `sqlalchemy.url` line → fallback still applies). Unit test
+is trivially green (constructs a Config directly; Task 8's per-tenant migrate is the real end-to-end guard — noted
+honestly). Existing migration suites pass on both multitenantauth (7) and baseline (2) renders; framework gate
+clean. Subagent-driven (Sonnet impl; Sonnet task review next — small surgical change).
+(FWK61 SP1 Task 7 → ledger)

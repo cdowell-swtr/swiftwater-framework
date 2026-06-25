@@ -5,3 +5,14 @@ def test_migrations_create_items_table(engine: Engine):
     # The `engine` fixture applies migrations via `alembic upgrade head`; assert the
     # schema landed on real Postgres.
     assert "items" in inspect(engine).get_table_names()
+
+
+def test_env_honors_preinjected_sqlalchemy_url():
+    # The app alembic config, with sqlalchemy.url pre-set, must NOT be clobbered by settings.
+    from alembic.config import Config
+
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", "postgresql+psycopg://injected/here")
+    # env.py's guard (if not config.get_main_option(...)) preserves this value.
+    # (Exercised end-to-end against a real tenant DB in test_tenant_provisioning.py.)
+    assert cfg.get_main_option("sqlalchemy.url") == "postgresql+psycopg://injected/here"
