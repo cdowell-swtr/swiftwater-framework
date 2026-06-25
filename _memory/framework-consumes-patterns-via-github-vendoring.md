@@ -13,7 +13,10 @@ on every machine. The framework consumes its conventions by **vendoring**:
 - **Vendor, don't sibling-path.** Pull the convention into the repo root from
   GitHub and reference the bare local name. The framework currently vendors
   `pi-convention.md` (from `main` HEAD, to capture an un-tagged access-pattern
-  hotfix) and `memory-convention.md` (from tag `memory/v1`). Each carries a
+  hotfix), `memory-convention.md` (from tag `memory/v1`), and
+  `cross-repo-convention.md` (from tag `cross-repo/v4`, vendored 2026-06-25 /
+  FWK64 — adopted as the **absorber** of the Meridian→Framework auth promote-up;
+  the AGENTS.md rule block + the Promote-Up Record live in-repo). Each carries a
   provenance comment: `<!-- vendored from cdowell-swtr/patterns <file> @ <sha>
   (<ref>) on <date> -->`. **Re-vendor** when a later tag supersedes a hotfix.
   Pull command: `gh api "repos/cdowell-swtr/patterns/contents/<file>?ref=<tag|main>"
