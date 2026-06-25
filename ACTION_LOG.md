@@ -2982,3 +2982,13 @@ auth suite does not assert their authz and the consumer must add their own guard
 dep) + T4 (auth vocab) don't see sibling routes; both passed in the full combo. Verified: renders gate
 correctly (5 routes in the combo, 0 solo) + a real multitenantauth+webhooks render passes T1/T1b/T2/T3.
 Pre-existing FWK58-build bug (Task 16b fitness suite × Task 22 full combo), not from the Layer-2/Option-B work.
+
+#### #0223 · release · chore(release): v0.4.0 — `--with multitenantauth` de-fork spine Phase 1 (FWK58) · 2026-06-25
+**Cutting v0.4.0** so the multitenantauth battery is scaffoldable from a real tag (the v0.3.1 tag predates
+FWK58 → `framework new --with multitenantauth` would bake a `_commit` tag that lacks the battery — the
+scaffold-from-a-real-tag invariant). Minor bump (new battery = feature; mirrors v0.3.0). Anchors bumped:
+`pyproject` 0.3.1→0.4.0, `dogfood.DOGFOOD_COMMIT` v0.3.1→v0.4.0, `uv.lock`. FWK58 Phase 1 moved to Done;
+Phase 2 (physical routing + ops) spun out as FWK61 with the recorded preconditions. Flow (master protected):
+chore(release) PR → green CI (render-matrix = proof) → self-merge → tag v0.4.0 → release.yml runs the full
+gate + publishes the GitHub Release. Ships the de-fork spine + the all-Opus Layer-2 hardening (0 Crit/High) +
+the Option-B integrity lock to consumers.
