@@ -3069,3 +3069,27 @@ Investigated three dead ends first (vcs_ref harvest renders empty; `_copier_answ
 answers; repo-root-with-`_subdirectory` local render also empty) → the working mechanism is rendering the
 subdir directly. ruff/format/mypy clean; `tests/test_upgrade.py` + `tests/test_upskill.py` 20 passed.
 (FWK62 DV-1 → PLAN)
+
+#### #0227 · completed · FWK62 DV-4/DV-6/DV-2/DV-3 — upgrade-path warning + upgrader notes · 2026-06-25
+**DV-4 (code + test):** v0.4.0 moved `default_install_hook_types` + `conventional-pre-commit` into the
+managed `.pre-commit-config.yaml` region; a project that hand-added its own copies upgrades to a **duplicate
+top-level key** → invalid YAML → `check-yaml` fails the first post-upgrade commit. Auto-de-dupe is unsafe
+(can't tell an intentional override from a redundant copy), so `framework upgrade` now **warns** non-fatally:
+`_duplicate_top_level_keys` (top-level-key line scan, ignores nested/comment lines) + `_precommit_warnings`
+in `upgrade.py`; `UpgradeOutcome` gains a `warnings: list[str]`; the CLI prints them to stderr before the
+status message (both green and red paths). TDD: unit test for the detector (catches a repeated key, ignores
+nested/once-only) + integration tests (a v2 source that ships a dup-key `.pre-commit-config.yaml` → warning
+surfaced, status still green; a clean config → no warning). **DV-6 (docs-only):** persisted-control-DB
+adoption reference in the new `docs/maintenance/upgrade-notes.md` — the battery's `migrations_control`
+reuses `c0001`/`c0002` ids with different schema under a NEW version table `alembic_version_multitenantauth`,
+so a consumer with a persisted prior control chain hits a `CREATE TABLE`-against-existing failure on
+`alembic upgrade head`. Two supported paths documented: rebuild (`task dev:reset`, dev) or stamp+upgrade
+(`alembic -c alembic_control.ini stamp head` then `… upgrade head`, prod). Affects de-forking consumers
+only; fresh/generic adopters unaffected. No code change (the framework can't know a consumer's prior fork
+chain). Commands fact-checked against the template (version-table name, `alembic_control.ini` separate
+config from `entrypoint.sh.jinja:12`, `c0001`–`c0003` head, `task dev:reset`). **DV-2/DV-3 (FYIs):**
+`stage`→`staging` env-token rename + framework-managed `AGENTS.md` recorded as expected-by-design upgrade
+notes in the same doc. The upgrade-notes doc is a living, newest-first reference (GitHub auto-generates
+release notes from PRs; this holds the upgrader-facing guidance the commit log can't convey). ruff/format/mypy
+clean; `tests/test_upgrade.py` 14 passed, `tests/test_cli.py` 132 passed. **v0.4.1 remaining: cut the release.**
+(FWK62 DV-4/DV-6/DV-2/DV-3 → PLAN)

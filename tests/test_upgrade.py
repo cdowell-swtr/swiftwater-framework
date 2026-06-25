@@ -3,7 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from framework_cli.upgrade import UpgradeError, upgrade_project
+from framework_cli.upgrade import (
+    UpgradeError,
+    _duplicate_top_level_keys,
+    upgrade_project,
+)
 
 
 def _git(repo: Path, *a):
@@ -160,6 +164,54 @@ def test_upgrade_applies_derived_default_for_newly_added_question(tmp_path: Path
     assert outcome.status == "green"
     # project_slug "demo" → derived prefix "DEMO"; must NOT be empty ("prefix=").
     assert (proj / "prefix_line.txt").read_text() == "prefix=DEMO\n"
+
+
+def test_duplicate_top_level_keys_detects_only_repeated_top_level_keys():
+    """DV-4 detector: flag repeated top-level keys; ignore nested/once-only/comment lines."""
+    text = (
+        "repos:\n"
+        "  - repo: local\n"
+        "    hooks:\n"
+        "      - id: x\n"
+        "default_install_hook_types: [pre-commit]\n"
+        "# default_install_hook_types: commented\n"
+        "default_install_hook_types: [pre-commit, commit-msg]\n"
+    )
+    assert _duplicate_top_level_keys(text) == ["default_install_hook_types"]
+    # No duplicates → empty.
+    assert _duplicate_top_level_keys("repos: []\nci:\n  skip: []\n") == []
+
+
+def test_upgrade_warns_on_duplicate_precommit_key(tmp_path: Path):
+    """DV-4: an upgrade that yields a duplicate top-level key in .pre-commit-config.yaml
+    surfaces a non-fatal warning (the project still upgrades green)."""
+    source = _source_repo(tmp_path)
+    proj = _project(tmp_path, source)
+    # v2 ships a .pre-commit-config.yaml with a duplicate top-level key (the post-merge shape
+    # a hand-added key + the managed region produce).
+    (source / "tmpl" / ".pre-commit-config.yaml.jinja").write_text(
+        "default_install_hook_types: [pre-commit]\n"
+        "repos: []\n"
+        "default_install_hook_types: [pre-commit, commit-msg]\n"
+    )
+    _bump(source, "v2")
+    outcome = upgrade_project(proj, to="v2")
+    assert outcome.status == "green"
+    assert any("duplicate top-level key" in w for w in outcome.warnings)
+    assert any("default_install_hook_types" in w for w in outcome.warnings)
+
+
+def test_upgrade_no_precommit_warning_when_clean(tmp_path: Path):
+    """DV-4: a clean .pre-commit-config.yaml yields no warning."""
+    source = _source_repo(tmp_path)
+    proj = _project(tmp_path, source)
+    (source / "tmpl" / ".pre-commit-config.yaml.jinja").write_text(
+        "default_install_hook_types: [pre-commit]\nrepos: []\n"
+    )
+    _bump(source, "v2")
+    outcome = upgrade_project(proj, to="v2")
+    assert outcome.status == "green"
+    assert outcome.warnings == []
 
 
 def test_upgrade_requires_git_tracked(tmp_path: Path):

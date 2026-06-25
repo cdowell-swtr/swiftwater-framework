@@ -439,6 +439,8 @@ def upgrade(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
 
+    for warning in outcome.warnings:
+        typer.echo(f"warning: {warning}", err=True)
     if outcome.status == "already-current":
         typer.echo(f"Already up to date ({outcome.target}).")
         return
