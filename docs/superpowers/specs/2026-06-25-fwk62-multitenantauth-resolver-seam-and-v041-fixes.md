@@ -132,6 +132,14 @@ flat default applies. The factory assumes a resolved tenant context; a tenant-le
 through to the flat control-DB resolver (fail-closed for a non-member). All shipped resource routes are
 tenant-scoped, so this is a documented assumption, not a live path.
 
+**Tenant placeholder naming (consumer requirement):** the membership-404 precondition and the factory
+consult both gate on `needs_tenant = "tenant_id" in resource_params()` — the **literal** param name. A
+consumer route naming its tenant placeholder anything other than `{tenant_id}` (e.g. `{org_id}`) is
+**fail-closed** — uniform 403, no leak — but silently skips the seam (the factory is never consulted). So
+a consumer's tenant-scoped resource routes **MUST** name the tenant path param `tenant_id`. (Surfaced and
+refuted as finding **t3** in the focused security review — fail-closed, not an over-grant; see the
+`2026-06-25-fwk62-dv5-resolver-seam-security-review` scorecard.)
+
 ### Integrity-lock interaction — no locked-file edit
 
 `register_authz_resolver_factory` lives in the **locked** `deps.py` (framework-owned seam). The consumer
@@ -194,6 +202,15 @@ The boundaries that keep it safe:
   decision. All stages on Opus (per the crown-jewels review policy).
 - **Fail-closed:** an exception raised inside a registered resolver **denies (403)** — never 500s, never
   allows.
+
+**Review outcome (2026-06-25, ran against `9db22b7`):** the focused all-Opus review **PASSED** — 0 confirmed
+Critical/High. 5 raw findings across 6 lenses (grant-via-ancestor ran as lens #1); triage promoted 4; the
+default-to-refuted Opus verify refuted all four as concrete battery breaks (0 survivors). The one genuine
+residual (t2: a hypothetical multi-distinct-resource route over-granting on its secondary resource) is
+**not reachable on the shipped artifact** and **equally affects the flat default** (pre-existing, not
+seam-introduced). No hardening lands in v0.4.1 — re-touching the locked mechanism after the gate blessed
+`9db22b7` would ship unreviewed grant-path code; t2/t4 + a sample resolver are tracked as a hardening
+follow-up. Full scorecard: `docs/superpowers/eval-scorecards/2026-06-25-fwk62-dv5-resolver-seam-security-review.md`.
 
 ### Tests (TDD) — `tests/functional/test_auth_deps.py`
 
@@ -265,3 +282,17 @@ both intended. One-line upgrade-note mentions so upgraders expect them.
 The cross-repo **Promote-Up-Record** convention the report opens with (the framework, as the absorber,
 adopting cross-repo + standing up the auth PUR + the formal fork-deletion gate). Real and worth doing, but
 it's a process/convention task, not a v0.4.1 code fix. Track separately.
+
+**DV-5 seam hardening (deferred follow-up).** The focused review surfaced three non-reachable,
+defense-in-depth residuals that are deliberately NOT landed in v0.4.1 (re-touching the locked mechanism
+after the gate blessed `9db22b7` would ship unreviewed grant-path code):
+- **t2** — a **fitness test** (additive, non-locked, ships to consumer CI; mirror the wildcard-under-ALL
+  guard at `authz/expr.py:52-78`) requiring any resource-scoped Perm leaf to bind the canonical
+  `resource_id` param. The in-mechanism options (construction-time guard / pass the per-leaf bound resource
+  to `resource_grant`) are explicitly out — the fitness-test form is the only acceptable shape.
+- **t4** — reorder `deps.py` so `ctx['platform_perms']` is computed BEFORE the factory call (removes the
+  privilege-influence adjacency; not request-reachable today).
+- **t3/t1** — ship a **sample correct consumer resolver** scoping `resource_id` by the closure tenant, and
+  (optionally) generalize `needs_tenant` detection beyond the literal `tenant_id` param name.
+
+See the `2026-06-25-fwk62-dv5-resolver-seam-security-review` scorecard.

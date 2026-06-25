@@ -3020,3 +3020,31 @@ assertion and an absent-key⇒403 flip. Spec DV-5 section updated to the 3-arg +
 contract, with the pattern-awareness + active_tenant_id-None boundaries documented. **Remaining for v0.4.1:** focused
 Opus security review (grant-via-ancestor lens, non-optional) · DV-1/DV-4/DV-6 upgrade-path fixes · DV-2/3 release-note
 FYIs · cut v0.4.1. (FWK62 → PLAN; spec `docs/superpowers/specs/2026-06-25-fwk62-multitenantauth-resolver-seam-and-v041-fixes.md`)
+
+#### #0225 · review · FWK62 DV-5 — focused all-Opus security review of the resolver seam: PASS · 2026-06-25
+Ran the focused crown-jewels review of the DV-5 `resource_grant` seam against the shipped commit `9db22b7`:
+all-Opus / high-effort, every stage — 6 attack lenses (grant-via-ancestor as lens #1, MD's load-bearing ask)
+→ triage → default-to-refuted verify → synthesis. 12 agents, 685,725 tokens, ~14 min. **Verdict: PASS —
+0 confirmed Critical/High.** 5 raw findings; triage promoted 4 (t1–t4); the Opus verify stage refuted ALL
+four as concrete battery breaks (each `refuted=true, mechanism_verified=false`); 0 survivors. Invariants
+independently re-verified as HOLDing: I3 fail-closed completeness (factory slot = `_deny` before the call;
+factory raise / non-mapping / absent-key + adapter missing-id / resolver-raise / non-callable all DENY,
+never 500/allow), I4 404-before-403 (factory consulted only when `factory is not None AND active_tenant_id
+is not None`; non-member 404s before the factory is built), I2 cross-tenant (flat default binds
+membership_id-AND-resource_id structurally; factory gets the resolved membership-gated tenant), I5 blast
+radius (`subtree_exists` hardcoded `_deny`, factory subtree key ignored), I1 over-grant (locked evaluator
+passes the discrete `path` dict, A-F1 preserved). **The one genuine residual (t2):** the adapter (`deps.py:109`)
+and the flat default (`deps.py:218`) both key on a hardcoded `resource_id`, so a hypothetical consumer-authored
+multi-distinct-resource route would over-grant on its secondary resource — but it is **not reachable** on the
+shipped artifact (no such route; seam contract is explicitly single-resource) and **equally affects the flat
+default** (verified: both key on `path.get("resource_id")`), so it is pre-existing, NOT seam-introduced.
+**Decision (advisor-confirmed): ship v0.4.1 on the PASS; land NO hardening on this branch.** The gate blessed
+the locked mechanism (`deps.py`/`authz/expr.py`) exactly as shipped at `9db22b7`; re-touching it post-review
+(the t2 construction-time guard, the t4 `platform_perms` reorder) would ship grant-path mechanism the review
+never saw — a bad trade for non-reachable, defense-in-depth residuals. Bundled t2 (fitness-test form only —
+additive, non-locked) / t4 / t3-sample into **FWK63** (deferred hardening). The t3 tenant-placeholder-naming
+requirement (a consumer's tenant param MUST be named `tenant_id`; differently-named ⇒ fail-closed, silently
+skips the seam) is documentation, not mechanism → added to the spec on this branch. Wrote the dated scorecard
+`docs/superpowers/eval-scorecards/2026-06-25-fwk62-dv5-resolver-seam-security-review.md`; updated the spec
+Security section with the outcome + Out-of-scope with the FWK63 follow-up. No locked-file edit; `9db22b7`
+untouched. **Next:** DV-1/DV-4/DV-6 upgrade-path fixes (framework_cli, not the locked mechanism) → cut v0.4.1.
