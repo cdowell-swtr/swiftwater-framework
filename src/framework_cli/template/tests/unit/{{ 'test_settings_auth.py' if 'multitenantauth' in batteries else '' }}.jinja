@@ -184,3 +184,27 @@ def test_pepper_version_env_override(monkeypatch):
     assert Settings().pepper_version == 1
     monkeypatch.setenv("APP_PEPPER_VERSION", "2")
     assert Settings().pepper_version == 2
+
+
+# ── SP1: tenant routing / budget / DSN knobs ─────────────────────────────────
+
+
+def test_tenant_routing_settings_defaults() -> None:
+    from {{ package_name }}.config.settings import Settings
+
+    s = Settings()
+    assert s.tenant_pool_size == 2
+    assert s.tenant_max_overflow == 3
+    assert s.max_cached_engines == 12
+    assert s.control_pool_size == 5
+    assert s.control_max_overflow == 10
+    assert s.db_pool_safety_factor == 0.8
+    assert s.tenant_dsn_cache_ttl_seconds == 300
+    assert s.tenant_db_name_prefix  # non-empty; defaults to "<package>_tenant"
+
+
+def test_tenant_db_name_prefix_env_override(monkeypatch) -> None:
+    from {{ package_name }}.config.settings import Settings
+
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "acme_t")
+    assert Settings().tenant_db_name_prefix == "acme_t"

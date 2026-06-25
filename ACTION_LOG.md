@@ -3230,3 +3230,12 @@ Promoted `control_db_url`/`ctrl_engine` (+ `truncate_control`, `drop_tenant_db`)
 cross-module smoke. RED (`fixture 'ctrl_engine' not found`) → GREEN (6 tests) on a real-PG render; ruff clean.
 Subagent-driven build (Sonnet implementer; task review next).
 (FWK61 SP1 Task 0 → ledger)
+
+#### #0234 · completed · FWK61 SP1 Task 1 — tenant routing/budget/DSN settings · 2026-06-25
+Added 8 battery-gated `Settings` fields (tenant_pool_size=2, tenant_max_overflow=3, max_cached_engines=12,
+control_pool_size=5, control_max_overflow=10, db_pool_safety_factor=0.8, tenant_dsn_cache_ttl_seconds=300,
+tenant_db_name_prefix) consumed by the rest of SP1; 2 tests (defaults + env override). RED (`AttributeError`) →
+GREEN (30 passed) on a render; ruff + `mypy src` clean; baseline render confirms the fields are absent without
+the battery. Side-effect: line-wrapped a pre-existing >88-char `verify_runtime` `if` (no logic change) that
+blocked the rendered format gate. Subagent-driven (Sonnet implementer; task review next).
+(FWK61 SP1 Task 1 → ledger)
