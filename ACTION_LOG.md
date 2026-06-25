@@ -3133,3 +3133,36 @@ patterns `_docs/cross-repo/implementers.md` via a pure gh-API PR (one row, `v4`,
 [[framework-consumes-patterns-via-github-vendoring]]; flip the PUR to `adopted` only once Meridian's fork-deletion is
 confirmed.
 (FWK64 → PLAN)
+
+#### #0230 · completed · FWK61 — Phase 2 decomposed (SP1/SP2/SP3); SP1 physical-routing-core design + PUR approved · 2026-06-25
+Brainstormed FWK58 **Phase 2** (physical per-tenant routing + ops) and **decomposed it into three sub-projects**,
+build order **SP1→SP2→SP3** (each its own spec/plan/build cycle): **SP1** physical routing core, **SP2** plane-aware
+migrate/deploy/rollback (MDN59/46), **SP3** authz-mechanism re-touch + lifecycle hardening — **which folds in FWK63's
+t1–t4 seam residuals** + the Phase-1 preconditions (DB-level ≥1-admin, `AuthzEvent.resource_id`, slug-history reaping)
++ the next-pass Layer-2 cells. **SP1 design approved** (spec `docs/superpowers/specs/2026-06-25-fwk61-sp1-physical-routing-core-design.md`).
+**Method (operator-authorized, MD busy):** read Meridian's Phase-2 routing code directly to extract the validated
+shape. **Strategy = lift the validated core, REBUILD the seam:** Meridian's engine/budget core (per-endpoint LRU +
+fail-closed connection budget MDN47, DSN cache, `tenant_session`, identical-404 routing gate) is validated gold →
+generalized as-is; its provision/migrate **write path is BROKEN** (verified directly: `provision.py:67-69` omits the
+now-required `slug` → `TypeError`; `migrate_all.py:13` imports an absent `all_tenant_dsns` → `ImportError`; hidden by
+stale docker-gated tests) → SP1 **rebuilds** provisioning on the battery's current `register_tenant`/`activate_tenant`,
+does NOT lift the drifted modules. Drift recorded as **promote-up evidence** (adoption deletes the broken module) —
+inversion of [[meridian-is-the-de-facto-integration-test]]. **Settled calls:** secrets = **match + seam** (`resolve_dsn`
+injection seam over Meridian's stored-DSN posture; real backend deferred to the **Secrets-backing** Horizon item,
+PLAN.md:56 — confirmed a separate project); topology = one-server + idempotent `CREATE DATABASE`, **entire** physical-create
+step skippable for managed-PG/bring-your-own-DSN; count-only LRU; alembic Python API; OTel spans + per-endpoint gauges.
+**Spec self-review caught two real design issues, fixed inline:** (1) **chicken-and-egg** — the physical DB name must
+be id-derived but the opaque id is minted *inside* `register_tenant`; resolved by making `dsn` optional (registry
+finalizes the id-derived default itself, opaque-id invariant preserved, DSN-naming policy lives in `tenancy/dsn.py`);
+(2) **integrity-lock upkeep** — the Phase-1 mechanism is LOCKED (`BATTERY_LOCKED_SRC`) and `test_auth_mechanism_lock.py`
+fails on any missing mechanism file, so SP1 registers its new `db/tenant/*`+`tenancy/{dsn,provision}.py` as locked +
+regenerates the manifest; edits to locked `registry.py`/`deps.py` are deliberate Layer-2-reviewed re-touches; the
+`resolve_dsn`/`provision_hook` seams register from the consumer's UNLOCKED `create_app()` (DV-5 pattern) so locking
+doesn't block customization. **Conformance is drift-aware:** pure-unit (registry/budget/cache) runs everywhere;
+isolation/provisioning go in the real-Postgres acceptance tier `render-complete` runs, **never skip-neutral** (so the
+battery can't recreate Meridian's hide-the-drift failure); seeded from intended behavior, not Meridian's broken write-path.
+**SP1 PUR** authored at `docs/superpowers/decisions/DEC-0004-multitenantauth-phase2-sp1-routing-promote-up.md` (sub-record
+of DEC-0003; status `designed`; **Meridian async-confirmation requested** against it — durable artifact replaces the
+read-the-code shortcut). FWK63 line marked FOLDED INTO SP3. **Next:** writing-plans for SP1. **Outward/operator-gated:**
+relay the verified Meridian drift to Meridian (absorber does not write to the generator repo unprompted).
+(FWK61 SP1 design + PUR → PLAN)
