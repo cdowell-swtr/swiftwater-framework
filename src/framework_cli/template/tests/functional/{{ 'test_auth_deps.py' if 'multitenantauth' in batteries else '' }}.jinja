@@ -24,9 +24,22 @@ from {{ package_name }}.db.control import models as m
 from {{ package_name }}.db.control.base import ControlBase
 from {{ package_name }}.multitenantauth.authz.expr import Perm
 from {{ package_name }}.multitenantauth.authn.tokens import mint
-from {{ package_name }}.multitenantauth.deps import control_session, guard
+from {{ package_name }}.multitenantauth.deps import (
+    control_session,
+    guard,
+    register_authz_resolver_factory,
+)
 
 pytestmark = pytest.mark.usefixtures("_clean_control")
+
+
+@pytest.fixture(autouse=True)
+def _reset_resolver():  # type: ignore[no-untyped-def]
+    """Guarantee the process-global authz-resolver factory never leaks across tests: a leaked
+    grant-capable factory would make a LATER test pass spuriously — the worst failure mode for an
+    authz suite. Autouse + a reset to None; a no-op for tests that never register one."""
+    yield
+    register_authz_resolver_factory(None)
 
 
 # ── control-plane DB fixture (full schema, no alembic — Task 7 deferred) ────────
@@ -205,6 +218,17 @@ def probe_app(control_engine, monkeypatch):  # type: ignore[no-untyped-def]
     def _resource_view() -> dict:
         return {"ok": True}
 
+    # Wildcard-subtree route: inert (A-F10) — no consumer override path in this release; the
+    # subtree resolver always denies (DV-5 ships the resource_grant seam only).
+    @app.get(
+        "/t/{tenant_id}/resource-subtree/view",
+        dependencies=[
+            Depends(guard(Perm("resource:view", on="tenant:{tenant_id}/resource:*")))
+        ],
+    )
+    def _resource_subtree() -> dict:
+        return {"ok": True}
+
     yield app
     get_settings.cache_clear()
 
@@ -237,6 +261,44 @@ def _client(app: FastAPI, token: str | None = None) -> TestClient:
     if token:
         c.headers["authorization"] = f"Bearer {token}"
     return c
+
+
+def _status(app: FastAPI, token: str | None, url: str) -> int:
+    """GET ``url`` as ``token`` and return the status code (keeps the seam-test asserts short)."""
+    return _client(app, token).get(url).status_code
+
+
+def _seed_acme_member(s: Session, email: str, *, resource_role: bool = False) -> str:
+    """Seed the shared vocab + an active 'acme' tenant + a bare tenant.member (optionally also a
+    resource.viewer on 'widget-1'); return that member's session token. Used by the DV-5 seam
+    tests, where a bare member is denied by the flat default and a resource-role member is granted
+    — so 'fail-closed' tests can prove the deny comes from the seam, not from a missing grant."""
+    from {{ package_name }}.multitenantauth.authz.service import (
+        add_membership,
+        assign_resource_role,
+    )
+
+    _seed_vocab(s)
+    s.add(m.Tenant(id="acme", name="Acme", slug="acme", status="active", dsn="x"))
+    s.flush()
+    u = _user(s, email)
+    mem = add_membership(
+        s,
+        user_id=u.id,
+        tenant_id="acme",
+        role_name="tenant.member",
+        actor_id=None,
+        invited=False,
+    )
+    if resource_role:
+        assign_resource_role(
+            s,
+            membership_id=mem.id,
+            resource_id="widget-1",
+            role_name="resource.viewer",
+            actor_id=None,
+        )
+    return _session_token(s, u.id)
 
 
 # ── authn tests ───────────────────────────────────────────────────────────────────
@@ -576,13 +638,22 @@ def test_single_control_session_across_chain(probe_app, control_engine):  # type
     )
 
 
-# ── A-F10 guard: single inert subtree_exists ─────────────────────────────────────
+# ── A-F10 guard: inert-by-default subtree_exists (post-DV-5 seam) ─────────────────
 
 
-def test_af10_single_inert_subtree_exists_construction_site():
-    """A-F10: the battery has EXACTLY ONE construction site for subtree_exists in deps.py and
-    its value is the deny lambda — it cannot be locally overridden to allow. This is a static
-    grep guard verified at test time."""
+def test_af10_default_subtree_exists_is_inert_deny(probe_app, control_engine):  # type: ignore[no-untyped-def]
+    """A-F10 (post-DV-5): with NO resolver factory registered, the default subtree_exists is
+    inert — a member who passes the 404 precondition is still DENIED (403) on a wildcard-subtree
+    leaf. The seam does not relax the default; it only lets a consumer register an override from
+    their own unlocked startup."""
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "subtree-default@x.com")
+    assert _status(probe_app, token, "/t/acme/resource-subtree/view") == 403
+
+
+def test_af10_single_subtree_exists_construction_site():
+    """Static drift guard: deps.py builds the ctx subtree_exists at EXACTLY ONE site — defends
+    against a second, divergent construction slipping in alongside the seam."""
     import re
     from pathlib import Path
 
@@ -593,21 +664,192 @@ def test_af10_single_inert_subtree_exists_construction_site():
         / "multitenantauth"
         / "deps.py"
     )
-    text_content = deps_src.read_text()
-
-    # Count occurrences of 'subtree_exists' as a dict key assignment.
-    assignments = re.findall(r'"subtree_exists"\s*:', text_content)
+    assignments = re.findall(r'"subtree_exists"\s*:', deps_src.read_text())
     assert len(assignments) == 1, (
-        f"Expected exactly 1 'subtree_exists' construction site in deps.py, found {len(assignments)}"
+        f"Expected exactly 1 subtree_exists ctx construction site in deps.py, found {len(assignments)}"
     )
 
-    # The value must be the deny lambda (lambda that always returns False).
-    # Find the subtree_exists line and assert it is the inert form.
-    lines = text_content.splitlines()
-    subtree_line = next(
-        (ln for ln in lines if '"subtree_exists"' in ln and ":" in ln), None
-    )
-    assert subtree_line is not None
-    assert "lambda" in subtree_line and "False" in subtree_line, (
-        f"subtree_exists must be assigned the deny lambda (returns False), got: {subtree_line!r}"
-    )
+
+# ── DV-5: the pluggable authz-resolver seam ───────────────────────────────────────
+
+
+def test_registered_factory_grants_a_resource_leaf_through_the_guard(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """The core seam proof: a registered factory's resource_grant GRANTS a leaf the flat default
+    DENIES. A bare member (no resource role) is 403 by default; after registering a factory that
+    grants, the SAME request is 200 — the consumer's resolver runs THROUGH the battery guard."""
+    with Session(control_engine) as s:
+        # bare member, no resource role
+        token = _seed_acme_member(s, "factory-grant@x.com")
+    # baseline: the flat default denies (proves the 200 below comes from the factory).
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 403
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        # Tenant-free per-call contract: the resolver gets (perm_name, resource_id) only — the
+        # tenant binds via the closure (active_tenant_id), never per call.
+        def grant(name, resource_id):  # type: ignore[no-untyped-def]
+            return name == "resource:view" and resource_id == "widget-1"
+
+        return {"resource_grant": grant}
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 200
+
+
+def test_factory_receives_resolved_membership_gated_tenant(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """caveat ii: the factory is handed the membership-GATED active tenant (the resolved, 404-safe
+    value), never a raw request value — the cross-tenant compartmentalization the seam relies on
+    (grants match on membership_id AND resource together)."""
+    seen: dict[str, object] = {}
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "factory-tenant@x.com")
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        seen["tenant"] = active_tenant_id
+        seen["user_id"] = user.id
+        return {"resource_grant": lambda name, resource_id: True}
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 200
+    assert seen["tenant"] == "acme"  # the RESOLVED active tenant, not a raw path value
+
+
+def test_consumer_resolver_receives_the_bare_resource_id(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """The tenant-free per-call contract: the consumer's resolver receives the BARE resource id as
+    its second arg — exactly ``"widget-1"``, NOT the path dict and NOT a tenant-qualified composite
+    (which would make the resolver pattern-blind / re-derive path-tenant). Assert the exact string,
+    not truthiness, so a leaked path-dict or composite would fail this."""
+    seen: dict[str, object] = {}
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "bare-rid@x.com")
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        def grant(name, resource_id):  # type: ignore[no-untyped-def]
+            seen["name"] = name
+            seen["resource_id"] = resource_id
+            return True
+
+        return {"resource_grant": grant}
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 200
+    assert seen["name"] == "resource:view"
+    # bare id — no dict, no "acme/" tenant segment
+    assert seen["resource_id"] == "widget-1"
+
+
+def test_nonmember_is_404_before_the_factory_is_ever_consulted(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """A registered factory NEVER sees an unresolved tenant: a non-member is 404 at the membership
+    precondition, BEFORE the ctx/factory is built. Even a grant-all factory cannot rescue a
+    non-member — the 404 precedes the GRANT path entirely."""
+    called = {"n": 0}
+    with Session(control_engine) as s:
+        _seed_vocab(s)
+        s.add(m.Tenant(id="acme", name="Acme", slug="acme", status="active", dsn="x"))
+        s.flush()
+        u = _user(s, "outsider-factory@x.com")  # NO membership in acme
+        token = _session_token(s, u.id)
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        called["n"] += 1
+        # grants if ever consulted
+        return {"resource_grant": lambda name, resource_id: True}
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 404
+    assert called["n"] == 0  # the factory was never built for a non-member
+
+
+def test_factory_subtree_exists_key_is_ignored_wildcard_stays_inert(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """DV-5 ships the resource_grant seam ONLY: the wildcard-subtree resolver is NOT
+    consumer-overridable in this release. A factory that supplies a (grant-all) subtree_exists key
+    is IGNORED — the wildcard-subtree leaf stays inert (403), fail-closed. Pins the scope decision
+    so a future wildcard override is a deliberate, reviewed change, not an accidental wiring."""
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "subtree-ignored@x.com")
+    # baseline: the inert default denies the wildcard subtree.
+    assert _status(probe_app, token, "/t/acme/resource-subtree/view") == 403
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        # A grant-all subtree key the battery does not honor (resource_grant deliberately omitted).
+        return {"subtree_exists": lambda *a: True}
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource-subtree/view") == 403
+
+
+def test_resolver_exception_fails_closed_403_not_500(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """A resolver that RAISES denies (403) — never 500, never allow. The member HAS the resource
+    role (the flat default would grant 200), so the deny must come from fail-closed."""
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "boom-resolver@x.com", resource_role=True)
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        def boom(name, resource_id):  # type: ignore[no-untyped-def]
+            raise RuntimeError("resolver blew up")
+
+        return {"resource_grant": boom}
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 403
+
+
+def test_factory_exception_fails_closed_denies_all_not_flat_fallback(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """A factory that RAISES denies ALL resource leaves (403) — it must NOT silently fall back to
+    the flat default. The member HAS the resource role (flat would grant 200), proving the broken
+    factory denies rather than reverting to flat."""
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "boom-factory@x.com", resource_role=True)
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        raise RuntimeError("factory blew up")
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 403
+
+
+def test_factory_returning_non_dict_fails_closed_403(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """A factory that returns a NON-DICT (a plausible consumer mistake — a bare resolver, a list)
+    must fail closed (403), not 500. The member HAS the resource role (flat would grant 200)."""
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "nondict-factory@x.com", resource_role=True)
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        # NOT a dict — has no .get → must fail closed
+        return lambda name, resource_id: True
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 403
+
+
+def test_omitted_resource_grant_key_denies_registration_is_opt_in(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """Absent ⇒ deny: a registered factory that omits resource_grant DENIES every resource leaf —
+    it does NOT fall back to the flat control-DB default. Registration is strictly opt-in: once you
+    register a factory, you own the resource-grant decision. The member HAS the resource role (the
+    flat default would grant 200), so the 403 proves the absent key denies rather than reverting to
+    flat."""
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "omitted-key@x.com", resource_role=True)
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        return {}  # resource_grant omitted → deny (registration owns the decision)
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 403

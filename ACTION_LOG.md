@@ -2992,3 +2992,120 @@ Phase 2 (physical routing + ops) spun out as FWK61 with the recorded preconditio
 chore(release) PR → green CI (render-matrix = proof) → self-merge → tag v0.4.0 → release.yml runs the full
 gate + publishes the GitHub Release. Ships the de-fork spine + the all-Opus Layer-2 hardening (0 Crit/High) +
 the Option-B integrity lock to consumers.
+
+#### #0224 · completed · FWK62 DV-5 — multitenantauth pluggable authz-resolver seam (the core) · 2026-06-25
+Built the DV-5 seam on the integrity-LOCKED `multitenantauth/deps.py`: `register_authz_resolver_factory(factory)`,
+`factory(control_session, app_user, active_tenant_id) -> {"resource_grant": (perm_name, resource_id) -> bool}`,
+defaulting to today's flat resolver. A consumer registers from its own UNLOCKED `create_app()`; the resolver runs
+THROUGH the battery guard (replacing Meridian's parallel-guard stopgap). **MD's two load-bearing refinements
+(reconciliation dialogue, this session) incorporated:** (1) the 3rd factory arg is the membership-gated, 404-safe
+RESOLVED active tenant — consulted ONLY after the membership-404 precondition, so the factory never sees a raw/
+unresolved tenant (a non-member 404s before the factory is built); cross-plane invariant = grants match on
+membership_id AND resource together. (2) The per-call resolver is TENANT-FREE: a battery-side ADAPTER extracts the
+BARE `path["resource_id"]` and calls the consumer's `(perm_name, resource_id)` — tenant binds once in the factory
+closure — delivering MD's contract WITHOUT touching the locked evaluator (`authz/expr.py`) or A-F1. **Scope cut
+(colonization gate + YAGNI, advisor-confirmed):** ship the `resource_grant` override ONLY; `subtree_exists` stays
+the inert default (A-F10) and is NOT consumer-overridable — verified no shipped battery route uses a `resource:*`
+wildcard (provably dead code), which halves the grant surface the focused review must cover; a factory's
+`subtree_exists` key is ignored, pinned by a test. **Fail-closed, all logged via stdlib `logging`:** absent
+`resource_grant` key / factory raise / non-mapping return / resolver raise → deny (403), never 500/allow; a
+registered factory OWNS resource grants (absent ⇒ deny — strictly opt-in, NOT a fall-back to flat). **Discriminator
+confirmed to MD: BARE** (`resource_id` stored verbatim, no tenant segment) → cross-tenant conflation structurally
+impossible; mismatch-assert unneeded. **Verification (canonical `demo` render):** rendered authz suite 80 passed
+against real Postgres (test_auth_deps + authz_fitness + authz_service + authz_seed + expr units); ruff check +
+`ruff format --check` + rendered-project mypy on `deps.py` clean; auth-mechanism-lock integrity 5 passed (the
+locked-file edit keeps the manifest/lock intact). TDD: edit-1 unwired → 6 red, edit-2 wired → green; the 25
+test_auth_deps tests rewritten to the tenant-free `(name, resource_id)` contract incl. a bare-id exact-`==`
+assertion and an absent-key⇒403 flip. Spec DV-5 section updated to the 3-arg + tenant-free + bare-id + resource_grant-only
+contract, with the pattern-awareness + active_tenant_id-None boundaries documented. **Remaining for v0.4.1:** focused
+Opus security review (grant-via-ancestor lens, non-optional) · DV-1/DV-4/DV-6 upgrade-path fixes · DV-2/3 release-note
+FYIs · cut v0.4.1. (FWK62 → PLAN; spec `docs/superpowers/specs/2026-06-25-fwk62-multitenantauth-resolver-seam-and-v041-fixes.md`)
+
+#### #0225 · review · FWK62 DV-5 — focused all-Opus security review of the resolver seam: PASS · 2026-06-25
+Ran the focused crown-jewels review of the DV-5 `resource_grant` seam against the shipped commit `9db22b7`:
+all-Opus / high-effort, every stage — 6 attack lenses (grant-via-ancestor as lens #1, MD's load-bearing ask)
+→ triage → default-to-refuted verify → synthesis. 12 agents, 685,725 tokens, ~14 min. **Verdict: PASS —
+0 confirmed Critical/High.** 5 raw findings; triage promoted 4 (t1–t4); the Opus verify stage refuted ALL
+four as concrete battery breaks (each `refuted=true, mechanism_verified=false`); 0 survivors. Invariants
+independently re-verified as HOLDing: I3 fail-closed completeness (factory slot = `_deny` before the call;
+factory raise / non-mapping / absent-key + adapter missing-id / resolver-raise / non-callable all DENY,
+never 500/allow), I4 404-before-403 (factory consulted only when `factory is not None AND active_tenant_id
+is not None`; non-member 404s before the factory is built), I2 cross-tenant (flat default binds
+membership_id-AND-resource_id structurally; factory gets the resolved membership-gated tenant), I5 blast
+radius (`subtree_exists` hardcoded `_deny`, factory subtree key ignored), I1 over-grant (locked evaluator
+passes the discrete `path` dict, A-F1 preserved). **The one genuine residual (t2):** the adapter (`deps.py:109`)
+and the flat default (`deps.py:218`) both key on a hardcoded `resource_id`, so a hypothetical consumer-authored
+multi-distinct-resource route would over-grant on its secondary resource — but it is **not reachable** on the
+shipped artifact (no such route; seam contract is explicitly single-resource) and **equally affects the flat
+default** (verified: both key on `path.get("resource_id")`), so it is pre-existing, NOT seam-introduced.
+**Decision (advisor-confirmed): ship v0.4.1 on the PASS; land NO hardening on this branch.** The gate blessed
+the locked mechanism (`deps.py`/`authz/expr.py`) exactly as shipped at `9db22b7`; re-touching it post-review
+(the t2 construction-time guard, the t4 `platform_perms` reorder) would ship grant-path mechanism the review
+never saw — a bad trade for non-reachable, defense-in-depth residuals. Bundled t2 (fitness-test form only —
+additive, non-locked) / t4 / t3-sample into **FWK63** (deferred hardening). The t3 tenant-placeholder-naming
+requirement (a consumer's tenant param MUST be named `tenant_id`; differently-named ⇒ fail-closed, silently
+skips the seam) is documentation, not mechanism → added to the spec on this branch. Wrote the dated scorecard
+`docs/superpowers/eval-scorecards/2026-06-25-fwk62-dv5-resolver-seam-security-review.md`; updated the spec
+Security section with the outcome + Out-of-scope with the FWK63 follow-up. No locked-file edit; `9db22b7`
+untouched. **Next:** DV-1/DV-4/DV-6 upgrade-path fixes (framework_cli, not the locked mechanism) → cut v0.4.1.
+
+#### #0226 · completed · FWK62 DV-1 — upgrade applies derived defaults for questions a project predates · 2026-06-25
+A project created before a question existed (Meridian: pre-FWK9, no persisted `pi_prefix`) upgrades to a
+template that *uses* it → the managed block rendered with an **empty** value. Root cause (verified empirically,
+copier 9.15.1): copier computes a question's **derived default** only when rendering the template *directory*
+(as `framework new` does — `render_project` runs `run_copy(template_path())` on the bundled subdir), NOT
+through the portable `_subdirectory` source that `copier update` uses. So `_apply_update`'s `run_update`
+left newly-added questions blank. **Fix** (`upskill.py`, shared by `framework upgrade` + `upskill --with`):
+before `run_update`, `_derived_defaults_for_absent_questions` clones the template at `vcs_ref`
+(`gh:owner/repo` → https; `--depth 1`, harmlessly ignored for local sources), renders its **subdirectory**
+into a throwaway dir with the project's identity (mirroring a fresh `new`, which DOES compute defaults), and
+harvests the `{question: value}` copier computed for questions ABSENT from the project's recorded answers —
+forced via `data={…, **derived}`. Native value types preserved (a future bool/int default isn't
+stringified). **Best-effort:** no `_src_path` / clone or render failure → `{}` (today's behavior); the real
+`run_update` stays the source of truth. **TDD:** new `test_upgrade_applies_derived_default_for_newly_added_question`
+(synthetic source that adds a `pi_prefix` question with a derived default + a managed file using it at v2;
+asserts the upgraded project renders `prefix=DEMO`, not `prefix=`) — RED before the fix (empty), GREEN after.
+Investigated three dead ends first (vcs_ref harvest renders empty; `_copier_answers` omits default-valued
+answers; repo-root-with-`_subdirectory` local render also empty) → the working mechanism is rendering the
+subdir directly. ruff/format/mypy clean; `tests/test_upgrade.py` + `tests/test_upskill.py` 20 passed.
+(FWK62 DV-1 → PLAN)
+
+#### #0227 · completed · FWK62 DV-4/DV-6/DV-2/DV-3 — upgrade-path warning + upgrader notes · 2026-06-25
+**DV-4 (code + test):** v0.4.0 moved `default_install_hook_types` + `conventional-pre-commit` into the
+managed `.pre-commit-config.yaml` region; a project that hand-added its own copies upgrades to a **duplicate
+top-level key** → invalid YAML → `check-yaml` fails the first post-upgrade commit. Auto-de-dupe is unsafe
+(can't tell an intentional override from a redundant copy), so `framework upgrade` now **warns** non-fatally:
+`_duplicate_top_level_keys` (top-level-key line scan, ignores nested/comment lines) + `_precommit_warnings`
+in `upgrade.py`; `UpgradeOutcome` gains a `warnings: list[str]`; the CLI prints them to stderr before the
+status message (both green and red paths). TDD: unit test for the detector (catches a repeated key, ignores
+nested/once-only) + integration tests (a v2 source that ships a dup-key `.pre-commit-config.yaml` → warning
+surfaced, status still green; a clean config → no warning). **DV-6 (docs-only):** persisted-control-DB
+adoption reference in the new `docs/maintenance/upgrade-notes.md` — the battery's `migrations_control`
+reuses `c0001`/`c0002` ids with different schema under a NEW version table `alembic_version_multitenantauth`,
+so a consumer with a persisted prior control chain hits a `CREATE TABLE`-against-existing failure on
+`alembic upgrade head`. Two supported paths documented: rebuild (`task dev:reset`, dev) or stamp+upgrade
+(`alembic -c alembic_control.ini stamp head` then `… upgrade head`, prod). Affects de-forking consumers
+only; fresh/generic adopters unaffected. No code change (the framework can't know a consumer's prior fork
+chain). Commands fact-checked against the template (version-table name, `alembic_control.ini` separate
+config from `entrypoint.sh.jinja:12`, `c0001`–`c0003` head, `task dev:reset`). **DV-2/DV-3 (FYIs):**
+`stage`→`staging` env-token rename + framework-managed `AGENTS.md` recorded as expected-by-design upgrade
+notes in the same doc. The upgrade-notes doc is a living, newest-first reference (GitHub auto-generates
+release notes from PRs; this holds the upgrader-facing guidance the commit log can't convey). ruff/format/mypy
+clean; `tests/test_upgrade.py` 14 passed, `tests/test_cli.py` 132 passed. **v0.4.1 remaining: cut the release.**
+(FWK62 DV-4/DV-6/DV-2/DV-3 → PLAN)
+
+#### #0228 · milestone · FWK62 — v0.4.1 release cut (chore(release) on branch) · 2026-06-25
+Release-cut commit prepared on `fwk62-resolver-seam-v041` per the release-cut procedure: `pyproject.toml`
+version 0.4.0→0.4.1, `uv lock` refreshed (`framework-cli 0.4.0 → 0.4.1`), `dogfood.py` `DOGFOOD_COMMIT`
+v0.4.0→v0.4.1. Version-consistency guards green (`tests/test_release.py` 4 passed, `tests/test_dogfood.py`
+16 passed); full non-acceptance suite green before the bump (**1089 passed, 3 skipped**); ruff/format/mypy
+clean. **Pre-cut DV-1 honesty check** (advisor-flagged): DV-1 had only ever run against the 7-question
+synthetic fixture, and `_derived_defaults_for_absent_questions` swallows render failures with a broad
+`except → {}`, so a real-template render failure would have silently shipped the empty-`pi_prefix` bug
+untested. Ran the harvest against the **real** bundled template @ `v0.4.0` (raw clone+subdir render AND the
+public helper) → both return `{'pi_prefix': 'DEMO'}`: the seam is real, not a silent no-op. The bump touches
+framework source/lock only — no template payload, so the render is unchanged (DV-5's template change was
+already render-validated at `9db22b7`). **Remaining (outward-facing, user-gated):** push → PR to protected
+`master` → self-merge → verify master tip is the bump commit before tagging ([[verify-master-content-after-pr-merge]])
+→ lightweight tag `v0.4.1` → `release.yml` publishes the GitHub Release.
+(FWK62 v0.4.1 cut → PLAN)
