@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Mechanism ships integrity-LOCKED.** Every new file under `src/{package_name}/multitenantauth/tenancy/` is framework-owned mechanism. Add its path to `BATTERY_LOCKED_SRC` in `src/framework_cli/integrity/classes.py` **in the same task that creates it** — `tests/integrity/test_auth_mechanism_lock.py` walks the `multitenantauth` tree and FAILS on any unlisted `.py` file. (Do NOT defer lock-registration to a final task: an intermediate render would ship the file unlocked and the framework gate would be red.)
-- **Locked-file edits are deliberate + Layer-2-reviewed.** `tenancy/registry.py` and `deps.py` are already locked; the edits here (Tasks 6, 9) are intentional mechanism re-touches. They re-checksum on the next `build_manifest`; the branch-end Phase-2 Layer-2 security review (Task 12) is their gate, exactly as DEC-0003 anticipates.
+- **Locked-file edits are deliberate + Layer-2-reviewed.** `tenancy/registry.py` and `deps.py` are already locked; the edits here (Tasks 6, 9) are intentional mechanism re-touches. They re-checksum on the next `build_manifest`; the branch-end Phase-2 Layer-2 security review (Task 11, Step 4) is their gate, exactly as DEC-0003 anticipates.
 - **Consumer seams register from the UNLOCKED `create_app()`** — `register_tenant_dsn_resolver` and `register_provision_hook` follow the DV-5 `register_authz_resolver_factory` pattern. Locking the mechanism never blocks these.
 - **Sync engines only** (match the control plane + Meridian). No async/await anywhere in this plan.
 - **Fail-closed, always.** Unknown/non-active/non-member tenant → identical `404` (never 403, never an existence leak). Budget over-allocation → `BudgetExceeded` (never silently over-allocate). A `resolve_dsn` resolver that raises/returns non-str → deny.
@@ -41,13 +41,162 @@
 - `src/{package_name}/routes/health.py.jinja` — expose tenant-engine metrics at `/metrics` (Task 10).
 - `src/framework_cli/integrity/classes.py` — 5 new `BATTERY_LOCKED_SRC` entries (Tasks 2–5, 8).
 - `infra/observability/grafana/dashboards/...` + `prometheus/alerts/...` (multitenantauth's existing files) — add a pool/budget panel + alert (Task 10).
+- `tests/conftest.py.jinja` — battery-gated shared control-plane fixtures (Task 0).
+- `tests/functional/{{ 'test_control_migrations.py' ... }}.jinja` — drop its local control fixtures; use the shared ones (Task 0).
 
 **Rendered-project tests (template payload):**
+- `tests/functional/{{ 'test_tenant_fixtures_shared.py' ... }}.jinja` (Task 0 — cross-module fixture smoke)
 - `tests/unit/{{ 'test_tenant_engine_registry.py' if 'multitenantauth' ... }}.jinja`
 - `tests/unit/{{ 'test_tenant_dsn.py' ... }}.jinja`
 - `tests/unit/{{ 'test_tenant_session_seam.py' ... }}.jinja`
 - `tests/functional/{{ 'test_tenant_provisioning.py' ... }}.jinja` (acceptance, real PG)
 - `tests/functional/{{ 'test_tenant_routing_deps.py' ... }}.jinja` (real PG)
+
+---
+
+## Task 0: Shared control-plane acceptance fixtures (battery-gated conftest)
+
+**Why this task exists:** `control_db_url` + `ctrl_engine` are today defined **module-scoped inside `test_control_migrations.py`**. pytest does not share fixtures across modules except through `conftest.py`, so Tasks 8/9/11 (new modules) requesting `ctrl_engine` would fail `fixture 'ctrl_engine' not found`. Promote the engine/url + a `drop_tenant_db` + `truncate_control` helper into the (battery-gated) shared conftest. **Leave per-module truncation cleanup local** — do NOT make `_clean` autouse in conftest (it would truncate control tables around *every* test in the rendered suite, including non-DB tests).
+
+**Files:**
+- Modify: `src/framework_cli/template/tests/conftest.py.jinja` — add battery-gated `control_db_url`, `ctrl_engine`, `truncate_control`, `drop_tenant_db` fixtures.
+- Modify: `src/framework_cli/template/tests/functional/{{ 'test_control_migrations.py' ... }}.jinja` — delete its local `control_db_url`/`ctrl_engine`; rewrite `_clean` to use the shared `truncate_control`; prune now-unused imports.
+- Create: `src/framework_cli/template/tests/functional/{{ 'test_tenant_fixtures_shared.py' if 'multitenantauth' in batteries else '' }}.jinja` — a one-line cross-module smoke proving the fixtures resolve.
+
+**Interfaces:**
+- Produces (rendered conftest, only when `multitenantauth` in batteries): `control_db_url` (session) → control DSN string; `ctrl_engine` (session) → control-migrated `Engine`; `truncate_control` → `Callable[[], None]` truncating all control tables; `drop_tenant_db` → `Callable[[str], None]` force-dropping a sibling tenant DB. Consumed by Tasks 8, 9, 11.
+
+- [ ] **Step 1: Write the failing cross-module smoke** (rendered project) — proves the blocker
+
+```python
+"""Proves the control fixtures are shared via conftest, not module-local."""
+
+
+def test_ctrl_engine_is_visible_cross_module(ctrl_engine) -> None:
+    from sqlalchemy import inspect
+
+    # control chain migrated → the tenant table exists on the shared control engine
+    assert "tenant" in set(inspect(ctrl_engine).get_table_names())
+```
+
+- [ ] **Step 2: Run — expect FAIL** (`fixture 'ctrl_engine' not found`, because it is still module-local to `test_control_migrations.py`).
+
+Run (in the render): `uv run pytest tests/functional/test_tenant_fixtures_shared.py -q` → ERROR (fixture not found).
+
+- [ ] **Step 3: Promote the fixtures into `conftest.py.jinja`** (append, battery-gated; conftest already imports `os`, `subprocess`, `Engine`, `Iterator`)
+
+```jinja
+{%- if "multitenantauth" in batteries %}
+
+
+@pytest.fixture(scope="session")
+def control_db_url(pg_url: str) -> str:
+    """A separate Postgres database for the control plane (shared across the control-migration
+    and tenant-provisioning acceptance modules)."""
+    from sqlalchemy import create_engine, make_url, text
+
+    _ctrl_db = "{{ package_name }}_ctrl_mig_test"
+    base = make_url(pg_url)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+    return ctrl_url
+
+
+@pytest.fixture(scope="session")
+def ctrl_engine(control_db_url: str) -> Iterator[Engine]:
+    """Run `alembic upgrade head` on the control chain once; yield a bound engine."""
+    from sqlalchemy import create_engine
+
+    proc = subprocess.run(
+        ["alembic", "-c", "alembic_control.ini", "upgrade", "head"],
+        env={**os.environ, "APP_CONTROL_DATABASE_URL": control_db_url},
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        pytest.fail(f"alembic control upgrade head failed:\n{proc.stdout}\n{proc.stderr}")
+    engine = create_engine(control_db_url)
+    yield engine
+    engine.dispose()
+
+
+_CONTROL_TABLES = (
+    "resource_role_assignment, platform_role_assignment, tenant_role_assignment, "
+    "authz_event, invite_token, session, tenant_membership, role_permission, "
+    "permission, role, tenant_slug_history, tenant, app_user"
+)
+
+
+@pytest.fixture
+def truncate_control(ctrl_engine: Engine):
+    """Return a callable that truncates all control-plane tables. Modules decide WHEN to call
+    it via their own autouse fixture — cleanup policy stays local (this only shares the SQL)."""
+    from sqlalchemy import text
+
+    def _truncate() -> None:
+        with ctrl_engine.begin() as conn:
+            conn.execute(text(f"TRUNCATE TABLE {_CONTROL_TABLES} CASCADE"))
+
+    return _truncate
+
+
+@pytest.fixture
+def drop_tenant_db(control_db_url: str):
+    """Return drop_tenant_db(dbname): force-drop a sibling tenant database on the control
+    instance (provisioning-acceptance teardown). Terminates live backends first."""
+    from sqlalchemy import create_engine, make_url, text
+
+    def _drop(dbname: str) -> None:
+        maint = create_engine(
+            make_url(control_db_url)
+            .set(database="postgres")
+            .render_as_string(hide_password=False),
+            isolation_level="AUTOCOMMIT",
+        )
+        with maint.connect() as c:
+            c.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = :n"
+                ),
+                {"n": dbname},
+            )
+            c.execute(text(f'DROP DATABASE IF EXISTS "{dbname}"'))
+        maint.dispose()
+
+    return _drop
+{%- endif %}
+```
+
+- [ ] **Step 4: Repoint `test_control_migrations.py`** — delete its local `control_db_url` + `ctrl_engine` fixtures (the two `@pytest.fixture(scope="module")` blocks), rewrite `_clean` to use the shared helper, and prune the imports that only those fixtures used (`os`, `subprocess`, `create_engine`, `make_url`, `text`):
+
+```python
+@pytest.fixture(autouse=True)
+def _clean(truncate_control) -> None:  # type: ignore[no-untyped-def]
+    """Truncate all control-plane tables after each test (shared helper; policy stays local)."""
+    yield
+    truncate_control()
+```
+
+> Keep `_seed`, the three invariant tests, and `test_both_chains_produce_two_version_tables` / `test_app_db_has_no_control_tables` unchanged — they still request `ctrl_engine`/`engine`, now resolved from conftest. After the edit, `uv run ruff check` the rendered module to confirm no unused-import (F401) remains.
+
+- [ ] **Step 5: Run both — expect PASS**
+
+In the render: `uv run pytest tests/functional/test_tenant_fixtures_shared.py tests/functional/test_control_migrations.py -q` → PASS (the smoke now resolves the shared fixture; the migration suite is unchanged behaviorally). `ruff format --check` the rendered conftest + modules.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -A
+git commit -m "test(FWK61 SP1): share control-plane acceptance fixtures via conftest"
+```
 
 ---
 
@@ -283,7 +432,7 @@ def test_get_caches_and_reuses_one_engine_per_dsn():
 
 
 def test_lru_evicts_oldest_when_endpoint_full(monkeypatch):
-    s = Settings(); object.__setattr__(s, "max_cached_engines", 2)  # if frozen; else s.max_cached_engines=2
+    s = Settings(max_cached_engines=2)  # Settings is a (non-frozen) BaseSettings — set directly
     reg, built = _registry(s)
     e1 = reg.get("postgresql+psycopg://u:p@h/t1")
     e2 = reg.get("postgresql+psycopg://u:p@h/t2")
@@ -307,8 +456,6 @@ def test_required_connections_includes_control_when_colocated():
     assert n == s.max_cached_engines * (s.tenant_pool_size + s.tenant_max_overflow) \
         + s.control_pool_size + s.control_max_overflow
 ```
-
-> Note: if `Settings` is a frozen pydantic model, set `max_cached_engines` via `Settings(max_cached_engines=2)` rather than `object.__setattr__`. Use whichever the model allows.
 
 - [ ] **Step 2: Run — expect FAIL** (`ModuleNotFoundError`).
 
@@ -527,7 +674,7 @@ def test_default_tenant_dsn_swaps_db_name(monkeypatch) -> None:
     monkeypatch.setenv("APP_DATABASE_URL", "postgresql+psycopg://u:pw@h:5432/appdb")
     monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "acme_t")
     from {{ package_name }}.config.settings import get_settings
-    get_settings.cache_clear()  # if lru_cached; else skip
+    get_settings.cache_clear()  # get_settings is @lru_cache'd — clear after setenv, every time
     from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
 
     dsn = default_tenant_dsn("abc123")
@@ -816,23 +963,33 @@ git commit -m "feat(FWK61 SP1): tenant_session + resolve_dsn seam + DSN cache (l
 **Interfaces:**
 - Produces: `register_tenant(session, name, *, slug, dsn: str | None = None, status="provisioning") -> Tenant` — when `dsn is None`, the id-derived `default_tenant_dsn(tenant_id)` is used. Opaque-id invariant preserved (id still minted internally). Resolves the chicken-and-egg (DSN needs the id; the id is generated here).
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing test** — add to `test_tenancy_registry.py`, using its **existing module fixture `registry_engine`** (which already provisions the `tenant` + `tenant_slug_history` tables). `default_tenant_dsn` reads `settings.database_url`, so set `APP_DATABASE_URL` and clear the settings cache.
 
 ```python
-def test_register_tenant_defaults_dsn_from_id(db_session, monkeypatch):
+def test_register_tenant_defaults_dsn_from_id(registry_engine, monkeypatch):
+    monkeypatch.setenv("APP_DATABASE_URL", "postgresql+psycopg://u:pw@h:5432/appdb")
     monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "acme_t")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
     from {{ package_name }}.multitenantauth.tenancy.registry import register_tenant
-    t = register_tenant(db_session, "Acme", slug="acme")  # no dsn passed
+
+    with Session(registry_engine) as s:
+        t = register_tenant(s, "Acme", slug="acme")  # no dsn passed
+        s.commit()
     assert t.dsn.endswith(f"/acme_t_{t.id}")
 
 
-def test_register_tenant_explicit_dsn_unchanged(db_session):
+def test_register_tenant_explicit_dsn_unchanged(registry_engine):
     from {{ package_name }}.multitenantauth.tenancy.registry import register_tenant
-    t = register_tenant(db_session, "Acme", slug="acme2", dsn="postgresql+psycopg://x/byo")
+
+    with Session(registry_engine) as s:
+        t = register_tenant(s, "Acme", slug="acme2", dsn="postgresql+psycopg://x/byo")
+        s.commit()
     assert t.dsn == "postgresql+psycopg://x/byo"
 ```
 
-> These need the control schema. Run them against the control DB fixture pattern from `test_control_migrations.py` (a control-migrated engine), not the app `db_session`. Adapt the fixture accordingly in the test module.
+> `Session` is already imported in `test_tenancy_registry.py`. The module's existing autouse cleanup truncates between tests, so the two distinct slugs (`acme`, `acme2`) don't collide.
 
 - [ ] **Step 2: Run — expect FAIL** (`dsn` is currently required → `TypeError`).
 
@@ -934,102 +1091,163 @@ git commit -m "feat(FWK61 SP1): alembic env.py honors a pre-injected sqlalchemy.
 - [ ] **Step 1: Write the failing acceptance test** (real PG; non-transactional — creates + drops real tenant DBs; uses the control-migrated engine pattern from `test_control_migrations.py`)
 
 ```python
-import uuid
 import pytest
-from sqlalchemy import create_engine, make_url, text, inspect
+from sqlalchemy import create_engine, inspect, make_url
 from sqlalchemy.orm import Session
 
 
-def _drop_db(pg_url: str, dbname: str) -> None:
-    maint = create_engine(make_url(pg_url).set(database="postgres").render_as_string(hide_password=False),
-                          isolation_level="AUTOCOMMIT")
-    with maint.connect() as c:
-        c.execute(text(f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='{dbname}'"))
-        c.execute(text(f'DROP DATABASE IF EXISTS "{dbname}"'))
-    maint.dispose()
+@pytest.fixture(autouse=True)
+def _clean_control(truncate_control):  # type: ignore[no-untyped-def]
+    """Truncate control tables after each test so the reused `acme` slug never persists
+    across cases (this module deliberately reuses one slug). Tenant DBs are dropped per-test
+    by each test's own `finally` via the shared `drop_tenant_db` fixture."""
+    yield
+    truncate_control()
 
 
-def test_provision_creates_migrates_and_activates(ctrl_engine, control_db_url, monkeypatch):
+def test_provision_creates_migrates_and_activates(
+    ctrl_engine, control_db_url, drop_tenant_db, monkeypatch
+):
     # app DB instance == the testcontainer; tenant DBs are siblings on it.
     monkeypatch.setenv("APP_DATABASE_URL", control_db_url)  # same instance; name swapped per tenant
     monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
     from {{ package_name }}.config.settings import get_settings
+
     get_settings.cache_clear()
-    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
     from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
 
     with Session(ctrl_engine) as cs:
         tid = provision_tenant(cs, "Acme", slug="acme")
         cs.commit()
-    dsn = default_tenant_dsn(tid)
-    dbname = make_url(dsn).database
+    dbname = make_url(default_tenant_dsn(tid)).database
     try:
         # the tenant DB exists and carries the APP schema (items), NOT control tables
-        teng = create_engine(dsn)
+        teng = create_engine(default_tenant_dsn(tid))
         tables = set(inspect(teng).get_table_names())
         teng.dispose()
         assert "items" in tables
         assert "tenant" not in tables  # control tables never in a tenant DB
-        # status flipped to active
         with Session(ctrl_engine) as cs:
             from {{ package_name }}.db.control import repository as repo
+
             assert repo.get_tenant(cs, tid).status == "active"
     finally:
-        _drop_db(control_db_url, dbname)
+        drop_tenant_db(dbname)
 
 
-def test_provision_is_idempotent_after_partial(ctrl_engine, control_db_url, monkeypatch):
+def test_provision_is_noop_when_already_active(
+    ctrl_engine, control_db_url, drop_tenant_db, monkeypatch
+):
+    """Re-running provision for an already-active slug short-circuits to the same id (the
+    `status == "active"` no-op path)."""
     monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
-    from {{ package_name }}.config.settings import get_settings; get_settings.cache_clear()
-    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
     from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
-    from {{ package_name }}.db.control import repository as repo
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
 
     with Session(ctrl_engine) as cs:
-        tid1 = provision_tenant(cs, "Acme", slug="acme"); cs.commit()
+        tid1 = provision_tenant(cs, "Acme", slug="acme")
+        cs.commit()
     dbname = make_url(default_tenant_dsn(tid1)).database
     try:
         with Session(ctrl_engine) as cs:
-            tid2 = provision_tenant(cs, "Acme", slug="acme"); cs.commit()  # re-run same slug
-        assert tid1 == tid2  # resumed, not a second tenant
+            tid2 = provision_tenant(cs, "Acme", slug="acme")  # already active → no-op
+            cs.commit()
+        assert tid1 == tid2  # same tenant, not a second one
     finally:
-        _drop_db(control_db_url, dbname)
+        drop_tenant_db(dbname)
 
 
-def test_provision_hook_runs_before_activate(ctrl_engine, control_db_url, monkeypatch):
+def test_provision_resumes_a_partial_provisioning_row(
+    ctrl_engine, control_db_url, drop_tenant_db, monkeypatch
+):
+    """A crashed first run leaves a 'provisioning' control row with NO physical DB. Re-running
+    by slug must RESUME that row (same id) and finish: create+migrate the DB, flip to active.
+    This exercises the live_slug_tenant_id → resume branch (NOT the active no-op path)."""
     monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
-    from {{ package_name }}.config.settings import get_settings; get_settings.cache_clear()
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    from {{ package_name }}.db.control import repository as repo
+    from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+    from {{ package_name }}.multitenantauth.tenancy.registry import register_tenant
+
+    # Simulate the crash: a 'provisioning' row, default DSN derived, no physical DB created.
+    with Session(ctrl_engine) as cs:
+        partial = register_tenant(cs, "Acme", slug="acme", status="provisioning")
+        cs.commit()
+        partial_id = partial.id
+    dbname = make_url(default_tenant_dsn(partial_id)).database
+    try:
+        with Session(ctrl_engine) as cs:
+            resumed_id = provision_tenant(cs, "Acme", slug="acme")  # same slug → resume
+            cs.commit()
+        assert resumed_id == partial_id  # resumed the partial, not a new tenant
+        teng = create_engine(default_tenant_dsn(partial_id))
+        assert "items" in set(inspect(teng).get_table_names())  # physical now created+migrated
+        teng.dispose()
+        with Session(ctrl_engine) as cs:
+            assert repo.get_tenant(cs, partial_id).status == "active"
+    finally:
+        drop_tenant_db(dbname)
+
+
+def test_provision_hook_runs_before_activate(
+    ctrl_engine, control_db_url, drop_tenant_db, monkeypatch
+):
+    monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    from {{ package_name }}.db.control import repository as repo
     from {{ package_name }}.multitenantauth.tenancy import provision as P
     from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
 
-    seen = {}
+    seen: dict[str, str] = {}
+
     def hook(cs, tenant_id, tenant_dsn):
         seen["id"] = tenant_id
-        seen["status_at_hook"] = __import__("{{ package_name }}.db.control.repository", fromlist=["get_tenant"]).get_tenant(cs, tenant_id).status
+        seen["status_at_hook"] = repo.get_tenant(cs, tenant_id).status
+
     P.register_provision_hook(hook)
+    tid = None
     try:
         with Session(ctrl_engine) as cs:
-            tid = P.provision_tenant(cs, "Acme", slug="acme"); cs.commit()
+            tid = P.provision_tenant(cs, "Acme", slug="acme")
+            cs.commit()
         assert seen["id"] == tid
         assert seen["status_at_hook"] == "provisioning"  # hook runs BEFORE activate
     finally:
         P.register_provision_hook(None)
-        _drop_db(control_db_url, make_url(default_tenant_dsn(tid)).database)
+        if tid is not None:
+            drop_tenant_db(make_url(default_tenant_dsn(tid)).database)
 
 
 def test_provision_skips_physical_when_disabled(ctrl_engine, control_db_url, monkeypatch):
     monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
-    from {{ package_name }}.config.settings import get_settings; get_settings.cache_clear()
-    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
     from {{ package_name }}.db.control import repository as repo
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
 
     with Session(ctrl_engine) as cs:
-        tid = provision_tenant(cs, "Acme", slug="acme",
-                               dsn="postgresql+psycopg://byo/elsewhere", run_physical=False)
+        tid = provision_tenant(
+            cs, "Acme", slug="acme",
+            dsn="postgresql+psycopg://byo/elsewhere", run_physical=False,
+        )
         cs.commit()
         t = repo.get_tenant(cs, tid)
     assert t.status == "active"
-    assert t.dsn == "postgresql+psycopg://byo/elsewhere"  # no DB created locally
+    assert t.dsn == "postgresql+psycopg://byo/elsewhere"  # no DB created locally — nothing to drop
 ```
 
 - [ ] **Step 2: Run — expect FAIL** (`ModuleNotFoundError`).
@@ -1129,6 +1347,8 @@ def provision_tenant(
     return tenant_id
 ```
 
+> **`_project_root()` assumption:** `parents[4]` resolves `src/<pkg>/multitenantauth/tenancy/provision.py` → the project root, which is correct for the editable/`/app` install the acceptance tests and the generated Docker image use (`alembic.ini` + `migrations/` sit at the root). It would NOT hold for a `site-packages` install — out of scope for SP1, but if a future deploy installs the package non-editably, make the alembic.ini location a setting rather than deriving it. The acceptance test (`tests/functional`, editable install) is the guard.
+
 - [ ] **Step 4: Register the lock entry** — `"src/{package_name}/multitenantauth/tenancy/provision.py": ("multitenantauth",),`.
 
 - [ ] **Step 5: Run both loops — PASS.** Acceptance test runs against real PG (`TMPDIR=/var/tmp`, Docker available, sandbox disabled). `uv run pytest tests/integrity/test_auth_mechanism_lock.py -q` PASS. `ruff format --check`.
@@ -1152,14 +1372,20 @@ git commit -m "feat(FWK61 SP1): idempotent physical tenant provisioning + post-m
 - Consumes: `active_tenant` (existing), `control_session` (existing), `tenant_session` (Task 5).
 - Produces: `tenant_db(tenant_id=Depends(active_tenant), cs=Depends(control_session)) -> Iterator[Session]` — yields a Session on the active tenant's DB; a `LookupError` from resolution maps to `404` (no leak).
 
-- [ ] **Step 1: Write the failing test** — a tiny app mounting a `{tenant_id}` route that depends on `tenant_db`; assert a provisioned tenant routes (writes land in the tenant DB) and an unknown tenant 404s. (Build it on the control-migrated `ctrl_engine` + a provisioned tenant from Task 8's helpers.)
+- [ ] **Step 1: Write the failing test** — a tiny app mounting a `{tenant_id}` route that depends on `tenant_db`; assert a provisioned tenant routes (writes land in the tenant DB) and an unknown tenant 404s. Use the shared conftest fixtures (`ctrl_engine`, `control_db_url`, `drop_tenant_db`) and `provision_tenant` from Task 8 to set up tenants. This module provisions tenants, so declare the same module-local autouse cleanup as Task 8:
 
 ```python
+@pytest.fixture(autouse=True)
+def _clean_control(truncate_control):
+    yield
+    truncate_control()
+
+
 def test_tenant_db_routes_to_tenant_database(...): ...   # write via tenant_db, read back from the tenant DB directly
 def test_tenant_db_unknown_tenant_returns_404(...): ...  # active_tenant already 404s a non-member/unknown
 ```
 
-> Keep the assertions concrete in the implementation: provision two tenants, write a row through `tenant_db` under tenant A, assert it is absent from tenant B's DB (isolation) and present in A's.
+> Keep the assertions concrete in the implementation: provision two tenants, write a row through `tenant_db` under tenant A, assert it is absent from tenant B's DB (isolation) and present in A's; drop both tenant DBs via `drop_tenant_db` in teardown.
 
 - [ ] **Step 2: Run — expect FAIL** (`tenant_db` undefined).
 
@@ -1254,12 +1480,14 @@ git commit -m "feat(FWK61 SP1): expose tenant-engine metrics + spans + dashboard
 
 **Interfaces:** none new — this is the drift-aware conformance gate (DEC-0004 §"Conformance contract").
 
-- [ ] **Step 1: Write the isolation acceptance test** — provision tenants A and B; via `tenant_session` write a distinct row into each tenant's `items` table; assert A's row is absent from B's DB and vice-versa (physical isolation), then drop both DBs.
+- [ ] **Step 1: Write the isolation acceptance test** — add it to `test_tenant_provisioning.py` (Task 8's module, so it inherits that module's autouse `_clean_control`). Provision tenants A and B (distinct slugs); via `tenant_session` write a distinct row into each tenant's `items` table; assert A's row is absent from B's DB and vice-versa (physical isolation), then drop both DBs via `drop_tenant_db`.
 
 ```python
-def test_two_tenants_are_physically_isolated(ctrl_engine, control_db_url, monkeypatch):
-    # provision A and B; write through tenant_session(A) and tenant_session(B);
-    # assert each row exists only in its own tenant DB. Drop both in teardown.
+def test_two_tenants_are_physically_isolated(
+    ctrl_engine, control_db_url, drop_tenant_db, monkeypatch
+):
+    # provision A (slug "acme") and B (slug "globex"); write through tenant_session(A) and
+    # tenant_session(B); assert each row exists only in its own tenant DB. Drop both in teardown.
     ...
 ```
 
@@ -1293,3 +1521,12 @@ git commit -m "feat(FWK61 SP1): tenant-isolation conformance + Layer-2 review; S
 - **Lock-sequencing:** each new mechanism file's `BATTERY_LOCKED_SRC` entry rides in its own task (Tasks 2–5, 8) — never deferred.
 - **Idempotency** is by-slug-resume (Task 8), not Meridian's by-id short-circuit (the battery mints the id internally).
 - **Acceptance tier is real-PG, never skip-neutral** (Tasks 8, 9, 11) — `CREATE DATABASE` is proven to work in the harness (`test_control_migrations.py` already does it).
+
+**Advisor-round corrections folded (post-plan review):**
+- **Cross-module fixture blocker → Task 0.** `control_db_url`/`ctrl_engine` were module-local to `test_control_migrations.py`; Tasks 8/9/11 (new modules) requesting them would fail `fixture not found`. Task 0 promotes them (+ `truncate_control`, `drop_tenant_db`) into the battery-gated conftest, repoints `test_control_migrations.py`, and proves the move with a cross-module smoke. **`_clean` stays per-module** (autouse-in-conftest would truncate around every test, including non-DB ones).
+- **Per-module control cleanup is required, not optional.** The provisioning/routing modules reuse the `acme` slug across cases; each declares its own autouse `_clean_control(truncate_control)` so a prior row doesn't make `provision_tenant` short-circuit. Encoded in Tasks 8, 9.
+- **`get_settings` is `@lru_cache`'d** (verified) → `get_settings.cache_clear()` after every `monkeypatch.setenv`, no hedge.
+- **`Settings` is not frozen** (verified) → set test overrides via `Settings(max_cached_engines=2)` directly.
+- **Task 6 test belongs in `test_tenancy_registry.py`** using its existing `registry_engine` fixture (not `db_session`/`ctrl_engine`); set `APP_DATABASE_URL` so `default_tenant_dsn` resolves.
+- **Idempotency coverage split** — the old `test_provision_is_idempotent_after_partial` only hit the active no-op path; now `test_provision_is_noop_when_already_active` (no-op branch) **and** `test_provision_resumes_a_partial_provisioning_row` (the real resume-from-`provisioning` branch, seeded via a status-only `register_tenant`).
+- **`_project_root() = parents[4]`** documented as an editable/`/app`-install assumption (acceptance test is the guard; site-packages install out of scope for SP1).

@@ -3197,3 +3197,28 @@ re-transcribing. **Next:** execute SP1 (subagent-driven per [[subagent-review-mo
 Sonnet, spec review Sonnet, code-quality + branch-end Opus; Phase-2 Layer-2 all-Opus per
 [[security-review-workflow-all-opus]]).
 (FWK61 SP1 plan → PLAN)
+
+#### #0232 · amended · FWK61 SP1 — plan hardened after adversarial review (1 blocker + secondaries) · 2026-06-25
+Ran the writing-plans self-review through the advisor (stronger reviewer, full transcript). It mentally executed
+the test code and found a **real execution blocker**: `control_db_url`/`ctrl_engine` are module-scoped inside
+`test_control_migrations.py`, so Tasks 8/9/11 (new modules) requesting them fail `fixture 'ctrl_engine' not
+found` — pytest shares fixtures across modules only via `conftest.py`. **Fix = new Task 0**: promote those two
+fixtures (+ `truncate_control`, `drop_tenant_db`) into the **battery-gated** `conftest.py.jinja` (session-scoped),
+repoint `test_control_migrations.py`, prove the move with a cross-module smoke. Critical caveat encoded: the
+`_clean` truncate stays **per-module autouse** — globalizing it in conftest would truncate control tables around
+every test (incl. non-DB) in the rendered suite. Knock-on the advisor's review didn't reach but the blocker
+implies: the provisioning/routing modules reuse the `acme` slug across cases, so each needs its own autouse
+`_clean_control(truncate_control)` or `provision_tenant` would short-circuit on a stale active row (Tasks 8, 9).
+**Secondaries folded:** (a) verified `get_settings` IS `@lru_cache`'d → `cache_clear()` after every setenv, hedge
+removed; (b) verified `Settings` is NOT frozen → `Settings(max_cached_engines=2)` directly, dropped the
+`object.__setattr__` fallback; (c) **idempotency test was mislabeled** — the old `_after_partial` only hit the
+active no-op path → split into `test_provision_is_noop_when_already_active` (no-op) + a NEW
+`test_provision_resumes_a_partial_provisioning_row` that seeds a status-only `register_tenant` row then re-runs,
+actually exercising the resume-from-`provisioning` branch; (d) Task 6's test moved onto the existing
+`registry_engine` fixture (+ `APP_DATABASE_URL` so `default_tenant_dsn` resolves), removing a `db_session` vs
+control-DB inconsistency; (e) `_project_root()=parents[4]` documented as an editable/`/app`-install assumption.
+Plan now 12 tasks (0–11); Layer-2 cross-ref corrected (Task 11 Step 4, not "Task 12"). Advisor's verdict:
+non-blocking for the document, fix in-plan before fan-out — done. **Riskiest execution step flagged for the
+controller:** Task 0's dual-loop conftest change + Task 1/2 establish the template-payload render→mirror→pytest
+loop — review the first 2–3 task outputs closely before trusting the fan-out.
+(FWK61 SP1 plan hardened → PLAN)
