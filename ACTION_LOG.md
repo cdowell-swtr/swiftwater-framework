@@ -3247,3 +3247,14 @@ DSN-cache counters, hand-rolled Prometheus exposition) and locked it via a `BATT
 TDD: Loop B rendered metrics test RED (`ModuleNotFoundError`) → GREEN; Loop A lock guard RED (unlisted file)
 → GREEN (5 passed); framework ruff/format/`mypy src` clean. Subagent-driven (Sonnet impl; Opus task review next).
 (FWK61 SP1 Task 2 → ledger)
+
+#### #0236 · completed · FWK61 SP1 Task 3 — TenantEngineRegistry (per-endpoint budgeted LRU, locked) · 2026-06-25
+Ported Meridian's validated `tenancy/engine_registry.py`: `endpoint_of`, `required_connections`,
+`BudgetExceeded`, `validate_endpoint_budget` (fail-closed, ×safety_factor), `TenantEngineRegistry` (RLock,
+per-endpoint count-driven LRU + soft dispose, **budget validated BEFORE caching** — on `BudgetExceeded` the
+just-built engine is disposed and NOT cached, `render_pool_gauges`), `tenant_engines` singleton. Builder uses
+`create_engine` directly so baseline `db/engine.py` stays uncoupled. Locked via `classes.py`. 6 rendered unit
+tests (1 metrics + 5 registry: caching/LRU-evict/budget-disposes/required-connections) GREEN with injected
+fakes (no PG); lock guard RED→GREEN; framework ruff/format/`mypy src` clean. Two test-only ruff fixes (unused
+`import threading`, `e1`→`_e1`). Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 3 → ledger)
