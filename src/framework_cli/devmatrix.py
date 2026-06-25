@@ -47,6 +47,8 @@ def representative_combos() -> list[Combo]:
         Combo("graphql+react", ("graphql", "react")),
         Combo("mongodb+pgvector", ("mongodb", "pgvector")),
         Combo("workers+redis", ("redis", "workers")),
+        Combo("multitenantauth", ("multitenantauth",)),
+        Combo("multitenantauth+workers", ("multitenantauth", "workers")),
         Combo("full", tuple(battery_names()), _ALL_CHANNELS),
     ]
 

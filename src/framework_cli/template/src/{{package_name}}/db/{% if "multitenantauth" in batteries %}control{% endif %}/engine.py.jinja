@@ -1,0 +1,42 @@
+import threading
+
+from sqlalchemy import Engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from {{package_name}}.config.settings import get_settings
+from {{package_name}}.db.engine import build_engine, build_session_factory
+
+_control_engine: Engine | None = None
+_control_factory: "sessionmaker[Session] | None" = None
+# double-checked lock (sec-review OPS-F3): FastAPI runs sync deps in a
+# threadpool — a cold-start burst must not orphan a second engine/pool.
+_control_lock = threading.Lock()
+
+
+def control_engine() -> Engine:
+    global _control_engine
+    if _control_engine is None:
+        with _control_lock:
+            if _control_engine is None:
+                _control_engine = build_engine(get_settings().control_database_url)
+    return _control_engine
+
+
+def control_session_factory() -> "sessionmaker[Session]":
+    global _control_factory
+    if _control_factory is None:
+        # Resolve the engine before acquiring the lock: control_engine() has its own.
+        engine = control_engine()
+        with _control_lock:
+            if _control_factory is None:
+                _control_factory = build_session_factory(engine)
+    return _control_factory
+
+
+def dispose_control_engine() -> None:
+    global _control_engine, _control_factory
+    with _control_lock:
+        if _control_engine is not None:
+            _control_engine.dispose()
+        _control_engine = None
+        _control_factory = None

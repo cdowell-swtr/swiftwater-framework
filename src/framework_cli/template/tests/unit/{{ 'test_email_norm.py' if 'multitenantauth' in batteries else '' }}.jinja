@@ -1,0 +1,78 @@
+"""Unit tests for {{ package_name }}.multitenantauth.authn.email_norm — conservative email canonicalization."""
+
+import pytest
+
+
+def test_lowercase_and_trim():
+    """Basic lowercase + trim applies to all domains."""
+    from {{ package_name }}.multitenantauth.authn.email_norm import canonicalize
+
+    assert canonicalize("Chris@Example.com") == "chris@example.com"
+
+
+def test_plus_tag_stripped_gmail():
+    """Gmail strips the +tag."""
+    from {{ package_name }}.multitenantauth.authn.email_norm import canonicalize
+
+    assert canonicalize("chrisdowell+x@gmail.com") == "chrisdowell@gmail.com"
+
+
+def test_dots_stripped_gmail():
+    """Gmail strips dots from the local part."""
+    from {{ package_name }}.multitenantauth.authn.email_norm import canonicalize
+
+    assert canonicalize("chris.dowell@gmail.com") == "chrisdowell@gmail.com"
+
+
+def test_outlook_strips_plus_but_not_dots():
+    """Outlook strips +tag but does NOT strip dots (conservative)."""
+    from {{ package_name }}.multitenantauth.authn.email_norm import canonicalize
+
+    assert canonicalize("a.b.c@outlook.com") == "a.b.c@outlook.com"
+
+
+def test_unknown_domain_preserves_plus_tag():
+    """Unknown domains preserve +tag — we must not merge distinct inboxes."""
+    from {{ package_name }}.multitenantauth.authn.email_norm import canonicalize
+
+    assert canonicalize("chris+meridian@example.com") == "chris+meridian@example.com"
+
+
+def test_whitespace_stripped():
+    """Leading/trailing whitespace is stripped before processing."""
+    from {{ package_name }}.multitenantauth.authn.email_norm import canonicalize
+
+    assert canonicalize("  Spaced@x.com  ") == "spaced@x.com"
+
+
+def test_malformed_no_at_raises():
+    """Input with no @ raises ValueError."""
+    from {{ package_name }}.multitenantauth.authn.email_norm import canonicalize
+
+    with pytest.raises(ValueError, match="malformed email"):
+        canonicalize("not-an-email")
+
+
+def test_malformed_multiple_at_raises():
+    """Input with two @ signs raises ValueError."""
+    from {{ package_name }}.multitenantauth.authn.email_norm import canonicalize
+
+    with pytest.raises(ValueError, match="malformed email"):
+        canonicalize("a@b@c.com")
+
+
+def test_malformed_leading_at_raises():
+    """Input starting with @ raises ValueError."""
+    from {{ package_name }}.multitenantauth.authn.email_norm import canonicalize
+
+    with pytest.raises(ValueError, match="malformed email"):
+        canonicalize("@example.com")
+
+
+def test_malformed_empty_local_after_plus_strip():
+    """A local part that becomes empty after stripping raises ValueError."""
+    from {{ package_name }}.multitenantauth.authn.email_norm import canonicalize
+
+    # "+@gmail.com" → local becomes "" after plus-strip and dot-strip
+    with pytest.raises(ValueError, match="malformed email"):
+        canonicalize("+@gmail.com")

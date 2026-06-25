@@ -30,6 +30,7 @@ dependencies = [
 {% endif %}{% if "redis" in batteries %}    "redis>=5",
 {% endif %}{% if "redis" in batteries or "workers" in batteries %}    "opentelemetry-instrumentation-redis>=0.48b0",
 {% endif %}{% if "consumers" in batteries %}    "httpx>=0.28",
+{% endif %}{% if "multitenantauth" in batteries %}    "argon2-cffi>=23",
 {% endif %}{% if "llm" in batteries %}    "litellm>=1.88.1",
 {% endif %}{% if "claudesubscriptioncli" in batteries %}    "litellm-claude-cli @ git+https://github.com/cdowell-swtr/litellm-claude-cli@v0.1.1",
 {% endif %}]

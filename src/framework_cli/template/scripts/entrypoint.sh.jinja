@@ -8,6 +8,12 @@ set -e
 # before the roll (see infra/deploy/README.md), so N containers don't race the same migration.
 if [ "${APP_RUN_MIGRATIONS:-true}" = "true" ]; then
   alembic upgrade head
+{%- if "multitenantauth" in batteries %}
+  alembic -c alembic_control.ini upgrade head
+  # Seed the control vocabulary (permissions/roles) BEFORE the consumer seed, so any
+  # consumer data that depends on the authz vocabulary always finds it present.
+  python -m {{ package_name }}.multitenantauth.authz.seed
+{%- endif %}
   python scripts/seed.py
 fi
 exec "$@"

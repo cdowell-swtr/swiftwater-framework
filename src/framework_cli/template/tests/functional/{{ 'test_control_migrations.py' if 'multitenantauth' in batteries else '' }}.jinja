@@ -1,0 +1,206 @@
+"""Control-plane migration chain verification tests.
+
+Asserts:
+(a) Both alembic chains (app + control) can run `upgrade head` to the same database
+    → two distinct version tables, no collision.
+(b) The control chain on a separate `control_database_url` → the app DB has no
+    control-plane tables.
+(c) After the control chain upgrade, a resource-role round-trip insert succeeds;
+    a 'product' role-domain insert is rejected (ck_role_domain); a non-DNS-safe slug
+    is rejected (ck_tenant_slug_dns_label).
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import uuid
+
+import pytest
+from sqlalchemy import Engine, create_engine, inspect, make_url, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+
+
+# ── fixtures ─────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def control_db_url(pg_url: str) -> str:
+    """A separate Postgres database for the control plane."""
+    _ctrl_db = "{{ package_name }}_ctrl_mig_test"
+    base = make_url(pg_url)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+    return ctrl_url
+
+
+@pytest.fixture(scope="module")
+def ctrl_engine(control_db_url: str) -> Engine:  # type: ignore[return]
+    """Run `alembic upgrade head` on the control chain and return a bound engine."""
+    proc = subprocess.run(
+        ["alembic", "-c", "alembic_control.ini", "upgrade", "head"],
+        env={**os.environ, "APP_CONTROL_DATABASE_URL": control_db_url},
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        pytest.fail(
+            f"alembic control upgrade head failed:\n{proc.stdout}\n{proc.stderr}"
+        )
+    engine = create_engine(control_db_url)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean(ctrl_engine: Engine) -> None:  # type: ignore[return]
+    """Truncate all control-plane tables after each test."""
+    yield
+    with ctrl_engine.begin() as conn:
+        conn.execute(
+            text(
+                "TRUNCATE TABLE resource_role_assignment, platform_role_assignment, "
+                "tenant_role_assignment, authz_event, invite_token, session, "
+                "tenant_membership, role_permission, permission, role, "
+                "tenant_slug_history, tenant, app_user CASCADE"
+            )
+        )
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _seed(s: Session) -> tuple[uuid.UUID, uuid.UUID]:
+    """Insert a tenant, user, membership, and a resource-domain role.
+
+    Returns (membership_id, resource_role_id).
+    """
+    tenant = m.Tenant(
+        id="testacme",
+        name="Acme Inc",
+        slug="acme",
+        dsn="postgresql+psycopg://x/acme",
+    )
+    s.add(tenant)
+    user = m.AppUser(email="a@x.io", email_canonical="a@x.io", born="operator")
+    s.add(user)
+    resource_role = m.Role(
+        name="resource.admin",
+        domain="resource",
+        description="resource admin",
+    )
+    s.add(resource_role)
+    s.flush()
+    membership = m.TenantMembership(user_id=user.id, tenant_id=tenant.id)
+    s.add(membership)
+    s.flush()
+    return membership.id, resource_role.id
+
+
+# ── (a) both chains co-located → two version tables, no collision ─────────────
+
+
+def test_both_chains_produce_two_version_tables(
+    engine: Engine, ctrl_engine: Engine
+) -> None:
+    """After both chains run head, each DB has exactly its own version table."""
+    app_tables = set(inspect(engine).get_table_names())
+    ctrl_tables = set(inspect(ctrl_engine).get_table_names())
+
+    # App DB has the app version table but NOT the control version table.
+    assert "alembic_version" in app_tables
+    assert "alembic_version_multitenantauth" not in app_tables
+
+    # Control DB has the control version table but NOT the standard app version table.
+    assert "alembic_version_multitenantauth" in ctrl_tables
+
+
+# ── (b) control chain on separate URL → app DB has no control tables ──────────
+
+
+def test_app_db_has_no_control_tables(engine: Engine) -> None:
+    """The app database must not contain control-plane tables."""
+    control_tables = {
+        "tenant",
+        "tenant_slug_history",
+        "tenant_membership",
+        "app_user",
+        "session",
+        "invite_token",
+        "role",
+        "permission",
+        "role_permission",
+        "tenant_role_assignment",
+        "platform_role_assignment",
+        "resource_role_assignment",
+        "authz_event",
+    }
+    app_tables = set(inspect(engine).get_table_names())
+    overlap = control_tables & app_tables
+    assert not overlap, f"App DB contains control-plane tables: {overlap}"
+
+
+# ── (c) round-trip + rejection invariants ─────────────────────────────────────
+
+
+def test_resource_role_round_trip(ctrl_engine: Engine) -> None:
+    """A resource-domain role CAN be assigned at resource grain (happy path)."""
+    with Session(ctrl_engine) as s:
+        membership_id, resource_role_id = _seed(s)
+        rra = m.ResourceRoleAssignment(
+            membership_id=membership_id,
+            resource_id="widget-42",
+            role_id=resource_role_id,
+        )
+        s.add(rra)
+        s.commit()
+        rra_id = rra.id
+
+    with Session(ctrl_engine) as s:
+        from sqlalchemy import select
+
+        row = s.scalar(
+            select(m.ResourceRoleAssignment).where(
+                m.ResourceRoleAssignment.id == rra_id
+            )
+        )
+        assert row is not None
+        assert row.resource_id == "widget-42"
+        assert row.role_domain == "resource"
+
+
+def test_product_domain_rejected_by_role_check(ctrl_engine: Engine) -> None:
+    """'product' is NOT a valid role domain (ck_role_domain = IN ('tenant','platform','resource'))."""
+    with Session(ctrl_engine) as s, pytest.raises(IntegrityError):
+        s.add(
+            m.Role(
+                name="product.admin",
+                domain="product",
+                description="should be rejected",
+            )
+        )
+        s.commit()
+
+
+def test_non_dns_slug_rejected(ctrl_engine: Engine) -> None:
+    """A non-DNS-safe slug is rejected by ck_tenant_slug_dns_label."""
+    with Session(ctrl_engine) as s, pytest.raises(IntegrityError):
+        s.add(
+            m.Tenant(
+                id="badslugtest",
+                name="Bad Slug Tenant",
+                slug="Bad_Slug",  # underscore + uppercase — invalid DNS label
+                dsn="postgresql+psycopg://x/bad",
+            )
+        )
+        s.commit()

@@ -1,0 +1,46 @@
+"""Control-plane engine tests for the multitenantauth battery."""
+
+import pytest
+from sqlalchemy import text
+from sqlalchemy.orm import sessionmaker
+
+from {{ package_name }}.config.settings import get_settings
+from {{ package_name }}.db.base import Base
+from {{ package_name }}.db.control.base import ControlBase
+from {{ package_name }}.db.control.engine import (
+    control_session_factory,
+    dispose_control_engine,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_control_engine():
+    """Dispose the control engine singleton before and after each test."""
+    dispose_control_engine()
+    yield
+    dispose_control_engine()
+
+
+def test_control_session_factory_returns_sessionmaker(pg_url: str, monkeypatch):
+    """control_session_factory() returns a sessionmaker."""
+    monkeypatch.setenv("APP_CONTROL_DATABASE_URL", pg_url)
+    get_settings.cache_clear()
+    factory = control_session_factory()
+    assert isinstance(factory, sessionmaker)
+    get_settings.cache_clear()
+
+
+def test_control_session_opens_against_control_url(pg_url: str, monkeypatch):
+    """A session opened from control_session_factory() can query the control DB."""
+    monkeypatch.setenv("APP_CONTROL_DATABASE_URL", pg_url)
+    get_settings.cache_clear()
+    factory = control_session_factory()
+    with factory() as session:
+        result = session.execute(text("SELECT 1")).scalar()
+    assert result == 1
+    get_settings.cache_clear()
+
+
+def test_control_base_metadata_distinct_from_base_metadata():
+    """ControlBase.metadata must be a DISTINCT object from Base.metadata."""
+    assert ControlBase.metadata is not Base.metadata

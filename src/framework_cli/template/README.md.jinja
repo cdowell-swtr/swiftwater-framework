@@ -105,6 +105,13 @@ separate, ephemeral Postgres (`postgres-test`, reset every run) for the full E2E
 - `GET /health` — readiness + SLO status
 - `GET /metrics` — Prometheus metrics
 - `GET /items` — example DB-backed listing (seeded data; paginated via `?limit=&offset=`)
+{%- if "multitenantauth" in batteries %}
+- `POST /auth/signup` — found a tenant (creates the founder as `tenant.admin`); **fail-closed** (see Authentication below)
+- `POST /auth/login` — exchange credentials for a fresh httpOnly session cookie
+- `POST /auth/logout` — revoke the current session
+- `POST /auth/set-password` — redeem a single-use invite/reset token (invalidates all the user's sessions)
+- `GET /auth/me` — the authenticated user + their tenant memberships/roles
+{%- endif %}
 {%- if "webhooks" in batteries %}
 - `POST /webhooks` — signed inbound webhook receiver (HMAC-verified, deduplicated)
 {%- endif %}
@@ -131,6 +138,40 @@ This project uses [Pact](https://docs.pact.io/) for consumer-driven contract tes
 - `task contract:pact` — run both locally.
 
 **Pact Broker (opt-in):** set `PACT_BROKER_URL` + `PACT_BROKER_TOKEN` (GitHub repo secrets) to publish pacts and verify against a real broker. Without those secrets the `contracts` CI job uses local pact files only (`scripts/pact-publish.sh` no-ops). The multi-repo flow — consumer publishes, provider verifies broker pacts, `pact-broker can-i-deploy` gates releases — is documented in the script.
+{%- endif %}
+{%- if "multitenantauth" in batteries %}
+
+## Authentication
+
+Identity lives in the **control plane** (users / sessions / memberships); sessions are opaque,
+server-side, and httpOnly-cookie-borne (never tenant-bound). Passwords are argon2id + an
+application pepper; tokens are stored only as `HMAC-SHA256(token, session_pepper)`.
+
+**Signup is FAIL-CLOSED by default** (this is the framework's deliberate opposite of an
+"empty allowlist = open" default — a consumer must explicitly opt in):
+
+| `APP_ENVIRONMENT` | `APP_SIGNUP_ALLOWLIST`     | `POST /auth/signup`              |
+| ----------------- | -------------------------- | -------------------------------- |
+| `prod`            | (any)                      | **404** — signup off entirely    |
+| `staging`         | empty                      | **403** — denied (opt-in needed) |
+| `staging`         | populated + email matches  | **201** — created                |
+| `dev`             | (any)                      | **201** — open                   |
+
+Opt into staging signups by populating `APP_SIGNUP_ALLOWLIST` (exact emails and/or `@domain`
+suffixes). Collisions on email *or* slug return one generic **409** that never reveals which
+collided (no account/tenant enumeration); login failures all return the same generic **401**.
+
+**Login mints a brand-new session** — no caller-supplied session id is ever adopted, so session
+fixation is structurally impossible. `/auth/set-password` redeems a single-use token and then
+**deletes ALL of the user's sessions** (a credential reset must not leave old sessions live).
+
+> **B-F11 — if you add a logged-in change-password or account-disable flow, it MUST replicate
+> that session-invalidation step** (`delete Session WHERE user_id = …`). `/auth/set-password`
+> already does it; any new credential-mutating route is on the hook to do the same, or stale
+> sessions survive the credential change.
+
+The session-cookie flags (httpOnly, `secure`, `SameSite=Lax`, optional parent `domain`) are set
+in exactly one place — `multitenantauth/cookies.py:set_session_cookie`.
 {%- endif %}
 
 ## Conventions

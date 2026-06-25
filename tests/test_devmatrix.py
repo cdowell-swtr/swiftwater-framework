@@ -39,6 +39,8 @@ def test_representative_is_the_documented_set():
         "graphql+react",
         "mongodb+pgvector",
         "workers+redis",
+        "multitenantauth",
+        "multitenantauth+workers",
         "full",
     ]
     full = next(c for c in representative_combos() if c.name == "full")

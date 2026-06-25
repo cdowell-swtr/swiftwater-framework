@@ -1,0 +1,469 @@
+"""Functional tests for the AuthN routes (signup/login/logout/set-password/me).
+
+These exercise the routers via a probe app that mounts the auth router and overrides
+``control_session`` onto a real test control DB (create_all — Task 7 alembic deferred). Signup is
+routing-agnostic in Phase 1 (``register_tenant``+``activate`` in the control plane only; no physical
+per-tenant DB), so these tests need only the control engine — no provisioning machinery.
+
+Outcome-space: founder→admin happy path, no-enumeration login/collision failures, logout/login
+roundtrip, **login mints a FRESH session (fixation)**, single-use set-password that **invalidates
+all sessions**, and the **fail-closed signup gate** (prod→404, staging+empty→403, staging+match→201,
+dev→201).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine, create_engine, make_url, select, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+from {{ package_name }}.db.control.base import ControlBase
+from {{ package_name }}.multitenantauth.authn.tokens import mint
+from {{ package_name }}.multitenantauth.deps import control_session
+from {{ package_name }}.multitenantauth.routes.auth import router as auth_router
+
+pytestmark = pytest.mark.usefixtures("_clean_control")
+
+
+# ── control-plane DB fixture (full schema, no alembic — Task 7 deferred) ────────
+
+
+@pytest.fixture(scope="module")
+def control_engine(pg_url: str) -> Iterator[Engine]:
+    """Control-plane engine for the auth-route tests. create_all (no alembic)."""
+    _ctrl_db = "{{ package_name }}_authroutes_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(engine)
+    yield engine
+    engine.dispose()
+
+
+_CONTROL_TABLES = (
+    "invite_token, session, authz_event, platform_role_assignment, "
+    "resource_role_assignment, tenant_role_assignment, tenant_membership, "
+    "role_permission, permission, role, app_user, tenant, tenant_slug_history"
+)
+
+
+@pytest.fixture
+def _clean_control(control_engine: Engine) -> Iterator[None]:
+    """Truncate control tables after each test (function-scoped isolation)."""
+    yield
+    with control_engine.begin() as conn:
+        conn.execute(text(f"TRUNCATE TABLE {_CONTROL_TABLES} CASCADE"))
+
+
+def _seed_vocab(s: Session) -> None:
+    """Seed the minimum roles/permissions signup needs (Task 17 seed_authz deferred).
+
+    Signup assigns ``tenant.admin`` to the founder, so that role (+ its grants) must exist.
+    """
+    from uuid import uuid4
+
+    perms = [("tenant:read", "tenant"), ("tenant:manage-members", "tenant")]
+    for name, domain in perms:
+        s.execute(
+            text(
+                "INSERT INTO permission (name, domain, description, is_active) "
+                "VALUES (:name, :domain, :desc, true) ON CONFLICT DO NOTHING"
+            ),
+            {"name": name, "domain": domain, "desc": name},
+        )
+    roles_def = [
+        ("tenant.member", "tenant", {"tenant:read"}),
+        ("tenant.admin", "tenant", {"tenant:read", "tenant:manage-members"}),
+    ]
+    role_ids: dict[str, object] = {}
+    for rname, rdomain, _ in roles_def:
+        s.execute(
+            text(
+                "INSERT INTO role (id, name, domain, description, is_builtin) "
+                "VALUES (:id, :name, :domain, :desc, true) ON CONFLICT (name) DO NOTHING"
+            ),
+            {"id": uuid4(), "name": rname, "domain": rdomain, "desc": rname},
+        )
+        role_ids[rname] = s.execute(
+            text("SELECT id FROM role WHERE name=:name"), {"name": rname}
+        ).scalar_one()
+    for rname, _, grants in roles_def:
+        for pname in grants:
+            s.execute(
+                text(
+                    "INSERT INTO role_permission (role_id, permission_name) "
+                    "VALUES (:rid, :pname) ON CONFLICT DO NOTHING"
+                ),
+                {"rid": role_ids[rname], "pname": pname},
+            )
+
+
+def _build_client(control_engine: Engine, monkeypatch, env: str = "dev") -> TestClient:
+    """Build a TestClient over a probe app mounting the auth router, with control_session
+    overridden onto *control_engine* and the env/peppers set for *env*."""
+    monkeypatch.setenv("APP_ENVIRONMENT", env)
+    monkeypatch.setenv("APP_SESSION_PEPPER", "authroutes-session-pepper")
+    monkeypatch.setenv("APP_PASSWORD_PEPPER", "authroutes-password-pepper")
+    monkeypatch.setenv("APP_SESSION_COOKIE_SECURE", "false")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    with Session(control_engine) as s:
+        _seed_vocab(s)
+        s.commit()
+
+    app = FastAPI()
+    app.include_router(auth_router)
+
+    def _cs() -> Iterator[Session]:
+        with Session(control_engine) as s:
+            yield s
+
+    app.dependency_overrides[control_session] = _cs
+    return TestClient(app)
+
+
+@pytest.fixture
+def auth_client(control_engine: Engine, monkeypatch) -> Iterator[TestClient]:
+    """A dev-env client (signup open) over the test control plane."""
+    client = _build_client(control_engine, monkeypatch, env="dev")
+    try:
+        yield client
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()
+
+
+# ── happy path + identity ────────────────────────────────────────────────────────
+
+
+def test_signup_creates_tenant_founder_and_me(auth_client):
+    r = auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "ceo@acme.com",
+            "password": "pw-placeholder",
+            "tenant_name": "Acme",
+            "slug": "acme",
+        },
+    )
+    assert r.status_code == 201
+    tenant_id = r.json()["tenant_id"]
+    assert tenant_id  # opaque, auto-generated — NOT the slug
+    assert r.json()["slug"] == "acme"
+    assert auth_client.cookies.get("{{ package_name }}_session")
+    # The session cookie carries the security flags (set in cookies.py): httpOnly + SameSite=Lax.
+    set_cookie = r.headers["set-cookie"].lower()
+    assert "httponly" in set_cookie
+    assert "samesite=lax" in set_cookie
+    me = auth_client.get("/auth/me")
+    assert me.status_code == 200
+    body = me.json()
+    assert body["email"] == "ceo@acme.com"
+    # Founder is tenant.admin on the freshly-created (opaque-id) tenant.
+    assert any(
+        mem["tenant_id"] == tenant_id and "tenant.admin" in mem["roles"]
+        for mem in body["memberships"]
+    )
+
+
+# ── login: no enumeration ────────────────────────────────────────────────────────
+
+
+def test_login_wrong_password_is_401_generic(auth_client):
+    auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "a@x.com",
+            "password": "right-pw-placeholder",
+            "tenant_name": "X",
+            "slug": "xco",
+        },
+    )
+    auth_client.post("/auth/logout")
+    r = auth_client.post("/auth/login", json={"email": "a@x.com", "password": "wrong"})
+    assert r.status_code == 401
+    assert "password" not in r.text.lower() and "email" not in r.text.lower()
+
+
+def test_login_unknown_user_is_401_same_as_wrong_password(auth_client):
+    r = auth_client.post(
+        "/auth/login", json={"email": "nobody@x.com", "password": "whatever"}
+    )
+    assert r.status_code == 401  # no enumeration — same shape as wrong-password
+
+
+def test_login_then_me_roundtrip(auth_client):
+    auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "b@x.com",
+            "password": "pw-placeholder",
+            "tenant_name": "B",
+            "slug": "bco",
+        },
+    )
+    auth_client.post("/auth/logout")
+    assert auth_client.get("/auth/me").status_code == 401  # logged out
+    assert (
+        auth_client.post(
+            "/auth/login", json={"email": "b@x.com", "password": "pw-placeholder"}
+        ).status_code
+        == 200
+    )
+    assert auth_client.get("/auth/me").status_code == 200
+
+
+def test_logout_is_idempotent_without_session(auth_client):
+    # No session cookie set — logout must still succeed (idempotent, no auth required).
+    assert auth_client.post("/auth/logout").status_code == 204
+
+
+def test_disabled_user_cannot_login(auth_client, control_engine):
+    auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "disabled@x.com",
+            "password": "pw-placeholder",
+            "tenant_name": "Dis",
+            "slug": "disco",
+        },
+    )
+    auth_client.post("/auth/logout")
+    with Session(control_engine) as s:
+        user = s.scalar(
+            select(m.AppUser).where(m.AppUser.email_canonical == "disabled@x.com")
+        )
+        user.disabled_at = datetime.now(timezone.utc)
+        s.commit()
+    r = auth_client.post(
+        "/auth/login", json={"email": "disabled@x.com", "password": "pw-placeholder"}
+    )
+    assert r.status_code == 401  # disabled → same generic 401 (no enumeration)
+
+
+# ── login mints a FRESH session (fixation prevented) ─────────────────────────────
+
+
+def test_login_mints_fresh_session_not_caller_supplied(auth_client):
+    """Session fixation: a caller-supplied (junk) session cookie is NEVER adopted. After a valid
+    login the issued token differs from the junk, and the junk cookie does not authenticate."""
+    auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "fix@x.com",
+            "password": "pw-placeholder",
+            "tenant_name": "Fix",
+            "slug": "fixco",
+        },
+    )
+    auth_client.post("/auth/logout")
+
+    junk = "attacker-fixated-session-value"
+    # A fresh client carrying ONLY the attacker-supplied (junk) session cookie.
+    attacker = TestClient(auth_client.app)
+    attacker.cookies.set("{{ package_name }}_session", junk)
+    r = attacker.post(
+        "/auth/login", json={"email": "fix@x.com", "password": "pw-placeholder"}
+    )
+    assert r.status_code == 200
+    # Read the issued token from the login response's Set-Cookie header (deterministic — the jar
+    # may transiently hold both the junk and the issued cookie under different domains).
+    issued = r.cookies.get("{{ package_name }}_session")
+    assert issued and issued != junk  # a brand-new token, not the attacker's value
+
+    # The junk value never authenticates (it was never registered as a session).
+    bad = TestClient(auth_client.app)
+    bad.cookies.set("{{ package_name }}_session", junk)
+    assert bad.get("/auth/me").status_code == 401
+
+
+# ── signup collisions: one generic 409, no enumeration ───────────────────────────
+
+
+def test_signup_duplicate_email_is_409_without_enumeration(auth_client):
+    first = auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "dup@x.com",
+            "password": "pw-placeholder",
+            "tenant_name": "Dup",
+            "slug": "dupco",
+        },
+    )
+    assert first.status_code == 201
+    auth_client.post("/auth/logout")
+    # Same email, different slug → email collision; the response must not reveal which collided.
+    second = auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "dup@x.com",
+            "password": "pw-placeholder",
+            "tenant_name": "Other",
+            "slug": "otherco",
+        },
+    )
+    assert second.status_code == 409
+    assert "email" not in second.text.lower() and "slug" not in second.text.lower()
+
+
+def test_signup_duplicate_slug_is_409_no_orphan(auth_client, control_engine):
+    """A second signup reusing a live slug → generic 409 (slug collision). The attacker gets no
+    user and no membership — and reusing a slug never joins the victim's tenant."""
+    first = auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "founder@acme.com",
+            "password": "pw-placeholder",
+            "tenant_name": "Acme",
+            "slug": "acme",
+        },
+    )
+    assert first.status_code == 201
+    attacker = auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "attacker@evil.com",
+            "password": "pw-placeholder",
+            "tenant_name": "Evil",
+            "slug": "acme",  # reuse the live slug
+        },
+    )
+    assert attacker.status_code == 409
+    assert "email" not in attacker.text.lower() and "slug" not in attacker.text.lower()
+    with Session(control_engine) as s:
+        # No attacker user was created (rejected before any write).
+        assert (
+            s.scalar(
+                select(m.AppUser.id).where(
+                    m.AppUser.email_canonical == "attacker@evil.com"
+                )
+            )
+            is None
+        )
+        # Exactly one tenant owns the slug (no orphan second tenant).
+        tenant_count = s.scalar(
+            select(text("count(*)"))
+            .select_from(m.Tenant)
+            .where(m.Tenant.slug == "acme")
+        )
+        assert tenant_count == 1
+
+
+def test_signup_bad_slug_is_400_generic(auth_client):
+    r = auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "bad@x.com",
+            "password": "pw-placeholder",
+            "tenant_name": "Bad",
+            "slug": "Bad_Slug!",  # uppercase + punctuation → not a DNS label
+        },
+    )
+    assert r.status_code == 400
+
+
+# ── set-password: single-use + invalidates ALL sessions ──────────────────────────
+
+
+def test_set_password_single_use_and_invalidates_sessions(auth_client, control_engine):
+    signup = auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "invitee@x.com",
+            "password": "pw-placeholder",
+            "tenant_name": "Inv",
+            "slug": "invco",
+        },
+    )
+    assert signup.status_code == 201
+
+    raw, token_hash = mint()
+    with Session(control_engine) as s:
+        user = s.scalar(
+            select(m.AppUser).where(m.AppUser.email_canonical == "invitee@x.com")
+        )
+        assert user is not None
+        membership = s.scalar(
+            select(m.TenantMembership).where(m.TenantMembership.user_id == user.id)
+        )
+        s.add(
+            m.InviteToken(
+                token_hash=token_hash,
+                user_id=user.id,
+                membership_id=membership.id,
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            )
+        )
+        s.commit()
+
+    # Redeem → 204; sets the password, stamps accepted_at, invalidates the founder's live session.
+    r = auth_client.post(
+        "/auth/set-password", json={"token": raw, "password": "new-pw-placeholder"}
+    )
+    assert r.status_code == 204
+    # The pre-existing signup session is now dead (all sessions invalidated).
+    assert auth_client.get("/auth/me").status_code == 401
+    # The new password works.
+    assert (
+        auth_client.post(
+            "/auth/login",
+            json={"email": "invitee@x.com", "password": "new-pw-placeholder"},
+        ).status_code
+        == 200
+    )
+    # Second redemption of the same token is rejected (single-use).
+    second = auth_client.post(
+        "/auth/set-password", json={"token": raw, "password": "another-pw-placeholder"}
+    )
+    assert second.status_code == 400
+    # The membership's accepted_at was stamped.
+    with Session(control_engine) as s:
+        membership = s.scalar(
+            select(m.TenantMembership)
+            .join(m.AppUser, m.TenantMembership.user_id == m.AppUser.id)
+            .where(m.AppUser.email_canonical == "invitee@x.com")
+        )
+        assert membership.accepted_at is not None
+
+
+def test_set_password_unknown_token_is_400(auth_client):
+    r = auth_client.post(
+        "/auth/set-password",
+        json={"token": "not-a-real-token", "password": "pw-placeholder"},
+    )
+    assert r.status_code == 400
+
+
+# ── validation: no value echo ────────────────────────────────────────────────────
+
+
+def test_signup_short_password_is_422(auth_client):
+    r = auth_client.post(
+        "/auth/signup",
+        json={
+            "email": "short@x.com",
+            "password": "1234",  # < 12-char floor
+            "tenant_name": "Short",
+            "slug": "shortco",
+        },
+    )
+    assert r.status_code == 422

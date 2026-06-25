@@ -4280,3 +4280,134 @@ def test_render_docs_layout_validator_is_zero_dep_bash(tmp_path: Path):
     script = (dest / "scripts" / "docs_layout_check.sh").read_text()
     assert script.startswith("#!/usr/bin/env bash")
     assert "vendored from cdowell-swtr/patterns" in script
+
+
+def test_render_with_multitenantauth_battery_creates_package(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    assert (dest / "src" / "demo" / "multitenantauth" / "__init__.py").is_file()
+
+
+def test_render_without_multitenantauth_has_no_package(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / "src" / "demo" / "multitenantauth").exists()
+
+
+def test_render_multitenantauth_settings_has_auth_fields(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    settings = (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    # All required auth fields must be present in the multitenantauth render.
+    for field in [
+        "control_database_url",
+        "session_cookie_secure",
+        "session_cookie_domain",
+        "csrf_allowed_origins",
+        "session_pepper",
+        "password_pepper",
+        "admin_role_name",
+        "verify_runtime",
+        "argon2_time_cost",
+        "argon2_memory_cost",
+        "argon2_parallelism",
+    ]:
+        assert field in settings, f"missing auth field: {field}"
+    # environment validator must reference the framework set (staging, not stage).
+    # The allowed set must contain "staging" and must NOT contain a bare "stage" token
+    # (B-F1 env-token remap). Check the allowed set literal in the validator.
+    # environment validator must reference the framework set (staging, not stage) — B-F1 remap.
+    # Check the exact allowed-set literal in the validator.
+    assert '{"dev", "test", "staging", "prod"}' in settings
+    # The Meridian allowed-set literal (using "stage") must NOT be present.
+    assert '{"dev", "test", "stage", "prod"}' not in settings
+
+
+def test_render_without_multitenantauth_settings_has_no_auth_fields(tmp_path: Path):
+    """A non-multitenantauth render must not contain any auth-battery fields."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # no batteries → no multitenantauth
+    settings = (dest / "src" / "demo" / "config" / "settings.py").read_text()
+    for field in [
+        "control_database_url",
+        "session_cookie_secure",
+        "session_cookie_domain",
+        "csrf_allowed_origins",
+        "session_pepper",
+        "password_pepper",
+        "admin_role_name",
+        "verify_runtime",
+    ]:
+        assert field not in settings, f"auth field leaked into non-mt render: {field}"
+
+
+def test_render_multitenantauth_test_file_is_created(tmp_path: Path):
+    """The conditional test file must be rendered when multitenantauth is active."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    assert (dest / "tests" / "unit" / "test_settings_auth.py").is_file()
+
+
+def test_render_without_multitenantauth_test_file_is_absent(tmp_path: Path):
+    """The conditional test file must NOT be rendered without the battery."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    assert not (dest / "tests" / "unit" / "test_settings_auth.py").exists()
+
+
+def test_render_multitenantauth_env_example_has_auth_vars(tmp_path: Path):
+    """The .env.example must document the multitenantauth vars when the battery is active."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    env_example = (dest / ".env.example").read_text()
+    assert "APP_SESSION_PEPPER" in env_example
+    assert "APP_PASSWORD_PEPPER" in env_example
+    assert "APP_CONTROL_DATABASE_URL" in env_example
+    assert "APP_SIGNUP_ALLOWLIST" in env_example
+
+
+def test_render_without_multitenantauth_env_example_lacks_auth_vars(tmp_path: Path):
+    """A non-multitenantauth render must not expose auth vars in .env.example."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    env_example = (dest / ".env.example").read_text()
+    assert "APP_SESSION_PEPPER" not in env_example
+    assert "APP_PASSWORD_PEPPER" not in env_example
+
+
+def test_render_multitenantauth_entrypoint_runs_control_chain_and_seed(tmp_path: Path):
+    """With multitenantauth, entrypoint.sh must run the control alembic chain then the
+    authz seed, both after the app chain, all gated on APP_RUN_MIGRATIONS."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    entry = (dest / "scripts" / "entrypoint.sh").read_text()
+    # App chain still present.
+    assert "alembic upgrade head" in entry
+    # Control chain present with explicit config flag.
+    assert "alembic -c alembic_control.ini upgrade head" in entry
+    # Control seed present.
+    assert "python -m demo.multitenantauth.authz.seed" in entry
+    # Ordering: app chain → control chain → control seed → consumer seed (within the
+    # migrations block). The control vocabulary must be seeded BEFORE the consumer seed so
+    # any consumer data depending on the authz vocabulary always finds it present.
+    app_chain_pos = entry.index("alembic upgrade head")
+    control_chain_pos = entry.index("alembic -c alembic_control.ini upgrade head")
+    control_seed_pos = entry.index("python -m demo.multitenantauth.authz.seed")
+    consumer_seed_pos = entry.index("python scripts/seed.py")
+    assert app_chain_pos < control_chain_pos < control_seed_pos < consumer_seed_pos
+    # All within the APP_RUN_MIGRATIONS gate.
+    assert "APP_RUN_MIGRATIONS" in entry
+
+
+def test_render_without_multitenantauth_entrypoint_has_no_control_chain_or_seed(
+    tmp_path: Path,
+) -> None:
+    """Without multitenantauth, entrypoint.sh must not contain the control chain or authz seed."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    entry = (dest / "scripts" / "entrypoint.sh").read_text()
+    # Baseline app chain is still present.
+    assert "alembic upgrade head" in entry
+    # Control-chain and seed must be absent.
+    assert "alembic_control.ini" not in entry
+    assert "multitenantauth.authz.seed" not in entry

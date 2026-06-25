@@ -1,0 +1,21 @@
+groups:
+- name: multitenantauth
+  rules:
+  - alert: HighAuthLoginFailureRate
+    # Elevated login-failure share: brute-force, credential stuffing, or client misconfiguration.
+    # Tune the 0.3 threshold (fraction of attempts) and the window per your traffic profile.
+    expr: sum(rate(app_auth_logins_total{outcome="failure"}[5m])) / clamp_min(sum(rate(app_auth_logins_total[5m])), 1) > 0.3
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Over 30% of login attempts are failing (possible brute-force or credential-stuffing; check WAF and rate-limiting)
+  - alert: HighAuthzDenyRate
+    # Elevated authz-deny share: misconfigured roles, privilege escalation probing, or a broken
+    # permission rule. Tune the 0.2 threshold per your application's expected denial rate.
+    expr: sum(rate(app_authz_decisions_total{decision="deny"}[5m])) / clamp_min(sum(rate(app_authz_decisions_total[5m])), 1) > 0.2
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Over 20% of authorization checks are being denied (check role configuration and for permission probing)

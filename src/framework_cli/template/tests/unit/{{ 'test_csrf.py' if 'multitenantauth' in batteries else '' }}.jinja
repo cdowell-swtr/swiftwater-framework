@@ -1,0 +1,236 @@
+"""CSRF middleware unit tests — no DB needed; the middleware checks cookie presence only.
+
+Tests:
+  (a) same-origin POST passes
+  (b) cross-origin cookie-auth POST → 403
+  (c) Bearer-only (no cookie) cross-origin → passes (exempt; attacker can't set the header)
+  (c2) junk Authorization: Bearer on a cookie-bearing cross-origin POST → 403 (B-F7)
+  (d) unauthenticated (no cookie) cross-origin → passes
+  (e) absent Origin AND Referer on a cookie POST → 403 (fail-closed)
+  (e2) empty allowlist cross-origin cookie POST still 403s (B-F6)
+  (f) exact netloc in csrf_allowed_origins passes
+  (f2) a '*'/wildcard entry never substring-matches — cross-origin POST still 403s (B-F4)
+  (g) session_cookie_domain set → Set-Cookie carries Domain=; default unset → no Domain=
+"""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+from fastapi import FastAPI, Response
+from fastapi.testclient import TestClient
+
+from {{ package_name }}.config.settings import Settings
+from {{ package_name }}.multitenantauth.cookies import set_session_cookie
+from {{ package_name }}.multitenantauth.csrf import CSRFMiddleware
+
+_COOKIE_NAME = "{{ package_name }}_session"
+
+
+def _make_settings(**kwargs) -> Settings:
+    """Build a Settings instance via model_construct (skips validators, no env reads)."""
+    defaults = dict(
+        environment="dev",
+        session_cookie_name=_COOKIE_NAME,
+        session_cookie_secure=False,
+        session_cookie_domain=None,
+        csrf_allowed_origins=set(),
+    )
+    defaults.update(kwargs)
+    return Settings.model_construct(**defaults)
+
+
+def _make_app_with_settings(settings: Settings) -> FastAPI:
+    """Build a minimal probe app with CSRFMiddleware and a /set-cookie endpoint.
+
+    The middleware and cookies.py both call get_settings() directly (lru_cache, not
+    FastAPI DI), so callers must patch the cache via the ``_with_settings`` helper.
+    """
+    app = FastAPI()
+    app.add_middleware(CSRFMiddleware)
+
+    @app.post("/probe")
+    def probe() -> dict[str, str]:
+        return {"ok": "yes"}
+
+    @app.post("/set-cookie")
+    def set_cookie_endpoint(response: Response) -> dict[str, str]:
+        set_session_cookie(response, "dummy-raw-token")
+        return {"ok": "yes"}
+
+    return app
+
+
+def _with_settings(settings: Settings):
+    """Context manager that patches get_settings in both csrf and cookies modules."""
+    from contextlib import ExitStack
+
+    stack = ExitStack()
+    for target in [
+        "{{ package_name }}.multitenantauth.csrf.get_settings",
+        "{{ package_name }}.multitenantauth.cookies.get_settings",
+    ]:
+        stack.enter_context(patch(target, return_value=settings))
+    return stack
+
+
+# ── (a) same-origin passes ───────────────────────────────────────────────────────
+
+
+def test_same_origin_post_passes() -> None:
+    settings = _make_settings()
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        c.cookies.set(_COOKIE_NAME, "placeholder")
+        r = c.post("/probe", headers={"Origin": "http://testserver"})
+    assert r.status_code == 200
+
+
+# ── (b) cross-origin cookie-auth POST → 403 ─────────────────────────────────────
+
+
+def test_cross_origin_cookie_post_is_403() -> None:
+    settings = _make_settings()
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        c.cookies.set(_COOKIE_NAME, "placeholder")
+        r = c.post("/probe", headers={"Origin": "http://evil.example"})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "CSRF check failed"
+
+
+# ── (c) Bearer-only (no cookie) cross-origin → passes ───────────────────────────
+
+
+def test_bearer_only_no_cookie_cross_origin_passes() -> None:
+    """Pure-Bearer client: no session cookie → exempt (attacker can't set the header)."""
+    settings = _make_settings()
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        c.cookies.clear()
+        r = c.post(
+            "/probe",
+            headers={
+                "Origin": "http://evil.example",
+                "Authorization": "Bearer valid-token",
+            },
+        )
+    assert r.status_code == 200
+
+
+# ── (c2) junk Bearer + cookie → 403 (B-F7) ──────────────────────────────────────
+
+
+def test_junk_bearer_plus_cookie_is_403() -> None:
+    """Cookie presence triggers CSRF check — a junk Bearer must NOT exempt the request."""
+    settings = _make_settings()
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        c.cookies.set(_COOKIE_NAME, "placeholder")
+        r = c.post(
+            "/probe",
+            headers={"Origin": "http://evil.example", "Authorization": "Bearer junk"},
+        )
+    assert r.status_code == 403
+
+
+# ── (d) unauthenticated (no cookie) → passes ────────────────────────────────────
+
+
+def test_unauthenticated_no_cookie_cross_origin_passes() -> None:
+    settings = _make_settings()
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        c.cookies.clear()
+        r = c.post("/probe", headers={"Origin": "http://evil.example"})
+    assert r.status_code == 200
+
+
+# ── (e) absent Origin AND Referer on a cookie POST → 403 (fail-closed, Layer-2 F) ──
+
+
+def test_absent_origin_and_referer_cookie_post_is_403() -> None:
+    """No Origin, no Referer on a cookie-auth mutating request — fail-closed 403.
+
+    A real browser always sends Origin on a cross-origin mutating request; an absent pair
+    implies a non-browser / header-stripping client, so we deny rather than allow (the prior
+    lenient pass relied on browsers always sending Origin). Pure-Bearer / unauthenticated
+    clients are still exempt — see (c)/(d) — because they carry no session cookie.
+    """
+    settings = _make_settings()
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        c.cookies.set(_COOKIE_NAME, "placeholder")
+        r = c.post("/probe")  # no Origin, no Referer
+    assert r.status_code == 403
+
+
+# ── (e2) empty allowlist cross-origin cookie POST still 403s (B-F6) ─────────────
+
+
+def test_empty_allowlist_cross_origin_still_403() -> None:
+    """With an empty allowlist (default), a cross-origin cookie POST must 403 (B-F6)."""
+    settings = _make_settings(csrf_allowed_origins=set())
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        c.cookies.set(_COOKIE_NAME, "placeholder")
+        r = c.post("/probe", headers={"Origin": "http://anywhere.example"})
+    assert r.status_code == 403
+
+
+# ── (f) exact netloc in csrf_allowed_origins passes ─────────────────────────────
+
+
+def test_exact_allowed_origin_passes() -> None:
+    """An exact netloc match in csrf_allowed_origins lets the cross-origin request through.
+
+    csrf_allowed_origins holds BARE NETLOCS (e.g. "good.example") —
+    urlsplit("http://good.example").netloc == "good.example".
+    """
+    settings = _make_settings(csrf_allowed_origins={"good.example"})
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        c.cookies.set(_COOKIE_NAME, "placeholder")
+        r = c.post("/probe", headers={"Origin": "http://good.example"})
+    assert r.status_code == 200
+
+
+# ── (f2) wildcard entry never substring-matches → still 403 (B-F4) ──────────────
+
+
+def test_wildcard_entry_does_not_grant_access() -> None:
+    """A '*' or '*.example' in the allowlist must NEVER match cross-origin requests (B-F4).
+
+    The exact-match comparison rejects any entry that isn't the literal netloc of the Origin.
+    """
+    settings = _make_settings(csrf_allowed_origins={"*", "*.evil.example"})
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        c.cookies.set(_COOKIE_NAME, "placeholder")
+        r = c.post("/probe", headers={"Origin": "http://evil.example"})
+    assert r.status_code == 403
+
+
+# ── (g) session_cookie_domain shape ─────────────────────────────────────────────
+
+
+def test_set_cookie_with_domain() -> None:
+    """session_cookie_domain set → Set-Cookie carries Domain=."""
+    settings = _make_settings(session_cookie_domain="example.com")
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        r = c.post("/set-cookie")
+    assert r.status_code == 200
+    set_cookie_header = r.headers.get("set-cookie", "").lower()
+    assert "domain=example.com" in set_cookie_header
+
+
+def test_set_cookie_without_domain_has_no_domain_attr() -> None:
+    """Default (session_cookie_domain=None) → no Domain= attribute in Set-Cookie."""
+    settings = _make_settings(session_cookie_domain=None)
+    app = _make_app_with_settings(settings)
+    with _with_settings(settings), TestClient(app) as c:
+        r = c.post("/set-cookie")
+    assert r.status_code == 200
+    set_cookie_header = r.headers.get("set-cookie", "").lower()
+    assert "domain=" not in set_cookie_header

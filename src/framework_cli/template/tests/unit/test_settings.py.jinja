@@ -15,7 +15,18 @@ def test_resolved_log_level_is_debug_in_dev():
     assert Settings(environment="dev").resolved_log_level == "DEBUG"
 
 
-@pytest.mark.parametrize("env", ["staging", "prod", "ci"])
+@pytest.mark.parametrize(
+    "env",
+    [
+        "staging",
+        "prod",
+{%- if "multitenantauth" not in batteries %}
+        # "ci" is only valid when multitenantauth is absent (the battery's environment validator
+        # restricts to {dev,test,staging,prod} — "ci" is not in the allowed set).
+        "ci",
+{%- endif %}
+    ],
+)
 def test_resolved_log_level_is_info_outside_dev(env):
     assert Settings(environment=env).resolved_log_level == "INFO"
 
@@ -62,7 +73,17 @@ def test_graphql_ide_enabled_in_dev_and_test(env):
 
 def test_graphql_ide_disabled_for_unknown_env():
     # Fail-closed: an unrecognized environment token must not expose introspection.
+{%- if "multitenantauth" in batteries %}
+    # When multitenantauth is active, the environment validator rejects "qa" with a
+    # ValidationError before resolved_graphql_ide is evaluated — test that case via pytest.raises.
+    import pytest as _pytest
+    from pydantic import ValidationError as _ValidationError
+
+    with _pytest.raises(_ValidationError):
+        Settings(environment="qa")
+{%- else %}
     assert Settings(environment="qa").resolved_graphql_ide is False
+{%- endif %}
 
 
 def test_graphql_ide_explicit_override_wins():

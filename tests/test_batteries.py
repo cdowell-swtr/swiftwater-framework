@@ -173,3 +173,13 @@ def test_docs_battery_is_registered_as_rides_existing():
     # The docs battery is pure scaffolding: it gates no review agents and implies no batteries.
     assert spec.gates_agents == ()
     assert spec.requires == ()
+
+
+def test_multitenantauth_battery_registered():
+    from framework_cli.batteries import get_battery, resolve
+
+    spec = get_battery("multitenantauth")
+    assert spec.obs == "in-process"
+    assert spec.requires == ()  # postgres is the base, not a battery
+    assert spec.gates_agents == ("security",)
+    assert resolve(["multitenantauth"]) == ["multitenantauth"]

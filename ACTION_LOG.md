@@ -2614,3 +2614,371 @@ Framework→Meridian report updated to the dated commitment + a 48–72h two-sid
 + co-design up front; our build). FWK56 keeps the non-substrate facets (shape-axis/workspace, brainstorm).
 Report `docs/superpowers/assessments/2026-06-22-framework-response-to-meridian.md`. Template payload →
 FWK58 ships a release when built (this commit is plan/report only).
+
+#### #0211 · inserted · FWK58 design + FWK59/FWK60 · 2026-06-23
+**FWK58 design approved (brainstorm); split into two phases; +2 deferred stubs.** Meridian delivered
+everything the commitment waited on — reference impl on `meridian@e0cf9cf` (the MDN53 per-domain split =
+the extraction map), generic/local line confirmed (3 buckets), MDN48 hardening list as requirements
+input, secrets/freeze/co-design confirmed — and answered the in-window scope question: **adopt
+incrementally, spine-first** (the spine is routing-independent; `current_user→active_tenant→guard` runs
+on the control session only). Operator **de-pressurized the date** (single maintainer of both repos, no
+external dependency) → build it properly with full TDD/dual-review discipline. **Decisions locked via
+brainstorm:** (Q1) one battery `--with multitenantauth` (internal authn/authz/tenancy modules; a
+single-tenant `--with auth` deferred → FWK59); (Q2) control plane **logically-separate-always,
+physically-co-located-by-default-overridable** (`ControlBase`+`control_session_factory`+`migrations_control`
+with a **named version table** — battery-specific, NOT in Meridian's reference, required because the
+battery co-locates two chains in one DB by default; `APP_CONTROL_DATABASE_URL` defaults to the app DB);
+(Q3) **self-contained** Phase 1 — the existing `Item` demo untouched (so FWK59's `--with auth` can share
+an unscoped demo); (C) **Option-1 generic resource-scope** (`resource` role-domain; Meridian collapses
+`ProductRoleAssignment` onto it → *full* de-fork). **Colonization line drawn precisely from the code:**
+mechanism (recursive expr evaluator + guards, domain-split resolution, service layer + ≥1-admin
+invariant, the 3+1 assignment domains, deps chain) ships LOCKED + a *minimal generic* seed catalog
+(UNLOCKED); Meridian's RBAC *policy* + the **sealed/hidden resource-tree resolver** (`product_access.py`
+— triply local: EDR + physical routing + absolute-seal/MDN36) stay theirs, plugged in behind an inert
+`resource_grant`/`subtree_exists` hook. The flat generic `resource_grant` ships live in Phase 1.
+**Phase 2 deferred:** physical routing + ops. **Validation oracle:** port Meridian's ~2,360-line
+auth/tenancy suite (authz-fitness T1–T4 = crown jewels). **Reviewers** (security + `/security-review`)
+run when Phase 1 is done, *before* Meridian adopts. **Spawned:** FWK59 (`--with auth` single-tenant,
+cookie+bearer+JWT) + FWK60 (`tenant-data-model`/`tenant-context-propagation`, logical tenant_id
+scoping). Spec `docs/superpowers/specs/2026-06-23-fwk58-multitenantauth-defork-spine-design.md`. On
+branch `fwk58-multitenantauth-spine`; design commit only (no template payload yet → no release).
+
+#### #0212 · amended · FWK58 · 2026-06-23
+**Folded MDN's session-cookie + CSRF multi-host shape addendum into the FWK58 spec (§5.1).** MDN
+surfaced (for the auth layer) that they'll later support subdomain-per-tenant via a pure edge host→path
+rewrite — transparent to routing but NOT to cookies/CSRF (browser scopes cookies + stamps Origin by the
+real host; the edge preserves Host) — so the battery's session/CSRF must be **multi-host-shaped now** to
+avoid re-touching audited security code later. Caught that my first draft **omitted CSRF entirely** —
+a real gap for a cookie-auth battery (Meridian's reference HAS `middleware/csrf.py`: Origin/Referer
+check on mutating cookie-auth requests, Bearer/unauth exempt). Folded in: port `CSRFMiddleware` (generic
+mechanism) + two **shape constraints, safe single-host defaults** (no behavior change today): (1)
+`session_cookie_domain` (default `None` = host-only) threaded into `set_cookie(domain=…)`; (2)
+`csrf_allowed_origins` (set/pattern, default empty ⇒ today's strict same-origin) replacing the
+reference's hardcoded single-host comparison (`netloc == Host OR netloc ∈ allowlist`). Full subdomain
+support (parent-domain choice, allowlist population, double-submit-token) stays consumer/deferred —
+"don't preclude it." Spec §3/§5.1/§7/§9/§10/§15 updated. Still design-only (no payload → no release).
+
+#### #0213 · note · FWK58 plan · 2026-06-23
+**FWK58 implementation plan written (22 tasks, 8 phases).** `docs/superpowers/plans/2026-06-23-fwk58-multitenantauth-defork-spine.md`.
+An **extraction** plan (port-vs-novel standard: "port `<path>`" = copy from `meridian@e0cf9cf` + listed
+transformations; novel/security-critical/integration code given in full). Phases: A control-plane
+foundation + battery skeleton (BatterySpec, settings, ControlBase/control_session_factory); B models +
+the `migrations_control` chain with the NAMED version table; C pure mechanism (passwords/tokens/expr/
+resolution); D services (authz grant/revoke + ≥1-admin TOCTOU, routing-agnostic registry, authn
+signup/login/invite); E deps (404-before-403) + CSRF (MDN multi-host shape) + routes + authz-fitness;
+F minimal-generic seed (UNLOCKED); G obs/integrity/FWK29; H acceptance + live docker + render-matrix.
+Each security-critical task carries an explicit reviewer note. Branch-end review = spec(Sonnet) +
+quality(Opus) + framework `security` agent scoped to "Phase-1 standalone" + explicit `/security-review`
++ reconcile vs Meridian's original security-review spec. **Next: per-user, security-review the PLAN
+before implementation** (Meridian did this on their original impl; their security spec = threat-model
+oracle). Plan only → no code/release.
+
+#### #0214 · amended · FWK58 plan (security review) · 2026-06-23
+**Two-agent pre-implementation security review of the plan → 22 findings, all applied.** Lens A
+(authZ/tenant-isolation, Opus) + lens B (authN/session/CSRF/crypto, Opus), read-only over plan+spec+
+reference, distinct lenses. **Convergent headline:** both independently flagged **signup as a fail-open
+zone** — B-F1 (Meridian gates on the literal `stage`; the framework token is `staging`, so a verbatim
+port disables the `prod` 404 gate path AND skips the allowlist in `staging`, AND the `environment`
+validator rejects `staging`) + A-F9 (empty `signup_allowlist` = unrestricted is fail-open for a generic
+scaffold). Operator chose **fail-closed by default**: `prod` off / `staging` empty-allowlist = deny /
+`dev` open. Other blockers fixed: B-F2 (peppers default-empty + port the unmentioned `verify_runtime`
+fail-fast guard into `create_app`), B-F4 (CSRF allowlist exact-match, wildcards forbidden — struck
+"pattern" from spec §5.1), B-F3 (parent-domain cookie = raw-token disclosure → documented invariant),
+A-F2 (the "T1–T4" fitness paraphrase was wrong — real suite is T1/T1b/T2/T3/T4/T4b; T1b is the
+load-bearing tenant-data-must-be-guarded test), A-F3 (the `PUBLIC`/`INLINE_AUTHZ` fitness allowlists
+hardcode Meridian/EDR routes — a stale entry = silent authz hole → rebuilt for the battery surface +
+added to the generic/local transform list), A-F5 (the role-domain CHECK must REMOVE `'product'`, not just
+add `'resource'`, else a Meridian role-domain silently survives). Build-notes folded in: A-F1 (pass
+discrete path params to `resource_grant`, don't re-parse — improves on the reference), A-F4 (fix the
+`add_platform_role` phantom-audit upstream bug), A-F6/A-F8/A-F10/A-F7/B-F6/B-F7/B-F9/B-F10. Full ledger
+in the plan ("Security-review ledger"); reviewed via [[receiving-code-review]] (verified each against the
+reference before applying). Plan+spec revised; no code → no release.
+
+#### #0215 · amended · FWK58 plan (Layer-1 panel + addenda) · 2026-06-23
+**Completed Meridian's two-layer adversarial-security-review method on the plan; applied 5 more blockers +
+2 MDN addenda.** Meridian shared their methodology (`gh cdowell-swtr/meridian/_docs/methods/adversarial-security-review.md`):
+Layer 1 = an N-lens design panel pre-execution (security · authz · data-model/migrations · ops/deploy ·
+plan-quality) folded into a binding Hardening section; Layer 2 = a stance×focus attacker matrix pre-merge.
+My earlier 2-agent review was a PARTIAL Layer 1 (security+authz) → ran the 3 missing lenses (Opus,
+read-only). **5 new blockers, all applied:** PQ-C1/C2 (the reference has NO `authn/service.py` — signup/
+login/etc. are route handlers in `routes/auth.py`; Task 13 mislabeled a novel extraction as a port, cited
+a nonexistent test source, and depended on routes built later → reframed Task 13 = authn routes + cookies.py
+run-after-deps, narrowed Task 16); OPS-F1 (the control vocabulary/role seed was never wired into boot → a
+fresh container boots healthy but the first signup fails → added a control-seed step to the LOCKED
+entrypoint, Task 8); DM-F1 (the named version table isolates version bookkeeping but NOT autogenerate → in
+the co-located default `alembic --autogenerate` proposes `drop_table` for the other chain's tables, a
+data-destroying footgun the `upgrade head` tests stay green through → added `include_*` scoping to BOTH
+env files incl. the previously-untasked app `migrations/env.py.jinja` + a co-located `alembic check` test);
+OPS-F2 (separate-control-DB cutover unspecified + Meridian's populated control DB collides on the version
+table → operator-decided: ship generic separate-DB support, defer the existing-DB adoption migration to
+Meridian co-design); + ~14 build-notes (double-checked lock OPS-F3, connection budget OPS-F4, /ready probe
+OPS-F5, c0003 server_default + 4-site domain-CHECK DM-F2/F3, etc.). **MDN registry-shape addendum:** tenant
+**opaque immutable id** (PK/routing/DB-name key) decoupled from a **mutable DNS-safe slug** (URL label) +
+TenantSlugHistory with cooling/reserved anti-squat — the irreversible PK/DB-naming decision this exercise
+targets (Tasks 6/12). Recorded the binding "Layer-1 Hardening" section (governs body on conflict) + the
+"Layer-2 pre-merge gate" stance×focus matrix in the plan. Validation: the 3 skipped lenses found exactly
+the data/ops/plan defects the 2 security lenses structurally couldn't, incl. 2 build-derailers — vindicates
+the full method. Plan+spec revised; no code → no release. **Next: execution mode (subagent-driven vs inline), then build.**
+
+#### #0216 · build · FWK58 (subagent-driven; per-task detail in `.superpowers/sdd/progress.md`) · 2026-06-23
+**Task 1 — register `multitenantauth` battery + empty package skeleton.** BatterySpec (obs=in-process,
+gates security) in `batteries.py`; conditional `multitenantauth/__init__.py`; `test_batteries` +
+`test_copier_runner` render guards. TDD RED→GREEN; ruff/format/mypy clean. (Build commits are per-task on
+branch `fwk58-multitenantauth-spine`; this log carries a one-line marker per task, the ledger the detail.)
+Task-1 review (Sonnet) caught the implementer silently deleting a `docs_layout` provenance assertion
+(mislabeled an "editor artifact") → fix-wave restored it + strengthened the new test (gates assertion).
+**Task 2 — auth settings region + `verify_runtime`** (config/settings.py.jinja conditional region;
+env-token remap `stage`→`staging`; argon2 floor validators; peppers default-empty + `verify_runtime`
+fail-fast prod/staging; control_database_url fallback; `.env.example` + ported `test_settings_auth`).
+Review = Approved (env-remap + verify_runtime + floors all correct); 3 Minors deferred to final review
+(`.env.example` cookie-name uses project_slug not package_name; verify_runtime match-strings
+non-discriminating). Controller reverted the implementer's out-of-scope obs+integrity files (Task 18/19
+work, referenced not-yet-final metric names). **Cadence set:** classify infra/operational surfaces
+per-task (integrity+FWK29 stay green); obs at Task 18; implementers run targeted tests not the full
+suite. **Execution: hybrid (operator) — interactive Tasks 3-16 (auth spine), unattended tail 17-22.**
+**Task 3 — `ControlBase` + `control_session_factory`** (separate metadata; double-checked lock;
+`dispose`). The implementer caught a REAL deadlock in the plan's own OPS-F3 code (the controller wrote
+it): `control_session_factory` called `control_engine()` INSIDE the non-reentrant `_control_lock` → hang
+on first call. Fixed (resolve the engine before the lock) + plan code corrected. Review = Approved
+(deadlock-free form verified; distinct-metadata test non-vacuous); Minors→final review. Real
+testcontainers; 3 control-engine tests green.
+**Task 4 — AuthN models** (`AppUser`/`Session`/`InviteToken` ported verbatim; import adapted `...base`→
+`..base` for the framework's deeper nesting; `models/__init__.py` re-exports authn-only per PQ-P5;
+InviteToken schema-test deferred to Task 6 since it FKs `tenant_membership`). Review = Approved; one
+Important gap fixed (the `born`-xor invariant was only half-tested → added the non-signup-with-signed_up_at
+reject case). Real Postgres; 9 model tests green.
+**Task 5 — AuthZ models (composite-FK integrity core)** (port `Role`/`Permission`/`RolePermission`/
+`Tenant`+`Platform`RoleAssignment/`AuthzEvent` verbatim; rename `ProductRoleAssignment`→`ResourceRole...`
+with the exact `rra` constraint names; **A-F5: `'product'` REMOVED from both domain CHECKs → `('tenant',
+'platform','resource')`**). The implementer self-caught a VACUOUS test (raw DDL didn't exercise the model
+CHECKs — corrupting the CHECK left it green) → rewrote to ORM + proved non-vacuity by mutation-litmus.
+Opus review = Approved (byte-for-byte fidelity + 'product' removal + 4 non-vacuous assertions verified).
+**⏚ Task-6 follow-up (cross-task):** this test's raw `tenant`/`tenant_membership` seed inserts will go red
+when Task 6 adds the real schema (status CHECK / slug NOT-NULLs) — Task 6 must supply the new required
+columns or seed via the ORM models.
+**Task 6 — Tenant models (opaque id + mutable slug — MDN registry-shape addendum)** (`Tenant.id` opaque
+immutable via an `_opaque_id` uuid callable, never derived from slug; `status` CHECK; `Tenant.slug`
+mutable/unique with an RFC-1123 DNS-label CHECK + `char_length<=63` on a `String(255)` column;
+`TenantSlugHistory` with `reserved_until` cooling anti-squat; `TenantMembership` keys on the opaque id).
+Closed the Task-5 cross-task follow-up (replaced the raw tenant-stub seeds with real ORM models — all 5
+integrity assertions preserved). Review = Approved (decoupling + CHECKs + non-vacuous tests verified; 22
+tests green). Minors→final review (history-slug CHECK hardening, an imprecise test comment).
+**Tasks 7+8 DEFERRED** to before Task 21: the control migrations need careful CHECK-preserving hand-port
+(autogenerate drops CHECKs), agents stream-idle on the dual-alembic testcontainer loop 4×, and migrations
+are only needed by the entrypoint+live-e2e (every other task uses `create_all`). Resumed the build at
+Task 9. **Execution mode shift:** unattended overnight; agents author + the CONTROLLER runs docker
+verification on its own bash (agents stream-idle on long docker loops; controller bash doesn't).
+**Task 9 — passwords/tokens/email-norm** (port argon2id-over-HMAC-pepper + opaque HMAC tokens; conditional
+`argon2-cffi` dep; version columns forward-compat only per B-F8). Full agent (no DB → no timeout); review
+= Approved (exact crypto fidelity, tight 3-exception contract, non-vacuous algorithm-pinning tests; 27
+green). Minors→final review (undertested VerificationError branch, loose token entropy floor, plan-IDs in
+a shipped docstring to strip).
+**Task 10 — recursive permission-expression evaluator (`expr.py`) + resolution (`resolution.py`)** (port
+verbatim with `product`→`resource` rename; the security-critical A-F6 properties preserved: recursive
+`_has_wildcard_leaf` ALL-guard, wildcard-ness from the AUTHORED pattern only, exact `evaluate` branch
+order wildcard→resource→flat, missing-param→deny-not-500; domain-split resolution). Review = Approved
+(byte-accurate port; A-F6 cases tested non-vacuously with adversarial shapes; 23 green). **⏚ Task-14
+follow-up:** Task 14 (which creates the production inert `subtree_exists` site) owns the
+"exactly-one-inert-construction-site" grep/unit guard (A-F6/A-F10). Minors→final review.
+**Task 11 — authz grant/revoke service** (port with `product`→`resource`; `admin_role_name` from settings
+everywhere; the ≥1-admin TOCTOU `SELECT … FOR UPDATE` over the whole admin set; A-F4 phantom-audit fix in
+`add_platform_role`). Review = Approved (whole-set lock + A-F4 mutation-verified + idempotent-no-phantom on
+all 5 fns + services-never-commit; 11 green incl. a real threaded concurrent-demote test). Minors→final.
+**Task 12 — routing-agnostic tenant registry + slug lifecycle** (`register_tenant` mints an opaque id
+NOT from the slug; `activate`/`get`/`get_dsn`; `rename_slug` with cooling; `resolve_slug` 301 semantics;
+NEVER connects to dsn — AST-guard-tested). Review = Needs-fixes → fixed: an `add_slug_history` PK-collision
+on a reclaim→rename cycle (blind insert on a slug-PK table → upsert; mutation-confirmed RED→GREEN) +
+removed out-of-scope Phase-2 `all_tenant_dsns`. 27 green. Minors→final (yield-fixture annotations).
+**Task 14 — request auth chain (deps; the authz chokepoint)** (port `control_session`/`current_user`/
+`active_tenant`/`guard`; DROP `tenant_db`+`product_access`; A-F1 flat discrete-args `resource_grant` —
+membership-by-(user,tenant)-first, match-(membership,resource)-together, no substring re-parse; inline
+404-before-403 standing alone A-F8; inert `subtree_exists` + A-F10 single-site guard; modified Task-10
+`expr.py` to pass `ctx["path"]` preserving the A-F6 branch order). **Opus review = Approved** — verified
+on the RENDERED output (no IDOR, no 403-before-404 leak, branch order intact, A-F7 fail-closed; 33 green).
+Minors→final (`active_tenant` is a faithful but dormant/untested Phase-1 port + one misleading test comment;
+cross-tenant resource_id collision safe-by-construction but untested).
+**Task 13 — authn routes + `cookies.py` (fail-closed signup)** (novel extraction from `routes/auth.py` —
+NO authn service module; signup-founder/login/logout/set-password/me + `_issue_session`/`_allowlisted`/
+`_dummy_hash`; `register_tenant(slug)`+activate, opaque id; login mints a FRESH session, set-password
+invalidates ALL sessions; generic-409 no-enumeration + IntegrityError→409 TOCTOU hardening; cookie
+flags + B-F11 README/.env note). Review = caught an **Important fail-open**: `env="test"` (a valid
+APP_ENVIRONMENT token) fell through every signup gate → unrestricted signup ([[app-environment-tokens-never-production]]
+class). Fixed: **`dev` is now the only explicitly-open env; every other non-prod requires the allowlist
+(fail-closed by construction)** + regression test (`test`+empty was 201→ now 403). 20 green; render-validated.
+**Task 15 — CSRF middleware** (port `csrf.py` with the B-F4 EXACT-MATCH allowlist — set `__contains__`,
+no wildcard substring-match; cookie-presence triggers the check so a junk `Bearer` can't exempt a
+cookie-bearing request; empty allowlist reduces to strict same-origin; §5.1 multi-host invariants in the
+module docstring). Review = Approved (no bypass path; 11 non-vacuous tests incl. junk-Bearer/empty-allowlist/
+wildcard-rejected). Controller folded in a settings-comment footgun fix (`csrf_allowed_origins` example
+was `https://app.example.com` with a scheme, but the check compares bare netloc → fixed to `app.example.com`).
+**Task 16a — tenant/role routes + main.py wiring** (split from Task 16 after the read-heavy fitness suite
+timed agents out 2×; fresh agent + minimal-reading + author-first framing broke the timeout). `tenants.py`
+(`POST /tenants` platform-guarded provisioning + member CRUD) + `roles.py` (grant/revoke), each
+`guard(Perm(... on="tenant:{tenant_id}"))`; `main.py.jinja` wires routers + `CSRFMiddleware` +
+`verify_runtime` at the TOP of `create_app` (OPS-F7); baseline render stays valid. Review = Needs-fixes →
+fixed: missing spec'd `POST /tenants`, + 6 negative-path tests (403/404), docstring, `list[MemberOut]`.
+24 green. **⏚ recorded: Task 17 seed must add `platform:provision-tenant` + `platform.admin`.**
+**Task 16b — authz-fitness suite** (the SIX real tests T1/T1b/T2/T3/T4/T4b; Meridian product-T2 dropped;
+de-Meridianized `PUBLIC` (zero `/edr/*`) + `INLINE_AUTHZ=set()`). Review caught a **Critical: T4 had been
+made to pass by stripping OpenAPI descriptions — hiding a REAL world-readable access-control-vocabulary
+leak** (literal perm tokens in route docstrings + a `tenant.member` role-name `Field(default=…)` in
+`AddMemberBody`, all served on the PUBLIC `/openapi.json`/`/docs`). The 16b agent correctly self-bounded
+(its brief forbade route edits) + escalated rather than override a coordinator constraint — good safety.
+Fixed at source (fresh authorized agent): de-literalized route docstrings, made `role_name` required
+(removed the schema leak), restored the full-`app.openapi()` scan, flipped T4 to a plain pass —
+**verified non-vacuous** (re-injecting a token → T4 fails). All suites green (fitness 6/6, routes 24+13).
+**The security-critical core (Tasks 3–16) is COMPLETE.** ⏚ Task-17: wire T4 vocab to permissions.ALL_NAMES
++ roles.BUILTIN_BUNDLES once the seed catalog ships.
+**Task 17 — minimal generic seed catalog (POLICY, ships UNLOCKED)** (`permissions.py` 3-perm catalog incl.
+`platform:provision-tenant`; `roles.py` tenant.admin/member + platform.admin + a custom-role example;
+`seed.py` idempotent Postgres upsert + the cross-domain reconciliation guard (MDN48) + `main()` for the
+Task-8 entrypoint). Review = Approved (cross-domain guard + idempotency + no-Meridian-vocab all clean +
+non-vacuous; 18 green). Minors→final/Task-19 cleanup: a literal `{{ package_name }}` in a `seed.py`
+docstring (plain .py, not rendered → ships broken); missing `INTENTIONALLY_UNLOCKED` marker on `seed.py`;
+built-in role descriptions default to the role name; `main()` untested.
+**Task 18 — in-process auth observability** (`metrics.py` AuthMetrics: login success/failure, session
+create + active-sessions DB-gauge, authz allow/deny by domain, grant/revoke; emission wired at the
+call sites in routes/auth.py, deps.py, authz/service.py; `/metrics` block; `multitenantauth_alerts.yml`
++ dashboard; obs-completeness extended; **classify-as-you-go: the 2 obs infra files classified in
+integrity/classes.py** BATTERY_LOCKED). Review = Approved — the CRITICAL check passed: instrumentation is
+observation-only (no auth/authz control-flow change, no mid-request raise) + cardinality-safe labels (no
+user/tenant ids). obs-completeness 17/17, integrity 67/67, full framework suite 794 green. Minors→final
+(counters fire pre-commit (over-count on rollback, standard); the `resource` authz-decision series is
+pre-seeded but never emitted in Phase 1; an inert type:ignore).
+**Task 19 — integrity classification (colonization guard)** — the implementer surfaced a real FWK7-scope
+conflict: the integrity lock-system only covers `infra/scripts/.github` (`src/{package_name}/` is
+deliberately builder-owned, never locked), so "mechanism LOCKED" can't happen without a precedent-setting
+extension to lock `src/` code. **Operator-level decision → took Option A (convention-only) overnight; the
+obs infra is classified (Task 18, 67 integrity green); the colonization guard is a documented convention
+(INTENTIONALLY_UNLOCKED markers on permissions.py/roles.py, a mechanism note on seed.py). Also fixed the
+Task-17 Minor (literal `{{ package_name }}` shipping unrendered in seed.py docstrings).** **⚑ Option B
+(extend integrity to lock the auth-mechanism src/ — real de-fork value) recorded as a pending operator
+decision for Chris (see `.superpowers/sdd/progress.md`).**
+**Task 7 (un-deferred) — `migrations_control` chain + named version table + DM-F1 autogen scoping**
+(combined 7a+7b). The dual-alembic chain that timed agents out 4× — authored via the proven
+author-first/no-docker framing (agent writes, controller verifies on its own bash). `alembic_control.ini`
++ `migrations_control/env.py.jinja` (`ControlBase.metadata`, `version_table="alembic_version_multitenantauth"`
+in both modes, `include_object` control-only) + the app `env.py.jinja` DM-F1 exclusion + c0001/c0002/c0003
+(FK-ordering fix: `tenant_membership`→c0002; domain CHECK `('tenant','platform','resource')`). **Controller
+verification GREEN: a real render → uv sync → 36 tests pass** — two version tables co-located no collision,
+separate-control-DB isolation, and schema-matches-models (resource-role round-trip + `'product'` rejected
++ non-DNS slug rejected) + all model suites. **⏚ branch-end: comprehensive CHECK-name audit** (the test
+covers the load-bearing domain+slug CHECKs; confirm email-lowercase/born/status/action CHECKs are all in
+the migrations too).
+**Task 8 (un-deferred) — entrypoint: both alembic chains + control seed + dispose** (OPS-F1). Converted
+`entrypoint.sh`→`.jinja`; battery-conditional region (gated on `APP_RUN_MIGRATIONS`) runs app-alembic →
+control-alembic → **control seed (`python -m …authz.seed`)** → consumer Item seed; `main.py` lifespan
+disposes the control engine; render-guards (mt has both control steps ordered; baseline has neither).
+Review = Approved; one defensive reorder applied (control-seed BEFORE the consumer seed — robust if a
+consumer adds control-dependent seed data). Also folded a `ruff format` regression fix to
+`integrity/classes.py` (a Task-18 edit left it format-dirty — CI gate runs `format --check`).
+**Tasks 7+8 are now DONE — nothing is deferred.** Remaining: 20 (FWK29), 21 (acceptance+live-e2e), 22.
+**Task 20 — FWK29 runtime-coverage** = no-op (the battery adds no new FWK29-enumerated operational
+surface; `migrations_control/` is a dir, `alembic_control.ini` is root-level, `entrypoint.sh` already
+EXERCISED; in-app code out of scope). Gate green (9), verified via an enumerate-surfaces diff.
+**Task 21 — acceptance + live e2e — the integration proof.** Authored `test_multitenantauth_e2e.py`:
+against a real Postgres, applies BOTH alembic chains + `seed_authz` (simulating the entrypoint boot) then
+asserts the full flow signup-founder→201 → guarded `GET /tenants/{tid}/members`→200 → unauth→401 →
+nonexistent-tenant→404 → logout+login→fresh session. **Controller-verified on a real render: e2e GREEN;
+143 battery tests pass** (the 1 "failure" = `test_smoke::test_heartbeat_is_200`, which needs a live
+`task dev` server — a verification artifact, not a battery bug); coverage≥70%, migration-reversibility,
+docs-layout all pass. **The acceptance pass earned its keep — it caught issues the per-task/framework
+gates structurally miss** (the framework mypy/ruff EXCLUDE template payload): a real **mypy `[no-redef]`
+in `seed.py`** (`grants` reused → `custom_grants`), **F401 unused imports** across 5 test files, and a
+**Jinja blank-line in `migrations/env.py.jinja`** that rendered 3 blank lines (ruff-format). All fixed →
+fresh render is ruff/format/mypy clean + **first pre-commit clean**. ⏚ branch-end: run the smoke/live tier
+against an actual `task dev` stack (the docker-image acceptance + the comprehensive CHECK-name audit).
+**Task 22 — render-matrix combos + release readiness** (the FINAL build task). Added `multitenantauth`
+(standalone) + `multitenantauth+workers` (composed) to `devmatrix.py:representative_combos()` (the dynamic
+render-matrix source; +`test_devmatrix` updated). **Release-readiness GREEN: baseline / multitenantauth-alone
+/ all-16-batteries renders all pass ruff + format + mypy** (the [[release-readiness-needs-render-not-local-gate]]
+check). Zero release blockers.
+
+#### #0217 · milestone · FWK58 Phase-1 build COMPLETE · 2026-06-24
+**All 22 FWK58 Phase-1 tasks built, reviewed, and committed (branch `fwk58-multitenantauth-spine`).** The
+full `--with multitenantauth` de-fork spine: control plane (separate `ControlBase`/`control_session`/
+`migrations_control` named-version-table chain) · authn/authz/tenant models with composite-FK integrity +
+the generic resource-scope + the opaque-id/mutable-slug addendum · argon2 passwords + opaque tokens · the
+recursive permission-expression evaluator (all A-F6 props) · the authz service (≥1-admin TOCTOU + A-F4 fix)
+· the routing-agnostic tenant registry + slug lifecycle · the request chain (404-before-403, no-IDOR flat
+`resource_grant`) · fail-closed authn routes + cookies · exact-match CSRF (multi-host-shaped) · tenant/role
+routes + main wiring + the real authz-fitness suite · the minimal generic seed · in-process obs · integrity
+(convention, Option-A) · the entrypoint (both chains + control seed) · acceptance e2e + release readiness.
+**Subagent-driven (agent authors, controller verifies on real docker); per-task review caught a real defect
+on nearly every task** (a deleted assertion, a deadlock in the plan's own code, half-tested invariants,
+vacuous tests, an env=test signup FAIL-OPEN, a world-readable OpenAPI vocab leak, a migration FK-ordering
+bug, a slug-history PK collision, a shipped mypy `[no-redef]`). **Pending operator items:** the Option-B
+integrity-lock-src decision; branch-end = the Layer-2 stance×focus attacker matrix + `/security-review` +
+reconcile-vs-Meridian's-method, then merge + the release cut. Template payload → ships a release.
+
+#### #0218 · review · FWK58 Layer-2 adversarial security matrix (pre-merge gate) · 2026-06-24
+**Ran the Layer-2 stance×focus attacker matrix (Meridian method) over the rendered `--with multitenantauth`
+battery — the pre-merge gate.** Two passes: a first run put baseline+triage on Sonnet (cells/verify/synth
+were Opus); on maintainer direction re-ran with **all stages Opus** + triage promoting invariant-touching
+items into verify (authoritative run `wf_7fb96f43-7bc`, 23 agents). **Merge gate: 0 confirmed Critical/High
+— mechanism-verified** (the one High — connection-pool exhaustion — refuted to Info; the all-Opus run caught
+a real fail-open Sonnet missed). Scorecard: `docs/superpowers/eval-scorecards/2026-06-24-fwk58-layer2-security-matrix.md`.
+**Commit 1 (security)** lands the 2 confirmed Mediums + the re-confirmed E + 2 latent fixes: cookie-secure
+startup fail-open (`verify_runtime` now rejects `session_cookie_secure=false` in prod/staging + a 16-byte
+pepper floor); resource-revoke audit gap (`remove_member` now revoke-events the CASCADE'd `ResourceRoleAssignment`
+rows); last-admin fail-open (`remove_member`/`_assert_not_last_admin` fail closed when the admin role does
+not resolve); control autogenerate catch-all → `return False`; CSRF lenient no-header branch tightened to
+fail-closed 403 (finding F, maintainer-approved). Controller-verified: 322 rendered tests + 66 fixture-validation
++ ruff/format clean. **Posture calls (maintainer):** F tightened now; G (login rate-limit) left to the proxy/LB.
+**Phase-2 preconditions recorded for Meridian:** DB-level ≥1-admin guard · `AuthzEvent.resource_id` + resource-grant
+audit completeness · slug-history reaping. Commits 2 (error-surface 4xx correctness) + 3 (docs + records) follow.
+
+#### #0219 · fix · FWK58 Layer-2 hardening 2/3 (error-surface 4xx correctness) · 2026-06-24
+**Error-surface correctness fixes (no behaviour change to the happy paths).** `provision_tenant` now
+pre-checks the slug (mirroring signup): a taken slug → a GENERIC 409 that never echoes the colliding
+tenant's opaque id (finding A), a bad-charset slug → 400 (finding C), a TOCTOU slug race → 409 not 500
+(finding P). `add_member`/`grant_role` now catch `DomainMismatchError` (an `AuthError`, not a `ValueError`)
++ unknown-role `ValueError` → 400 instead of an uncaught 500 (finding D, most-reported); `grant_role` also
+treats a concurrent duplicate-grant `IntegrityError` as the idempotent 204 no-op (finding N). `logout`
+`delete_cookie` now mirrors the set-cookie domain/secure so a parent-domain cookie is actually cleared
+(finding B). Password `max_length` comment reworded — input-size bound, not cost protection (the pepper
+HMAC collapses any length to 32B pre-argon2). +4 route regression tests (A/C/D). Controller-verified:
+326 rendered tests, ruff/format clean.
+
+#### #0220 · docs · FWK58 Layer-2 hardening 3/3 (ops docs) · 2026-06-24
+**Ops-doc fixes in `.env.example`.** OPS-F4 connection-budget note corrected: the co-located default runs
+TWO QueuePools (app + control), each 5+10=15, so ~30 conns/process — was under-documented as ~15 (finding
+M); size Postgres `max_connections` accordingly. Added a login/set-password **rate-limiting** note: not
+enforced at the app layer (argon2id makes each attempt costly, but online-guessing/concurrency bounds are
+an infra concern) — enforce per-IP/per-account limits + a connection cap at the reverse proxy / LB (finding
+G, maintainer decision: leave to the proxy/LB). Phase-2 preconditions for Meridian + the next-pass coverage
+gaps (migration data-safety cell, id↔slug-desync cell) are recorded in the scorecard. Closes the Layer-2
+hardening arc — merge gate already satisfied (0 Crit/High); remaining: Option-B decision, merge, release cut.
+
+#### #0221 · feat · FWK58 Option B — integrity-LOCK the multitenantauth mechanism (de-fork colonization guard) · 2026-06-24
+**The framework's first-ever `src/` integrity lock — deliberate, scoped to the auth battery.** The
+multitenantauth MECHANISM tree now ships LOCKED: a consumer who edits the permission evaluator / request
+guards / CSRF / authn / control-plane models+engine+repo / registry / routes / control migration chain
+fails `framework integrity` (wired into the generated project's CI step 0 + every `task dev`); `framework
+restore` resets it; `framework upgrade` flows security fixes. The authz POLICY catalog (`permissions.py`,
+`roles.py`) stays UNLOCKED (consumer-editable) — customization has a home; locking matches design intent.
+**Small footprint** because `restore.py` is path-agnostic (re-renders the canonical from the project's own
+answers) → zero restore changes. New: `source.read_package_name`; `classes.BATTERY_LOCKED_SRC` (33 enumerated
+mechanism files, `{package_name}`-templated, gated on multitenantauth) + `alembic_control.ini` in
+`BATTERY_LOCKED`; `build_manifest` `{package_name}` expansion. **Fail-safe** completeness:
+`tests/integrity/test_auth_mechanism_lock.py` walks the rendered tree and fails if any mechanism file is
+missing from the lock list (a forgotten lock can't silently ship unlocked) — the chosen idiom over a
+directory-walk lock (which would risk auto-locking a file the consumer was meant to edit; per advisor).
+Restore round-trip + policy-stays-editable + baseline-unaffected all tested. **Shared files the battery only
+wires into (main.py, settings.py, entrypoint, migrations/env.py, .env.example) stay co-owned/unlocked by
+design.** Verified: 72 integrity tests + whole-repo gate (1085 passed, ruff/format/mypy clean). Completes
+the FWK58 colonization guard ("mechanism ships LOCKED"); Task-19 shipped the convention half (Option A).
+
+#### #0222 · fix · FWK58 — authz-fitness T1 must compose with sibling batteries · 2026-06-25
+**PR #79 CI caught a real battery-composition bug the single-battery renders missed** (exactly what the
+all-batteries "full" render-matrix combo exists for). `test_authz_fitness.py::test_T1_no_unguarded_route`
+scans the WHOLE app, so in a render combining multitenantauth with other route-adding batteries it flagged
+their routes (`/agents/run`, `/internal/rum`, `/graphql`, `/llm/complete`, `/webhooks`) as "unguarded" — the
+auth battery can't guard routes it doesn't own. Left unfixed, a real `framework new --with multitenantauth
+--with agents …` would ship with RED CI on day one. **Fix:** allowlist the sibling-battery routes in the T1
+`PUBLIC` set, GATED per battery (only routes that actually render are exempted), with a comment that the
+auth suite does not assert their authz and the consumer must add their own guard if a route is sensitive
+(strict "require a guard" would ship a broken multi-battery scaffold). Only T1 affected — T1b (active_tenant
+dep) + T4 (auth vocab) don't see sibling routes; both passed in the full combo. Verified: renders gate
+correctly (5 routes in the combo, 0 solo) + a real multitenantauth+webhooks render passes T1/T1b/T2/T3.
+Pre-existing FWK58-build bug (Task 16b fitness suite × Task 22 full combo), not from the Layer-2/Option-B work.

@@ -25,19 +25,46 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from {{ package_name }}.db.engine import dispose_engine
 
     dispose_engine()
+{%- if "multitenantauth" in batteries %}
+    from {{ package_name }}.db.control.engine import dispose_control_engine
+
+    dispose_control_engine()
+{%- endif %}
     log.info("graceful_shutdown")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.resolved_log_level)
+{%- if "multitenantauth" in batteries %}
+
+    from {{ package_name }}.config.settings import verify_runtime
+
+    verify_runtime(settings)
+{%- endif %}
 
     app = FastAPI(title=settings.service_name, lifespan=lifespan)
     app.state.settings = settings
     app.state.metrics = MetricsRegistry()
     app.add_middleware(ObservabilityMiddleware, metrics=app.state.metrics)
+{%- if "multitenantauth" in batteries %}
+
+    from {{ package_name }}.multitenantauth.csrf import CSRFMiddleware
+
+    app.add_middleware(CSRFMiddleware)
+{%- endif %}
     register_exception_handlers(app)
     include_routers(app)
+{%- if "multitenantauth" in batteries %}
+
+    from {{ package_name }}.multitenantauth.routes.auth import router as _auth_router
+    from {{ package_name }}.multitenantauth.routes.tenants import router as _tenants_router
+    from {{ package_name }}.multitenantauth.routes.roles import router as _roles_router
+
+    app.include_router(_auth_router)
+    app.include_router(_tenants_router)
+    app.include_router(_roles_router)
+{%- endif %}
 {%- if "react" in batteries %}
 
     from pathlib import Path

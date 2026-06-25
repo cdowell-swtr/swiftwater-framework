@@ -1,0 +1,86 @@
+"""Unit tests for {{ package_name }}.multitenantauth.authn.tokens — opaque session/invite token minting."""
+
+import hashlib
+import hmac
+
+import pytest
+
+from {{ package_name }}.config.settings import get_settings
+
+
+@pytest.fixture(autouse=True)
+def _clear_settings_cache():
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+def test_mint_returns_raw_and_hash(monkeypatch):
+    """mint() returns a (raw, hash) tuple where hash == hash_token(raw)."""
+    monkeypatch.setenv("APP_SESSION_PEPPER", "test-session-pepper")
+    get_settings.cache_clear()
+
+    from {{ package_name }}.multitenantauth.authn.tokens import hash_token, mint
+
+    raw, digest = mint()
+    assert digest == hash_token(raw)
+
+
+def test_mint_raw_length(monkeypatch):
+    """Raw token is at least 32 characters (token_urlsafe(32) → 43 chars base64url)."""
+    monkeypatch.setenv("APP_SESSION_PEPPER", "test-session-pepper")
+    get_settings.cache_clear()
+
+    from {{ package_name }}.multitenantauth.authn.tokens import mint
+
+    raw, _ = mint()
+    assert len(raw) >= 32
+
+
+def test_hash_token_is_not_raw(monkeypatch):
+    """The stored hash must never equal the raw token value."""
+    monkeypatch.setenv("APP_SESSION_PEPPER", "test-session-pepper")
+    get_settings.cache_clear()
+
+    from {{ package_name }}.multitenantauth.authn.tokens import mint
+
+    raw, digest = mint()
+    assert digest != raw
+
+
+def test_hash_token_is_hmac_sha256(monkeypatch):
+    """hash_token produces HMAC-SHA256(raw, session_pepper) in hex — the exact algorithm."""
+    pepper = "test-session-pepper"
+    monkeypatch.setenv("APP_SESSION_PEPPER", pepper)
+    get_settings.cache_clear()
+
+    from {{ package_name }}.multitenantauth.authn.tokens import hash_token
+
+    raw = "fixed-token"
+    expected = hmac.new(pepper.encode(), raw.encode(), hashlib.sha256).hexdigest()
+    assert hash_token(raw) == expected
+
+
+def test_hash_token_stable(monkeypatch):
+    """hash_token is deterministic — same input + pepper → same output."""
+    monkeypatch.setenv("APP_SESSION_PEPPER", "test-session-pepper")
+    get_settings.cache_clear()
+
+    from {{ package_name }}.multitenantauth.authn.tokens import hash_token
+
+    assert hash_token("fixed-token") == hash_token("fixed-token")
+
+
+def test_hash_token_pepper_dependent(monkeypatch):
+    """Different APP_SESSION_PEPPER values produce different hashes for the same raw token."""
+    from {{ package_name }}.multitenantauth.authn.tokens import hash_token
+
+    monkeypatch.setenv("APP_SESSION_PEPPER", "pepper-alpha")
+    get_settings.cache_clear()
+    h1 = hash_token("fixed-token")
+
+    monkeypatch.setenv("APP_SESSION_PEPPER", "pepper-beta")
+    get_settings.cache_clear()
+    h2 = hash_token("fixed-token")
+
+    assert h1 != h2

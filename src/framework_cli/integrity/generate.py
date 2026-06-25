@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pathspec
 
-from framework_cli.integrity.classes import rules
+from framework_cli.integrity.classes import BATTERY_LOCKED_SRC, rules
 from framework_cli.integrity.hashing import sha256_file
 from framework_cli.integrity.manifest import Entry, Manifest
 from framework_cli.integrity.sections import section_sha256
-from framework_cli.source import read_batteries
+from framework_cli.source import read_batteries, read_package_name
 
 
 class AuthoringError(Exception):
@@ -28,8 +28,9 @@ def build_manifest(project: Path, framework_version: str) -> Manifest:
     excluded by the project's own .gitignore.
     """
     spec = _gitignore_spec(project)
+    batteries = read_batteries(project)
     entries: list[Entry] = []
-    for rule in rules(read_batteries(project)):
+    for rule in rules(batteries):
         if rule.tier == "tracked":
             if spec.match_file(rule.path):
                 raise AuthoringError(
@@ -56,6 +57,34 @@ def build_manifest(project: Path, framework_version: str) -> Manifest:
                 )
         else:  # gitignored existence tier — recorded, never checksummed
             entries.append(Entry(rule.path, rule.cls, rule.tier, sha256=None))
+
+    # Battery-gated locked SOURCE tree: {package_name}-templated paths (src/<package_name>/…)
+    # can't be static literals in rules(), so resolve the token against the project's recorded
+    # package_name and lock each like any other tracked file (the de-fork mechanism guard).
+    active = set(batteries)
+    src_locked = [
+        p for p, gate in BATTERY_LOCKED_SRC.items() if active.intersection(gate)
+    ]
+    if src_locked:
+        package_name = read_package_name(project)
+        if package_name is None:
+            raise AuthoringError(
+                "a battery-gated source lock is active but .copier-answers.yml has no "
+                "package_name — cannot resolve the locked source paths."
+            )
+        for templated in src_locked:
+            rel = templated.format(package_name=package_name)
+            if spec.match_file(rel):
+                raise AuthoringError(
+                    f"{rel} is locked/tracked but matches .gitignore — a checksummed "
+                    "file must be git-tracked (spec §17)."
+                )
+            f = project / rel
+            if not f.is_file():
+                raise AuthoringError(
+                    f"{rel} is declared a locked framework source file but was not rendered."
+                )
+            entries.append(Entry(rel, "locked", "tracked", sha256=sha256_file(f)))
     return Manifest(framework_version=framework_version, entries=entries)
 
 

@@ -107,6 +107,13 @@ _BATTERIES: dict[str, BatterySpec] = {
         "Versioning-ready MkDocs+Material documentation site (mkdocstrings Python API, static OpenAPI render, mike per-version docs)",
         obs="rides-existing",
     ),
+    "multitenantauth": BatterySpec(
+        "multitenantauth",
+        "Multitenant identity + sessions + authz mechanism + tenant registry "
+        "(control-plane spine; cookie/bearer auth, CSRF-defended)",
+        gates_agents=("security",),
+        obs="in-process",
+    ),
 }
 
 

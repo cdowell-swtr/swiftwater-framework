@@ -1,0 +1,235 @@
+"""End-to-end integration test: the full multitenantauth battery composes correctly.
+
+This is the integration proof that:
+  (a) BOTH alembic chains run to ``head`` successfully (app chain + control chain, co-located
+      on one Postgres DB — the default Phase-1 deployment shape).
+  (b) ``seed_authz`` runs cleanly against the migrated control schema.
+  (c) The real app (``create_app()``) can boot against that DB via ``control_session`` override.
+  (d) The full authn→tenancy→authz flow works end-to-end through real migrations + real seed:
+        signup → guarded member route → unauthenticated 401 → cross-tenant 404 → login.
+
+This test deliberately uses **real alembic** (subprocess ``upgrade head``) on a dedicated
+database so the migration files themselves are exercised, not just ``create_all``.  It mirrors
+the entrypoint boot sequence: ``alembic upgrade head`` → ``alembic -c alembic_control.ini
+upgrade head`` → ``seed_authz(session)`` → uvicorn (here: TestClient).
+
+A dedicated database (``{{ package_name }}_mta_e2e_test``) is created so the control-plane
+tables never land in the shared ``engine`` fixture's DB, which ``test_control_migrations.py``
+asserts must be free of them.
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+from collections.abc import Iterator
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine, create_engine, make_url, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control.engine import dispose_control_engine
+from {{ package_name }}.multitenantauth.authz.seed import seed_authz
+from {{ package_name }}.multitenantauth.deps import control_session
+
+# ── Dedicated co-located DB ────────────────────────────────────────────────────
+
+_E2E_DB = "{{ package_name }}_mta_e2e_test"
+
+
+@pytest.fixture(scope="module")
+def e2e_db_url(pg_url: str) -> str:
+    """Create (if absent) the dedicated e2e database and return its connection URL."""
+    base = make_url(pg_url)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    db_url = base.set(database=_E2E_DB).render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_E2E_DB}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_E2E_DB}"'))
+    maint.dispose()
+    return db_url
+
+
+@pytest.fixture(scope="module")
+def e2e_engine(e2e_db_url: str) -> Iterator[Engine]:
+    """Apply BOTH alembic chains + seed_authz against the dedicated e2e DB.
+
+    Boot sequence mirrors the container entrypoint exactly:
+      1. ``alembic upgrade head``               (app schema)
+      2. ``alembic -c alembic_control.ini upgrade head``  (control schema, same DB)
+      3. ``seed_authz(session)``                (permission/role vocabulary)
+    """
+    # Step 1 — app chain
+    proc = subprocess.run(
+        ["alembic", "upgrade", "head"],
+        env={**os.environ, "APP_DATABASE_URL": e2e_db_url},
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        pytest.fail(f"app alembic upgrade head failed:\n{proc.stdout}\n{proc.stderr}")
+
+    # Step 2 — control chain (same DB, different version table)
+    proc = subprocess.run(
+        ["alembic", "-c", "alembic_control.ini", "upgrade", "head"],
+        env={
+            **os.environ,
+            "APP_CONTROL_DATABASE_URL": e2e_db_url,
+            # control env.py reads APP_CONTROL_DATABASE_URL; also supply APP_DATABASE_URL
+            # so Settings() does not fail its own validator if it reads both.
+            "APP_DATABASE_URL": e2e_db_url,
+        },
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        pytest.fail(
+            f"control alembic upgrade head failed:\n{proc.stdout}\n{proc.stderr}"
+        )
+
+    engine = create_engine(e2e_db_url)
+
+    # Step 3 — seed_authz (permission/role vocabulary)
+    with Session(engine) as s:
+        seed_authz(s)
+        s.commit()
+
+    yield engine
+    engine.dispose()
+
+
+# ── App client ─────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def e2e_client(
+    e2e_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[TestClient]:
+    """Boot ``create_app()`` with ``control_session`` overridden onto *e2e_engine*.
+
+    The override is the same pattern used by ``test_auth_routes`` and ``test_authz_fitness``.
+    ``APP_SESSION_COOKIE_SECURE=false`` is required: without it Set-Cookie carries the
+    ``Secure`` flag, which TestClient (plain http) ignores → the session cookie is never
+    echoed back → every authenticated request gets 401.
+    """
+    monkeypatch.setenv("APP_ENVIRONMENT", "dev")
+    monkeypatch.setenv("APP_SESSION_PEPPER", "e2e-session-pepper")
+    monkeypatch.setenv("APP_PASSWORD_PEPPER", "e2e-password-pepper")
+    monkeypatch.setenv("APP_SESSION_COOKIE_SECURE", "false")
+    # Point both database URLs at the e2e DB so Settings() and control_engine() agree.
+    monkeypatch.setenv(
+        "APP_DATABASE_URL", e2e_engine.url.render_as_string(hide_password=False)
+    )
+    monkeypatch.setenv(
+        "APP_CONTROL_DATABASE_URL", e2e_engine.url.render_as_string(hide_password=False)
+    )
+
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    # Dispose any cached control engine singleton from a prior test module so
+    # control_session_factory() re-initialises against the e2e DB.
+    dispose_control_engine()
+
+    from {{ package_name }}.main import create_app
+
+    app = create_app()
+
+    def _cs() -> Iterator[Session]:
+        with Session(e2e_engine) as s:
+            yield s
+
+    app.dependency_overrides[control_session] = _cs
+
+    # Simulate a browser: send a same-origin Origin header on every request. The CSRF
+    # middleware fails closed on a cookie-authenticated mutating request that carries NEITHER
+    # Origin nor Referer (Layer-2 F) — a real browser always sends Origin, so the e2e flow
+    # must too, or logout/set-password would 403. urlsplit("http://testserver").netloc ==
+    # the Host header ("testserver"), so this matches same-origin and passes.
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        yield client
+
+    get_settings.cache_clear()
+    dispose_control_engine()
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+_FOUNDER_EMAIL = "founder@e2e-acme.com"
+_FOUNDER_PASSWORD = "pw-e2e-placeholder"
+_TENANT_SLUG = "e2eacme"
+_TENANT_NAME = "E2E Acme"
+
+
+# ── E2E test: full authn→tenancy→authz flow ───────────────────────────────────
+
+
+def test_multitenantauth_e2e_full_flow(e2e_client: TestClient) -> None:
+    """Prove the full battery composes end-to-end through real migrations + real seed.
+
+    1. Signup → 201 + session cookie (authn works).
+    2. Founder ``GET /tenants/{tenant_id}/members`` → 200 (authz guard works with seeded roles).
+    3. Unauthenticated ``GET /tenants/{tenant_id}/members`` → 401 (no session = no access).
+    4. Cross-tenant / nonexistent tenant ``GET /tenants/{bad_id}/members`` → 404 (member guard).
+    5. Logout + login with founder creds → 200 + fresh session cookie (session fixation safe).
+    """
+    # ── 1. Signup ──────────────────────────────────────────────────────────────
+    r = e2e_client.post(
+        "/auth/signup",
+        json={
+            "email": _FOUNDER_EMAIL,
+            "password": _FOUNDER_PASSWORD,
+            "tenant_name": _TENANT_NAME,
+            "slug": _TENANT_SLUG,
+        },
+    )
+    assert r.status_code == 201, f"signup failed: {r.status_code} {r.text}"
+    tenant_id = r.json()["tenant_id"]
+    assert tenant_id, "signup must return a tenant_id"
+    assert r.json().get("slug") == _TENANT_SLUG
+    # Session cookie must be present — all subsequent authed requests rely on it.
+    assert e2e_client.cookies.get("{{ package_name }}_session"), "signup must issue a session cookie"
+
+    # ── 2. Founder can list members (guarded route; seeded tenant.admin role) ──
+    r = e2e_client.get(f"/tenants/{tenant_id}/members")
+    assert r.status_code == 200, (
+        f"GET /tenants/{{tenant_id}}/members failed for founder: {r.status_code} {r.text}"
+    )
+    members = r.json()
+    # The founder is a member of their own tenant.
+    assert any(m["email"] == _FOUNDER_EMAIL for m in members), (
+        "founder must appear in their own tenant's member list"
+    )
+
+    # ── 3. Unauthenticated request → 401 ──────────────────────────────────────
+    anon = TestClient(e2e_client.app)
+    r = anon.get(f"/tenants/{tenant_id}/members")
+    assert r.status_code == 401, (
+        f"unauthenticated GET /tenants/{{tenant_id}}/members must be 401, got {r.status_code}"
+    )
+
+    # ── 4. Nonexistent / cross-tenant → 404 (existence not leaked) ────────────
+    r = e2e_client.get("/tenants/nonexistent-tenant-id/members")
+    assert r.status_code == 404, (
+        f"cross-tenant/nonexistent GET must be 404, got {r.status_code}"
+    )
+
+    # ── 5. Logout → login → fresh session ──────────────────────────────────────
+    pre_logout_cookie = e2e_client.cookies.get("{{ package_name }}_session")
+    r = e2e_client.post("/auth/logout")
+    assert r.status_code == 204, f"logout failed: {r.status_code} {r.text}"
+
+    r = e2e_client.post(
+        "/auth/login",
+        json={"email": _FOUNDER_EMAIL, "password": _FOUNDER_PASSWORD},
+    )
+    assert r.status_code == 200, f"login failed: {r.status_code} {r.text}"
+    post_login_cookie = e2e_client.cookies.get("{{ package_name }}_session")
+    assert post_login_cookie, "login must issue a session cookie"
+    assert post_login_cookie != pre_logout_cookie, (
+        "login must mint a fresh session (session fixation defence)"
+    )
