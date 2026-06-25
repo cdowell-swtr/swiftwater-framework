@@ -3166,3 +3166,34 @@ of DEC-0003; status `designed`; **Meridian async-confirmation requested** agains
 read-the-code shortcut). FWK63 line marked FOLDED INTO SP3. **Next:** writing-plans for SP1. **Outward/operator-gated:**
 relay the verified Meridian drift to Meridian (absorber does not write to the generator repo unprompted).
 (FWK61 SP1 design + PUR → PLAN)
+
+#### #0231 · completed · FWK61 SP1 — implementation plan written (11 TDD tasks) + spec corrected · 2026-06-25
+Wrote the SP1 implementation plan (`docs/superpowers/plans/2026-06-25-fwk61-sp1-physical-routing-core.md`, 11
+tasks, subagent-driven/TDD). **Grounded it by reading the validated source directly** (operator-authorized,
+MD busy): Meridian's `db/engine_registry.py`, `db/engine.py`, `db/tenancy/dsn.py`, `auth/deps.py` (the lifted
+core), AND the battery's real integration points — `deps.py`, baseline `db/engine.py`, `db/control/engine.py`,
+`multitenantauth/metrics.py`, `config/settings.py`, `integrity/classes.py`, `migrations/env.py`, `alembic.ini`,
+`tests/conftest.py`, `test_control_migrations.py`, `test_auth_mechanism_lock.py`, `test_obs_completeness.py`,
+`health.py`. **Five blockers/discoveries resolved before drafting** (advisor-prompted): (1) **placement** — the
+routing core lives under `multitenantauth/tenancy/`, NOT a sibling `db/tenant/`, because the lock completeness
+guard (`test_auth_mechanism_lock.py`) only walks `multitenantauth`/`db/control`/`migrations_control` trees — a
+`db/tenant/` plane would ship UNLOCKED; (2) **env.py blocker** — `migrations/env.py:15` sets `sqlalchemy.url`
+unconditionally → a per-tenant `command.upgrade` would migrate the APP db; fix = honor a pre-injected url (app
+`alembic.ini` has none, so CLI/control path unchanged) → new Task 7; (3) **active_tenant pre-exists** (Phase 1
+shipped it) → SP1's deps change is `tenant_db`-only, not "+active_tenant" as the first-draft spec implied;
+(4) **baseline `build_engine(url)` takes no pool args** → the tenant plane builds its own pooled engines (don't
+couple baseline to multitenantauth settings); (5) **idempotency is by-slug-resume** — `register_tenant` mints a
+new opaque id + rejects a re-used slug, so `provision_tenant` detects a partial run via `live_slug_tenant_id`
+and resumes (NOT Meridian's by-id short-circuit). **Acceptance tier confirmed viable, not skip-neutral:**
+`CREATE DATABASE` works on the testcontainer superuser role (`test_control_migrations.py:42` already does it).
+**Lock-sequencing:** each new `tenancy/*` file's `BATTERY_LOCKED_SRC` entry rides in the same task that creates
+it (can't defer — the guard goes red the moment the file renders). Secrets seam = match+seam (Secrets-backing
+Horizon item is the future backend); DSN id-derived + immutable in SP1 → write-once cache, no move/suspend
+invalidation (SP3). **Plan altitude (advisor):** inline the generalized ported code (don't reference Meridian's
+moving/partially-broken repo); tests-first for new code, drop-in for ports. **Spec corrected on the same branch**
+(placement, active_tenant pre-exists, baseline-engine-untouched, env.py task, by-slug-resume, write-once cache).
+Soft spots flagged: Tasks 9/11 test bodies reference Task 8's concrete provisioning helpers rather than
+re-transcribing. **Next:** execute SP1 (subagent-driven per [[subagent-review-model-pattern]]: implementers
+Sonnet, spec review Sonnet, code-quality + branch-end Opus; Phase-2 Layer-2 all-Opus per
+[[security-review-workflow-all-opus]]).
+(FWK61 SP1 plan → PLAN)

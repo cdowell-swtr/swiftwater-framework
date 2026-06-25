@@ -32,9 +32,10 @@ resolution, and the fail-closed identical-404 routing gate are **validated gold*
 - `resolve_dsn` seam — the injectable connect-time DSN resolver; default reads the stored control-row DSN (matches Meridian); the forward-compatible hook the future **Secrets-backing** Horizon item plugs a vault into.
 - Physical provisioning — `provision_tenant(...)`: register → **[skippable]** `CREATE DATABASE` → per-tenant `alembic upgrade head` (Python API) → post-migrate hook (default no-op) → activate. Idempotent / re-runnable.
 - `default_tenant_dsn(tenant_id)` — compute the co-located default DSN (parametrized DB-name prefix).
-- Routing deps — `active_tenant` (fail-closed identical-404) + `tenant_db` (request-scoped tenant `Session`), composing with the Phase-1/DV-5 authz dep already in `multitenantauth/deps.py`.
+- Routing dep — `tenant_db` (request-scoped tenant `Session`); `active_tenant` (fail-closed identical-404) **already ships from Phase 1** and is reused unchanged. Composes with the Phase-1/DV-5 authz dep already in `multitenantauth/deps.py`.
+- The `migrations/env.py` change so a per-tenant `alembic upgrade` targets the tenant DSN (§4.4).
 - Observability — OTel spans on resolve/provision + per-endpoint pool gauges (the surface Meridian's core lacks).
-- Integrity-lock upkeep — register the new mechanism files in `BATTERY_LOCKED_SRC` + regenerate the manifest (§4.7).
+- Integrity-lock upkeep — register the new `multitenantauth/tenancy/*` mechanism files in `BATTERY_LOCKED_SRC`, each in the task that creates it (§4.7).
 - A drift-aware conformance suite split (§8).
 
 **Out (deferred, with the boundary named):**
@@ -54,21 +55,31 @@ db/control/                      (Phase 1 — exists)
   engine.py        control_engine(), control_session_factory()
   models/          authn, authz, tenant
   repository.py    add_tenant(*, id, name, slug, dsn, status), get_tenant, get_tenant_dsn, …
-db/tenant/                       (SP1 — new; mirrors db/control)
-  engine_registry.py  TenantEngineRegistry  — per-endpoint LRU + connection budget
-  engine.py           tenant_session(tenant_id, *, control_session)  + DSN cache + resolve_dsn default
+multitenantauth/tenancy/         (the tenant plane — registry exists; SP1 adds the rest)
+  registry.py         (Phase 1 — exists; routing-agnostic register/activate/resolve)
+  engine_registry.py  (SP1 — new) TenantEngineRegistry  — per-endpoint LRU + connection budget
+  session.py          (SP1 — new) tenant_session(tenant_id, *, control_session) + DSN cache + resolve_dsn seam
+  dsn.py              (SP1 — new) default_tenant_dsn(tenant_id) + create_database(dsn)
+  provision.py        (SP1 — new) provision_tenant(...) + register_provision_hook(...)
+  metrics.py          (SP1 — new) tenant_engine_metrics (eviction + DSN-cache counters)
 multitenantauth/
-  tenancy/registry.py  (Phase 1 — exists; routing-agnostic register/activate/resolve)
-  tenancy/dsn.py       (SP1 — new) default_tenant_dsn(tenant_id)
-  tenancy/provision.py (SP1 — new) provision_tenant(...) + register_provision_hook(...)
-  deps.py              (exists; SP1 adds active_tenant + tenant_db routing deps)
+  deps.py             (exists; active_tenant already ships — SP1 adds tenant_db only)
 ```
+
+**Placement (corrected from a first-draft `db/tenant/`):** the routing core lives under
+`multitenantauth/tenancy/`, not a sibling `db/tenant/`. The integrity-lock completeness guard
+(`test_auth_mechanism_lock.py`) walks the `multitenantauth`, `db/control`, and `migrations_control`
+trees — a `db/tenant/` plane would be **uncovered** and could ship unlocked. Locating the routing
+core under the already-walked `multitenantauth/tenancy/` tree makes the lock fail-safe automatic and
+keeps it cohesive with the existing `registry.py`. The baseline `db/engine.py` is **left untouched**
+(its `build_engine(url)` takes no pool args); the tenant plane builds its own pooled engines so the
+baseline engine is never coupled to multitenantauth-only settings.
 
 All engines are **sync** (matching the control plane and Meridian) — no async/await split is introduced.
 
 ## 4. Components
 
-### 4.1 `TenantEngineRegistry` (`db/tenant/engine_registry.py`)
+### 4.1 `TenantEngineRegistry` (`multitenantauth/tenancy/engine_registry.py`)
 A process-global singleton holding a bounded LRU of sync engines keyed by full DSN, accounted **per
 endpoint** (`host:port`). Lifted from Meridian's validated core; defaults carried over:
 
@@ -78,17 +89,20 @@ endpoint** (`host:port`). Lifted from Meridian's validated core; defaults carrie
 - Thread-safe under an `RLock` (FastAPI runs sync deps in a threadpool — same hazard the control engine's double-checked lock addresses).
 - Renders gauges `app_tenant_engines_cached{endpoint}` and `app_tenant_pool_checked_out` (§4.6).
 
-### 4.2 `tenant_session` + the `resolve_dsn` seam (`db/tenant/engine.py`)
+### 4.2 `tenant_session` + the `resolve_dsn` seam (`multitenantauth/tenancy/session.py`)
 `tenant_session(tenant_id, *, control_session)` is a context manager that: resolves the DSN via the seam →
 gets-or-creates the engine from the registry → yields a request-scoped `Session` → closes it. A small DSN
-cache (`tenant_id → (dsn, expiry)`, TTL `tenant_dsn_cache_ttl=300s`, invalidated on a lifecycle change)
-avoids a control-DB read per request.
+cache (`tenant_id → (dsn, expiry)`, TTL `tenant_dsn_cache_ttl_seconds=300`) avoids a control-DB read per
+request. **The DSN is id-derived and immutable in SP1** (no move/suspend/rename-of-DSN in scope), so the
+cache is effectively write-once per tenant and the TTL is only a backstop — SP1 keeps `invalidate_dsn_cache()`
+for provisioning + test reset but does **not** build move/suspend invalidation (deferred to SP3).
 
 The **seam** is `resolve_dsn(tenant_id, *, control_session) -> str`, injectable via
 `register_tenant_dsn_resolver(fn)` (default-registry pattern, same shape as the DV-5 authz-resolver seam).
-**Default** = `get_tenant_dsn(control_session, tenant_id)` — read the DSN stored in the control row, matching
-Meridian's validated posture. The **Secrets-backing** item later registers a resolver that merges injected
-credentials from a vault. Fail-closed: a resolver raising, or returning a non-string, denies the route.
+**Default** reads the DSN stored on the control row (`control_repo.get_tenant(...).dsn`), matching Meridian's
+validated posture. The **Secrets-backing** item later registers a resolver that merges injected credentials
+from a vault. Fail-closed: a resolver that raises, or returns a non-string, raises `LookupError` → the route
+denies (404).
 
 ### 4.3 `default_tenant_dsn` (`multitenantauth/tenancy/dsn.py`)
 `default_tenant_dsn(tenant_id) -> str` clones the app/control database URL and swaps the database name to
@@ -113,18 +127,20 @@ Bring-your-own-DSN callers pass `dsn` explicitly. *(This is a deliberate edit to
 `provision_tenant(control_session, name, *, slug, dsn=None, run_physical=True)`:
 1. `tenant = register_tenant(control_session, name, slug=slug, dsn=dsn, status="provisioning")` → opaque id + control row. With `dsn=None` the registry finalizes the id-derived default DSN itself (§4.3); bring-your-own-DSN callers pass `dsn` explicitly and typically `run_physical=False`. The row's DSN is correct as written — no second update pass.
 2. **If `run_physical`:** idempotent `CREATE DATABASE` via an AUTOCOMMIT engine to the maintenance DB (`postgres`); skipped entirely when `run_physical=False` (managed Postgres blocks the maintenance-DB connection, so bring-your-own-DSN must skip the **whole** step, not just the CREATE).
-3. **If `run_physical`:** per-tenant migrate primitive — `alembic.command.upgrade(cfg, "head")` against the tenant DSN via a programmatic `Config` (Python API, **not** a subprocess), pointing at the app `migrations/`.
-4. Post-migrate hook — `provision_hook(control_session, tenant_id, tenant_session)`, **default no-op**, registered via `register_provision_hook(fn)`. This is exactly where Meridian's EDR `seed_base_vocabulary` lives — cleanly excluded from the generic battery.
+3. **If `run_physical`:** per-tenant migrate primitive — `alembic.command.upgrade(cfg, "head")` against the tenant DSN via a programmatic `Config` (Python API, **not** a subprocess), pointing at the app `migrations/`. **Requires an env.py change:** `migrations/env.py` currently sets `sqlalchemy.url` to `settings.database_url` *unconditionally*, so a per-tenant upgrade would migrate the app DB. SP1 changes it to honor a pre-injected `sqlalchemy.url` (the app `alembic.ini` has none, so the CLI/control path is unchanged) — then `cfg.set_main_option("sqlalchemy.url", tenant_dsn)` routes the upgrade to the tenant DB. The tenant DB receives the **app/business** schema (e.g. `items`), never the control tables.
+4. Post-migrate hook — `provision_hook(control_session, tenant_id, tenant_dsn)`, **default no-op**, registered via `register_provision_hook(fn)`. This is exactly where Meridian's EDR `seed_base_vocabulary` lives — cleanly excluded from the generic battery.
 5. `activate_tenant(control_session, tenant_id)`.
 
-The flow is **non-transactional and re-runnable** by design (a DB create can't join the control transaction):
-each step is idempotent (`get_tenant` short-circuits a re-register; `CREATE DATABASE` is existence-checked;
+The flow is **non-transactional and idempotent** by design (a DB create can't join the control transaction).
+**Re-runnability is by-slug resume:** because `register_tenant` mints a *new* opaque id and rejects a re-used
+slug, `provision_tenant` first checks `live_slug_tenant_id(slug)` — an already-active tenant is a no-op, a
+`provisioning`-status tenant is *resumed* (physical steps re-run: `CREATE DATABASE` is existence-checked,
 `upgrade head` is a no-op when current). A half-provisioned tenant stays `provisioning` and is safe to re-run;
-SP1 does **not** attempt to roll back a partially-created physical DB (teardown is an SP3/lifecycle concern).
+SP1 does **not** roll back a partially-created physical DB (teardown is an SP3/lifecycle concern).
 
 ### 4.5 Routing deps (`multitenantauth/deps.py`)
-- `active_tenant(...)` — resolve the request's tenant; **fail-closed and identical** for unknown / non-active / non-member: all return the same `404` (never `403`, never a leak of existence). Lifted from Meridian's validated dep.
-- `tenant_db(tenant_id=Depends(active_tenant), cs=Depends(control_session)) -> Session` — opens `tenant_session(tenant_id, control_session=cs)` for the request. Lazy: the engine is created on first use and cached.
+- `active_tenant(...)` — **already ships (Phase 1)**: resolves the request's tenant, **fail-closed and identical** for unknown / non-active / non-member (all `404`, never `403`, never an existence leak). SP1 reuses it as-is; no change.
+- `tenant_db(tenant_id=Depends(active_tenant), cs=Depends(control_session)) -> Session` — **the only deps addition in SP1**: opens `tenant_session(tenant_id, control_session=cs)` for the request; a `LookupError` from resolution maps to `404` (no leak). Lazy: the engine is created on first use and cached.
 - Composes with the existing Phase-1/DV-5 authz dep — routing resolves the tenant, authz gates the action; neither is bypassed.
 
 ### 4.6 Observability
@@ -138,7 +154,7 @@ The Phase-1 mechanism is **integrity-locked** (`integrity/classes.py:BATTERY_LOC
 `db/control/repository.py`, `db/control/engine.py`, `multitenantauth/deps.py`, etc. `tests/integrity/
 test_auth_mechanism_lock.py` walks the rendered tree and **fails if any mechanism file is missing** from that
 list — so SP1 must keep the lock complete:
-- **New mechanism files** — `db/tenant/engine_registry.py`, `db/tenant/engine.py`, `db/tenant/__init__.py`, `multitenantauth/tenancy/dsn.py`, `multitenantauth/tenancy/provision.py` — are added to `BATTERY_LOCKED_SRC` (gated on `multitenantauth`), and the manifest is regenerated (`build_manifest`). Forgetting one fails `test_auth_mechanism_lock.py` (fail-safe).
+- **New mechanism files** — `multitenantauth/tenancy/{engine_registry,session,dsn,provision,metrics}.py` — are added to `BATTERY_LOCKED_SRC` (gated on `multitenantauth`), **each in the task that creates it** (the manifest is rebuilt per render by `build_manifest`). Because they live under the already-walked `multitenantauth` tree, a forgotten lock fails `test_auth_mechanism_lock.py` the moment the file renders (fail-safe) — so registration cannot be deferred to a final task.
 - **Edits to locked Phase-1 files** — the optional-`dsn` change in `registry.py` (§4.3) and the routing deps added to `deps.py` (§4.5) — are deliberate mechanism re-touches; their checksums regenerate. They are covered by the branch's Phase-2 Layer-2 adversarial review (§9), the same gate the DV-5 seam edit went through. *(DEC-0003 already anticipates this: "Phase 2 re-touches the same mechanism under its own Layer-2 review.")*
 - **The consumer seams stay open without unlocking anything** — `register_tenant_dsn_resolver` (§4.2) and `register_provision_hook` (§4.4) are registered from the consumer's **unlocked** `create_app()`, exactly as the DV-5 `register_authz_resolver_factory` seam is. Locking the mechanism does not block the documented customization points.
 
