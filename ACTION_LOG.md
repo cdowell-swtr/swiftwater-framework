@@ -3307,3 +3307,14 @@ suppress the cause chain — the LOCKED mechanism self-protects rather than trus
 `__cause__ is None`, type preserved) + empty-string-deny test. 8/8 rendered + framework gate clean. Subagent-driven
 (Sonnet fixer; focused Opus re-review next).
 (FWK61 SP1 Task 5 fix → ledger)
+
+#### #0241 · completed · FWK61 SP1 Task 6 — register_tenant derives default DSN from the opaque id (LOCKED edit) · 2026-06-25
+First LOCKED-file edit of SP1: `register_tenant`'s `dsn` → `str | None = None`; when `None`, derive
+`default_tenant_dsn(tenant_id)` (local import, avoids circular) AFTER the opaque id is minted — resolving the
+provisioning chicken-and-egg while preserving the opaque-id invariant (id still server-generated, never
+slug-derived). Explicit `dsn=` still passes through verbatim. `registry.py` was already in `BATTERY_LOCKED_SRC`
+(deliberate re-touch, Layer-2-gated) — no new lock entry; the checksum changes, manifest rebuilt at render time.
+RED (`TypeError: missing 'dsn'`) → GREEN 29/29 registry tests on real PG (opaque-id invariant + slug rules intact);
+lock guard 5/5; framework gate clean. Implementer caught a brief test bug (asserting `t.dsn` after session close →
+DetachedInstanceError) and moved the assert inside the session. Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 6 → ledger)

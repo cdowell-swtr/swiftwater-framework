@@ -167,6 +167,36 @@ def test_register_tenant_rejects_cooling_slug(registry_engine: Engine) -> None:
             )
 
 
+def test_register_tenant_defaults_dsn_from_id(
+    registry_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When dsn is omitted, register_tenant must derive it from the opaque id via default_tenant_dsn."""
+    monkeypatch.setenv("APP_DATABASE_URL", "postgresql+psycopg://u:pw@h:5432/appdb")
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "acme_t")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    from {{ package_name }}.multitenantauth.tenancy.registry import register_tenant
+
+    with Session(registry_engine) as s:
+        t = register_tenant(s, "Acme", slug="acme")  # no dsn passed
+        s.commit()
+        tid = t.id
+        dsn = t.dsn  # capture inside session (commit expires attrs; reload here)
+    assert dsn.endswith(f"/acme_t_{tid}")
+
+
+def test_register_tenant_explicit_dsn_unchanged(registry_engine: Engine) -> None:
+    """When dsn is passed explicitly, register_tenant must store it verbatim."""
+    from {{ package_name }}.multitenantauth.tenancy.registry import register_tenant
+
+    with Session(registry_engine) as s:
+        t = register_tenant(s, "Acme", slug="acme2", dsn="postgresql+psycopg://x/byo")
+        s.commit()
+        dsn = t.dsn  # capture inside session (commit expires attrs; reload here)
+    assert dsn == "postgresql+psycopg://x/byo"
+
+
 # ── tests: activate_tenant ────────────────────────────────────────────────────
 
 
