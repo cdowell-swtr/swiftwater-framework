@@ -2949,3 +2949,22 @@ an infra concern) — enforce per-IP/per-account limits + a connection cap at th
 G, maintainer decision: leave to the proxy/LB). Phase-2 preconditions for Meridian + the next-pass coverage
 gaps (migration data-safety cell, id↔slug-desync cell) are recorded in the scorecard. Closes the Layer-2
 hardening arc — merge gate already satisfied (0 Crit/High); remaining: Option-B decision, merge, release cut.
+
+#### #0221 · feat · FWK58 Option B — integrity-LOCK the multitenantauth mechanism (de-fork colonization guard) · 2026-06-24
+**The framework's first-ever `src/` integrity lock — deliberate, scoped to the auth battery.** The
+multitenantauth MECHANISM tree now ships LOCKED: a consumer who edits the permission evaluator / request
+guards / CSRF / authn / control-plane models+engine+repo / registry / routes / control migration chain
+fails `framework integrity` (wired into the generated project's CI step 0 + every `task dev`); `framework
+restore` resets it; `framework upgrade` flows security fixes. The authz POLICY catalog (`permissions.py`,
+`roles.py`) stays UNLOCKED (consumer-editable) — customization has a home; locking matches design intent.
+**Small footprint** because `restore.py` is path-agnostic (re-renders the canonical from the project's own
+answers) → zero restore changes. New: `source.read_package_name`; `classes.BATTERY_LOCKED_SRC` (33 enumerated
+mechanism files, `{package_name}`-templated, gated on multitenantauth) + `alembic_control.ini` in
+`BATTERY_LOCKED`; `build_manifest` `{package_name}` expansion. **Fail-safe** completeness:
+`tests/integrity/test_auth_mechanism_lock.py` walks the rendered tree and fails if any mechanism file is
+missing from the lock list (a forgotten lock can't silently ship unlocked) — the chosen idiom over a
+directory-walk lock (which would risk auto-locking a file the consumer was meant to edit; per advisor).
+Restore round-trip + policy-stays-editable + baseline-unaffected all tested. **Shared files the battery only
+wires into (main.py, settings.py, entrypoint, migrations/env.py, .env.example) stay co-owned/unlocked by
+design.** Verified: 72 integrity tests + whole-repo gate (1085 passed, ruff/format/mypy clean). Completes
+the FWK58 colonization guard ("mechanism ships LOCKED"); Task-19 shipped the convention half (Option A).

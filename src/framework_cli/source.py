@@ -61,6 +61,22 @@ def read_batteries(project: Path) -> list[str]:
     return [str(b) for b in value] if isinstance(value, list) else []
 
 
+def read_package_name(project: Path) -> str | None:
+    """The `package_name` answer recorded in the project's .copier-answers.yml (None if absent).
+
+    Needed to resolve `{package_name}`-templated locked paths (e.g. the multitenantauth mechanism
+    tree under src/<package_name>/) against a concrete rendered project.
+    """
+    import yaml
+
+    answers = project / _ANSWERS_REL
+    if not answers.is_file():
+        return None
+    data = yaml.safe_load(answers.read_text()) or {}
+    value = data.get("package_name")
+    return str(value) if value else None
+
+
 def record_batteries(project: Path, batteries: list[str]) -> None:
     """Write the battery set into the project's .copier-answers.yml (framework-owned).
 
