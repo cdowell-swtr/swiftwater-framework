@@ -3273,3 +3273,12 @@ concurrency; wrapped in `with self._lock:` (reentrant, internal callers unaffect
 gained a `Field(ge=1)` floor (0 → infinite RLock-holding spin in `_evict_if_full`). 38 rendered tests (2 new) +
 framework gate clean. Spec §budget + DEC-0004 drift updated. Subagent-driven (Sonnet fixer; focused Opus re-review next).
 (FWK61 SP1 Task 3 fix → ledger)
+
+#### #0238 · completed · FWK61 SP1 Task 4 — tenant DSN derivation + idempotent CREATE DATABASE (locked) · 2026-06-25
+Created `multitenantauth/tenancy/dsn.py`: `default_tenant_dsn(tenant_id)` (swap the app `database_url`'s DB
+name to `<tenant_db_name_prefix>_<tenant_id>`, password preserved) + `create_database(dsn)` (AUTOCOMMIT
+maintenance connection to `postgres`, idempotent `SELECT 1 FROM pg_database` guard, `finally`-dispose). DB name
+is `[a-z0-9_]`-only (registry-constrained tenant_id + operator prefix) → safe quoted identifier. Locked via
+`classes.py`. Name-swap unit test GREEN (pure, no PG; `create_database` deferred to Task 8 acceptance); lock guard
+RED→GREEN; framework gate clean. Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 4 → ledger)
