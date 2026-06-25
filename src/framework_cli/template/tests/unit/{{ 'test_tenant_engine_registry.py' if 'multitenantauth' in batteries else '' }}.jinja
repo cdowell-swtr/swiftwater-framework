@@ -1,0 +1,16 @@
+"""Unit tests for tenant-engine metrics and (in later tasks) the engine registry."""
+
+from __future__ import annotations
+
+
+def test_tenant_engine_metrics_counters() -> None:
+    from {{ package_name }}.multitenantauth.tenancy.metrics import tenant_engine_metrics as tm
+
+    tm.reset()
+    tm.record_dsn_hit()
+    tm.record_dsn_miss()
+    tm.record_eviction("db:5432")
+    out = tm.render_prometheus()
+    assert 'app_tenant_dsn_cache_total{outcome="hit"} 1' in out
+    assert 'app_tenant_dsn_cache_total{outcome="miss"} 1' in out
+    assert 'app_tenant_engine_evictions_total{endpoint="db:5432"} 1' in out

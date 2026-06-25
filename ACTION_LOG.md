@@ -3239,3 +3239,11 @@ GREEN (30 passed) on a render; ruff + `mypy src` clean; baseline render confirms
 the battery. Side-effect: line-wrapped a pre-existing >88-char `verify_runtime` `if` (no logic change) that
 blocked the rendered format gate. Subagent-driven (Sonnet implementer; task review next).
 (FWK61 SP1 Task 1 → ledger)
+
+#### #0235 · completed · FWK61 SP1 Task 2 — tenant-engine metrics (locked) · 2026-06-25
+Created `multitenantauth/tenancy/metrics.py` (thread-safe `TenantEngineMetrics` singleton: eviction +
+DSN-cache counters, hand-rolled Prometheus exposition) and locked it via a `BATTERY_LOCKED_SRC` entry in
+`integrity/classes.py` (same task — the completeness guard fails on any unlisted mechanism file). Dual-loop
+TDD: Loop B rendered metrics test RED (`ModuleNotFoundError`) → GREEN; Loop A lock guard RED (unlisted file)
+→ GREEN (5 passed); framework ruff/format/`mypy src` clean. Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 2 → ledger)
