@@ -3222,3 +3222,11 @@ non-blocking for the document, fix in-plan before fan-out — done. **Riskiest e
 controller:** Task 0's dual-loop conftest change + Task 1/2 establish the template-payload render→mirror→pytest
 loop — review the first 2–3 task outputs closely before trusting the fan-out.
 (FWK61 SP1 plan hardened → PLAN)
+
+#### #0233 · completed · FWK61 SP1 Task 0 — shared control-plane acceptance fixtures · 2026-06-25
+Promoted `control_db_url`/`ctrl_engine` (+ `truncate_control`, `drop_tenant_db`) into the battery-gated
+`conftest.py.jinja` (session-scoped); repointed `test_control_migrations._clean` to the shared
+`truncate_control`; pruned its now-dead imports (`os`/`subprocess`/`create_engine`/`make_url`/`text`); added a
+cross-module smoke. RED (`fixture 'ctrl_engine' not found`) → GREEN (6 tests) on a real-PG render; ruff clean.
+Subagent-driven build (Sonnet implementer; task review next).
+(FWK61 SP1 Task 0 → ledger)

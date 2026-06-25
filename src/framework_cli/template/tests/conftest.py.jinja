@@ -174,3 +174,92 @@ def _celery_eager() -> None:
     _celery_app.conf.task_always_eager = True
     _celery_app.conf.task_eager_propagates = True
 {%- endif %}
+{%- if "multitenantauth" in batteries %}
+
+
+@pytest.fixture(scope="session")
+def control_db_url(pg_url: str) -> str:
+    """A separate Postgres database for the control plane (shared across the control-migration
+    and tenant-provisioning acceptance modules)."""
+    from sqlalchemy import create_engine, make_url, text
+
+    _ctrl_db = "{{ package_name }}_ctrl_mig_test"
+    base = make_url(pg_url)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+    return ctrl_url
+
+
+@pytest.fixture(scope="session")
+def ctrl_engine(control_db_url: str) -> Iterator[Engine]:
+    """Run `alembic upgrade head` on the control chain once; yield a bound engine."""
+    from sqlalchemy import create_engine
+
+    proc = subprocess.run(
+        ["alembic", "-c", "alembic_control.ini", "upgrade", "head"],
+        env={**os.environ, "APP_CONTROL_DATABASE_URL": control_db_url},
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        pytest.fail(
+            f"alembic control upgrade head failed:\n{proc.stdout}\n{proc.stderr}"
+        )
+    engine = create_engine(control_db_url)
+    yield engine
+    engine.dispose()
+
+
+_CONTROL_TABLES = (
+    "resource_role_assignment, platform_role_assignment, tenant_role_assignment, "
+    "authz_event, invite_token, session, tenant_membership, role_permission, "
+    "permission, role, tenant_slug_history, tenant, app_user"
+)
+
+
+@pytest.fixture
+def truncate_control(ctrl_engine: Engine):
+    """Return a callable that truncates all control-plane tables. Modules decide WHEN to call
+    it via their own autouse fixture — cleanup policy stays local (this only shares the SQL)."""
+    from sqlalchemy import text
+
+    def _truncate() -> None:
+        with ctrl_engine.begin() as conn:
+            conn.execute(text(f"TRUNCATE TABLE {_CONTROL_TABLES} CASCADE"))
+
+    return _truncate
+
+
+@pytest.fixture
+def drop_tenant_db(control_db_url: str):
+    """Return drop_tenant_db(dbname): force-drop a sibling tenant database on the control
+    instance (provisioning-acceptance teardown). Terminates live backends first."""
+    from sqlalchemy import create_engine, make_url, text
+
+    def _drop(dbname: str) -> None:
+        maint = create_engine(
+            make_url(control_db_url)
+            .set(database="postgres")
+            .render_as_string(hide_password=False),
+            isolation_level="AUTOCOMMIT",
+        )
+        with maint.connect() as c:
+            c.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = :n"
+                ),
+                {"n": dbname},
+            )
+            c.execute(text(f'DROP DATABASE IF EXISTS "{dbname}"'))
+        maint.dispose()
+
+    return _drop
+{%- endif %}
