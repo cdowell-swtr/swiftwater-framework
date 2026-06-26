@@ -3466,3 +3466,31 @@ unused `from pathlib import Path` (left over when the P10 path expr was simplifi
 already returns a Path). Local pre-flight ran `ruff check src/demo` (src only); `task ci` runs `ruff check .` over
 `tests/` too — the task-ci coverage-gap class. Removed the import; re-render `ruff check .` + `mypy` clean.
 (FWK61 SP1 CI lint fix → ledger)
+
+#### #0255 · completed · FWK66 (SP2) — plane-aware migrate/deploy/rollback brainstorm → spec APPROVED + PI ledger reconciliation · 2026-06-25
+Started FWK58 Phase 2 SP2 (= **FWK66**) — plane-aware migrate/deploy/rollback — via the brainstorm→spec flow on
+branch `fwk66-plane-aware-migrate-deploy-rollback`. **Orientation** (2 Explore passes + SP1 spec/scorecard +
+DEC-0004): the template has no fan-out today (entrypoint migrates only control + the live `database_url` business
+DB, never tenant DBs); `strategy.sh` rollback blindly `downgrade`s one chain. Confirmed from code that the demo
+routes bind `get_session()`→`database_url` (none consume `tenant_db`) → the forward sequence is **3-step**
+(control → default business DB → fan-out over active tenants), purely additive. **Surprise correction:** Meridian's
+migrate fan-out is **no longer broken** — DEC-0004's drift note (missing `slug`, `all_tenant_dsns` ImportError) is
+stale; Meridian now has a working control-first `upgrade_all()` + plane-aware `entrypoint_tenancy.sh` + plane-split
+seed. The genuinely-unwired part on their side is the **CD deploy/rollback** (their open MDN46). **Design decisions
+(operator-approved):** one spec for all three; control-fail-fast + tenant-best-effort + non-zero-exit result map;
+sequential fan-out (parallelism = YAGNI); **image-only rollback under the battery** (no `alembic downgrade` on any
+plane; relies on the expand-only contract; **contract migrations = an explicit rollback floor**, refuse a one-click
+rollback that crosses one); everything battery-gated, non-battery render byte-identical (`strategy.sh` → `.jinja`);
+`check_migrations.py` scans both chains. Operator surfaced + we nailed the load-bearing mental model: images carry
+**code, not data** — rollback-by-image leaves all DBs at the forward (expanded) schema untouched; the accepted cost
+is N× schema **cruft** reclaimed later by a deliberate forward-only contract migration. **Spec APPROVED**
+`docs/superpowers/specs/2026-06-25-fwk66-sp2-plane-aware-migrate-deploy-rollback-design.md`; **PUR**
+`docs/superpowers/decisions/DEC-0005-multitenantauth-phase2-sp2-migrate-deploy-rollback-promote-up.md` (`designed`;
+corrects DEC-0004's drift note; generator confirmation requested). **PI ledger reconciliation** (rides this first
+commit, per the FWK61-Phase-2 ID map — master protected, no doc-only PR): re-scoped FWK61 → "Phase 2 SP1 (shipped
+v0.4.2)"; renumbered the done PI-v3 row **FWK64 → FWK65** (collision with the open cross-repo FWK64 resolved; the
+`chore(FWK64)` git label is immutable); added **FWK66** (SP2, this work), **FWK67** (SP3, folds FWK63 t1–t4 +
+Phase-1 preconditions), **FWK68** (convention-lock presence+floor, parked); ticked **FWK62** → done (SHIPPED v0.4.1)
+and corrected the **FWK64** cross-repo row's stale "register in implementers.md" prose (PR #13 merged; only the
+`adopted`-flip remains, gated on Meridian's fork-deletion). Next: user reviews the spec → writing-plans.
+(FWK66 spec + PI reconciliation → ledger)
