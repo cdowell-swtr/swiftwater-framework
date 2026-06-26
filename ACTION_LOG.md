@@ -3508,3 +3508,20 @@ engine/integrity classes/Taskfile + the render_project test helper). Each task =
 Execution: subagent-driven, author/verify split, per-task Opus quality, branch-end whole-branch Opus + Layer-2 all-Opus
 stance×focus gate (migration-data-safety cell). Next: execution-choice handoff → build.
 (FWK66 plan → ledger)
+
+#### #0257 · amended · FWK66 (SP2) — plan hardened after advisor review (6 execution-time traps) · 2026-06-25
+Advisor review of the plan surfaced 6 harness/conformance-fidelity traps (no design change); patched all into
+`docs/superpowers/plans/2026-06-25-fwk66-sp2-plane-aware-migrate-deploy-rollback.md`. (1) **strategy.sh is
+`LOCKED_TRACKED`** (verified `integrity/classes.py:38`) → jinja-ifying it is the FWK39 newline-drift class; added a
+byte-identity **golden** (`tests/fixtures/sp2/strategy_sh_pre_sp2.golden`, snapshotted before the `git mv`), a battery-branch
+EOF-clean byte assertion, and the baseline `test_rendered_project_precommit_runs_clean` acceptance as the end-to-end FWK39
+catch — and reframed the Step-5 `integrity --ci` claim (a fresh render re-checksums to itself → cannot prove byte-fidelity).
+(2) Task 3 `_upgrade_default` is an expected idempotent **no-op** (verified the `engine` fixture already `alembic upgrade
+head`s that DB) — documented so it isn't "fixed". (3) Task 3 `_env` must **dispose the process-global control-engine
+singleton** (`dispose_control_engine()` before/after — verified the helper exists in `db.control.engine`); it's the first
+test to drive the singleton against the dedicated ctrl DB. (4) Task 2 call-site made self-consistent: module-level
+`active_tenant_dsns` import + bare call (so the unit test's `monkeypatch.setattr(migrate, ...)` bites); removed the
+contradictory follow-up note. (5) Named the **subprocess-per-target fallback** behind the `upgrade_all` seam if in-process
+multi-`command.upgrade` interferes (Task 3 is the canary). (6) Cosmetic: dropped a dead `if False` ternary in Task 7.
+Next: execution-choice handoff → build.
+(FWK66 plan hardening → ledger)

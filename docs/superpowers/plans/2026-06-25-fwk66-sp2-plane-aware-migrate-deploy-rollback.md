@@ -49,6 +49,7 @@ Every task's requirements implicitly include this section. Values copied verbati
 **Tests (framework-level, run in the framework venv):**
 - `tests/test_check_migrations.py` — **CREATE** (loads the template script via importlib).
 - Render-content assertions for entrypoint / Taskfile / strategy.sh added to `tests/test_copier_runner.py` (or a focused new module `tests/test_sp2_plane_aware_render.py`).
+- `tests/fixtures/sp2/strategy_sh_pre_sp2.golden` — **CREATE** (Task 8). The pre-SP2 `strategy.sh` bytes, snapshotted before the rename; the non-battery render must reproduce it byte-for-byte (FWK39 guard).
 
 ---
 
@@ -266,9 +267,14 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
-from ...db.control import repository as control_repo
 from ...db.control.engine import control_session_factory
+from ...db.control.repository import active_tenant_dsns
 from .provision import migrate_tenant
+
+# active_tenant_dsns / migrate_tenant / control_session_factory are imported as module-level
+# names (not called via a `repo.`/module qualifier) so the unit test can monkeypatch them on
+# this module: `monkeypatch.setattr(migrate, "active_tenant_dsns", ...)` only rebinds the
+# module-level name, never an attribute reached through a qualifier.
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +319,7 @@ def upgrade_all() -> dict[str, object]:
 
     # Tenant fan-out, best-effort.
     with control_session_factory()() as cs:
-        targets = control_repo.active_tenant_dsns(cs)
+        targets = active_tenant_dsns(cs)
     tenants: dict[str, str] = {}
     for tenant_id, dsn in targets:
         try:
@@ -352,13 +358,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-`active_tenant_dsns` is referenced as `control_repo.active_tenant_dsns` so the unit test's `monkeypatch.setattr(migrate, "active_tenant_dsns", ...)` patches the module-level name — therefore also bind it at import for patchability:
-
-```python
-from ...db.control.repository import active_tenant_dsns  # noqa: F401 — module-level for monkeypatch
-```
-
-and call `active_tenant_dsns(cs)` (not `control_repo.active_tenant_dsns(cs)`) inside `upgrade_all`.
+(The import block above already binds `active_tenant_dsns`, `migrate_tenant`, and `control_session_factory` as module-level names and the call sites use them bare — that is what makes the unit test's `monkeypatch.setattr(migrate, "active_tenant_dsns", ...)` bite. Do **not** reintroduce a `repo.`/module-qualified call.)
 
 - [ ] **Step 4: Register the lock (same task — fail-safe)**
 
@@ -405,6 +405,7 @@ from sqlalchemy.orm import Session
 
 from {{ package_name }}.config.settings import get_settings
 from {{ package_name }}.db.control import repository as control_repo
+from {{ package_name }}.db.control.engine import dispose_control_engine
 from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
 from {{ package_name }}.multitenantauth.tenancy.engine_registry import reset_tenant_engines
 from {{ package_name }}.multitenantauth.tenancy.migrate import report_failed, upgrade_all
@@ -419,10 +420,17 @@ def _env(monkeypatch, control_db_url, engine):
     monkeypatch.setenv("APP_DATABASE_URL", str(engine.url.render_as_string(hide_password=False)))
     monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "{{ package_name }}_fanout")
     get_settings.cache_clear()
+    # upgrade_all enumerates tenants via control_session_factory() — the PROCESS-GLOBAL control
+    # engine singleton. Dispose it so it rebinds to APP_CONTROL_DATABASE_URL set above; without
+    # this, a singleton built by an earlier test (different URL) survives cache_clear and the
+    # fan-out reads the wrong control DB. This is the first test to drive the singleton against
+    # the dedicated ctrl DB (SP1's acceptance tests used Session(ctrl_engine) directly).
+    dispose_control_engine()
     invalidate_dsn_cache()
     reset_tenant_engines()
     yield
     get_settings.cache_clear()
+    dispose_control_engine()
     invalidate_dsn_cache()
     reset_tenant_engines()
 
@@ -495,7 +503,10 @@ Expected: FAIL initially only if Task 2 wiring is incomplete; otherwise this is 
 
 - [ ] **Step 3: Implementation**
 
-No new implementation — this exercises Tasks 1–2. If a real-PG behavior surfaces (e.g., `upgrade_all` doesn't read the monkeypatched settings because of caching), the minimal fix lands here (e.g., ensure `_upgrade_control`/`_upgrade_default` don't capture a stale config).
+No new implementation — this exercises Tasks 1–2. Two things the implementer should expect rather than "fix":
+
+- **`_upgrade_default` is an idempotent no-op here, returning `"ok"` — that is correct, not a missed migration.** The session-scoped `engine` fixture already ran `alembic upgrade head` against `pg_url`, and `_env` sets `APP_DATABASE_URL` to that same URL, so `_upgrade_default`'s `alembic upgrade head` finds the app chain already at head. The assertion `report["default"] == "ok"` confirms the call ran and reported success — it does not require fresh DDL.
+- **This task is the canary for multiple in-process `command.upgrade` calls** (control + default + N tenants in one process — Meridian ran each target in a *subprocess*). If they interfere (e.g. alembic's `fileConfig` re-running logging config per call, or env.py re-exec capturing a stale config), the minimal fix lands here. The contained fallback, if needed, is **subprocess-per-target inside `_upgrade_control`/`_upgrade_default`/`migrate_tenant`** — it stays behind the `upgrade_all` seam, so callers, the result-map contract, and every test are unaffected.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1005,7 +1016,7 @@ def test_contract_migration_in_range_is_refused(tmp_path):
     try:
         offenders = mod._app_contract_in_range(head_before)
         assert any("zzcontract" in o for o in offenders)
-        assert mod.main(["zzcontract" if False else head_before]) == 1  # refuse from old head
+        assert mod.main([head_before]) == 1  # refuse from old head (range contains the contract rev)
     finally:
         new.unlink()
 ```
@@ -1034,13 +1045,27 @@ git commit -m "feat(FWK66): rollback_guard contract-floor (refuse image-only rol
 - Consumes: `scripts/rollback_guard.py` (Task 7); the existing `__target_*` hooks, `__target_release_history`, `__target_place_image`, `__target_record_release`.
 - Produces: a `strategy.sh` whose battery render does image-only rollback (guard, no downgrade) and whose non-battery render is the verbatim pre-SP2 body (downgrade-then-redeploy).
 
-- [ ] **Step 1: Write the failing render test**
+- [ ] **Step 1: Capture the byte-identity golden, then write the failing render test**
 
-Add to `tests/test_copier_runner.py`:
+First snapshot the current static `strategy.sh` as the golden the non-battery render must reproduce. Do this **now**, before Step 3's `git mv` destroys the source path:
+
+```bash
+mkdir -p tests/fixtures/sp2
+cp src/framework_cli/template/infra/deploy/strategy.sh tests/fixtures/sp2/strategy_sh_pre_sp2.golden
+```
+
+Then add to `tests/test_copier_runner.py`:
 
 ```python
-import shutil
 import subprocess
+
+# Golden = the pre-SP2 strategy.sh bytes, captured above BEFORE the rename. A non-battery
+# render MUST reproduce these bytes EXACTLY — that is the spec/DEC-0005 promise ("strategy.sh
+# byte-identical"). Byte-identity (not a substring spot-check) is what catches the FWK39 class:
+# a `{%- … -%}` trim marker silently adding or dropping a trailing/leading newline in the
+# {% else %} branch, which a behavioral assertion would miss but a consumer's pre-commit
+# end-of-file-fixer would "repair" → integrity drift on their first commit.
+_STRATEGY_GOLDEN = Path(__file__).parent / "fixtures" / "sp2" / "strategy_sh_pre_sp2.golden"
 
 
 def _bash_n_ok(path: Path) -> bool:
@@ -1056,22 +1081,30 @@ def test_strategy_rollback_image_only_under_battery(tmp_path: Path):
     assert "image-only" in text.lower()
     assert '__target_migrate "downgrade' not in text   # NO downgrade on any plane
     assert _bash_n_ok(sh)
+    # EOF-hook clean (this render is LOCKED too, and there is no multitenantauth precommit
+    # acceptance test): exactly one trailing newline + no trailing whitespace, or a consumer's
+    # end-of-file-fixer / trailing-whitespace hook rewrites it on first commit → drift (FWK39).
+    raw = sh.read_bytes()
+    assert raw.endswith(b"\n") and not raw.endswith(b"\n\n")
+    assert all(line == line.rstrip() for line in text.splitlines())
 
 
-def test_strategy_unchanged_without_battery(tmp_path: Path):
+def test_strategy_byte_identical_without_battery(tmp_path: Path):
     dest = tmp_path / "demo"
-    render_project(dest, DATA)
-    sh = dest / "infra" / "deploy" / "strategy.sh"
-    text = sh.read_text()
-    assert '__target_migrate "downgrade ${rev}"' in text   # today's contract, verbatim
+    render_project(dest, DATA)  # no batteries
+    rendered = (dest / "infra" / "deploy" / "strategy.sh").read_bytes()
+    assert rendered == _STRATEGY_GOLDEN.read_bytes()   # verbatim today's file, byte-for-byte
+    # Behavioral spot-checks are subsumed by byte-identity above; kept for a readable failure.
+    text = rendered.decode()
+    assert '__target_migrate "downgrade ${rev}"' in text   # today's contract
     assert "rollback_guard" not in text
-    assert _bash_n_ok(sh)
+    assert _bash_n_ok(dest / "infra" / "deploy" / "strategy.sh")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 `uv run pytest tests/test_copier_runner.py -k strategy -v`
-Expected: FAIL — `rollback_guard.py` not present (and the file is still `strategy.sh`, not a jinja template).
+Expected: both FAIL — `test_strategy_rollback_image_only_under_battery` because `rollback_guard.py` is not present, and `test_strategy_byte_identical_without_battery` because the golden differs from the current render (the still-static `strategy.sh` renders verbatim, so this one may instead pass immediately — that is fine; the assertion bites once Step 3 introduces jinja). The `git mv` + jinja edit lands in Step 3.
 
 - [ ] **Step 3: Rename + edit**
 
@@ -1135,6 +1168,8 @@ rollback() {
 
 The `{% else %}` branch is the **verbatim** pre-SP2 `rollback()` body — so a non-battery render is byte-equivalent to today's file (only `rollback()` carries jinja; the rest of the file is unchanged). No other function changes.
 
+**Trim-marker discipline (FWK39 — this is the whole-ballgame detail).** The `{%- if … %}` / `{%- else %}` / `{%- endif %}` markers must be placed so the `{% else %}` branch reproduces today's bytes *exactly*, including the single trailing newline at end-of-file. The hyphen placement above (`{%- if … %}` opens by trimming the preceding newline; the body line that was already there supplies its own) is chosen to neither double nor drop the newline around `require_var DEPLOY_ENV` or after the closing brace. Get this wrong and `strategy.sh` is a LOCKED file whose checksum is fine on a *fresh* render (it re-checksums to itself) but whose trailing newline a consumer's `end-of-file-fixer` pre-commit hook rewrites → integrity drift on their first commit. The `test_strategy_byte_identical_without_battery` golden assertion (Step 1) is what proves you got it right — iterate the trim markers until it is green.
+
 - [ ] **Step 4: Update `infra/deploy/README.md`**
 
 Add a section (find the deploy/rollback discussion; if the file is `README.md.jinja`, edit that source):
@@ -1165,15 +1200,25 @@ default business DB, and one DB per tenant. Migration and rollback are plane-awa
 
 - [ ] **Step 5: Run tests + integrity to verify they pass**
 
-`uv run pytest tests/test_copier_runner.py -k strategy -v` → PASS (both).
-Confirm the rename didn't break classification: re-render `--with multitenantauth` and baseline; `framework integrity --ci` → OK on both (the rendered path `infra/deploy/strategy.sh` is unchanged). Run the FWK29 surface guard: `uv run pytest tests/runtime_coverage -q` → green (no new/over-broad surface).
+`uv run pytest tests/test_copier_runner.py -k strategy -v` → PASS (both). The byte-identity golden + the EOF/`bash -n` assertions are the **byte-fidelity** proof.
+
+End-to-end non-battery EOF guard (the real FWK39 catch — runs the actual `end-of-file-fixer` / `trailing-whitespace` hooks on a fresh non-battery render, which now includes the jinja-ified `strategy.sh`):
+
+```bash
+TMPDIR=/var/tmp uv run pytest tests/acceptance/test_rendered_project.py::test_rendered_project_precommit_runs_clean -v
+```
+→ PASS. (This baseline render carries no batteries, so it exercises the `{% else %}` branch through the live hooks. The battery branch's EOF is covered by the byte-level assertion in `test_strategy_rollback_image_only_under_battery`, since there is no `--with multitenantauth` precommit-clean acceptance test.)
+
+Classification + surface guards: re-render `--with multitenantauth` and baseline; `framework integrity --ci` → OK on both. **Note:** integrity on a *fresh* render only confirms the manifest is internally consistent (the file is still classified + its checksum matches the bytes just rendered) — it does **not** prove byte-fidelity vs. today (a fresh render always re-checksums to itself). That fidelity guarantee comes from the golden + the precommit acceptance above, not from `integrity --ci`. Run the FWK29 surface guard: `uv run pytest tests/runtime_coverage -q` → green (no new/over-broad surface; the rendered path `infra/deploy/strategy.sh` is unchanged).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/framework_cli/template/infra/deploy/strategy.sh.jinja src/framework_cli/template/infra/deploy/README.md tests/test_copier_runner.py
+git add src/framework_cli/template/infra/deploy/strategy.sh.jinja src/framework_cli/template/infra/deploy/README.md tests/test_copier_runner.py tests/fixtures/sp2/strategy_sh_pre_sp2.golden
 git commit -m "feat(FWK66): plane-aware image-only rollback + contract floor in strategy.sh (battery), non-battery unchanged"
 ```
+
+(The `git mv` from `strategy.sh` → `strategy.sh.jinja` is already staged; `git add` the new `.jinja`, the README, the test, and the golden fixture. The old `strategy.sh` deletion rides the `git mv`.)
 
 ---
 
