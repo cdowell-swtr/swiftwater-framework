@@ -3340,3 +3340,13 @@ post-migrate `_provision_hook` (runs BEFORE `activate_tenant` — seam for tenan
 hook-before-activate; skip-physical) using the Task-0 shared conftest fixtures + a module-local `_clean_control`;
 lock guard RED→GREEN; framework gate (358 tests) + ruff/mypy clean. Subagent-driven (Sonnet impl; Opus task review next).
 (FWK61 SP1 Task 8 → ledger)
+
+#### #0244 · completed · FWK61 SP1 Task 9 — tenant_db routing dependency (LOCKED edit) · 2026-06-25
+Second LOCKED-file edit: added ONLY `tenant_db` to `multitenantauth/deps.py` (Phase-1 `active_tenant` already
+ships + 404s unknown/non-member) — composes `active_tenant` + `control_session` + `tenant_session` (Task 5),
+yields a Session on the active tenant's DB, and maps a `LookupError` from DSN resolution to a 404 `from None`
+(no existence leak, no DSN in the error). `deps.py` already locked → no new entry; purely additive (no existing
+dep touched). Real-PG tests: **physical isolation** (tenant A's row present in A's DB, ABSENT from B's) + 404 for
+unknown tenant; 143 broader authz/deps/tenant render tests green; lock guard 5/5; framework + render ruff/mypy
+clean. Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 9 → ledger)
