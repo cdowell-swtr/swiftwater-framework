@@ -7,8 +7,6 @@ Guards the two confirmed High findings from the SP1 Layer-2 adversarial security
   `--autogenerate` EXCLUDES them instead of emitting drop_table for the entire control plane.
 """
 
-from pathlib import Path
-
 import {{ package_name }}.multitenantauth.tenancy.provision as provision_mod
 from {{ package_name }}.multitenantauth.tenancy.provision import migrate_tenant
 

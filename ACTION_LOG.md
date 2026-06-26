@@ -3459,3 +3459,10 @@ ruff/format/mypy); integrity+copier 73 passed; `test_release`+`test_smoke` green
 Layer-2-hardened) + FWK64 (PI v3). Next: push → PR → merge → tag v0.4.2 (release.yml publishes) → patterns
 `implementers.md` v2→v3 gh-API PR.
 (FWK61 SP1 + FWK64 → ledger; v0.4.2 release-cut)
+
+#### #0254 · completed · FWK61 SP1 — fix render-matrix lint (unused import) · 2026-06-25
+PR #84 render-matrix `task ci` failed fast (~18s) at `lint`: `tests/unit/test_sp1_routing_hardening.py` carried an
+unused `from pathlib import Path` (left over when the P10 path expr was simplified to `_project_root()`, which
+already returns a Path). Local pre-flight ran `ruff check src/demo` (src only); `task ci` runs `ruff check .` over
+`tests/` too — the task-ci coverage-gap class. Removed the import; re-render `ruff check .` + `mypy` clean.
+(FWK61 SP1 CI lint fix → ledger)
