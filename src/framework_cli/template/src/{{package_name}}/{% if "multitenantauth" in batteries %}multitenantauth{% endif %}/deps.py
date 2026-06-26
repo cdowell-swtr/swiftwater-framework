@@ -177,11 +177,17 @@ def tenant_db(
 ) -> Iterator[Session]:
     """Yield a session bound to the active tenant's database, resolving the DSN on the
     request's existing control session (no extra control connection). A resolution failure
-    maps to 404 — never leak whether a tenant/DB exists."""
+    maps to 404 — never leak whether a tenant/DB exists. A LookupError raised by the route
+    handler AFTER the session is yielded propagates normally (it is a handler bug, not a
+    routing miss)."""
+    entered = False
     try:
         with tenant_session(tenant_id, control_session=cs) as session:
+            entered = True
             yield session
     except LookupError:
+        if entered:
+            raise  # post-yield LookupError = handler bug → 500, do not mask as 404
         raise HTTPException(status_code=404, detail="Not found") from None
 
 

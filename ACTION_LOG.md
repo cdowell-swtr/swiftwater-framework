@@ -3350,3 +3350,14 @@ dep touched). Real-PG tests: **physical isolation** (tenant A's row present in A
 unknown tenant; 143 broader authz/deps/tenant render tests green; lock guard 5/5; framework + render ruff/mypy
 clean. Subagent-driven (Sonnet impl; Opus task review next).
 (FWK61 SP1 Task 9 → ledger)
+
+#### #0245 · amended · FWK61 SP1 Task 9 — fix wave (Opus review: over-broad except masks handler bugs) · 2026-06-25
+Task 9's Opus review Approved but flagged a subtle bug-masking footgun: `tenant_db`'s `except LookupError`
+spanned the `yield`, and FastAPI re-throws a route-handler exception into a yield-dep AT the yield point — so a
+handler raising a `LookupError` subclass (`KeyError`/`IndexError`, e.g. a dict miss) AFTER receiving the session
+was masked as a **404 instead of a 500**. Fail-closed (never grants access) but hides handler bugs in the locked
+routing gate. Fix: an `entered` flag — only the pre-yield resolution `LookupError` (from `tenant_session.__enter__`)
+maps to 404; a post-yield `LookupError` re-raises (→ 500). New test: a route raising `KeyError` post-yield → RED
+(404) pre-fix → GREEN (500) post-fix (`TestClient(raise_server_exceptions=False)`). 3 real-PG tests + lock + gate
+clean. Fixed in the same cycle to avoid a second locked-`deps.py` re-touch. Subagent-driven (Sonnet fixer; controller-verified diff).
+(FWK61 SP1 Task 9 fix → ledger)

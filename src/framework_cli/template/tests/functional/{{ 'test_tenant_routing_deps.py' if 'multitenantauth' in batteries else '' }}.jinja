@@ -6,6 +6,9 @@ Verified properties:
   other (physical isolation — wrong DB never touched).
 - test_tenant_db_unknown_tenant_returns_404: when the DSN resolver raises LookupError for
   an unknown tenant, tenant_db maps it to 404 (existence never leaked, no 500).
+- test_tenant_db_handler_lookup_error_not_masked_as_404: a LookupError raised by the route
+  handler AFTER receiving the tenant session is NOT masked as 404 — it propagates as 500
+  (handler bug, not a routing miss).
 """
 
 import pytest
@@ -143,3 +146,71 @@ def test_tenant_db_unknown_tenant_returns_404(probe_app):  # type: ignore[no-unt
     assert resp.status_code == 404, (
         f"expected 404 for unknown tenant, got {resp.status_code}"
     )
+
+
+def test_tenant_db_handler_lookup_error_not_masked_as_404(  # type: ignore[no-untyped-def]
+    ctrl_engine, control_db_url, monkeypatch, drop_tenant_db
+):
+    """A LookupError raised by the route handler AFTER receiving the tenant session must
+    NOT be masked as 404 — it is a handler bug and must propagate as 500.
+
+    This is the regression guard for the over-broad ``except LookupError`` pattern: with
+    the pre-fix code the ``except`` catches the post-yield KeyError (a LookupError subclass)
+    and wraps it in HTTPException(404).  The fix introduces an ``entered`` flag so only the
+    pre-yield resolution LookupError maps to 404; a post-yield one re-raises (→ 500).
+    """
+    from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+    from {{ package_name }}.config.settings import get_settings
+
+    monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    get_settings.cache_clear()
+    invalidate_dsn_cache()
+
+    app = FastAPI()
+
+    def _cs():  # type: ignore[no-untyped-def]
+        with Session(ctrl_engine) as s:
+            yield s
+
+    def _active_tenant_passthrough(request: Request) -> str:
+        tenant_id = request.path_params.get("tenant_id")
+        if tenant_id is None:
+            raise HTTPException(status_code=404, detail="Not found")
+        return tenant_id
+
+    app.dependency_overrides[control_session] = _cs
+    app.dependency_overrides[active_tenant] = _active_tenant_passthrough
+
+    @app.get("/{tenant_id}/boom")
+    def _handler_raises_key_error(db: Session = Depends(tenant_db)) -> dict:  # type: ignore[no-untyped-def]
+        """Simulates a handler bug: KeyError (a LookupError subclass) raised post-yield."""
+        _ = db  # session was successfully obtained
+        raise KeyError("boom")  # handler bug — must NOT be masked as 404
+
+    tenant_id = None
+    tenant_dbname = None
+    try:
+        with Session(ctrl_engine) as cs:
+            tenant_id = provision_tenant(cs, "BoomCo", slug="boomco")
+            cs.commit()
+
+        tenant_dbname = make_url(default_tenant_dsn(tenant_id)).database
+        invalidate_dsn_cache()
+
+        # raise_server_exceptions=False: returns 500 instead of re-raising in the test process.
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get(f"/{tenant_id}/boom")
+
+        assert resp.status_code != 404, (
+            "handler KeyError was masked as 404 — over-broad except LookupError in tenant_db"
+        )
+        assert resp.status_code == 500, (
+            f"expected 500 for handler KeyError, got {resp.status_code}"
+        )
+    finally:
+        reset_tenant_engines()
+        get_settings.cache_clear()
+        if tenant_dbname:
+            drop_tenant_db(tenant_dbname)
