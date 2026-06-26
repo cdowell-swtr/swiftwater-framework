@@ -3,7 +3,7 @@
 > Append-only event narrative, task grain. Never edit or truncate existing
 > entries. Closed taxonomy: completed · inserted · reordered · dep-found ·
 > amended · superseded · discarded · milestone · note.
-> Maintained per `pi-convention.md` (PI-convention: v2).
+> Maintained per `pi-convention.md` (PI-convention: v3).
 
 #### #0001 · note · 2026-06-12
 Adopted the Planning Instrument convention (PI-convention: v1). Scaffolded
@@ -3420,3 +3420,16 @@ the SDD fix-wave implementer subagent stalled mid-stream (API error, zero repo p
 directly per the outage-fallback pattern (fixes fully specified by the scorecard); independent Opus quality review
 of the committed diff is next.
 (FWK61 SP1 Task 11 fix wave → ledger; scorecard committed)
+
+#### #0251 · completed · FWK64 — PI convention v2→v3 adoption (bundled into v0.4.2) · 2026-06-25
+Meridian upgraded to PI v3 / cross-repo v4; the framework's locked AGENTS.md PI block was still pinned at v2 (a
+version skew Meridian renders but cannot edit). Re-vendored `pi-convention.md` from `cdowell-swtr/patterns` @ tag
+`pi/v3` (commit feb84ec) — v3 adds rule 8 (no mutable resume/status pointer in PLAN.md) + slug-based adopter
+registration. Bumped the `PI-convention: v2`→`v3` marker across the framework's own `AGENTS.md`/`PLAN.md`/
+`ACTION_LOG.md` and the template payload (`AGENTS.md.jinja` locked region + `@ pi/v3` tag, `PLAN.md.jinja`,
+`ACTION_LOG.md.jinja`), and updated the `test_render_seeds_agents_md...` assertion. Already-fine, no action:
+cross-repo v4 everywhere; rule-8 clean (own + template PLAN carry no resume pointer); patterns registry already
+slug-keyed. Convention + integrity tests 73 passed (the AGENTS.md FRAMEWORK:BEGIN/END region re-checksums to v3).
+Pending (operator-gated, cross-repo): bump the framework's `implementers.md` row v2→v3 in patterns via a pure
+gh-API PR.
+(FWK64 → ledger)
