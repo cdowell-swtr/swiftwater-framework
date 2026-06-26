@@ -144,8 +144,12 @@ SP1 does **not** roll back a partially-created physical DB (teardown is an SP3/l
 - Composes with the existing Phase-1/DV-5 authz dep — routing resolves the tenant, authz gates the action; neither is bypassed.
 
 ### 4.6 Observability
-OTel spans on `resolve_dsn`, engine create/evict, and each `provision_tenant` step (tenant id as an
-attribute; **DSN/credentials never recorded** — `never-log` is a hard rule). Gauges
+**Build correction (Task 10):** the originally-specified *manual* OTel spans on `resolve_dsn`/provision steps were
+**descoped** — this template's tracing is AUTO-instrumentation (`observability/tracing.py` + SQLAlchemy/FastAPI
+instrumentors), so the tenant engines (standard SQLAlchemy engines) and provisioning SQL are already traced;
+hand-rolled spans would be off-pattern, redundant, re-touch the LOCKED routing files, and open a DSN-in-attribute
+leak surface. The shipped obs surface is therefore the Prometheus-metrics exposition below (the house idiom), with
+the **DSN/credentials-never-recorded** rule preserved (metric labels are bounded: `endpoint`=host:port, `outcome`∈{hit,miss} — never a DSN). Gauges
 `app_tenant_engines_cached{endpoint}` and `app_tenant_pool_checked_out`, wired through the battery's existing
 `metrics.py` and the obs-completeness guard (`battery.obs`).
 

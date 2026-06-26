@@ -128,6 +128,12 @@ def metrics(request: Request) -> PlainTextResponse:
         get_logger().warning(
             "auth_metrics_active_sessions_unavailable", error=str(_exc)
         )
+
+    from {{ package_name }}.multitenantauth.tenancy.engine_registry import tenant_engines
+    from {{ package_name }}.multitenantauth.tenancy.metrics import tenant_engine_metrics
+
+    body += tenant_engines.render_pool_gauges()
+    body += tenant_engine_metrics.render_prometheus()
 {%- endif %}
 {% if "workers" in batteries %}
     from {{ package_name }}.db.engine import SessionLocal

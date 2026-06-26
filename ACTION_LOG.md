@@ -3361,3 +3361,17 @@ maps to 404; a post-yield `LookupError` re-raises (→ 500). New test: a route r
 (404) pre-fix → GREEN (500) post-fix (`TestClient(raise_server_exceptions=False)`). 3 real-PG tests + lock + gate
 clean. Fixed in the same cycle to avoid a second locked-`deps.py` re-touch. Subagent-driven (Sonnet fixer; controller-verified diff).
 (FWK61 SP1 Task 9 fix → ledger)
+
+#### #0246 · completed · FWK61 SP1 Task 10 — expose tenant-engine metrics + dashboard/alert (manual spans DESCOPED) · 2026-06-25
+Wired the tenant-engine obs surface into the generated app: `health.py` `/metrics` route now appends
+`tenant_engines.render_pool_gauges()` + `tenant_engine_metrics.render_prometheus()` (battery-gated); added a
+Grafana panel (`app_tenant_engines_cached` + `app_tenant_pool_checked_out`) to `multitenantauth.json` and a
+`TenantPoolConnectionsSustainedHigh` rule to `multitenantauth_alerts.yml`. **Plan correction — manual OTel spans
+DESCOPED:** the brief called for `start_as_current_span` spans in `session.py`/`provision.py`, but the template's
+tracing is AUTO-instrumentation (`observability/tracing.py` + SQLAlchemy/FastAPI instrumentors), so the tenant
+engines (standard SQLAlchemy engines) and provisioning SQL are already traced; manual spans would be off-pattern,
+redundant, re-touch the LOCKED routing files, and open a DSN-in-attribute leak surface for no gain ([[design-spec-stale-verify-docs-against-code]] — the design spec assumed manual spans the codebase doesn't use). Net: NO
+locked-file edits, NO new DSN surface; metric labels are bounded (endpoint host:port, outcome hit/miss — no DSN).
+RED→GREEN `/metrics` series test; dashboard JSON + alert YAML parse; obs-completeness 17/17; framework gate clean.
+Spec obs section to be corrected. Subagent-driven (Sonnet impl; Sonnet task review next).
+(FWK61 SP1 Task 10 → ledger)

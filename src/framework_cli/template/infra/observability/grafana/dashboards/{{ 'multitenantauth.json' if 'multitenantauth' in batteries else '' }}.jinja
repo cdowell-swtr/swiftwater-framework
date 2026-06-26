@@ -60,6 +60,18 @@
         {"refId": "A", "expr": "sum by (action, domain) (rate(app_authz_grants_total[5m]))", "legendFormat": "__auto"}
       ],
       "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []}
+    },
+    {
+      "id": 6,
+      "title": "Tenant engine pool — cached engines and checked-out connections",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+      "targets": [
+        {"refId": "A", "expr": "sum by (endpoint) (app_tenant_engines_cached)", "legendFormat": "cached {{endpoint}}"},
+        {"refId": "B", "expr": "app_tenant_pool_checked_out", "legendFormat": "checked out"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
     }
   ]
 }

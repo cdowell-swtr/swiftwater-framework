@@ -1,0 +1,13 @@
+"""Functional test: /metrics exposes tenant-engine series (pool gauges + DSN cache counters).
+
+Series names appear in the HELP/TYPE preamble even at zero values, so the app
+needn't have provisioned tenants to make the assertions pass.
+"""
+
+
+def test_metrics_exposes_tenant_engine_series(api_client):
+    body = api_client.get("/metrics").text
+    assert "app_tenant_engines_cached" in body
+    assert "app_tenant_pool_checked_out" in body
+    assert "app_tenant_dsn_cache_total" in body
+    assert "app_tenant_engine_evictions_total" in body
