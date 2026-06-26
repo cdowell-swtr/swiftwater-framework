@@ -1,6 +1,18 @@
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from {{ package_name }}.db.engine import build_engine
+
 
 def test_get_session_executes_against_postgres(db_session: Session):
     assert db_session.execute(text("SELECT 1")).scalar() == 1
+
+
+def test_build_engine_without_pool_kwargs_uses_sqlalchemy_defaults():
+    """Layer-2 P5 baseline preservation: build_engine() with no pool_size/max_overflow must leave
+    the SQLAlchemy QueuePool defaults intact (size 5, overflow 10) — threading the control-plane
+    knobs through build_engine must not change baseline behavior. The engine builds lazily, so the
+    pool config is readable without connecting."""
+    engine = build_engine("postgresql+psycopg://app:app@localhost:5432/app")
+    assert engine.pool.size() == 5
+    assert engine.pool._max_overflow == 10

@@ -1,0 +1,142 @@
+"""Unit tests for tenant-engine metrics and engine registry."""
+
+from __future__ import annotations
+
+import pytest
+from {{ package_name }}.multitenantauth.tenancy.engine_registry import (
+    TenantEngineRegistry,
+    BudgetExceeded,
+    endpoint_of,
+    required_connections,
+)
+from {{ package_name }}.config.settings import Settings
+
+
+def test_tenant_engine_metrics_counters() -> None:
+    from {{ package_name }}.multitenantauth.tenancy.metrics import tenant_engine_metrics as tm
+
+    tm.reset()
+    tm.record_dsn_hit()
+    tm.record_dsn_miss()
+    tm.record_eviction("db:5432")
+    out = tm.render_prometheus()
+    assert 'app_tenant_dsn_cache_total{outcome="hit"} 1' in out
+    assert 'app_tenant_dsn_cache_total{outcome="miss"} 1' in out
+    assert 'app_tenant_engine_evictions_total{endpoint="db:5432"} 1' in out
+
+
+class _FakeEngine:
+    def __init__(self, url):
+        self.url = url
+        self.disposed = False
+
+    def dispose(self):
+        self.disposed = True
+
+    class _Pool:  # render_pool_gauges tolerates pools without checkedout()
+        def checkedout(self):
+            return 0
+
+    pool = _Pool()
+
+
+def _registry(settings, *, budget_ok=True):
+    built = []
+
+    def builder(dsn, **kw):
+        e = _FakeEngine(dsn)
+        built.append(e)
+        return e
+
+    def validator(engine, *, settings, includes_control):
+        if not budget_ok:
+            raise BudgetExceeded("nope")
+
+    reg = TenantEngineRegistry(
+        builder=builder, budget_validator=validator, settings_provider=lambda: settings
+    )
+    return reg, built
+
+
+def test_endpoint_of_defaults_port_5432():
+    assert endpoint_of("postgresql+psycopg://u:p@host/db") == "host:5432"
+
+
+def test_get_caches_and_reuses_one_engine_per_dsn():
+    reg, built = _registry(Settings())
+    a = reg.get("postgresql+psycopg://u:p@h/t1")
+    b = reg.get("postgresql+psycopg://u:p@h/t1")
+    assert a is b and len(built) == 1
+
+
+def test_lru_evicts_oldest_when_endpoint_full(monkeypatch):
+    s = Settings(
+        max_cached_engines=2
+    )  # Settings is a (non-frozen) BaseSettings — set directly
+    reg, built = _registry(s)
+    _e1 = reg.get("postgresql+psycopg://u:p@h/t1")
+    e2 = reg.get("postgresql+psycopg://u:p@h/t2")
+    reg.get("postgresql+psycopg://u:p@h/t1")  # touch t1 → t2 is now LRU
+    reg.get("postgresql+psycopg://u:p@h/t3")  # over cap → evict t2
+    assert e2.disposed is True
+    assert reg.cached_count("h:5432") == 2
+
+
+def test_budget_exceeded_disposes_engine_and_does_not_cache():
+    reg, built = _registry(Settings(), budget_ok=False)
+    with pytest.raises(BudgetExceeded):
+        reg.get("postgresql+psycopg://u:p@h/t1")
+    assert built[0].disposed is True
+    assert reg.cached_count("h:5432") == 0
+
+
+def test_required_connections_includes_control_when_colocated():
+    s = Settings()
+    n = required_connections(s, includes_control=True)
+    assert (
+        n
+        == s.max_cached_engines * (s.tenant_pool_size + s.tenant_max_overflow)
+        + s.control_pool_size
+        + s.control_max_overflow
+    )
+
+
+def test_includes_control_keys_off_control_database_url(monkeypatch):
+    """Fix 1: includes_control must key off control_database_url, not database_url.
+
+    When control runs on a DIFFERENT host than the app/tenant host, the budget
+    should only add the control pool overhead on the control host, not on the
+    tenant host.
+    """
+    from {{ package_name }}.config.settings import get_settings
+
+    monkeypatch.setenv(
+        "APP_DATABASE_URL", "postgresql+psycopg://u:p@tenant-host:5432/app"
+    )
+    monkeypatch.setenv(
+        "APP_CONTROL_DATABASE_URL",
+        "postgresql+psycopg://u:p@control-host:5432/ctrl",
+    )
+    get_settings.cache_clear()
+    seen: dict[str, bool] = {}
+
+    def validator(engine, *, settings, includes_control):
+        seen[endpoint_of(str(engine.url))] = includes_control
+
+    def builder(dsn, **kw):
+        return _FakeEngine(dsn)
+
+    reg = TenantEngineRegistry(
+        builder=builder, budget_validator=validator, settings_provider=get_settings
+    )
+    # Tenant co-located with control host → includes_control should be True
+    reg.get("postgresql+psycopg://u:p@control-host:5432/some_tenant")
+    # Tenant on the app/tenant host → includes_control should be False
+    reg.get("postgresql+psycopg://u:p@tenant-host:5432/t1")
+    assert seen["control-host:5432"] is True, (
+        "control pool lives on control-host → must be counted (includes_control=True)"
+    )
+    assert seen["tenant-host:5432"] is False, (
+        "control pool NOT on tenant-host → must not be counted (includes_control=False)"
+    )
+    get_settings.cache_clear()

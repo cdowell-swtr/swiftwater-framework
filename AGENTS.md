@@ -1,4 +1,4 @@
-<!-- PI-convention: v2 -->
+<!-- PI-convention: v3 -->
 ## Planning Instrument
 Read `PLAN.md` first. Maintain `PLAN.md` + `ACTION_LOG.md` at task grain as you
 work (tick tasks; append a log entry on every completion and every deviation),

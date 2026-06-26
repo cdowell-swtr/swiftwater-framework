@@ -175,6 +175,13 @@ BATTERY_LOCKED_SRC: dict[str, tuple[str, ...]] = {
     "src/{package_name}/multitenantauth/routes/tenants.py": ("multitenantauth",),
     "src/{package_name}/multitenantauth/tenancy/__init__.py": ("multitenantauth",),
     "src/{package_name}/multitenantauth/tenancy/registry.py": ("multitenantauth",),
+    "src/{package_name}/multitenantauth/tenancy/metrics.py": ("multitenantauth",),
+    "src/{package_name}/multitenantauth/tenancy/engine_registry.py": (
+        "multitenantauth",
+    ),
+    "src/{package_name}/multitenantauth/tenancy/dsn.py": ("multitenantauth",),
+    "src/{package_name}/multitenantauth/tenancy/provision.py": ("multitenantauth",),
+    "src/{package_name}/multitenantauth/tenancy/session.py": ("multitenantauth",),
     "src/{package_name}/db/control/__init__.py": ("multitenantauth",),
     "src/{package_name}/db/control/base.py": ("multitenantauth",),
     "src/{package_name}/db/control/engine.py": ("multitenantauth",),

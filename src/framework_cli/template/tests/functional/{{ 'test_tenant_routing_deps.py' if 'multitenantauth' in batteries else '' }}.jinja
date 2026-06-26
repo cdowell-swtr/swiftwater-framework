@@ -1,0 +1,216 @@
+"""tenant_db routing dependency: physical isolation + 404-on-LookupError (real Postgres).
+
+Verified properties:
+- test_tenant_db_routes_to_tenant_database: provision acme + globex; write a distinct row
+  through tenant_db for each; assert the row is present in its own DB and ABSENT from the
+  other (physical isolation — wrong DB never touched).
+- test_tenant_db_unknown_tenant_returns_404: when the DSN resolver raises LookupError for
+  an unknown tenant, tenant_db maps it to 404 (existence never leaked, no 500).
+- test_tenant_db_handler_lookup_error_not_masked_as_404: a LookupError raised by the route
+  handler AFTER receiving the tenant session is NOT masked as 404 — it propagates as 500
+  (handler bug, not a routing miss).
+"""
+
+import pytest
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.testclient import TestClient
+from sqlalchemy import make_url, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.multitenantauth.deps import active_tenant, control_session, tenant_db
+from {{ package_name }}.multitenantauth.tenancy.session import (
+    invalidate_dsn_cache,
+    reset_tenant_engines,
+)
+
+
+@pytest.fixture(autouse=True)
+def _clean_control(truncate_control):  # type: ignore[no-untyped-def]
+    """Truncate control tables after each test so provisioned tenants don't leak."""
+    yield
+    truncate_control()
+
+
+@pytest.fixture
+def probe_app(ctrl_engine, control_db_url, monkeypatch):  # type: ignore[no-untyped-def]
+    """A minimal FastAPI app exposing /{tenant_id}/items for write + read through tenant_db.
+
+    active_tenant is overridden to bypass authn (just extracts path param); control_session
+    is overridden to use the shared test engine.  The DSN + name-prefix env vars point both
+    provisioning and the DSN resolver at the testcontainer sibling databases.
+    """
+    monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    invalidate_dsn_cache()
+
+    app = FastAPI()
+
+    def _cs():  # type: ignore[no-untyped-def]
+        with Session(ctrl_engine) as s:
+            yield s
+
+    def _active_tenant_passthrough(request: Request) -> str:
+        """Bypass authn: extract tenant_id from path for routing dep isolation tests."""
+        tenant_id = request.path_params.get("tenant_id")
+        if tenant_id is None:
+            raise HTTPException(status_code=404, detail="Not found")
+        return tenant_id
+
+    app.dependency_overrides[control_session] = _cs
+    app.dependency_overrides[active_tenant] = _active_tenant_passthrough
+
+    @app.post("/{tenant_id}/items")
+    def _insert(name: str, db: Session = Depends(tenant_db)) -> dict:  # type: ignore[no-untyped-def]
+        db.execute(text("INSERT INTO items (name) VALUES (:n)"), {"n": name})
+        db.commit()
+        return {"ok": True}
+
+    @app.get("/{tenant_id}/items")
+    def _list(db: Session = Depends(tenant_db)) -> list:  # type: ignore[no-untyped-def]
+        rows = db.execute(text("SELECT name FROM items ORDER BY id")).fetchall()
+        return [r[0] for r in rows]
+
+    yield app
+
+    # Reset DSN + engine caches so dropped tenant DBs don't poison subsequent tests.
+    reset_tenant_engines()
+    get_settings.cache_clear()
+
+
+def test_tenant_db_routes_to_tenant_database(  # type: ignore[no-untyped-def]
+    probe_app, ctrl_engine, drop_tenant_db
+):
+    """Provision acme + globex; write via tenant_db; assert each row lands in the correct DB
+    and is ABSENT from the other.  This proves physical isolation: tenant_db never touches
+    the wrong database."""
+    from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+
+    acme_id = globex_id = None
+    acme_dbname = globex_dbname = None
+    try:
+        with Session(ctrl_engine) as cs:
+            acme_id = provision_tenant(cs, "Acme", slug="acme")
+            globex_id = provision_tenant(cs, "Globex", slug="globex")
+            cs.commit()
+
+        acme_dbname = make_url(default_tenant_dsn(acme_id)).database
+        globex_dbname = make_url(default_tenant_dsn(globex_id)).database
+        # Flush the DSN cache so the resolver reads the freshly-committed rows.
+        invalidate_dsn_cache()
+
+        client = TestClient(probe_app)
+
+        # Write a distinct row into each tenant's DB through the routing dep.
+        resp = client.post(f"/{acme_id}/items?name=acme-widget")
+        assert resp.status_code == 200, resp.text
+
+        resp = client.post(f"/{globex_id}/items?name=globex-widget")
+        assert resp.status_code == 200, resp.text
+
+        # Read back from each DB and assert physical isolation.
+        acme_items = client.get(f"/{acme_id}/items").json()
+        globex_items = client.get(f"/{globex_id}/items").json()
+
+        assert "acme-widget" in acme_items, (
+            f"acme row missing from acme DB: {acme_items}"
+        )
+        assert "globex-widget" not in acme_items, (
+            f"globex row leaked into acme DB: {acme_items}"
+        )
+
+        assert "globex-widget" in globex_items, (
+            f"globex row missing from globex DB: {globex_items}"
+        )
+        assert "acme-widget" not in globex_items, (
+            f"acme row leaked into globex DB: {globex_items}"
+        )
+
+    finally:
+        reset_tenant_engines()
+        if acme_dbname:
+            drop_tenant_db(acme_dbname)
+        if globex_dbname:
+            drop_tenant_db(globex_dbname)
+
+
+def test_tenant_db_unknown_tenant_returns_404(probe_app):  # type: ignore[no-untyped-def]
+    """When the DSN resolver raises LookupError (unknown tenant has no control row),
+    tenant_db maps it to 404 — never 500, never an existence leak."""
+    client = TestClient(probe_app)
+    # "ghost-id" was never provisioned; the control repo returns None → LookupError → 404.
+    resp = client.post("/ghost-id/items?name=should-not-exist")
+    assert resp.status_code == 404, (
+        f"expected 404 for unknown tenant, got {resp.status_code}"
+    )
+
+
+def test_tenant_db_handler_lookup_error_not_masked_as_404(  # type: ignore[no-untyped-def]
+    ctrl_engine, control_db_url, monkeypatch, drop_tenant_db
+):
+    """A LookupError raised by the route handler AFTER receiving the tenant session must
+    NOT be masked as 404 — it is a handler bug and must propagate as 500.
+
+    This is the regression guard for the over-broad ``except LookupError`` pattern: with
+    the pre-fix code the ``except`` catches the post-yield KeyError (a LookupError subclass)
+    and wraps it in HTTPException(404).  The fix introduces an ``entered`` flag so only the
+    pre-yield resolution LookupError maps to 404; a post-yield one re-raises (→ 500).
+    """
+    from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+    from {{ package_name }}.config.settings import get_settings
+
+    monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    get_settings.cache_clear()
+    invalidate_dsn_cache()
+
+    app = FastAPI()
+
+    def _cs():  # type: ignore[no-untyped-def]
+        with Session(ctrl_engine) as s:
+            yield s
+
+    def _active_tenant_passthrough(request: Request) -> str:
+        tenant_id = request.path_params.get("tenant_id")
+        if tenant_id is None:
+            raise HTTPException(status_code=404, detail="Not found")
+        return tenant_id
+
+    app.dependency_overrides[control_session] = _cs
+    app.dependency_overrides[active_tenant] = _active_tenant_passthrough
+
+    @app.get("/{tenant_id}/boom")
+    def _handler_raises_key_error(db: Session = Depends(tenant_db)) -> dict:  # type: ignore[no-untyped-def]
+        """Simulates a handler bug: KeyError (a LookupError subclass) raised post-yield."""
+        _ = db  # session was successfully obtained
+        raise KeyError("boom")  # handler bug — must NOT be masked as 404
+
+    tenant_id = None
+    tenant_dbname = None
+    try:
+        with Session(ctrl_engine) as cs:
+            tenant_id = provision_tenant(cs, "BoomCo", slug="boomco")
+            cs.commit()
+
+        tenant_dbname = make_url(default_tenant_dsn(tenant_id)).database
+        invalidate_dsn_cache()
+
+        # raise_server_exceptions=False: returns 500 instead of re-raising in the test process.
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get(f"/{tenant_id}/boom")
+
+        assert resp.status_code != 404, (
+            "handler KeyError was masked as 404 — over-broad except LookupError in tenant_db"
+        )
+        assert resp.status_code == 500, (
+            f"expected 500 for handler KeyError, got {resp.status_code}"
+        )
+    finally:
+        reset_tenant_engines()
+        get_settings.cache_clear()
+        if tenant_dbname:
+            drop_tenant_db(tenant_dbname)

@@ -2,11 +2,11 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 {%- if "llm" in batteries and "multitenantauth" in batteries %}
-from pydantic import BaseModel, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 {%- elif "llm" in batteries %}
 from pydantic import BaseModel, SecretStr
 {%- elif "multitenantauth" in batteries %}
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 {%- endif %}
 
 
@@ -107,6 +107,27 @@ class Settings(BaseSettings):
     # FAIL-CLOSED by default (unlike the reference) — semantics enforced in routes/auth.py:
     # prod → 404; staging + empty allowlist → 403; dev → open. Set this to opt into signups.
     signup_allowlist: list[str] = []
+
+    # ── Phase 2 / SP1: physical per-tenant routing (MDN47) ──────────────────────
+    # Per-tenant engine pool sizing + the per-endpoint LRU cap, kept small so the
+    # control pool + N tenant pools cannot exhaust the shared Postgres max_connections.
+    # Floors (Layer-2 P4, I-BUDGET): forbid the SQLAlchemy "unlimited" sentinels —
+    # pool_size=0 (= no limit) and max_overflow=-1 (= unbounded) would build an infinite
+    # pool behind a passing connection-budget estimate. ge=1 / ge=0 keep required_connections
+    # a true upper bound.
+    tenant_pool_size: int = Field(default=2, ge=1)
+    tenant_max_overflow: int = Field(default=3, ge=0)
+    max_cached_engines: int = Field(default=12, ge=1)
+    control_pool_size: int = Field(default=5, ge=1)
+    control_max_overflow: int = Field(default=10, ge=0)
+    # Fraction of a server's live max_connections the app is allowed to plan for (fail-closed budget).
+    # Bound to (0, 1] (Layer-2 P3, I-BUDGET): a value > 1 would inflate the budget past the live
+    # ceiling so BudgetExceeded never fires — the budget must not be defeasible by a config value.
+    db_pool_safety_factor: float = Field(default=0.8, gt=0.0, le=1.0)
+    # DSN cache TTL: a backstop only — the per-tenant DSN is immutable in SP1.
+    tenant_dsn_cache_ttl_seconds: int = 300
+    # Physical DB name = "<prefix>_<tenant_id>" on the app instance (co-located default).
+    tenant_db_name_prefix: str = "{{ package_name }}_tenant"
 {%- endif %}
 {%- if "webhooks" in batteries %}
 
@@ -276,7 +297,10 @@ def verify_runtime(settings: Settings) -> None:
             f"environment={settings.environment!r} requires "
             "APP_SESSION_PEPPER and APP_PASSWORD_PEPPER of at least 16 bytes"
         )
-    if settings.environment in {"prod", "staging"} and not settings.session_cookie_secure:
+    if (
+        settings.environment in {"prod", "staging"}
+        and not settings.session_cookie_secure
+    ):
         raise RuntimeError(
             f"environment={settings.environment!r} forbids "
             "APP_SESSION_COOKIE_SECURE=false (cleartext session cookie)"

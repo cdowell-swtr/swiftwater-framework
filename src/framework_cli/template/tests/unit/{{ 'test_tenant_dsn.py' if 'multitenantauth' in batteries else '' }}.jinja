@@ -1,0 +1,17 @@
+"""Unit test for per-tenant DSN derivation (SP1).
+
+create_database() is exercised in Task 8's acceptance tier (requires a live Postgres).
+This test is pure — no Postgres needed.
+"""
+
+
+def test_default_tenant_dsn_swaps_db_name(monkeypatch) -> None:
+    monkeypatch.setenv("APP_DATABASE_URL", "postgresql+psycopg://u:pw@h:5432/appdb")
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "acme_t")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()  # get_settings is @lru_cache'd — clear after setenv, every time
+    from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+
+    dsn = default_tenant_dsn("abc123")
+    assert dsn == "postgresql+psycopg://u:pw@h:5432/acme_t_abc123"

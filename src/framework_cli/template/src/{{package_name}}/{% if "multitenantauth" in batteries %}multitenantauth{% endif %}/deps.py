@@ -35,6 +35,7 @@ from .authz.resolution import has_membership, platform_permissions, tenant_permi
 from .authn.tokens import hash_token
 from .errors import AUTHZ_FORBIDDEN_DETAIL
 from .metrics import auth_metrics
+from .tenancy.session import tenant_session
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,26 @@ def active_tenant(
     ):
         raise HTTPException(status_code=404, detail="Not found")
     return tenant_id
+
+
+def tenant_db(
+    tenant_id: str = Depends(active_tenant),
+    cs: Session = Depends(control_session),
+) -> Iterator[Session]:
+    """Yield a session bound to the active tenant's database, resolving the DSN on the
+    request's existing control session (no extra control connection). A resolution failure
+    maps to 404 — never leak whether a tenant/DB exists. A LookupError raised by the route
+    handler AFTER the session is yielded propagates normally (it is a handler bug, not a
+    routing miss)."""
+    entered = False
+    try:
+        with tenant_session(tenant_id, control_session=cs) as session:
+            entered = True
+            yield session
+    except LookupError:
+        if entered:
+            raise  # post-yield LookupError = handler bug → 500, do not mask as 404
+        raise HTTPException(status_code=404, detail="Not found") from None
 
 
 def guard(expr: Expr):

@@ -4216,7 +4216,7 @@ def test_render_seeds_agents_md_with_portable_convention_blocks(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     agents = (dest / "AGENTS.md").read_text()
-    assert "PI-convention: v2" in agents
+    assert "PI-convention: v3" in agents
     assert "DOCS-convention: v1" in agents
     assert "GIT-convention: v1" in agents
     assert "cdowell-swtr/patterns" in agents

@@ -1,0 +1,8 @@
+"""Proves the control fixtures are shared via conftest, not module-local."""
+
+
+def test_ctrl_engine_is_visible_cross_module(ctrl_engine) -> None:
+    from sqlalchemy import inspect
+
+    # control chain migrated → the tenant table exists on the shared control engine
+    assert "tenant" in set(inspect(ctrl_engine).get_table_names())

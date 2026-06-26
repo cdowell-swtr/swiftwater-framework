@@ -12,12 +12,10 @@ Asserts:
 
 from __future__ import annotations
 
-import os
-import subprocess
 import uuid
 
 import pytest
-from sqlalchemy import Engine, create_engine, inspect, make_url, text
+from sqlalchemy import Engine, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -27,54 +25,11 @@ from {{ package_name }}.db.control import models as m
 # ── fixtures ─────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def control_db_url(pg_url: str) -> str:
-    """A separate Postgres database for the control plane."""
-    _ctrl_db = "{{ package_name }}_ctrl_mig_test"
-    base = make_url(pg_url)
-    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
-    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
-    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
-    with maint.connect() as c:
-        if not c.execute(
-            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
-        ).scalar():
-            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
-    maint.dispose()
-    return ctrl_url
-
-
-@pytest.fixture(scope="module")
-def ctrl_engine(control_db_url: str) -> Engine:  # type: ignore[return]
-    """Run `alembic upgrade head` on the control chain and return a bound engine."""
-    proc = subprocess.run(
-        ["alembic", "-c", "alembic_control.ini", "upgrade", "head"],
-        env={**os.environ, "APP_CONTROL_DATABASE_URL": control_db_url},
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        pytest.fail(
-            f"alembic control upgrade head failed:\n{proc.stdout}\n{proc.stderr}"
-        )
-    engine = create_engine(control_db_url)
-    yield engine
-    engine.dispose()
-
-
 @pytest.fixture(autouse=True)
-def _clean(ctrl_engine: Engine) -> None:  # type: ignore[return]
-    """Truncate all control-plane tables after each test."""
+def _clean(truncate_control) -> None:  # type: ignore[no-untyped-def]
+    """Truncate all control-plane tables after each test (shared helper; policy stays local)."""
     yield
-    with ctrl_engine.begin() as conn:
-        conn.execute(
-            text(
-                "TRUNCATE TABLE resource_role_assignment, platform_role_assignment, "
-                "tenant_role_assignment, authz_event, invite_token, session, "
-                "tenant_membership, role_permission, permission, role, "
-                "tenant_slug_history, tenant, app_user CASCADE"
-            )
-        )
+    truncate_control()
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

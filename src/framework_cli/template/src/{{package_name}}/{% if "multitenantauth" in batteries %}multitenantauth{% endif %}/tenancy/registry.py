@@ -6,7 +6,7 @@ between the control plane and the tenant's physical database, which is Phase 2).
 
 Public API
 ----------
-register_tenant(session, name, *, slug, dsn, status="provisioning") -> Tenant
+register_tenant(session, name, *, slug, dsn=None, status="provisioning") -> Tenant
 activate_tenant(session, tenant_id) -> Tenant
 get_tenant(session, tenant_id) -> Tenant | None
 get_tenant_dsn(session, tenant_id) -> str
@@ -80,7 +80,7 @@ def register_tenant(
     name: str,
     *,
     slug: str,
-    dsn: str,
+    dsn: str | None = None,
     status: str = "provisioning",
 ) -> Tenant:
     """Register a new tenant with an OPAQUE, auto-generated id.
@@ -89,6 +89,12 @@ def register_tenant(
     and is NEVER derived from the slug. The tenant is created with status
     'provisioning' by default; the caller must activate it after physical
     provisioning is complete (Phase 2).
+
+    When ``dsn`` is ``None`` (the default), the DSN is derived from the
+    opaque id via ``default_tenant_dsn(tenant_id)`` after the id is minted,
+    preserving the opaque-id invariant (the id is still server-generated,
+    never derived from the slug).  Pass an explicit ``dsn`` to override
+    (bring-your-own-DSN provision).
 
     Validates:
     - slug is a valid DNS label
@@ -104,6 +110,13 @@ def register_tenant(
     # derived from the slug — the opaque-id invariant is structural here.
     tenant_id = _opaque_id()
     _validate_tenant_id(tenant_id)  # belt-and-suspenders: _opaque_id always passes
+
+    if dsn is None:
+        from .dsn import (
+            default_tenant_dsn,
+        )  # local import: avoids circular at module load
+
+        dsn = default_tenant_dsn(tenant_id)
 
     return control_repo.add_tenant(
         session,

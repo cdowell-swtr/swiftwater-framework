@@ -3,7 +3,7 @@
 > Append-only event narrative, task grain. Never edit or truncate existing
 > entries. Closed taxonomy: completed · inserted · reordered · dep-found ·
 > amended · superseded · discarded · milestone · note.
-> Maintained per `pi-convention.md` (PI-convention: v2).
+> Maintained per `pi-convention.md` (PI-convention: v3).
 
 #### #0001 · note · 2026-06-12
 Adopted the Planning Instrument convention (PI-convention: v1). Scaffolded
@@ -3133,3 +3133,336 @@ patterns `_docs/cross-repo/implementers.md` via a pure gh-API PR (one row, `v4`,
 [[framework-consumes-patterns-via-github-vendoring]]; flip the PUR to `adopted` only once Meridian's fork-deletion is
 confirmed.
 (FWK64 → PLAN)
+
+#### #0230 · completed · FWK61 — Phase 2 decomposed (SP1/SP2/SP3); SP1 physical-routing-core design + PUR approved · 2026-06-25
+Brainstormed FWK58 **Phase 2** (physical per-tenant routing + ops) and **decomposed it into three sub-projects**,
+build order **SP1→SP2→SP3** (each its own spec/plan/build cycle): **SP1** physical routing core, **SP2** plane-aware
+migrate/deploy/rollback (MDN59/46), **SP3** authz-mechanism re-touch + lifecycle hardening — **which folds in FWK63's
+t1–t4 seam residuals** + the Phase-1 preconditions (DB-level ≥1-admin, `AuthzEvent.resource_id`, slug-history reaping)
++ the next-pass Layer-2 cells. **SP1 design approved** (spec `docs/superpowers/specs/2026-06-25-fwk61-sp1-physical-routing-core-design.md`).
+**Method (operator-authorized, MD busy):** read Meridian's Phase-2 routing code directly to extract the validated
+shape. **Strategy = lift the validated core, REBUILD the seam:** Meridian's engine/budget core (per-endpoint LRU +
+fail-closed connection budget MDN47, DSN cache, `tenant_session`, identical-404 routing gate) is validated gold →
+generalized as-is; its provision/migrate **write path is BROKEN** (verified directly: `provision.py:67-69` omits the
+now-required `slug` → `TypeError`; `migrate_all.py:13` imports an absent `all_tenant_dsns` → `ImportError`; hidden by
+stale docker-gated tests) → SP1 **rebuilds** provisioning on the battery's current `register_tenant`/`activate_tenant`,
+does NOT lift the drifted modules. Drift recorded as **promote-up evidence** (adoption deletes the broken module) —
+inversion of [[meridian-is-the-de-facto-integration-test]]. **Settled calls:** secrets = **match + seam** (`resolve_dsn`
+injection seam over Meridian's stored-DSN posture; real backend deferred to the **Secrets-backing** Horizon item,
+PLAN.md:56 — confirmed a separate project); topology = one-server + idempotent `CREATE DATABASE`, **entire** physical-create
+step skippable for managed-PG/bring-your-own-DSN; count-only LRU; alembic Python API; OTel spans + per-endpoint gauges.
+**Spec self-review caught two real design issues, fixed inline:** (1) **chicken-and-egg** — the physical DB name must
+be id-derived but the opaque id is minted *inside* `register_tenant`; resolved by making `dsn` optional (registry
+finalizes the id-derived default itself, opaque-id invariant preserved, DSN-naming policy lives in `tenancy/dsn.py`);
+(2) **integrity-lock upkeep** — the Phase-1 mechanism is LOCKED (`BATTERY_LOCKED_SRC`) and `test_auth_mechanism_lock.py`
+fails on any missing mechanism file, so SP1 registers its new `db/tenant/*`+`tenancy/{dsn,provision}.py` as locked +
+regenerates the manifest; edits to locked `registry.py`/`deps.py` are deliberate Layer-2-reviewed re-touches; the
+`resolve_dsn`/`provision_hook` seams register from the consumer's UNLOCKED `create_app()` (DV-5 pattern) so locking
+doesn't block customization. **Conformance is drift-aware:** pure-unit (registry/budget/cache) runs everywhere;
+isolation/provisioning go in the real-Postgres acceptance tier `render-complete` runs, **never skip-neutral** (so the
+battery can't recreate Meridian's hide-the-drift failure); seeded from intended behavior, not Meridian's broken write-path.
+**SP1 PUR** authored at `docs/superpowers/decisions/DEC-0004-multitenantauth-phase2-sp1-routing-promote-up.md` (sub-record
+of DEC-0003; status `designed`; **Meridian async-confirmation requested** against it — durable artifact replaces the
+read-the-code shortcut). FWK63 line marked FOLDED INTO SP3. **Next:** writing-plans for SP1. **Outward/operator-gated:**
+relay the verified Meridian drift to Meridian (absorber does not write to the generator repo unprompted).
+(FWK61 SP1 design + PUR → PLAN)
+
+#### #0231 · completed · FWK61 SP1 — implementation plan written (11 TDD tasks) + spec corrected · 2026-06-25
+Wrote the SP1 implementation plan (`docs/superpowers/plans/2026-06-25-fwk61-sp1-physical-routing-core.md`, 11
+tasks, subagent-driven/TDD). **Grounded it by reading the validated source directly** (operator-authorized,
+MD busy): Meridian's `db/engine_registry.py`, `db/engine.py`, `db/tenancy/dsn.py`, `auth/deps.py` (the lifted
+core), AND the battery's real integration points — `deps.py`, baseline `db/engine.py`, `db/control/engine.py`,
+`multitenantauth/metrics.py`, `config/settings.py`, `integrity/classes.py`, `migrations/env.py`, `alembic.ini`,
+`tests/conftest.py`, `test_control_migrations.py`, `test_auth_mechanism_lock.py`, `test_obs_completeness.py`,
+`health.py`. **Five blockers/discoveries resolved before drafting** (advisor-prompted): (1) **placement** — the
+routing core lives under `multitenantauth/tenancy/`, NOT a sibling `db/tenant/`, because the lock completeness
+guard (`test_auth_mechanism_lock.py`) only walks `multitenantauth`/`db/control`/`migrations_control` trees — a
+`db/tenant/` plane would ship UNLOCKED; (2) **env.py blocker** — `migrations/env.py:15` sets `sqlalchemy.url`
+unconditionally → a per-tenant `command.upgrade` would migrate the APP db; fix = honor a pre-injected url (app
+`alembic.ini` has none, so CLI/control path unchanged) → new Task 7; (3) **active_tenant pre-exists** (Phase 1
+shipped it) → SP1's deps change is `tenant_db`-only, not "+active_tenant" as the first-draft spec implied;
+(4) **baseline `build_engine(url)` takes no pool args** → the tenant plane builds its own pooled engines (don't
+couple baseline to multitenantauth settings); (5) **idempotency is by-slug-resume** — `register_tenant` mints a
+new opaque id + rejects a re-used slug, so `provision_tenant` detects a partial run via `live_slug_tenant_id`
+and resumes (NOT Meridian's by-id short-circuit). **Acceptance tier confirmed viable, not skip-neutral:**
+`CREATE DATABASE` works on the testcontainer superuser role (`test_control_migrations.py:42` already does it).
+**Lock-sequencing:** each new `tenancy/*` file's `BATTERY_LOCKED_SRC` entry rides in the same task that creates
+it (can't defer — the guard goes red the moment the file renders). Secrets seam = match+seam (Secrets-backing
+Horizon item is the future backend); DSN id-derived + immutable in SP1 → write-once cache, no move/suspend
+invalidation (SP3). **Plan altitude (advisor):** inline the generalized ported code (don't reference Meridian's
+moving/partially-broken repo); tests-first for new code, drop-in for ports. **Spec corrected on the same branch**
+(placement, active_tenant pre-exists, baseline-engine-untouched, env.py task, by-slug-resume, write-once cache).
+Soft spots flagged: Tasks 9/11 test bodies reference Task 8's concrete provisioning helpers rather than
+re-transcribing. **Next:** execute SP1 (subagent-driven per [[subagent-review-model-pattern]]: implementers
+Sonnet, spec review Sonnet, code-quality + branch-end Opus; Phase-2 Layer-2 all-Opus per
+[[security-review-workflow-all-opus]]).
+(FWK61 SP1 plan → PLAN)
+
+#### #0232 · amended · FWK61 SP1 — plan hardened after adversarial review (1 blocker + secondaries) · 2026-06-25
+Ran the writing-plans self-review through the advisor (stronger reviewer, full transcript). It mentally executed
+the test code and found a **real execution blocker**: `control_db_url`/`ctrl_engine` are module-scoped inside
+`test_control_migrations.py`, so Tasks 8/9/11 (new modules) requesting them fail `fixture 'ctrl_engine' not
+found` — pytest shares fixtures across modules only via `conftest.py`. **Fix = new Task 0**: promote those two
+fixtures (+ `truncate_control`, `drop_tenant_db`) into the **battery-gated** `conftest.py.jinja` (session-scoped),
+repoint `test_control_migrations.py`, prove the move with a cross-module smoke. Critical caveat encoded: the
+`_clean` truncate stays **per-module autouse** — globalizing it in conftest would truncate control tables around
+every test (incl. non-DB) in the rendered suite. Knock-on the advisor's review didn't reach but the blocker
+implies: the provisioning/routing modules reuse the `acme` slug across cases, so each needs its own autouse
+`_clean_control(truncate_control)` or `provision_tenant` would short-circuit on a stale active row (Tasks 8, 9).
+**Secondaries folded:** (a) verified `get_settings` IS `@lru_cache`'d → `cache_clear()` after every setenv, hedge
+removed; (b) verified `Settings` is NOT frozen → `Settings(max_cached_engines=2)` directly, dropped the
+`object.__setattr__` fallback; (c) **idempotency test was mislabeled** — the old `_after_partial` only hit the
+active no-op path → split into `test_provision_is_noop_when_already_active` (no-op) + a NEW
+`test_provision_resumes_a_partial_provisioning_row` that seeds a status-only `register_tenant` row then re-runs,
+actually exercising the resume-from-`provisioning` branch; (d) Task 6's test moved onto the existing
+`registry_engine` fixture (+ `APP_DATABASE_URL` so `default_tenant_dsn` resolves), removing a `db_session` vs
+control-DB inconsistency; (e) `_project_root()=parents[4]` documented as an editable/`/app`-install assumption.
+Plan now 12 tasks (0–11); Layer-2 cross-ref corrected (Task 11 Step 4, not "Task 12"). Advisor's verdict:
+non-blocking for the document, fix in-plan before fan-out — done. **Riskiest execution step flagged for the
+controller:** Task 0's dual-loop conftest change + Task 1/2 establish the template-payload render→mirror→pytest
+loop — review the first 2–3 task outputs closely before trusting the fan-out.
+(FWK61 SP1 plan hardened → PLAN)
+
+#### #0233 · completed · FWK61 SP1 Task 0 — shared control-plane acceptance fixtures · 2026-06-25
+Promoted `control_db_url`/`ctrl_engine` (+ `truncate_control`, `drop_tenant_db`) into the battery-gated
+`conftest.py.jinja` (session-scoped); repointed `test_control_migrations._clean` to the shared
+`truncate_control`; pruned its now-dead imports (`os`/`subprocess`/`create_engine`/`make_url`/`text`); added a
+cross-module smoke. RED (`fixture 'ctrl_engine' not found`) → GREEN (6 tests) on a real-PG render; ruff clean.
+Subagent-driven build (Sonnet implementer; task review next).
+(FWK61 SP1 Task 0 → ledger)
+
+#### #0234 · completed · FWK61 SP1 Task 1 — tenant routing/budget/DSN settings · 2026-06-25
+Added 8 battery-gated `Settings` fields (tenant_pool_size=2, tenant_max_overflow=3, max_cached_engines=12,
+control_pool_size=5, control_max_overflow=10, db_pool_safety_factor=0.8, tenant_dsn_cache_ttl_seconds=300,
+tenant_db_name_prefix) consumed by the rest of SP1; 2 tests (defaults + env override). RED (`AttributeError`) →
+GREEN (30 passed) on a render; ruff + `mypy src` clean; baseline render confirms the fields are absent without
+the battery. Side-effect: line-wrapped a pre-existing >88-char `verify_runtime` `if` (no logic change) that
+blocked the rendered format gate. Subagent-driven (Sonnet implementer; task review next).
+(FWK61 SP1 Task 1 → ledger)
+
+#### #0235 · completed · FWK61 SP1 Task 2 — tenant-engine metrics (locked) · 2026-06-25
+Created `multitenantauth/tenancy/metrics.py` (thread-safe `TenantEngineMetrics` singleton: eviction +
+DSN-cache counters, hand-rolled Prometheus exposition) and locked it via a `BATTERY_LOCKED_SRC` entry in
+`integrity/classes.py` (same task — the completeness guard fails on any unlisted mechanism file). Dual-loop
+TDD: Loop B rendered metrics test RED (`ModuleNotFoundError`) → GREEN; Loop A lock guard RED (unlisted file)
+→ GREEN (5 passed); framework ruff/format/`mypy src` clean. Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 2 → ledger)
+
+#### #0236 · completed · FWK61 SP1 Task 3 — TenantEngineRegistry (per-endpoint budgeted LRU, locked) · 2026-06-25
+Ported Meridian's validated `tenancy/engine_registry.py`: `endpoint_of`, `required_connections`,
+`BudgetExceeded`, `validate_endpoint_budget` (fail-closed, ×safety_factor), `TenantEngineRegistry` (RLock,
+per-endpoint count-driven LRU + soft dispose, **budget validated BEFORE caching** — on `BudgetExceeded` the
+just-built engine is disposed and NOT cached, `render_pool_gauges`), `tenant_engines` singleton. Builder uses
+`create_engine` directly so baseline `db/engine.py` stays uncoupled. Locked via `classes.py`. 6 rendered unit
+tests (1 metrics + 5 registry: caching/LRU-evict/budget-disposes/required-connections) GREEN with injected
+fakes (no PG); lock guard RED→GREEN; framework ruff/format/`mypy src` clean. Two test-only ruff fixes (unused
+`import threading`, `e1`→`_e1`). Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 3 → ledger)
+
+#### #0237 · amended · FWK61 SP1 Task 3 — fix wave (Opus review: fail-open budget drift + cached_count race) · 2026-06-25
+Task 3's Opus code-quality review Approved but flagged two Important findings, **both originating in Meridian's
+ported reference text** (not implementer error): (1) **fail-OPEN budget bug** — `includes_control` keyed off
+`settings.database_url`, but the control pool connects to `control_database_url` (separately configurable via
+`APP_CONTROL_DATABASE_URL`); in a split-control deployment the budget under-counts → silent over-subscription,
+which violates SP1's own fail-closed Global Constraint. Default co-located config is unaffected (the validator
+fills `control_database_url` from `database_url`). **A SECOND latent drift in Meridian's validated core** (after
+provision.py/migrate_all.py) — recorded in DEC-0004, operator-gated relay to Meridian pending. Fixed →
+`endpoint_of(settings.control_database_url)` + a split-endpoint test locking it. (2) **`cached_count` race** —
+public reader iterated `_endpoints` without the RLock → `dictionary changed size during iteration` under
+concurrency; wrapped in `with self._lock:` (reentrant, internal callers unaffected). (3) Minor: `max_cached_engines`
+gained a `Field(ge=1)` floor (0 → infinite RLock-holding spin in `_evict_if_full`). 38 rendered tests (2 new) +
+framework gate clean. Spec §budget + DEC-0004 drift updated. Subagent-driven (Sonnet fixer; focused Opus re-review next).
+(FWK61 SP1 Task 3 fix → ledger)
+
+#### #0238 · completed · FWK61 SP1 Task 4 — tenant DSN derivation + idempotent CREATE DATABASE (locked) · 2026-06-25
+Created `multitenantauth/tenancy/dsn.py`: `default_tenant_dsn(tenant_id)` (swap the app `database_url`'s DB
+name to `<tenant_db_name_prefix>_<tenant_id>`, password preserved) + `create_database(dsn)` (AUTOCOMMIT
+maintenance connection to `postgres`, idempotent `SELECT 1 FROM pg_database` guard, `finally`-dispose). DB name
+is `[a-z0-9_]`-only (registry-constrained tenant_id + operator prefix) → safe quoted identifier. Locked via
+`classes.py`. Name-swap unit test GREEN (pure, no PG; `create_database` deferred to Task 8 acceptance); lock guard
+RED→GREEN; framework gate clean. Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 4 → ledger)
+
+#### #0239 · completed · FWK61 SP1 Task 5 — tenant_session + resolve_dsn seam + DSN cache (locked) · 2026-06-25
+Created `multitenantauth/tenancy/session.py`: the connect-time DSN resolution + per-tenant `Session` routing.
+`register_tenant_dsn_resolver(fn|None)` consumer seam (DV-5 pattern, registered from the unlocked create_app);
+default resolver reads the control-row DSN; `_resolve_dsn` is **fail-closed** — unknown tenant, resolver-raises,
+or non-str/empty return all → `LookupError` (the warning message carries NO DSN); process-wide DSN cache (TTL +
+`invalidate_dsn_cache`), cache-hit skips the resolver; `tenant_session` contextmanager binds a Session via the
+bounded registry; `reset_tenant_engines`. Locked via `classes.py`. 6 rendered seam/cache tests GREEN (fakes, no
+PG) — resolver-raises→deny, non-str→deny, unknown→deny, cache-hit-skips-resolver all confirmed; lock guard
+RED→GREEN; framework gate clean. Subagent-driven (Sonnet impl; Opus security task review next — note: review weighs
+whether `exc_info=True` on a resolver crash could surface a resolver-embedded DSN).
+(FWK61 SP1 Task 5 → ledger)
+
+#### #0240 · amended · FWK61 SP1 Task 5 — fix wave (Opus review: conditional credential leak in the resolver seam) · 2026-06-25
+Task 5's Opus security review = Needs fixes (fail-closed contract airtight, but a credential leak in the seam
+the Layer-2 pass targets). `_resolve_dsn`'s resolver-crash handler logged `exc_info=True` AND chained
+`raise LookupError(...) from exc` — a custom resolver raising with a DSN in its own message (e.g.
+`RuntimeError(f"connect failed: {dsn}")`) leaked the credential to the log (verified: `SUPERSECRET` appeared in
+`caplog.text` pre-fix) and carried it up the `__cause__` chain to any upstream `exc_info` boundary, violating
+"never log a DSN." Fix: log only `type(exc).__name__` (no exc_info, no str(exc)); `from exc` → `from None` to
+suppress the cause chain — the LOCKED mechanism self-protects rather than trusting callers. New `caplog` test
+`test_resolver_exception_never_logs_or_chains_the_dsn` (RED pre-fix → GREEN: asserts the DSN is in no log record,
+`__cause__ is None`, type preserved) + empty-string-deny test. 8/8 rendered + framework gate clean. Subagent-driven
+(Sonnet fixer; focused Opus re-review next).
+(FWK61 SP1 Task 5 fix → ledger)
+
+#### #0241 · completed · FWK61 SP1 Task 6 — register_tenant derives default DSN from the opaque id (LOCKED edit) · 2026-06-25
+First LOCKED-file edit of SP1: `register_tenant`'s `dsn` → `str | None = None`; when `None`, derive
+`default_tenant_dsn(tenant_id)` (local import, avoids circular) AFTER the opaque id is minted — resolving the
+provisioning chicken-and-egg while preserving the opaque-id invariant (id still server-generated, never
+slug-derived). Explicit `dsn=` still passes through verbatim. `registry.py` was already in `BATTERY_LOCKED_SRC`
+(deliberate re-touch, Layer-2-gated) — no new lock entry; the checksum changes, manifest rebuilt at render time.
+RED (`TypeError: missing 'dsn'`) → GREEN 29/29 registry tests on real PG (opaque-id invariant + slug rules intact);
+lock guard 5/5; framework gate clean. Implementer caught a brief test bug (asserting `t.dsn` after session close →
+DetachedInstanceError) and moved the assert inside the session. Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 6 → ledger)
+
+#### #0242 · completed · FWK61 SP1 Task 7 — alembic env.py honors a pre-injected sqlalchemy.url · 2026-06-25
+`migrations/env.py.jinja`: wrapped the unconditional `config.set_main_option("sqlalchemy.url", database_url)` in
+`if not config.get_main_option("sqlalchemy.url"):` so a per-tenant `command.upgrade` (Task 8) that pre-sets the
+url targets the tenant DB instead of being clobbered to the app DB. Universal payload (all renders); the normal
+CLI/control path is unchanged (app `alembic.ini` has no `sqlalchemy.url` line → fallback still applies). Unit test
+is trivially green (constructs a Config directly; Task 8's per-tenant migrate is the real end-to-end guard — noted
+honestly). Existing migration suites pass on both multitenantauth (7) and baseline (2) renders; framework gate
+clean. Subagent-driven (Sonnet impl; Sonnet task review next — small surgical change).
+(FWK61 SP1 Task 7 → ledger)
+
+#### #0243 · completed · FWK61 SP1 Task 8 — idempotent physical tenant provisioning + post-migrate hook (locked) · 2026-06-25
+Created `multitenantauth/tenancy/provision.py`: `provision_tenant(cs, name, *, slug, dsn=None, run_physical=True)`
+— **idempotent by slug** via `live_slug_tenant_id` (active→no-op return; partial `provisioning` row→resume;
+else→register fresh), then `create_database`+`migrate_tenant` (skipped when `run_physical=False` for BYO-DSN),
+post-migrate `_provision_hook` (runs BEFORE `activate_tenant` — seam for tenant-scoped seeding), activate,
+`invalidate_dsn_cache`. `migrate_tenant` runs the app chain against the tenant DSN via the Alembic Python API
+(relies on Task 7's env.py inject-url). `register_provision_hook` consumer seam. Locked via `classes.py`.
+**5 real-Postgres acceptance tests GREEN** (create→migrate→activate; noop-when-active; resume-from-partial;
+hook-before-activate; skip-physical) using the Task-0 shared conftest fixtures + a module-local `_clean_control`;
+lock guard RED→GREEN; framework gate (358 tests) + ruff/mypy clean. Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 8 → ledger)
+
+#### #0244 · completed · FWK61 SP1 Task 9 — tenant_db routing dependency (LOCKED edit) · 2026-06-25
+Second LOCKED-file edit: added ONLY `tenant_db` to `multitenantauth/deps.py` (Phase-1 `active_tenant` already
+ships + 404s unknown/non-member) — composes `active_tenant` + `control_session` + `tenant_session` (Task 5),
+yields a Session on the active tenant's DB, and maps a `LookupError` from DSN resolution to a 404 `from None`
+(no existence leak, no DSN in the error). `deps.py` already locked → no new entry; purely additive (no existing
+dep touched). Real-PG tests: **physical isolation** (tenant A's row present in A's DB, ABSENT from B's) + 404 for
+unknown tenant; 143 broader authz/deps/tenant render tests green; lock guard 5/5; framework + render ruff/mypy
+clean. Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 9 → ledger)
+
+#### #0245 · amended · FWK61 SP1 Task 9 — fix wave (Opus review: over-broad except masks handler bugs) · 2026-06-25
+Task 9's Opus review Approved but flagged a subtle bug-masking footgun: `tenant_db`'s `except LookupError`
+spanned the `yield`, and FastAPI re-throws a route-handler exception into a yield-dep AT the yield point — so a
+handler raising a `LookupError` subclass (`KeyError`/`IndexError`, e.g. a dict miss) AFTER receiving the session
+was masked as a **404 instead of a 500**. Fail-closed (never grants access) but hides handler bugs in the locked
+routing gate. Fix: an `entered` flag — only the pre-yield resolution `LookupError` (from `tenant_session.__enter__`)
+maps to 404; a post-yield `LookupError` re-raises (→ 500). New test: a route raising `KeyError` post-yield → RED
+(404) pre-fix → GREEN (500) post-fix (`TestClient(raise_server_exceptions=False)`). 3 real-PG tests + lock + gate
+clean. Fixed in the same cycle to avoid a second locked-`deps.py` re-touch. Subagent-driven (Sonnet fixer; controller-verified diff).
+(FWK61 SP1 Task 9 fix → ledger)
+
+#### #0246 · completed · FWK61 SP1 Task 10 — expose tenant-engine metrics + dashboard/alert (manual spans DESCOPED) · 2026-06-25
+Wired the tenant-engine obs surface into the generated app: `health.py` `/metrics` route now appends
+`tenant_engines.render_pool_gauges()` + `tenant_engine_metrics.render_prometheus()` (battery-gated); added a
+Grafana panel (`app_tenant_engines_cached` + `app_tenant_pool_checked_out`) to `multitenantauth.json` and a
+`TenantPoolConnectionsSustainedHigh` rule to `multitenantauth_alerts.yml`. **Plan correction — manual OTel spans
+DESCOPED:** the brief called for `start_as_current_span` spans in `session.py`/`provision.py`, but the template's
+tracing is AUTO-instrumentation (`observability/tracing.py` + SQLAlchemy/FastAPI instrumentors), so the tenant
+engines (standard SQLAlchemy engines) and provisioning SQL are already traced; manual spans would be off-pattern,
+redundant, re-touch the LOCKED routing files, and open a DSN-in-attribute leak surface for no gain ([[design-spec-stale-verify-docs-against-code]] — the design spec assumed manual spans the codebase doesn't use). Net: NO
+locked-file edits, NO new DSN surface; metric labels are bounded (endpoint host:port, outcome hit/miss — no DSN).
+RED→GREEN `/metrics` series test; dashboard JSON + alert YAML parse; obs-completeness 17/17; framework gate clean.
+Spec obs section to be corrected. Subagent-driven (Sonnet impl; Sonnet task review next).
+(FWK61 SP1 Task 10 → ledger)
+
+#### #0247 · amended · FWK61 SP1 Task 10 — fix wave (Sonnet review: dashboard legend Jinja-collision) · 2026-06-25
+Task 10's review = Needs fixes: the new Grafana panel's `"legendFormat": "cached {{endpoint}}"` lives in a
+`.jinja` file, so Copier/Jinja consumed `{{endpoint}}` at render time (not a Copier var → rendered BLANK), giving
+every cached-engine series the same empty legend in multi-endpoint deployments (valid JSON, silently wrong).
+Controller-fixed (1-line, matches the repo idiom — every other panel uses `"__auto"`, which Grafana auto-derives
+from the `sum by (endpoint)` query). Render-verified: panel-6 legends `['__auto','checked out']`, valid JSON, no
+leftover `{{...}}`. Minor (guard-wrap the in-memory render calls like `render_active_sessions_gauge`) deferred —
+safe in practice (no DB reach). Subagent-driven (Sonnet review; controller fix + render-verify).
+(FWK61 SP1 Task 10 fix → ledger)
+
+#### #0248 · completed · FWK61 SP1 Task 11 (Steps 1–3) — engine-level isolation conformance + full sweep GREEN · 2026-06-25
+Added `test_two_tenants_are_physically_isolated` to `test_tenant_provisioning.py`: provisions acme + globex,
+INSERTs a distinct `items` row into each via `tenant_session` (engine layer, no FastAPI stack), asserts
+cross-absence both directions, drops both DBs — complements Task 9's dep-layer isolation. **Full conformance sweep
+ALL GREEN:** framework lock+obs 22 passed, framework ruff/format/`mypy src` clean; **rendered multitenantauth
+project full suite 371 passed (0 failures)**, rendered ruff/format/mypy clean. Zero regressions — the whole SP1
+routing core renders into a clean, fully-passing project. Next (controller): Phase-2 Layer-2 adversarial security
+review (all-Opus) over the routing/provisioning surface, then SDD whole-branch review + branch finish.
+(FWK61 SP1 Task 11 Steps 1–3 → ledger)
+
+#### #0249 · milestone · FWK61 SP1 Task 11 Step 4 — Layer-2 adversarial security review (corrected stance×focus matrix) · 2026-06-25
+First Layer-2 attempt was a flat surface-partitioned single-stance sweep (operator: "you've lost the stance
+variation"). Re-ran the established stance×focus matrix — 3 baseline + 12 cells over stances
+breakin/harden/disrupt/damage/**leak** × focus areas → Opus triage (promote invariant-touching) →
+default-to-refuted Opus verify → synthesis; all Opus/high, 29 agents/~1.9M tok. The stance variation earned
+out: `leak` + `damage` each caught a confirmed High the single-stance sweep structurally missed. Scorecard:
+`docs/superpowers/eval-scorecards/2026-06-25-fwk61-sp1-layer2-security-matrix.md`. Gate RED — 2 confirmed
+Crit/High (P1 I-CRED, P10 I-IDEMP) + 3 FIX-NOW Medium I-BUDGET (P3/P4/P5); 7 items refuted → Phase-2 preconditions
+for Meridian. Both Highs controller-verified against shipped code.
+
+#### #0250 · completed · FWK61 SP1 Task 11 — Layer-2 fix wave (P1/P10/P3/P4/P5) · 2026-06-25
+Closed all 5 confirmed findings. **P1** (I-CRED, LOCKED `provision.py`): escape `%`→`%%` before alembic
+`set_main_option` so a tenant DSN can't reach a ConfigParser interpolation error; env.py's interpolating getter
+un-escapes so the DSN round-trips intact. **P10** (I-IDEMP): app `migrations/env.py` now imports the control
+models so `_CONTROL_TABLES` is populated and app autogenerate excludes (not DROPs) the 13 control tables.
+**P3/P4** (I-BUDGET): settings floors — `db_pool_safety_factor` `Field(gt=0, le=1)`; pool/overflow knobs
+`ge=1`/`ge=0` (forbid SQLAlchemy's 0/-1 "unbounded" sentinels). **P5** (I-BUDGET, option a): `build_engine`
+gains optional `pool_size`/`max_overflow` (None → baseline byte-identical), control engine passes its knobs so
+the budget term reflects the real pool. 5 DB-free regression tests added, all GREEN; rendered ruff/format/`mypy
+src` clean; framework integrity+copier green (locked `provision.py`/`control/engine.py` re-checksum). **Deviation:**
+the SDD fix-wave implementer subagent stalled mid-stream (API error, zero repo progress) → controller-implemented
+directly per the outage-fallback pattern (fixes fully specified by the scorecard); independent Opus quality review
+of the committed diff is next.
+(FWK61 SP1 Task 11 fix wave → ledger; scorecard committed)
+
+#### #0251 · completed · FWK64 — PI convention v2→v3 adoption (bundled into v0.4.2) · 2026-06-25
+Meridian upgraded to PI v3 / cross-repo v4; the framework's locked AGENTS.md PI block was still pinned at v2 (a
+version skew Meridian renders but cannot edit). Re-vendored `pi-convention.md` from `cdowell-swtr/patterns` @ tag
+`pi/v3` (commit feb84ec) — v3 adds rule 8 (no mutable resume/status pointer in PLAN.md) + slug-based adopter
+registration. Bumped the `PI-convention: v2`→`v3` marker across the framework's own `AGENTS.md`/`PLAN.md`/
+`ACTION_LOG.md` and the template payload (`AGENTS.md.jinja` locked region + `@ pi/v3` tag, `PLAN.md.jinja`,
+`ACTION_LOG.md.jinja`), and updated the `test_render_seeds_agents_md...` assertion. Already-fine, no action:
+cross-repo v4 everywhere; rule-8 clean (own + template PLAN carry no resume pointer); patterns registry already
+slug-keyed. Convention + integrity tests 73 passed (the AGENTS.md FRAMEWORK:BEGIN/END region re-checksums to v3).
+Pending (operator-gated, cross-repo): bump the framework's `implementers.md` row v2→v3 in patterns via a pure
+gh-API PR.
+(FWK64 → ledger)
+
+#### #0252 · completed · FWK61 SP1 Task 11 — fix-wave Opus review APPROVED; M1/M2 test hardening · 2026-06-25
+Independent Opus review of the fix wave (a77965b) = **APPROVED**, 0 Critical/Important; it empirically reproduced
+the P1 leak both ways and confirmed P10's 13 control tables + P5 baseline byte-identity. Closed 2 of 3 Minors
+(test durability): **M1** — the P1 regression test now also asserts the shipped `migrations/env.py` reads the url
+via an INTERPOLATING getter (`get_main_option`/`get_section`, never `raw=True`), guarding the `%%`-escape round-trip
+against a future raw read (the test previously only proved its own `Config` round-trips). **M2** — added a
+baseline-preservation test: `build_engine()` with no kwargs keeps the SQLAlchemy QueuePool defaults (size 5 /
+overflow 10), proving the P5 optional-kwarg threading leaves baseline behavior unchanged. M3 (private
+`pool._max_overflow` read) left as accepted (reviewer: acceptable; no public accessor). Re-render + tests GREEN;
+ruff format clean. Next: final whole-branch Opus review → PR → v0.4.2.
+(FWK61 SP1 fix-wave review + M1/M2 → ledger)
+
+#### #0253 · milestone · FWK61 SP1 + FWK64 — whole-branch review READY-TO-MERGE; cut v0.4.2 · 2026-06-25
+Final whole-branch Opus review of `fwk61-sp1-physical-routing` (e4e8743..f8c96fa, 22 commits) = **READY-TO-MERGE**:
+all 5 Layer-2 confirmed findings closed in the diff; binding constraints hold (no DSN logging — `tenancy/`+`deps.py`
+grep clean; fail-closed; sync engines; I-ISO latent — no route consumes `tenant_db`); cross-task integration
+coherent; FWK64 PI v3 complete (no dangling v2 marker). 0 Critical/Important; 2 cosmetic Minors — fixed the
+`build_engine` baseline docstring (dropped the multitenantauth-specific refs that shipped into every baseline
+project); left the pre-existing unused `provision.py` logger placeholder (locked file, harmless). Release-readiness
+verified locally: framework ruff/format/`mypy src` clean; multitenantauth + baseline renders clean (own
+ruff/format/mypy); integrity+copier 73 passed; `test_release`+`test_smoke` green. Cut v0.4.2 — pyproject
+0.4.1→0.4.2, `DOGFOOD_COMMIT` v0.4.1→v0.4.2, `uv lock` re-resolved. Branch = FWK61 SP1 (physical routing core,
+Layer-2-hardened) + FWK64 (PI v3). Next: push → PR → merge → tag v0.4.2 (release.yml publishes) → patterns
+`implementers.md` v2→v3 gh-API PR.
+(FWK61 SP1 + FWK64 → ledger; v0.4.2 release-cut)
+
+#### #0254 · completed · FWK61 SP1 — fix render-matrix lint (unused import) · 2026-06-25
+PR #84 render-matrix `task ci` failed fast (~18s) at `lint`: `tests/unit/test_sp1_routing_hardening.py` carried an
+unused `from pathlib import Path` (left over when the P10 path expr was simplified to `_project_root()`, which
+already returns a Path). Local pre-flight ran `ruff check src/demo` (src only); `task ci` runs `ruff check .` over
+`tests/` too — the task-ci coverage-gap class. Removed the import; re-render `ruff check .` + `mypy` clean.
+(FWK61 SP1 CI lint fix → ledger)

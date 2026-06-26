@@ -8,6 +8,7 @@ from {{ package_name }}.config.settings import get_settings
 from {{ package_name }}.db.base import Base
 from {{ package_name }}.db.control.base import ControlBase
 from {{ package_name }}.db.control.engine import (
+    control_engine,
     control_session_factory,
     dispose_control_engine,
 )
@@ -44,3 +45,20 @@ def test_control_session_opens_against_control_url(pg_url: str, monkeypatch):
 def test_control_base_metadata_distinct_from_base_metadata():
     """ControlBase.metadata must be a DISTINCT object from Base.metadata."""
     assert ControlBase.metadata is not Base.metadata
+
+
+def test_control_engine_pool_reflects_configured_knobs(monkeypatch):
+    """Layer-2 P5 (I-BUDGET): the real control engine pool must honor control_pool_size /
+    control_max_overflow so the connection budget (engine_registry.required_connections)
+    matches the engine's actual footprint instead of a phantom estimate. The engine is built
+    lazily, so pool.size()/_max_overflow are readable without connecting."""
+    monkeypatch.setenv(
+        "APP_CONTROL_DATABASE_URL", "postgresql+psycopg://app:app@localhost:5432/app"
+    )
+    monkeypatch.setenv("APP_CONTROL_POOL_SIZE", "7")
+    monkeypatch.setenv("APP_CONTROL_MAX_OVERFLOW", "2")
+    get_settings.cache_clear()
+    engine = control_engine()
+    assert engine.pool.size() == 7
+    assert engine.pool._max_overflow == 2
+    get_settings.cache_clear()

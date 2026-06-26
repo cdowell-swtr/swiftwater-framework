@@ -1,0 +1,88 @@
+"""Unit tests for the tenant DSN resolver seam + DSN cache (SP1). No Postgres needed."""
+
+import pytest
+from {{ package_name }}.multitenantauth.tenancy import session as S
+
+
+@pytest.fixture(autouse=True)
+def _clean():
+    S.invalidate_dsn_cache()
+    S.register_tenant_dsn_resolver(None)
+    yield
+    S.invalidate_dsn_cache()
+    S.register_tenant_dsn_resolver(None)
+
+
+def test_default_resolver_reads_control_row(monkeypatch):
+    class _T:  # stand-in tenant row
+        dsn = "postgresql+psycopg://u:p@h/t_abc"
+
+    monkeypatch.setattr(
+        S, "_get_tenant", lambda cs, tid: _T() if tid == "abc" else None
+    )
+    assert S._resolve_dsn("abc", object()) == "postgresql+psycopg://u:p@h/t_abc"
+
+
+def test_unknown_tenant_raises_lookup(monkeypatch):
+    monkeypatch.setattr(S, "_get_tenant", lambda cs, tid: None)
+    with pytest.raises(LookupError):
+        S._resolve_dsn("nope", object())
+
+
+def test_registered_resolver_overrides_default():
+    S.register_tenant_dsn_resolver(
+        lambda tid, *, control_session: f"postgresql+psycopg://x/{tid}"
+    )
+    assert S._resolve_dsn("abc", object()) == "postgresql+psycopg://x/abc"
+
+
+def test_resolver_returning_non_str_denies():
+    S.register_tenant_dsn_resolver(lambda tid, *, control_session: 123)  # type: ignore
+    with pytest.raises(LookupError):
+        S._resolve_dsn("abc", object())
+
+
+def test_resolver_raising_denies():
+    def boom(tid, *, control_session):
+        raise RuntimeError("x")
+
+    S.register_tenant_dsn_resolver(boom)
+    with pytest.raises(LookupError):
+        S._resolve_dsn("abc", object())
+
+
+def test_dsn_cache_hit_skips_resolver(monkeypatch):
+    calls = []
+    S.register_tenant_dsn_resolver(
+        lambda tid, *, control_session: calls.append(1) or "postgresql+psycopg://x/y"
+    )
+    S._resolve_dsn("abc", object())
+    S._resolve_dsn("abc", object())
+    assert len(calls) == 1  # second call served from cache
+
+
+def test_resolver_exception_never_logs_or_chains_the_dsn(caplog):
+    import logging
+
+    secret_dsn = "postgresql+psycopg://user:SUPERSECRET@db/tenant_x"
+
+    def leaky(tid, *, control_session):
+        raise RuntimeError(f"connect failed for {secret_dsn}")
+
+    S.register_tenant_dsn_resolver(leaky)
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(LookupError) as ei:
+            S._resolve_dsn("abc", object())
+    # the credential must not appear in any log record...
+    assert all("SUPERSECRET" not in r.getMessage() for r in caplog.records)
+    assert "SUPERSECRET" not in caplog.text
+    # ...nor be carried up via the exception cause chain
+    assert ei.value.__cause__ is None
+    # but the exception TYPE is preserved for debugging
+    assert any("RuntimeError" in r.getMessage() for r in caplog.records)
+
+
+def test_resolver_returning_empty_string_denies():
+    S.register_tenant_dsn_resolver(lambda tid, *, control_session: "")
+    with pytest.raises(LookupError):
+        S._resolve_dsn("abc", object())

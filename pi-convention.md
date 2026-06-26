@@ -1,9 +1,9 @@
-<!-- vendored from cdowell-swtr/patterns pi-convention-v2.md @ 2c88543bd117f163802d1f747ce05bb4b4bf9779 (main HEAD, PI v2) on 2026-06-13; re-vendor when a later pi/v tag supersedes the hotfix -->
+<!-- vendored from cdowell-swtr/patterns pi-convention-v3.md @ feb84ec0082b7ea48ce2657881942779244b1c04 (tag pi/v3) on 2026-06-25; re-vendor when a later pi/v tag supersedes -->
 
-<!-- PI-convention: v2 -->
+<!-- PI-convention: v3 -->
 # Planning Instrument (PI) — Convention
 
-*Authoritative definition. Version: `PI-convention: v2`. Portable — depends on nothing but git + markdown. **v2** changed the task-ID scheme from a fixed `T` to a per-repo prefix; v1→v2 migration is **advisory** — see the adoption runbook's migration section.*
+*Authoritative definition. Version: `PI-convention: v3`. Portable — depends on nothing but git + markdown. **v2** changed the task-ID scheme from a fixed `T` to a per-repo prefix. **v3** (a) forbids a free-text resume/status pointer in `PLAN.md` — it can't be ID-keyed, append-only, or single-writer-safe, so it drifts and breaks under federation (rule 8); and (b) registers adopters by **GitHub slug `<owner>/<repo>`**, not a machine-local path. v1→v2 and v2→v3 migrations are **advisory** — see the adoption runbook's migration section.*
 
 ## Purpose
 Give a repo a durable, self-governing record of *what was done and what's next*, tuned for coding agents but useful to humans. **Bound the always-loaded context**: keep "what's next / what we did / why" out of the always-loaded agent file, leaving only a lean pointer. PI records the **pragmatic execution trail** — not strategic decision rationale (that belongs in a separate decision store, if one exists).
@@ -11,7 +11,7 @@ Give a repo a durable, self-governing record of *what was done and what's next*,
 ## The four artifacts
 | File | Holds | Read temperature |
 |---|---|---|
-| `PLAN.md` (root) | Current state only: `Next` (ordered, with deps) + recent `Done` | hot — every session, first |
+| `PLAN.md` (root) | Current state only: `Next` (ordered, with deps) + recent `Done`. **No resume/status pointer** (rule 8). | hot — every session, first |
 | `ACTION_LOG.md` (root) | Append-only event narrative: completions + deviations + operational reasons | warm — on demand |
 | `_archive/ARCHIVED_PLAN.md` | Full preserved content of items that left the plan | cold |
 | `_archive/ARCHIVED_ACTION_LOG.md` | Overflow for old log sections (stub until needed) | cold |
@@ -24,6 +24,7 @@ Give a repo a durable, self-governing record of *what was done and what's next*,
 5. **Closed event taxonomy:** `completed · inserted · reordered · dep-found · amended · superseded · discarded · milestone · note`.
 6. **PLAN holds the plan, not the process that produced it.** Planning-process outputs (brainstorms, specs, design docs) stay separate documents the tasks *reference*; never mirror their in-transit state into PLAN. When a process concludes, its full task breakdown enters PLAN (every concluded task, not a hand-picked subset), re-keyed to PLAN's own IDs.
 7. **PLAN may point *out* for context, never for evidence.** A task may carry a relative link to its source (spec/brainstorm/design doc) for context and detail — that does not make PLAN an epistemic store.
+8. **No mutable resume/status pointer in PLAN (anti-pattern).** Do not add a free-text "resume" / "you-are-here" / "status" line to `PLAN.md`. Orientation at session start is `Next` (ordered, with deps) + recent `Done` + the `ACTION_LOG` tail; under the **Federation convention**, the live locus across parallel instances is the claim-ref snapshot (`git ls-remote origin 'refs/federation/claims/*'`). A free-text pointer is the one shape in PI with **no task ID, not append-only, and not single-writer-safe** — so it drifts (goes stale) and collides under parallel writers, and in practice accretes into narrative (the observed failure: a `RESUME HERE` line that grew into a multi-paragraph status blob, duplicating LOG content in PLAN). "Where we are" is the LOG tail; "what's next" is `Next`; "what's active across instances" is the claim refs. Nothing belongs on a mutable singleton line.
 
 ## File formats (plain, parseable markdown)
 ```
@@ -51,24 +52,25 @@ Before finishing any session that touched the instrument, confirm:
 - Referential integrity: every `deps:`, `superseded-by`, `log:#` resolves to a real ID.
 - Every event `type` is in the closed taxonomy.
 - LOG is append-only — never edit or truncate existing entries.
+- **PLAN carries no resume/status pointer** (rule 8) — orientation is `Next` + recent `Done` + the LOG tail (+ claim refs under federation).
 
 ## Adopt PI in a repo (from zero)
 1. **Choose your prefix** — a short uppercase tag (e.g. `PAT`, `FWK`, `MRDN`) — and record it in the implementer registry. Every task ID in this repo is `<PFX>N`.
 2. Create `PLAN.md` + `ACTION_LOG.md` at the repo root, and `_archive/ARCHIVED_PLAN.md` + `_archive/ARCHIVED_ACTION_LOG.md` — headers only, no items.
-3. Add the lean pointer to `AGENTS.md` (block below), including the `PI-convention: v2` marker. **Then make your agent autoload it:** Claude Code autoloads `CLAUDE.md`, *not* `AGENTS.md` — so in a CC repo add `@AGENTS.md` to `CLAUDE.md` (create it if absent). Without this, the pointer never reaches the agent at session start and "read `PLAN.md` first" never fires. (`AGENTS.md` stays canonical for portability; `CLAUDE.md` just imports it.)
+3. Add the lean pointer to `AGENTS.md` (block below), including the `PI-convention: v3` marker. **Then make your agent autoload it:** Claude Code autoloads `CLAUDE.md`, *not* `AGENTS.md` — so in a CC repo add `@AGENTS.md` to `CLAUDE.md` (create it if absent). Without this, the pointer never reaches the agent at session start and "read `PLAN.md` first" never fires. (`AGENTS.md` stays canonical for portability; `CLAUDE.md` just imports it.)
 4. Seed item zero: log `#0001 · note · <date>` "adopted PI convention"; put the next real task (`<PFX>1`) in `PLAN.md` `Next`.
-5. **Register yourself** — append a row to `_docs/planning-instrument/implementers.md` in the PI home repo (`patterns`): `<repo> | <local path, use ~> | v2 | <PFX> | <date>`.
+5. **Register yourself** — append a row to `_docs/planning-instrument/implementers.md` in the PI home repo (`patterns`): `<owner>/<repo> | v3 | <PFX> | <date>` — the **GitHub slug** (e.g. `cdowell-swtr/your-repo`), the portable identity, **not** a machine-local path.
 
 To find the registry, every adopter, or check synced versions — the `PI-convention:` marker is in the convention doc and in every adopter's `AGENTS.md`:
 ```
 grep -rIn "PI-convention:" <your projects root>
 ```
 
-Migrating an existing v1 (`T`-prefixed) instrument → see the adoption runbook's **advisory migration** section.
+Migrating an existing v1 (`T`-prefixed) or v2 instrument → see the adoption runbook's **advisory migration** section.
 
 ### AGENTS.md pointer (copy this block)
 ```
-<!-- PI-convention: v2 -->
+<!-- PI-convention: v3 -->
 ## Planning Instrument
 Read `PLAN.md` first. Maintain `PLAN.md` + `ACTION_LOG.md` at task grain as you work
 (tick tasks; append a log entry on every completion and every deviation), per `pi-convention.md`.

@@ -19,3 +19,13 @@ groups:
       severity: warning
     annotations:
       summary: Over 20% of authorization checks are being denied (check role configuration and for permission probing)
+  - alert: TenantPoolConnectionsSustainedHigh
+    # Tenant pool connections near saturation: sustained high checkout rate suggests the
+    # per-tenant pool_size / max_overflow settings need tuning, or max_cached_engines should be
+    # reduced. Tune the threshold (default 10) to your configured pool ceiling.
+    expr: app_tenant_pool_checked_out > 10
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Tenant DB pool has sustained high checked-out connections (tune pool_size/max_overflow or reduce max_cached_engines)
