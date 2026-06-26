@@ -18,7 +18,14 @@ def control_engine() -> Engine:
     if _control_engine is None:
         with _control_lock:
             if _control_engine is None:
-                _control_engine = build_engine(get_settings().control_database_url)
+                # Pass the control pool knobs so required_connections' control term matches the
+                # real engine pool (Layer-2 P5, I-BUDGET) — not a phantom estimate.
+                _settings = get_settings()
+                _control_engine = build_engine(
+                    _settings.control_database_url,
+                    pool_size=_settings.control_pool_size,
+                    max_overflow=_settings.control_max_overflow,
+                )
     return _control_engine
 
 

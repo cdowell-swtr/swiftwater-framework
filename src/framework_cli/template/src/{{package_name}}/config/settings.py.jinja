@@ -111,13 +111,19 @@ class Settings(BaseSettings):
     # ── Phase 2 / SP1: physical per-tenant routing (MDN47) ──────────────────────
     # Per-tenant engine pool sizing + the per-endpoint LRU cap, kept small so the
     # control pool + N tenant pools cannot exhaust the shared Postgres max_connections.
-    tenant_pool_size: int = 2
-    tenant_max_overflow: int = 3
+    # Floors (Layer-2 P4, I-BUDGET): forbid the SQLAlchemy "unlimited" sentinels —
+    # pool_size=0 (= no limit) and max_overflow=-1 (= unbounded) would build an infinite
+    # pool behind a passing connection-budget estimate. ge=1 / ge=0 keep required_connections
+    # a true upper bound.
+    tenant_pool_size: int = Field(default=2, ge=1)
+    tenant_max_overflow: int = Field(default=3, ge=0)
     max_cached_engines: int = Field(default=12, ge=1)
-    control_pool_size: int = 5
-    control_max_overflow: int = 10
+    control_pool_size: int = Field(default=5, ge=1)
+    control_max_overflow: int = Field(default=10, ge=0)
     # Fraction of a server's live max_connections the app is allowed to plan for (fail-closed budget).
-    db_pool_safety_factor: float = 0.8
+    # Bound to (0, 1] (Layer-2 P3, I-BUDGET): a value > 1 would inflate the budget past the live
+    # ceiling so BudgetExceeded never fires — the budget must not be defeasible by a config value.
+    db_pool_safety_factor: float = Field(default=0.8, gt=0.0, le=1.0)
     # DSN cache TTL: a backstop only — the per-tenant DSN is immutable in SP1.
     tenant_dsn_cache_ttl_seconds: int = 300
     # Physical DB name = "<prefix>_<tenant_id>" on the app instance (co-located default).

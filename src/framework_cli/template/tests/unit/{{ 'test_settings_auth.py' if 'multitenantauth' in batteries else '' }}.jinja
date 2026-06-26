@@ -216,3 +216,29 @@ def test_max_cached_engines_floor_rejects_zero() -> None:
 
     with pytest.raises(ValidationError):
         Settings(max_cached_engines=0)
+
+
+def test_db_pool_safety_factor_bounded_to_unit_interval() -> None:
+    """Layer-2 P3 (I-BUDGET): a safety factor > 1 inflates the budget past the live ceiling so
+    BudgetExceeded never fires; <= 0 refuses every endpoint. Bound to (0, 1] — the budget must
+    not be defeasible by a config value."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Settings(db_pool_safety_factor=1.5)
+    with pytest.raises(ValidationError):
+        Settings(db_pool_safety_factor=0.0)
+
+
+def test_pool_and_overflow_knobs_reject_unlimited_sentinels() -> None:
+    """Layer-2 P4 (I-BUDGET): SQLAlchemy treats pool_size=0 as unbounded and max_overflow=-1 as
+    unlimited — either builds an infinite pool behind a passing budget estimate. ge=1 / ge=0
+    floors keep required_connections a true upper bound."""
+    from pydantic import ValidationError
+
+    for field in ("tenant_pool_size", "control_pool_size"):
+        with pytest.raises(ValidationError):
+            Settings(**{field: 0})
+    for field in ("tenant_max_overflow", "control_max_overflow"):
+        with pytest.raises(ValidationError):
+            Settings(**{field: -1})

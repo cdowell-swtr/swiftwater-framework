@@ -53,7 +53,11 @@ def migrate_tenant(dsn: str) -> None:
     """Run the APP migration chain to head against a tenant DSN (Python API; env.py honors the
     pre-set sqlalchemy.url, so this targets the tenant DB, not the app DB)."""
     cfg = Config(str(_project_root() / "alembic.ini"))
-    cfg.set_main_option("sqlalchemy.url", dsn)
+    # Escape % so stdlib ConfigParser BasicInterpolation cannot raise a ValueError whose
+    # message embeds the plaintext DSN + credentials (Layer-2 P1, I-CRED). env.py reads the
+    # url via the interpolating get_main_option / get_section, which un-escape %% -> % — so
+    # the DSN round-trips intact while the credential can never reach an interpolation error.
+    cfg.set_main_option("sqlalchemy.url", dsn.replace("%", "%%"))
     command.upgrade(cfg, "head")
 
 

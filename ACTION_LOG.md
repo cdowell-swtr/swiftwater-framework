@@ -3395,3 +3395,28 @@ project full suite 371 passed (0 failures)**, rendered ruff/format/mypy clean. Z
 routing core renders into a clean, fully-passing project. Next (controller): Phase-2 Layer-2 adversarial security
 review (all-Opus) over the routing/provisioning surface, then SDD whole-branch review + branch finish.
 (FWK61 SP1 Task 11 Steps 1–3 → ledger)
+
+#### #0249 · milestone · FWK61 SP1 Task 11 Step 4 — Layer-2 adversarial security review (corrected stance×focus matrix) · 2026-06-25
+First Layer-2 attempt was a flat surface-partitioned single-stance sweep (operator: "you've lost the stance
+variation"). Re-ran the established stance×focus matrix — 3 baseline + 12 cells over stances
+breakin/harden/disrupt/damage/**leak** × focus areas → Opus triage (promote invariant-touching) →
+default-to-refuted Opus verify → synthesis; all Opus/high, 29 agents/~1.9M tok. The stance variation earned
+out: `leak` + `damage` each caught a confirmed High the single-stance sweep structurally missed. Scorecard:
+`docs/superpowers/eval-scorecards/2026-06-25-fwk61-sp1-layer2-security-matrix.md`. Gate RED — 2 confirmed
+Crit/High (P1 I-CRED, P10 I-IDEMP) + 3 FIX-NOW Medium I-BUDGET (P3/P4/P5); 7 items refuted → Phase-2 preconditions
+for Meridian. Both Highs controller-verified against shipped code.
+
+#### #0250 · completed · FWK61 SP1 Task 11 — Layer-2 fix wave (P1/P10/P3/P4/P5) · 2026-06-25
+Closed all 5 confirmed findings. **P1** (I-CRED, LOCKED `provision.py`): escape `%`→`%%` before alembic
+`set_main_option` so a tenant DSN can't reach a ConfigParser interpolation error; env.py's interpolating getter
+un-escapes so the DSN round-trips intact. **P10** (I-IDEMP): app `migrations/env.py` now imports the control
+models so `_CONTROL_TABLES` is populated and app autogenerate excludes (not DROPs) the 13 control tables.
+**P3/P4** (I-BUDGET): settings floors — `db_pool_safety_factor` `Field(gt=0, le=1)`; pool/overflow knobs
+`ge=1`/`ge=0` (forbid SQLAlchemy's 0/-1 "unbounded" sentinels). **P5** (I-BUDGET, option a): `build_engine`
+gains optional `pool_size`/`max_overflow` (None → baseline byte-identical), control engine passes its knobs so
+the budget term reflects the real pool. 5 DB-free regression tests added, all GREEN; rendered ruff/format/`mypy
+src` clean; framework integrity+copier green (locked `provision.py`/`control/engine.py` re-checksum). **Deviation:**
+the SDD fix-wave implementer subagent stalled mid-stream (API error, zero repo progress) → controller-implemented
+directly per the outage-fallback pattern (fixes fully specified by the scorecard); independent Opus quality review
+of the committed diff is next.
+(FWK61 SP1 Task 11 fix wave → ledger; scorecard committed)
