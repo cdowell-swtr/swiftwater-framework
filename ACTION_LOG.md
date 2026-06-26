@@ -3328,3 +3328,15 @@ is trivially green (constructs a Config directly; Task 8's per-tenant migrate is
 honestly). Existing migration suites pass on both multitenantauth (7) and baseline (2) renders; framework gate
 clean. Subagent-driven (Sonnet impl; Sonnet task review next — small surgical change).
 (FWK61 SP1 Task 7 → ledger)
+
+#### #0243 · completed · FWK61 SP1 Task 8 — idempotent physical tenant provisioning + post-migrate hook (locked) · 2026-06-25
+Created `multitenantauth/tenancy/provision.py`: `provision_tenant(cs, name, *, slug, dsn=None, run_physical=True)`
+— **idempotent by slug** via `live_slug_tenant_id` (active→no-op return; partial `provisioning` row→resume;
+else→register fresh), then `create_database`+`migrate_tenant` (skipped when `run_physical=False` for BYO-DSN),
+post-migrate `_provision_hook` (runs BEFORE `activate_tenant` — seam for tenant-scoped seeding), activate,
+`invalidate_dsn_cache`. `migrate_tenant` runs the app chain against the tenant DSN via the Alembic Python API
+(relies on Task 7's env.py inject-url). `register_provision_hook` consumer seam. Locked via `classes.py`.
+**5 real-Postgres acceptance tests GREEN** (create→migrate→activate; noop-when-active; resume-from-partial;
+hook-before-activate; skip-physical) using the Task-0 shared conftest fixtures + a module-local `_clean_control`;
+lock guard RED→GREEN; framework gate (358 tests) + ruff/mypy clean. Subagent-driven (Sonnet impl; Opus task review next).
+(FWK61 SP1 Task 8 → ledger)

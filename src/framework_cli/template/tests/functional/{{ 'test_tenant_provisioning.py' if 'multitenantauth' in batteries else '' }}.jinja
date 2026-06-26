@@ -1,0 +1,168 @@
+import pytest
+from sqlalchemy import create_engine, inspect, make_url
+from sqlalchemy.orm import Session
+
+
+@pytest.fixture(autouse=True)
+def _clean_control(truncate_control):  # type: ignore[no-untyped-def]
+    """Truncate control tables after each test so the reused `acme` slug never persists
+    across cases (this module deliberately reuses one slug). Tenant DBs are dropped per-test
+    by each test's own `finally` via the shared `drop_tenant_db` fixture."""
+    yield
+    truncate_control()
+
+
+def test_provision_creates_migrates_and_activates(
+    ctrl_engine, control_db_url, drop_tenant_db, monkeypatch
+):
+    # app DB instance == the testcontainer; tenant DBs are siblings on it.
+    monkeypatch.setenv(
+        "APP_DATABASE_URL", control_db_url
+    )  # same instance; name swapped per tenant
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+
+    with Session(ctrl_engine) as cs:
+        tid = provision_tenant(cs, "Acme", slug="acme")
+        cs.commit()
+    dbname = make_url(default_tenant_dsn(tid)).database
+    try:
+        # the tenant DB exists and carries the APP schema (items), NOT control tables
+        teng = create_engine(default_tenant_dsn(tid))
+        tables = set(inspect(teng).get_table_names())
+        teng.dispose()
+        assert "items" in tables
+        assert "tenant" not in tables  # control tables never in a tenant DB
+        with Session(ctrl_engine) as cs:
+            from {{ package_name }}.db.control import repository as repo
+
+            assert repo.get_tenant(cs, tid).status == "active"
+    finally:
+        drop_tenant_db(dbname)
+
+
+def test_provision_is_noop_when_already_active(
+    ctrl_engine, control_db_url, drop_tenant_db, monkeypatch
+):
+    """Re-running provision for an already-active slug short-circuits to the same id (the
+    `status == "active"` no-op path)."""
+    monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+
+    with Session(ctrl_engine) as cs:
+        tid1 = provision_tenant(cs, "Acme", slug="acme")
+        cs.commit()
+    dbname = make_url(default_tenant_dsn(tid1)).database
+    try:
+        with Session(ctrl_engine) as cs:
+            tid2 = provision_tenant(cs, "Acme", slug="acme")  # already active → no-op
+            cs.commit()
+        assert tid1 == tid2  # same tenant, not a second one
+    finally:
+        drop_tenant_db(dbname)
+
+
+def test_provision_resumes_a_partial_provisioning_row(
+    ctrl_engine, control_db_url, drop_tenant_db, monkeypatch
+):
+    """A crashed first run leaves a 'provisioning' control row with NO physical DB. Re-running
+    by slug must RESUME that row (same id) and finish: create+migrate the DB, flip to active.
+    This exercises the live_slug_tenant_id → resume branch (NOT the active no-op path)."""
+    monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    from {{ package_name }}.db.control import repository as repo
+    from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+    from {{ package_name }}.multitenantauth.tenancy.registry import register_tenant
+
+    # Simulate the crash: a 'provisioning' row, default DSN derived, no physical DB created.
+    with Session(ctrl_engine) as cs:
+        partial = register_tenant(cs, "Acme", slug="acme", status="provisioning")
+        cs.commit()
+        partial_id = partial.id
+    dbname = make_url(default_tenant_dsn(partial_id)).database
+    try:
+        with Session(ctrl_engine) as cs:
+            resumed_id = provision_tenant(cs, "Acme", slug="acme")  # same slug → resume
+            cs.commit()
+        assert resumed_id == partial_id  # resumed the partial, not a new tenant
+        teng = create_engine(default_tenant_dsn(partial_id))
+        assert "items" in set(
+            inspect(teng).get_table_names()
+        )  # physical now created+migrated
+        teng.dispose()
+        with Session(ctrl_engine) as cs:
+            assert repo.get_tenant(cs, partial_id).status == "active"
+    finally:
+        drop_tenant_db(dbname)
+
+
+def test_provision_hook_runs_before_activate(
+    ctrl_engine, control_db_url, drop_tenant_db, monkeypatch
+):
+    monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    from {{ package_name }}.db.control import repository as repo
+    from {{ package_name }}.multitenantauth.tenancy import provision as P
+    from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+
+    seen: dict[str, str] = {}
+
+    def hook(cs, tenant_id, tenant_dsn):
+        seen["id"] = tenant_id
+        seen["status_at_hook"] = repo.get_tenant(cs, tenant_id).status
+
+    P.register_provision_hook(hook)
+    tid = None
+    try:
+        with Session(ctrl_engine) as cs:
+            tid = P.provision_tenant(cs, "Acme", slug="acme")
+            cs.commit()
+        assert seen["id"] == tid
+        assert seen["status_at_hook"] == "provisioning"  # hook runs BEFORE activate
+    finally:
+        P.register_provision_hook(None)
+        if tid is not None:
+            drop_tenant_db(make_url(default_tenant_dsn(tid)).database)
+
+
+def test_provision_skips_physical_when_disabled(
+    ctrl_engine, control_db_url, monkeypatch
+):
+    monkeypatch.setenv("APP_DATABASE_URL", control_db_url)
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "demo_tenant")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    from {{ package_name }}.db.control import repository as repo
+    from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+
+    with Session(ctrl_engine) as cs:
+        tid = provision_tenant(
+            cs,
+            "Acme",
+            slug="acme",
+            dsn="postgresql+psycopg://byo/elsewhere",
+            run_physical=False,
+        )
+        cs.commit()
+        t = repo.get_tenant(cs, tid)
+    assert t.status == "active"
+    assert (
+        t.dsn == "postgresql+psycopg://byo/elsewhere"
+    )  # no DB created locally — nothing to drop
