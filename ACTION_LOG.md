@@ -3445,3 +3445,17 @@ overflow 10), proving the P5 optional-kwarg threading leaves baseline behavior u
 `pool._max_overflow` read) left as accepted (reviewer: acceptable; no public accessor). Re-render + tests GREEN;
 ruff format clean. Next: final whole-branch Opus review → PR → v0.4.2.
 (FWK61 SP1 fix-wave review + M1/M2 → ledger)
+
+#### #0253 · milestone · FWK61 SP1 + FWK64 — whole-branch review READY-TO-MERGE; cut v0.4.2 · 2026-06-25
+Final whole-branch Opus review of `fwk61-sp1-physical-routing` (e4e8743..f8c96fa, 22 commits) = **READY-TO-MERGE**:
+all 5 Layer-2 confirmed findings closed in the diff; binding constraints hold (no DSN logging — `tenancy/`+`deps.py`
+grep clean; fail-closed; sync engines; I-ISO latent — no route consumes `tenant_db`); cross-task integration
+coherent; FWK64 PI v3 complete (no dangling v2 marker). 0 Critical/Important; 2 cosmetic Minors — fixed the
+`build_engine` baseline docstring (dropped the multitenantauth-specific refs that shipped into every baseline
+project); left the pre-existing unused `provision.py` logger placeholder (locked file, harmless). Release-readiness
+verified locally: framework ruff/format/`mypy src` clean; multitenantauth + baseline renders clean (own
+ruff/format/mypy); integrity+copier 73 passed; `test_release`+`test_smoke` green. Cut v0.4.2 — pyproject
+0.4.1→0.4.2, `DOGFOOD_COMMIT` v0.4.1→v0.4.2, `uv lock` re-resolved. Branch = FWK61 SP1 (physical routing core,
+Layer-2-hardened) + FWK64 (PI v3). Next: push → PR → merge → tag v0.4.2 (release.yml publishes) → patterns
+`implementers.md` v2→v3 gh-API PR.
+(FWK61 SP1 + FWK64 → ledger; v0.4.2 release-cut)

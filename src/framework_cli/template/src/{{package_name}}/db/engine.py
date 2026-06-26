@@ -12,9 +12,8 @@ def build_engine(
     """Create a connection-pooled Engine for the given SQLAlchemy URL.
 
     pool_size / max_overflow are optional: when omitted the SQLAlchemy QueuePool defaults
-    apply (baseline behavior, unchanged). The control plane passes its configured knobs so the
-    connection budget (engine_registry.required_connections) reflects the engine's real pool
-    instead of a phantom estimate (Layer-2 P5, I-BUDGET).
+    apply. Callers that plan against a fixed connection budget can pass explicit values so the
+    engine's real pool matches their accounted footprint.
     """
     extra: dict[str, int] = {}
     if pool_size is not None:
