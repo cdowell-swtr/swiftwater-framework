@@ -3433,3 +3433,15 @@ slug-keyed. Convention + integrity tests 73 passed (the AGENTS.md FRAMEWORK:BEGI
 Pending (operator-gated, cross-repo): bump the framework's `implementers.md` row v2→v3 in patterns via a pure
 gh-API PR.
 (FWK64 → ledger)
+
+#### #0252 · completed · FWK61 SP1 Task 11 — fix-wave Opus review APPROVED; M1/M2 test hardening · 2026-06-25
+Independent Opus review of the fix wave (a77965b) = **APPROVED**, 0 Critical/Important; it empirically reproduced
+the P1 leak both ways and confirmed P10's 13 control tables + P5 baseline byte-identity. Closed 2 of 3 Minors
+(test durability): **M1** — the P1 regression test now also asserts the shipped `migrations/env.py` reads the url
+via an INTERPOLATING getter (`get_main_option`/`get_section`, never `raw=True`), guarding the `%%`-escape round-trip
+against a future raw read (the test previously only proved its own `Config` round-trips). **M2** — added a
+baseline-preservation test: `build_engine()` with no kwargs keeps the SQLAlchemy QueuePool defaults (size 5 /
+overflow 10), proving the P5 optional-kwarg threading leaves baseline behavior unchanged. M3 (private
+`pool._max_overflow` read) left as accepted (reviewer: acceptable; no public accessor). Re-render + tests GREEN;
+ruff format clean. Next: final whole-branch Opus review → PR → v0.4.2.
+(FWK61 SP1 fix-wave review + M1/M2 → ledger)

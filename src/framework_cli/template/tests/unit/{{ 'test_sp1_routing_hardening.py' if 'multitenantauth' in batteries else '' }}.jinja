@@ -27,6 +27,12 @@ def test_migrate_tenant_does_not_leak_dsn_via_configparser_interpolation(monkeyp
     migrate_tenant(dsn)  # must not raise ValueError from interpolation
     # the interpolating get_main_option un-escapes %%->% so alembic sees the original DSN
     assert captured["url"] == dsn
+    # Durability guard (fix-wave review M1): the %%-escape round-trips ONLY because the shipped
+    # alembic env.py reads the url via an INTERPOLATING getter (get_main_option / get_section). A
+    # future switch to a raw read would receive the doubled '%%' and mis-route — assert against it.
+    env_src = (provision_mod._project_root() / "migrations" / "env.py").read_text()
+    assert "get_main_option(" in env_src or "get_section(" in env_src
+    assert "raw=True" not in env_src
 
 
 def test_app_alembic_env_registers_control_tables_for_exclusion():
