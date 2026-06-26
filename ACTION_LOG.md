@@ -3494,3 +3494,17 @@ Phase-1 preconditions), **FWK68** (convention-lock presence+floor, parked); tick
 and corrected the **FWK64** cross-repo row's stale "register in implementers.md" prose (PR #13 merged; only the
 `adopted`-flip remains, gated on Meridian's fork-deletion). Next: user reviews the spec → writing-plans.
 (FWK66 spec + PI reconciliation → ledger)
+
+#### #0256 · completed · FWK66 (SP2) — implementation plan written (8 TDD tasks) · 2026-06-25
+Spec approved → wrote the implementation plan `docs/superpowers/plans/2026-06-25-fwk66-sp2-plane-aware-migrate-deploy-rollback.md`.
+**8 TDD tasks:** (1) `active_tenant_dsns` control-repo enumeration [LOCKED re-touch; functional]; (2) `upgrade_all`
+fan-out runner in new locked `tenancy/migrate.py` + BATTERY_LOCKED_SRC registration [unit — ordering/control-fail-fast/
+best-effort/no-DSN-in-report]; (3) real-PG fan-out + isolation + broken-tenant acceptance [never skip-neutral];
+(4) plane-aware entrypoint [render-content]; (5) `db:migrate:all` Taskfile target [render-content]; (6)
+`check_migrations.py` scans both chains [framework-level importlib]; (7) `rollback_guard.py` contract-floor [unit
+decision + functional alembic-walk]; (8) `strategy.sh`→`.jinja` image-only rollback + guard wiring + README, non-battery
+byte-identical [render-content + bash -n]. Grounded in exact code (read provision.py/repository.py/both env.py/control
+engine/integrity classes/Taskfile + the render_project test helper). Each task = real code, no placeholders.
+Execution: subagent-driven, author/verify split, per-task Opus quality, branch-end whole-branch Opus + Layer-2 all-Opus
+stance×focus gate (migration-data-safety cell). Next: execution-choice handoff → build.
+(FWK66 plan → ledger)
