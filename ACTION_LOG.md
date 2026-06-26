@@ -3375,3 +3375,13 @@ locked-file edits, NO new DSN surface; metric labels are bounded (endpoint host:
 RED→GREEN `/metrics` series test; dashboard JSON + alert YAML parse; obs-completeness 17/17; framework gate clean.
 Spec obs section to be corrected. Subagent-driven (Sonnet impl; Sonnet task review next).
 (FWK61 SP1 Task 10 → ledger)
+
+#### #0247 · amended · FWK61 SP1 Task 10 — fix wave (Sonnet review: dashboard legend Jinja-collision) · 2026-06-25
+Task 10's review = Needs fixes: the new Grafana panel's `"legendFormat": "cached {{endpoint}}"` lives in a
+`.jinja` file, so Copier/Jinja consumed `{{endpoint}}` at render time (not a Copier var → rendered BLANK), giving
+every cached-engine series the same empty legend in multi-endpoint deployments (valid JSON, silently wrong).
+Controller-fixed (1-line, matches the repo idiom — every other panel uses `"__auto"`, which Grafana auto-derives
+from the `sum by (endpoint)` query). Render-verified: panel-6 legends `['__auto','checked out']`, valid JSON, no
+leftover `{{...}}`. Minor (guard-wrap the in-memory render calls like `render_active_sessions_gauge`) deferred —
+safe in practice (no DB reach). Subagent-driven (Sonnet review; controller fix + render-verify).
+(FWK61 SP1 Task 10 fix → ledger)

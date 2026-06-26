@@ -68,7 +68,7 @@
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
       "targets": [
-        {"refId": "A", "expr": "sum by (endpoint) (app_tenant_engines_cached)", "legendFormat": "cached {{endpoint}}"},
+        {"refId": "A", "expr": "sum by (endpoint) (app_tenant_engines_cached)", "legendFormat": "__auto"},
         {"refId": "B", "expr": "app_tenant_pool_checked_out", "legendFormat": "checked out"}
       ],
       "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
