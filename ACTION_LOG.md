@@ -3385,3 +3385,13 @@ from the `sum by (endpoint)` query). Render-verified: panel-6 legends `['__auto'
 leftover `{{...}}`. Minor (guard-wrap the in-memory render calls like `render_active_sessions_gauge`) deferred —
 safe in practice (no DB reach). Subagent-driven (Sonnet review; controller fix + render-verify).
 (FWK61 SP1 Task 10 fix → ledger)
+
+#### #0248 · completed · FWK61 SP1 Task 11 (Steps 1–3) — engine-level isolation conformance + full sweep GREEN · 2026-06-25
+Added `test_two_tenants_are_physically_isolated` to `test_tenant_provisioning.py`: provisions acme + globex,
+INSERTs a distinct `items` row into each via `tenant_session` (engine layer, no FastAPI stack), asserts
+cross-absence both directions, drops both DBs — complements Task 9's dep-layer isolation. **Full conformance sweep
+ALL GREEN:** framework lock+obs 22 passed, framework ruff/format/`mypy src` clean; **rendered multitenantauth
+project full suite 371 passed (0 failures)**, rendered ruff/format/mypy clean. Zero regressions — the whole SP1
+routing core renders into a clean, fully-passing project. Next (controller): Phase-2 Layer-2 adversarial security
+review (all-Opus) over the routing/provisioning surface, then SDD whole-branch review + branch finish.
+(FWK61 SP1 Task 11 Steps 1–3 → ledger)
