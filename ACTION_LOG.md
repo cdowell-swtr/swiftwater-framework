@@ -3589,3 +3589,15 @@ tenants empty, "control" in report_failed, message not leaked). Re-verified: 6/6
 clean. Formal re-review folded into the branch-end whole-branch Opus pass (fix = the reviewer's exact prescription).
 1 optional Minor (cast vs `# type: ignore[union-attr]`) → final.
 (FWK66 Task 2 review + enumeration hardening → committed)
+
+#### #0263 · completed · FWK66 (SP2) Task 3 — real-PG fan-out + isolation + broken-tenant acceptance · 2026-06-26
+Test-only task (exercises Tasks 1-2). Haiku authored `tests/functional/test_migrate_fanout_acceptance.py.jinja`.
+Controller caught a 2nd plan defect pre-dispatch: the brief imported `reset_tenant_engines` from `tenancy.engine_registry`
+(ImportError — it lives in `tenancy.session`, line 118; verified against SP1's test_tenant_provisioning) → instructed the
+session import. Verified (never-skip-neutral real-PG tier, testcontainers): 2/2 — fan-out reaches control+default+both
+tenant DBs at head with isolation proven both directions (A's `items` write invisible to B); broken/ghost active tenant
+flagged != "ok" in the result map + report_failed while the real tenant migrates. ruff check+format clean (fixed 4
+line-wrap nits vs. plan block). Review folded into branch-end whole-branch Opus (test-only, exercises reviewed code).
+Roll-up Minor (pre-existing, NOT SP2): alembic emits `No path_separator found in configuration` DeprecationWarning —
+consider adding `path_separator = os` to the alembic.ini / alembic_control.ini templates (hygiene follow-up).
+(FWK66 Task 3 → real-PG acceptance verified + committed)
