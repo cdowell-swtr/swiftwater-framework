@@ -7,12 +7,17 @@ set -e
 # multi-host rolling deploy sets APP_RUN_MIGRATIONS=false on the app hosts and migrates ONCE
 # before the roll (see infra/deploy/README.md), so N containers don't race the same migration.
 if [ "${APP_RUN_MIGRATIONS:-true}" = "true" ]; then
-  alembic upgrade head
 {%- if "multitenantauth" in batteries %}
-  alembic -c alembic_control.ini upgrade head
-  # Seed the control vocabulary (permissions/roles) BEFORE the consumer seed, so any
-  # consumer data that depends on the authz vocabulary always finds it present.
+  # Plane-aware migrate: the control plane FIRST, then the default business DB, then a fan-out
+  # over every active tenant DB. A single `alembic upgrade head` would migrate only ONE plane and
+  # silently leave the tenant DBs stale. Multi-host roll: set APP_RUN_MIGRATIONS=false on the app
+  # hosts and run `task db:migrate:all` once before the roll (see infra/deploy/README.md).
+  python -m {{ package_name }}.multitenantauth.tenancy.migrate
+  # Seed the control vocabulary (permissions/roles) BEFORE the consumer seed, so any consumer
+  # data that depends on the authz vocabulary always finds it present.
   python -m {{ package_name }}.multitenantauth.authz.seed
+{%- else %}
+  alembic upgrade head
 {%- endif %}
   python scripts/seed.py
 fi

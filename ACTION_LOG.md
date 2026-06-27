@@ -3601,3 +3601,18 @@ line-wrap nits vs. plan block). Review folded into branch-end whole-branch Opus 
 Roll-up Minor (pre-existing, NOT SP2): alembic emits `No path_separator found in configuration` DeprecationWarning —
 consider adding `path_separator = os` to the alembic.ini / alembic_control.ini templates (hygiene follow-up).
 (FWK66 Task 3 → real-PG acceptance verified + committed)
+
+#### #0264 · completed · FWK66 (SP2) Task 4 — plane-aware container entrypoint · 2026-06-26
+Haiku authored the entrypoint.sh.jinja restructure: under the battery, boot runs the plane-aware fan-out
+(`python -m <pkg>.multitenantauth.tenancy.migrate`, Task 2) + authz seed INSTEAD of the two bare alembic
+chains; non-battery keeps `alembic upgrade head`. entrypoint.sh is LOCKED_TRACKED, so the FWK39 byte-drift risk
+applies — controller byte-verified the non-battery render is IDENTICAL to a pre-edit golden (trim markers
+`{%- if/else/endif %}` correct), battery render bash -n + EOF-clean (single trailing newline, no trailing ws).
+Deviations (controller, documented): (a) the pre-existing `test_render_multitenantauth_entrypoint_runs_control_chain_and_seed`
+asserted the OLD two-alembic-chain behavior → REWROTE it to the new plane-aware behavior + ordering
+(migrate→authz→consumer), renamed `..._runs_planeaware_fanout_then_seeds`; can't assert "alembic upgrade head"
+absence (it's in an explanatory comment) so assert control-chain-command absence instead. (b) Consolidated the
+2 plan-specified new tests into the rewritten pre-existing pair (DRY — they were strict subsets); added a
+`tenancy.migrate not in entry` assert to the non-battery test. 4 entrypoint tests green; ruff check+format clean.
+Review folded into branch-end whole-branch Opus.
+(FWK66 Task 4 → verified + committed)
