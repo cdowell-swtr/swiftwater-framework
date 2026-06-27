@@ -3731,3 +3731,15 @@ disposition: **file, don't fix here** — not merge-blocking, unrelated to SP2, 
 crown-jewels security review + release notes clean. Filed as PLAN `Next` **FWK70** (test-only → no release; fix verified with that
 one test alone, never the 47-min gate). Did NOT re-run the gate — 1174/1175 with the one fail provably orthogonal is a clean baseline.
 (FWK66 branch-end gate → FWK70 filed; Layer-2 all-Opus security pass launched in background)
+
+#### #0274 · recorded · FWK71 filed — review-system expansion candidates (idea-stage, low priority) · 2026-06-27
+Per operator note, recorded two idea-stage candidate-expansion docs the operator left under
+`src/framework_cli/review/agents/` (currently **untracked** working docs): `_proposed-agents.md` (~90 candidate reviewers
+beyond the ~25 shipped, bucketed by cadence) + `_proposed-stances.md` (security-panel stance taxonomy beyond the 5 baseline
+`break-in/harden/destroy/disrupt/leak`). Operator clarified these are **"not even backlog — potential future expansion
+services"** and wants only a **stub, not a priority**. Filed as PLAN `Next` **FWK71** (recording only; if picked up → own
+brainstorm, prompt-fit triage, Gate-vs-advisory + eval calibration; related FWK55 + the reviewer-tuning arc). Deliberately
+did NOT incorporate the richer stance catalog (`cross-plane`/`race`/`irreversibility`/`revocation-failure`) into the running
+FWK66 Layer-2 gate — operator confirmed idea-stage, and the launched pass already covers the plan-required migration-data-safety
+cell; mid-gate taxonomy swap would be scope creep. Left the `_proposed-*` files untracked (operator's working docs).
+(operator note → FWK71 stub added; running Layer-2 pass left undisturbed)
