@@ -3551,3 +3551,15 @@ format nit vs. the plan's block: `add_tenant(...)` args exploded one-per-line by
 (no new lock registration); the locked-file completeness walk is unaffected. Per-task independent review
 (Sonnet spec / Opus quality) DEFERRED to quota-return / branch-end whole-branch Opus pass.
 (FWK66 Task 1 → verified + committed)
+
+#### #0260 · note · adopt $DEV_ROOT projects-root convention (forward-only) · 2026-06-26
+Operator decision (option A) after the $DEV_ROOT mutation revert (#0258): adopt `$DEV_ROOT` (exported
+in shell rc = the projects root, `/home/chris/Claude Code/Projects` on this box) as the convention for
+all LOAD-BEARING paths — runbook commands, scratch scripts, fixture/`cd` paths, sibling-repo refs that
+actually execute — so the projects dir can be relocated later and to dodge the space-in-`Claude Code`
+quoting hazard. Documented in CLAUDE.md operating-environment. FORWARD-ONLY: historical/prose path
+references (frozen ACTION_LOG entries, completed plans, PI-registry rows) stay literal — NOT rewritten
+(the over-eager agent's error was rewriting history; here we keep the good half). Audit confirmed there
+are no active load-bearing absolute paths in-repo today — the active FWK66 plan + all scripts/hooks
+already use repo-relative paths.
+(adopt $DEV_ROOT convention → CLAUDE.md)
