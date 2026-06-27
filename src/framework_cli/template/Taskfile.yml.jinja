@@ -161,6 +161,13 @@ tasks:
     desc: Load seed data (idempotent — skips if data already exists).
     cmds:
       - uv run python scripts/seed.py
+{%- if "multitenantauth" in batteries %}
+
+  db:migrate:all:
+    desc: Plane-aware migration fan-out — the control plane, the default DB, then every active tenant DB. Run this ONCE before a multi-host roll (with APP_RUN_MIGRATIONS=false on the app hosts); see infra/deploy/README.md.
+    cmds:
+      - uv run python -m {{ package_name }}.multitenantauth.tenancy.migrate
+{%- endif %}
 {% if "workers" in batteries %}
   worker:
     desc: Run a Celery worker locally (the dev compose runs one already in `task dev`).

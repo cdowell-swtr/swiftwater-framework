@@ -3616,3 +3616,11 @@ absence (it's in an explanatory comment) so assert control-chain-command absence
 `tenancy.migrate not in entry` assert to the non-battery test. 4 entrypoint tests green; ruff check+format clean.
 Review folded into branch-end whole-branch Opus.
 (FWK66 Task 4 → verified + committed)
+
+#### #0265 · completed · FWK66 (SP2) Task 5 — db:migrate:all Taskfile target · 2026-06-26
+Haiku authored the battery-gated `db:migrate:all` target (runs the plane-aware fan-out, Task 2 — the multi-host
+pre-roll handle) after `db:seed:`, + 2 render-content tests. Taskfile.yml is LOCKED_TRACKED → controller
+byte-verified the non-battery render is IDENTICAL to a pre-edit golden (trim markers `{%- if/endif %}` correct);
+battery render YAML-valid (yaml.safe_load) with both `db:migrate:all` and the unchanged bare `db:migrate` present.
+2 render-content tests green; ruff check+format clean. Review→branch-end whole-branch Opus.
+(FWK66 Task 5 → verified + committed)

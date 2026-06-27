@@ -4415,3 +4415,20 @@ def test_render_without_multitenantauth_entrypoint_has_no_control_chain_or_seed(
     assert "alembic_control.ini" not in entry
     assert "tenancy.migrate" not in entry
     assert "multitenantauth.authz.seed" not in entry
+
+
+def test_taskfile_db_migrate_all_under_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    text = (dest / "Taskfile.yml").read_text()
+    assert "db:migrate:all:" in text
+    assert "python -m demo.multitenantauth.tenancy.migrate" in text
+    assert "uv run alembic upgrade head" in text  # bare db:migrate still present
+
+
+def test_taskfile_no_db_migrate_all_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    text = (dest / "Taskfile.yml").read_text()
+    assert "db:migrate:all:" not in text
+    assert "db:migrate:" in text  # the single-DB target is unchanged
