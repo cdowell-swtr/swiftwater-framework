@@ -3743,3 +3743,12 @@ did NOT incorporate the richer stance catalog (`cross-plane`/`race`/`irreversibi
 FWK66 Layer-2 gate — operator confirmed idea-stage, and the launched pass already covers the plan-required migration-data-safety
 cell; mid-gate taxonomy swap would be scope creep. Left the `_proposed-*` files untracked (operator's working docs).
 (operator note → FWK71 stub added; running Layer-2 pass left undisturbed)
+
+#### #0275 · completed · FWK71 — commit the two `_proposed-*` review-expansion docs for future reference · 2026-06-27
+Per operator follow-up, committed the two idea-stage catalogs into the repo (were untracked working docs):
+`src/framework_cli/review/agents/_proposed-agents.md` + `_proposed-stances.md`. Confirmed safe to track: the registry is
+an explicit list (not a glob), nothing enumerates `agents/*.md` (`baselines.py` iterates scorecards, `decisions.py` globs a
+decisions dir, `audit/brief.py` only iterates subdirs via `is_dir()`), the `_proposed-` prefix keeps them out of discovery,
+and the full branch-end gate already ran green with both present on disk — so tracking them is inert. Updated the FWK71 row
+(untracked → tracked for future reference).
+(operator follow-up → docs tracked)
