@@ -29,16 +29,29 @@ def _has_marker(path: Path) -> bool:
 
 
 def _app_contract_in_range(target_rev: str) -> list[str]:
-    """Contract-marked app revisions strictly newer than target_rev up to head. Fail-closed:
-    if the range can't be resolved, treat as unsafe (caller refuses)."""
+    """Contract-marked app revisions an image-only rollback to ``target_rev`` would CROSS — i.e. the
+    revisions a real ``alembic downgrade <target_rev>`` unapplies: ancestors of the current head(s)
+    minus the ancestors of (and including) ``target_rev``. This downgrade-set is correct under a MERGE
+    topology, where a contract on a merged side-branch is crossed by the rollback yet does NOT lie on
+    the linear ``walk_revisions(target, "heads")`` path — that walk silently missed such a contract and
+    the floor failed OPEN (FWK66 SP2 Layer-2 P15). Fail-closed: an unknown/ambiguous ``target_rev``
+    raises (e.g. ResolutionError), so the caller refuses."""
     script = ScriptDirectory.from_config(Config("alembic.ini"))
-    offenders: list[str] = []
-    for rev in script.walk_revisions(target_rev, "heads"):
-        if rev.revision == target_rev:
-            continue  # exclusive lower bound — the target itself is where we roll back TO
-        if _has_marker(Path(rev.path)):
-            offenders.append(Path(rev.path).name)
-    return offenders
+    head_ancestors = {
+        rev.revision: rev for rev in script.iterate_revisions("heads", "base")
+    }
+    target_ancestors = {
+        rev.revision for rev in script.iterate_revisions(target_rev, "base")
+    }
+    target_ancestors.add(
+        script.get_revision(target_rev).revision
+    )  # the rev we land ON, not cross
+    crossed = set(head_ancestors) - target_ancestors
+    return [
+        Path(head_ancestors[rid].path).name
+        for rid in sorted(crossed)
+        if _has_marker(Path(head_ancestors[rid].path))
+    ]
 
 
 def _control_contract_any() -> list[str]:

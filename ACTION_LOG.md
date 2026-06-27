@@ -3752,3 +3752,33 @@ decisions dir, `audit/brief.py` only iterates subdirs via `is_dir()`), the `_pro
 and the full branch-end gate already ran green with both present on disk — so tracking them is inert. Updated the FWK71 row
 (untracked → tracked for future reference).
 (operator follow-up → docs tracked)
+
+#### #0276 · completed · FWK66 (SP2) Phase-2 Layer-2 all-Opus security matrix PASSED + P15 fail-open fixed in-branch · 2026-06-27
+Ran the Phase-2 Layer-2 adversarial stance×focus security matrix (all-Opus `claude-opus-4-8`, effort high) on the SP2
+migrate/deploy/rollback surface — clean `--with multitenantauth` render at HEAD `2f36159`. 34 agents: 3 baseline producers →
+12 stance×focus cells (`operator/chaos/dataloss` × `F-ISO/F-CRED/F-ORDER/F-ROLLBACK`, incl. the migration-data-safety cell) →
+triage (18 raw → 17 promoted) → default-to-refuted verify → synthesis. **GATE GREEN — 0 confirmed Critical/High.** All four
+crown-jewel invariants re-verified on the shipped surface (I-ISO fresh per-DSN NullPool engine per call; I-CRED class-name-only
+sinks + SP1 `%%`-escape intact; I-FAILFAST control-first abort reproduced; I-ROLLBACK image-only, fail-closed, full-rev).
+**The matrix earned its keep BELOW the Crit/High line** — reading every confirmed disposition (not just the gated band)
+surfaced **P15**: a confirmed Medium FIX-NOW *fail-OPEN* of the I-ROLLBACK floor. `rollback_guard._app_contract_in_range`
+used `script.walk_revisions(target,"heads")`, which on a MERGE topology omits a marked `# deploy: contract` on a merged
+side-branch → an image-only rollback to a merge parent silently crosses it (reachable after the standard `alembic merge heads`).
+Both the precomputed Crit/High count (P15 is Medium) and the degraded synthesis narrative ("fix-now: none") missed it; caught
+by reading the per-agent verify verdicts. **FIXED in-branch** (advisor-confirmed: strict tightening, unlocked code, this branch):
+replaced the walk with the true downgrade set **ancestor-set difference** `ancestors(heads) − (ancestors(target) ∪ {target})`.
+The verifier's *suggested* fix (`iterate_revisions(heads,target,select_for_downgrade=True)`) was **empirically disproven** —
+run against the repro chain it ALSO missed the side-branch contract; the advisor's "prove the API before trusting it" discipline
+caught it before shipping a still-broken floor. Added 2 non-vacuous TDD merge-topology regression tests (synthetic merge chain,
+since the real chain is linear); RED/GREEN proven in a synced battery render (old impl → `AssertionError: []`; fix → 12/12 guard
+tests green); rendered guard+tests `ruff format --check` clean at the rendered project's 88-col default; my edits are confined to
+`template/` (excluded from the framework's own ruff/mypy), `"deploy: contract" in guard` copier-runner assertion still holds, no
+byte-golden for the guard. **P11** (marker-evasion: raw-SQL/type-narrowing destructive migrations carry no marker → evade both
+`check_migrations.py` and the guard) and **P16** (`_control_contract_any` always-in-range over-refusal — fail-CLOSED) confirmed
+but by-design/disclosed → **DOCUMENTED-LIMITATION**, carried to SP3 (FWK67) alongside the override audit trail (P13/P17) and the
+SP1 data-plane preconditions (the matrix re-surfaced the empty-DSN→default-DB fail-open → reinforces the placeholder-DSN sentinel).
+Recorded a provenance caveat: the workflow's Phase-5 synthesis received verify verdicts as `[object]` (script data-passing bug),
+so its narrative was a reconstruction that under-reported P15 — the scorecard is built from the gate-of-record (script precompute
++ verdicts extracted from agent transcripts), and the `.mjs` verdict-passing must be fixed before the next Layer-2 run. Scorecard
+`docs/superpowers/eval-scorecards/2026-06-27-fwk66-sp2-layer2-security-matrix.md`. Next = finishing-the-branch → PR → Phase-2 release.
+(Layer-2 PASSED + P15 fixed → ready to finish the branch)
