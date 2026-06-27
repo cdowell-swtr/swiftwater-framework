@@ -3575,3 +3575,17 @@ string instead. Verified (author/verify split): render `--with multitenantauth` 
 completeness walk 5 passed (migrate.py locked), ruff check+format clean (fixed 2 line-wrap nits vs. plan blocks),
 mypy clean. Per-task independent review (Opus quality+spec) next.
 (FWK66 Task 2 → verified + committed)
+
+#### #0262 · amended · FWK66 (SP2) Task 2 — Opus review (spec ✅) + enumeration-failure hardening · 2026-06-26
+Opus task review of d278bc9: **spec compliance ✅** (all binding constraints — Python-API alembic, control-fail-fast
+→ default-record → tenant-best-effort → non-zero exit, active-only, no-DSN-leak on every traced surface, integrity
+lock, no Jinja in the verbatim .py, module-level monkeypatch seams). **Code quality: one Important** — the tenant-
+enumeration read (`control_session_factory()() / active_tenant_dsns(cs)`) sat outside any try/except, so a control-
+registry read failure would make `upgrade_all` RAISE instead of returning its dict (contract + no-leak-by-construction
+gap; brief-inherited — the plan left this path unspecified). Controller decision (fail-closed, spec's fail-fast intent):
+wrapped the enumeration; on failure record it under `control` (class name only), abort, touch no tenant, return the
+report → `main()` non-zero. Added `test_tenant_enumeration_failure_is_control_fail_and_aborts` (asserts control=class-name,
+tenants empty, "control" in report_failed, message not leaked). Re-verified: 6/6 unit, integrity walk 5 passed, ruff+mypy
+clean. Formal re-review folded into the branch-end whole-branch Opus pass (fix = the reviewer's exact prescription).
+1 optional Minor (cast vs `# type: ignore[union-attr]`) → final.
+(FWK66 Task 2 review + enumeration hardening → committed)

@@ -69,9 +69,19 @@ def upgrade_all() -> dict[str, object]:
         report["default"] = type(exc).__name__
         logger.error("migrate.default.failed error=%s", type(exc).__name__)
 
+    # Enumerate the active-tenant fan-out targets. This is a CONTROL-plane read; if it fails we
+    # cannot know the targets, so treat it as a control-plane failure (fail-fast, no tenant
+    # touched) rather than letting upgrade_all raise and break its dict contract. Class name
+    # only — never leak the query or a DSN.
+    try:
+        with control_session_factory()() as cs:
+            targets = active_tenant_dsns(cs)
+    except Exception as exc:  # noqa: BLE001
+        report["control"] = type(exc).__name__
+        logger.error("migrate.tenant_enumeration.failed error=%s", type(exc).__name__)
+        return report
+
     # Tenant fan-out, best-effort.
-    with control_session_factory()() as cs:
-        targets = active_tenant_dsns(cs)
     tenants: dict[str, str] = {}
     for tenant_id, dsn in targets:
         try:

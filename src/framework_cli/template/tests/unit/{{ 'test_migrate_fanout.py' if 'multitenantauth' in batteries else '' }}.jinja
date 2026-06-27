@@ -63,6 +63,22 @@ def test_tenant_failure_is_best_effort(patched, monkeypatch):
     assert migrate.report_failed(report) == ["acme"]
 
 
+def test_tenant_enumeration_failure_is_control_fail_and_aborts(patched, monkeypatch):
+    # Reading the active-tenant registry is a control-plane read; if it raises, upgrade_all must
+    # NOT propagate (which would break its dict contract) — it records a control-plane failure,
+    # touches no tenant, and exits non-zero. Class name only, never the message.
+    monkeypatch.setattr(
+        migrate,
+        "active_tenant_dsns",
+        lambda cs: (_ for _ in ()).throw(RuntimeError("control read failed")),
+    )
+    report = migrate.upgrade_all()
+    assert report["control"] == "RuntimeError"
+    assert report["tenants"] == {}  # no tenant touched
+    assert "control" in migrate.report_failed(report)
+    assert "control read failed" not in repr(report)
+
+
 def test_report_never_contains_dsn_or_message(patched, monkeypatch):
     secret = "postgresql+psycopg://u:SECRET@h/db"
 
