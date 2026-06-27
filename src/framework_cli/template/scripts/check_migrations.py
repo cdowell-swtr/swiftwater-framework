@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 VERSIONS = Path("migrations/versions")
+CONTROL_VERSIONS = Path("migrations_control/versions")
 
 _DESTRUCTIVE_OPS = {
     "drop_column",
@@ -103,11 +104,14 @@ def _problems(path: Path) -> list[str]:
     return [msg for msg in found if msg is not None]
 
 
-def main() -> int:
-    if not VERSIONS.is_dir():
-        return 0
+def main(dirs: list[Path] | None = None) -> int:
+    scan = dirs if dirs is not None else [VERSIONS, CONTROL_VERSIONS]
     failures = [
-        msg for path in sorted(VERSIONS.glob("*.py")) for msg in _problems(path)
+        msg
+        for d in scan
+        if d.is_dir()
+        for path in sorted(d.glob("*.py"))
+        for msg in _problems(path)
     ]
     for msg in failures:
         print(f"::error::{msg}", file=sys.stderr)

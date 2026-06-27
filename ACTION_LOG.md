@@ -3624,3 +3624,15 @@ byte-verified the non-battery render is IDENTICAL to a pre-edit golden (trim mar
 battery render YAML-valid (yaml.safe_load) with both `db:migrate:all` and the unchanged bare `db:migrate` present.
 2 render-content tests green; ruff check+format clean. Review→branch-end whole-branch Opus.
 (FWK66 Task 5 → verified + committed)
+
+#### #0266 · completed · FWK66 (SP2) Task 6 — check_migrations.py scans both alembic chains · 2026-06-26
+Haiku authored: added `CONTROL_VERSIONS = Path("migrations_control/versions")` + a dirs-parameterized
+`main(dirs=None)` that scans BOTH chains (app + control, each only if present); removed the `if not
+VERSIONS.is_dir(): return 0` early guard (per-dir `if d.is_dir()` handles absence). The `# deploy: contract`
+marker is now authoritative in the control chain too — Task 7's rollback floor needs it. New framework-level
+test `tests/test_check_migrations.py` (importlib-loads the template script, temp dirs): RED→GREEN 4/4
+(clean app passes; unmarked destructive control fails; contract-marked control passes; absent dir skipped).
+check_migrations.py is a LOCKED re-touch (no Jinja, already registered). Verified: ruff check+format+mypy clean;
+regression-safe — baseline render still scans only migrations/versions (control dir absent → skipped), so the
+existing `test_rendered_project_blocks_contract_migration` acceptance behavior is unchanged. Review→branch-end.
+(FWK66 Task 6 → verified + committed)
