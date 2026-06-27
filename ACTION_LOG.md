@@ -3818,3 +3818,34 @@ verification ran subsets ([[meridian-is-the-de-facto-integration-test]], [[dogfo
 TEARDOWN — leaving the shared control DB clean, mirroring the SP1 module's `_clean_control` pattern. **Verified in the render:**
 the repro pair now 8/8, and the FULL functional group **175 passed** (was the failing group). Re-pushing.
 (cross-module control-DB pollution → truncate-in-teardown → functional group green)
+
+#### #0279 · completed · FWK66 (SP2) merged to master (PR #86) — UNTAGGED by design · 2026-06-27
+PR #86 squash-merged to master after a fully GREEN render-matrix (the branch's first full integrated CI run):
+`gate` + `build` + `render-complete` + every multitenantauth / workers / full render combo pass. Verified
+post-merge per [[verify-master-content-after-pr-merge]]: state=MERGED, local master in sync (0/0), and all three
+branch-tip fix markers present on origin/master (P15 `iterate_revisions` in `rollback_guard`; migrate.py
+`cast("dict[str, str]"`; the SP2 truncate-in-teardown comment) plus the Layer-2 scorecard. SP2 work is COMPLETE
+and on master but deliberately **untagged**: `framework upgrade` fetches from git TAGS
+([[framework-upgrade-fetches-template-from-tag]]), so an untagged master is invisible to Meridian — this lets
+SP2+SP3 ship as ONE combined release after FWK67, giving Meridian time to finish v0.4.2 adoption (their adoption
+latency ≈ the framework's cut cadence). No release cut.
+(SP2 landed on master untagged → combined SP2+SP3 release deferred to post-FWK67)
+
+#### #0280 · completed · FWK72 — framework default-branch rename master→main (transition PR) · 2026-06-27
+Repo-consistency hygiene: the generated-project template already targets `main` (`ci.yml.jinja` /
+`deploy-staging.yml` → `branches: [main]`); only the framework repo's OWN default was still `master`. Renaming to
+close the gap. **The one real hazard is CI-trigger continuity, and it's already mitigated:** all four framework
+workflows trigger on an UNFILTERED `pull_request:` event, so the required checks (`gate`/`build`/`render-complete`)
+fire on PRs to ANY base — there is NO merge deadlock, and the GitHub branch rename is reversible (redirects + PR
+retarget both ways). The `push: branches: [master]` filters + `docs.yml` `if: refs/heads/master` only gate
+post-merge / gh-pages runs, which WOULD silently stop firing on `main` if left unchanged. **This transition PR**
+updates exactly 5 surfaces to `main`: the push filters in `ci.yml` / `review.yml` / `docs.yml` / `render-matrix.yml`,
+the `docs.yml` deploy `if`, and the live `CLAUDE.md` "merge to `main`" prose. Chose `[main]` (not `[main, master]`)
+for a clean end state — safe precisely because `pull_request` is unfiltered. **To follow after this PR merges:**
+native rename `gh api -X POST .../branches/master/rename -f new_name=main` (auto-retargets open PR #85; rewrites
+ruleset 17579429's EXPLICIT `refs/heads/master` condition — must re-VERIFY it resolves to `main` or `main` is
+silently unprotected); then local `git branch -m master main` + re-point tracking; then hand the dir relocation
+(`mv framework swiftwater-framework`, then `mv swiftwater-framework main`) + the laptop-parity-clone local rename to
+the operator. The `CLAUDE.md` `$DEV_ROOT/...swiftwater-framework` operating-env path-ref update is deferred to FWK67
+(rides the same relocation).
+(template already on main → framework default master→main; transition PR now, native rename + local + handoff to follow)

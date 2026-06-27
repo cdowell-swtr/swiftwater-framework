@@ -21,7 +21,7 @@ This repo is an opinionated Python scaffold framework: a `framework` CLI that re
 Before every commit, update `PLAN.md` (tick the task; move finished items to `Done`) and append an `ACTION_LOG.md` entry for every completion and every deviation, per `pi-convention.md`. A `PreToolUse` hook in `.claude/settings.json` enforces this — it blocks `git commit` until `PLAN.md` or `ACTION_LOG.md` is staged. Run `/hooks` to review or disable it.
 
 ## How we build here
-- Work proceeds plan-by-plan per the meta-plan, using the superpowers subagent-driven flow: a feature branch → an implementer per task (TDD) → controller verification → a final review → merge to `master`.
+- Work proceeds plan-by-plan per the meta-plan, using the superpowers subagent-driven flow: a feature branch → an implementer per task (TDD) → controller verification → a final review → merge to `main`.
 - **Review-model policy** (long-standing; see [[subagent-review-model-pattern]]): implementers → Sonnet (Haiku for trivial); spec-compliance review → Sonnet; **code-quality review → Opus**; final/branch-end whole-branch review → Opus. Pass `model` explicitly per role and restate this in every plan's Execution section — don't let the writing-plans/subagent-driven skills' generic "least powerful model" guidance collapse the reviewers.
 - TDD is required: write the failing test first, confirm red, implement the minimum, confirm green.
 
