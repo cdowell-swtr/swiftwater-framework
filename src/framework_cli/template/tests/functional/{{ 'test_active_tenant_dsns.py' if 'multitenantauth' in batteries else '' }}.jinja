@@ -1,0 +1,32 @@
+"""active_tenant_dsns returns exactly the active tenants' (id, dsn) — the migrate fan-out target set."""
+
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import repository as control_repo
+
+
+def _add(cs: Session, *, id: str, slug: str, status: str) -> None:
+    control_repo.add_tenant(
+        cs,
+        id=id,
+        name=id.title(),
+        slug=slug,
+        dsn=f"postgresql+psycopg://app:app@db:5432/{{ package_name }}_tenant_{id}",
+        status=status,
+    )
+
+
+def test_active_tenant_dsns_returns_only_active(ctrl_engine, truncate_control):
+    truncate_control()
+    with Session(ctrl_engine) as cs:
+        _add(cs, id="acme", slug="acme", status="active")
+        _add(cs, id="globex", slug="globex", status="active")
+        _add(cs, id="initech", slug="initech", status="provisioning")
+        _add(cs, id="hooli", slug="hooli", status="suspended")
+        cs.commit()
+
+        result = control_repo.active_tenant_dsns(cs)
+
+    ids = {tid for tid, _ in result}
+    assert ids == {"acme", "globex"}
+    assert all(dsn.endswith(f"{{ package_name }}_tenant_{tid}") for tid, dsn in result)

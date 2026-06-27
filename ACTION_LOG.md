@@ -3525,3 +3525,29 @@ contradictory follow-up note. (5) Named the **subprocess-per-target fallback** b
 multi-`command.upgrade` interferes (Task 3 is the canary). (6) Cosmetic: dropped a dead `if False` ternary in Task 7.
 Next: execution-choice handoff → build.
 (FWK66 plan hardening → ledger)
+
+#### #0258 · note · working-tree $DEV_ROOT path mutation — detected + reverted · 2026-06-26
+Operator flagged that an over-eager agent had search-replaced all `/home/chris/Claude Code/Projects`
+and `~/Claude Code/Projects` absolute paths with the literal `$DEV_ROOT` across files — corrupting
+immutable historical records (ACTION_LOG entries, archived/old superpowers plans, DEC PURs). Assessed:
+20 tracked docs carried `$DEV_ROOT`, ALL unstaged working-tree changes; diff was perfectly symmetric
+(44 ins / 44 del) and every changed line was a pure path substitution (no legitimate edits mixed in).
+Verified the corruption never entered git history: every committed blob across this branch (6a62b2b,
+ab0a21a, 1cd4c28) and the pre-session baseline (master 14c9311) had ZERO `$DEV_ROOT` — my commits
+staged clean content; the mutation hit the working tree only. Reverted with `git checkout HEAD -- <the
+20 files>`; post-restore `git grep -l DEV_ROOT` = 0. SDD scratch + Task-1 WIP untouched. (Cross-repo
+caveat: the same agent likely mutated sibling repos — patterns/meridian — not visible from here; operator
+to check those.)
+(DEV_ROOT working-tree corruption → reverted, history clean)
+
+#### #0259 · completed · FWK66 (SP2) Task 1 — active_tenant_dsns control-repo enumeration · 2026-06-26
+Task 1 was already authored by a prior session (working-tree WIP, clean of `$DEV_ROOT`): `active_tenant_dsns`
+added to the LOCKED `db/control/repository.py` after `get_tenant_dsn` (exact plan code; `select`/`Tenant`
+already imported) + the functional test jinja. Controller-verified (author/verify split — subagent dispatch
+blocked by weekly quota, reset ~2026-06-26 23:00 PT): rendered `--with multitenantauth`, `uv sync`, ran the
+real-PG functional test via testcontainers — **1 passed**. ruff check + ruff format --check clean (fixed one
+format nit vs. the plan's block: `add_tenant(...)` args exploded one-per-line by the magic trailing comma —
+[[ruff-format-check-after-inline-edits]]). repository.py is a pre-registered BATTERY_LOCKED_SRC re-touch
+(no new lock registration); the locked-file completeness walk is unaffected. Per-task independent review
+(Sonnet spec / Opus quality) DEFERRED to quota-return / branch-end whole-branch Opus pass.
+(FWK66 Task 1 → verified + committed)
