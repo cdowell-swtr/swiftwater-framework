@@ -3689,3 +3689,30 @@ strategy pair (`test_deploy_readme_byte_identical_without_battery`, `test_deploy
 DATA; my golden + current base render agree at 17147 — verified identical). Cosmetic comment-parity Minor on the battery
 `__target_record_release` → branch-end roll-up. Both `infra/deploy/{strategy.sh,README.md}` confirmed in LOCKED_TRACKED.
 (FWK66 Task 8 review → README golden + tests committed; all 8 tasks done — next = branch-end whole-branch Opus review + Phase-2 Layer-2 gate)
+
+#### #0271 · completed · FWK66 (SP2) branch-end whole-branch Opus review → README contradiction fix · 2026-06-27
+Whole-branch Opus code-quality review (master..HEAD): **APPROVE WITH MINORS** — all 3 cross-task seams verified correct
+(entrypoint→migrate module path matches; strategy→rollback_guard receives the FULL alembic rev so Task-7 M1 is satisfied,
+guard runs before redeploy, zero `__target_migrate "downgrade"` on any plane; fan-out tenant isolation is correct BY
+CONSTRUCTION — `migrate_tenant` builds a fresh `NullPool` engine per DSN, never the request-path engine registry, so a
+mid-loop exception can't cross-contaminate; control fail-fast aborts before any tenant DB; no DSN/credential leak on any
+path). One Important, docs-only: the BATTERY `infra/deploy/README.md` carried contradictory rollback guidance — the new
+image-only section vs. un-gated pre-SP2 prose ("Migration-aware rollback … explicit downgrade is required"; the
+`__target_migrate` hook rationale, false under the battery). An operator reading top-to-bottom forms the wrong model for
+a destructive op. Fixed with **inline** battery-gated `{% if %}…{% endif %}` pointers on the two flagged lines (the
+`__target_migrate` row + the "Migration-aware rollback" bullet) — inline tags carry NO newlines, so the non-battery render
+stays byte-identical (the committed golden test confirms zero drift; deliberately NOT block-level gating, which would add
+stray blank lines → FWK39 drift). Strengthened `test_deploy_readme_plane_aware_section_under_battery` to assert the
+superseding pointers are present under the battery. 3/3 README render tests green; ruff+format clean. Minors (cosmetic
+comment-parity; release-history preamble duplicated across the strategy branches; the asymmetric-but-inert control-config
+fail-open) → branch-end roll-up, none escalate. Verdict stands: branch functionally sound.
+(FWK66 whole-branch review → README fix committed; next = Phase-2 Layer-2 all-Opus security gate)
+
+#### #0272 · completed · FWK69 recorded — `behind-edge` edge-proxy promote-up PLAN stub · 2026-06-27
+Per operator request, recorded the `behind-edge` capability (surfaced by the `local-reverse-proxy` box tool; PUR
+`DEC-0006-behind-edge-promote-up.md`, assoc. PR #81) as a new PLAN `Next` row **FWK69** — nothing more (recording only,
+not started, needs its own brainstorm). Captures: generalize into the framework a dev stack runnable *behind-edge* (app +
+observability on host ports, no per-stack Traefik `:80`/`:443` binding) so N generated stacks share one box edge proxy;
+likely shape = (1) decouple Traefik from the `dev` profile, (2) `FORWARDED_ALLOW_IPS=*` + proxy-header honoring (a
+pre-existing framework-wide `X-Forwarded-Proto` gap, not box-specific); upstream-first per cross-repo/v4, ships a release.
+(operator request → FWK69 stub added)

@@ -4501,6 +4501,11 @@ def test_deploy_readme_plane_aware_section_under_battery(tmp_path: Path):
     assert "Plane-aware migrate & rollback (multitenantauth)" in text
     # the section is additive — the pre-SP2 single-DB guidance is still present
     assert "deploy: contract" in text
+    # ...but the pre-SP2 single-DB rollback prose must be SUPERSEDED, not left to contradict the
+    # image-only section (whole-branch review: an operator reading top-to-bottom otherwise forms
+    # the wrong model for a destructive op). Battery-only inline pointers resolve the conflict.
+    assert "is **superseded**" in text  # the "Migration-aware rollback" bullet
+    assert "do **not** call this hook" in text  # the __target_migrate hook row
 
 
 def test_deploy_readme_byte_identical_without_battery(tmp_path: Path):
