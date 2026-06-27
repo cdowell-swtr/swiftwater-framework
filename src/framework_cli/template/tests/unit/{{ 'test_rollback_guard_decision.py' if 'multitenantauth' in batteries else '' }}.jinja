@@ -47,6 +47,26 @@ def test_override_allows_with_warning(guard, monkeypatch):
     assert guard.main(["abc123"]) == 0
 
 
+def test_resolution_error_fails_closed(guard, monkeypatch):
+    # The spec's #1 property: if the migration range can't be resolved, REFUSE — never silently
+    # allow a rollback whose safety could not be proven.
+    def _boom(rev):
+        raise RuntimeError("walk failed")
+
+    monkeypatch.setattr(guard, "_app_contract_in_range", _boom)
+    assert guard.main(["abc123"]) == 1
+
+
+def test_resolution_error_override_still_allows(guard, monkeypatch):
+    # The explicit override is honored on the resolution-error path too (operator has a plan).
+    def _boom(rev):
+        raise RuntimeError("walk failed")
+
+    monkeypatch.setattr(guard, "_app_contract_in_range", _boom)
+    monkeypatch.setenv("ALLOW_CONTRACT_ROLLBACK", "1")
+    assert guard.main(["abc123"]) == 0
+
+
 def test_marker_detection(guard, tmp_path):
     f = tmp_path / "m.py"
     f.write_text("# deploy: contract\ndef upgrade(): ...\n")

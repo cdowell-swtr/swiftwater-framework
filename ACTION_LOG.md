@@ -3649,3 +3649,16 @@ rendered project's own template-payload tests, matching the generated-CI-script 
 line-wrap fixes vs. plan blocks. Verified: 6/6 unit + 2/2 functional, ruff+format+mypy clean, runtime_coverage 9
 passed, integrity 72 passed, baseline render has NO rollback_guard.py. Opus task review next (security mechanism).
 (FWK66 Task 7 → verified + committed; Opus review pending)
+
+#### #0268 · amended · FWK66 (SP2) Task 7 — Opus review (spec ✅) + fail-closed regression guards · 2026-06-26
+Opus task review of f33b491: spec ✅ (range (target,heads] correct & off-by-one-safe; control = any-marker;
+fail-closed verified against alembic source; override on both paths via strict `=="1"`; no leak; registrations
+correct). Code quality: ONE Important — the fail-CLOSED branch (the spec's #1 property) had NO regression test:
+a `return 1`→`return 0` slip in the `except` would pass the whole suite. Added 2 unit tests
+(`test_resolution_error_fails_closed`, `test_resolution_error_override_still_allows`) → 8/8 green, ruff+format clean.
+2 Minors → branch-end roll-up: (M1) `if rev.revision == target_rev` over-blocks on an ABBREVIATED target rev
+(safe/over-block direction only) → Task 8 must pass the FULL revision to rollback_guard; (M2) the control-chain
+`if not cfg_path.exists(): return []` branch is untested (spec-endorsed, can't legitimately fire under the battery).
+Inherited (not this task): raw-SQL/type-narrowing contract changes evade the marker → evade the floor (deferred to
+the data-integrity review agent; floor is only as complete as check_migrations' marker enforcement).
+(FWK66 Task 7 review + fail-closed guards → committed)
