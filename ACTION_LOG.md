@@ -3662,3 +3662,16 @@ a `return 1`→`return 0` slip in the `except` would pass the whole suite. Added
 Inherited (not this task): raw-SQL/type-narrowing contract changes evade the marker → evade the floor (deferred to
 the data-integrity review agent; floor is only as complete as check_migrations' marker enforcement).
 (FWK66 Task 7 review + fail-closed guards → committed)
+
+#### #0269 · completed · FWK66 (SP2) Task 8 — image-only rollback in strategy.sh + plane-aware README · 2026-06-26
+Sonnet authored the final, byte-identity-critical task: `infra/deploy/strategy.sh` → `strategy.sh.jinja` (LOCKED,
+newly jinja-ified). Battery `rollback()` = IMAGE-ONLY — calls `uv run python scripts/rollback_guard.py "${rev}"`
+(full alembic rev per Task-7 review M1) + redeploys the prior image; NO `__target_migrate "downgrade"` on any plane.
+Non-battery `{% else %}` branch = the verbatim pre-SP2 body. `infra/deploy/README.md` → `README.md.jinja` with the
+plane-aware section GATED under `{% if "multitenantauth" %}` (controller adjustment vs. brief — keeps baseline deploy
+READMEs clean instead of appending mt content everywhere). Controller-verified (FWK39 class): BOTH non-battery renders
+BYTE-IDENTICAL to pre-SP2 goldens (strategy via committed tests/fixtures/sp2/strategy_sh_pre_sp2.golden; README via
+controller golden); battery strategy bash -n + EOF clean + guard wired + no-downgrade; 3 render-content tests green;
+ruff+format clean; baseline precommit acceptance PASSED (end-to-end EOF-hook guard on both newly-jinja'd files);
+rendered paths (strategy.sh, README.md) unchanged → no integrity reclassification. Opus task review next (security mechanism).
+(FWK66 Task 8 → verified + committed; Opus review pending)

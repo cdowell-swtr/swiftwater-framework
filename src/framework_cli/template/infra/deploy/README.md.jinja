@@ -107,7 +107,29 @@ Rollback can only restore a previous release if its migrations can be reversed, 
   here; document/key-value/graph/time-series/vector stores (Plan 8) carry their own reversible
   migration tooling and the same discipline + guard. Reverse each active store in
   `__target_migrate`.
+{% if "multitenantauth" in batteries %}
+## Plane-aware migrate & rollback (multitenantauth)
 
+With the `multitenantauth` battery, a project has THREE database planes: the control plane, the
+default business DB, and one DB per tenant. Migration and rollback are plane-aware:
+
+- **Migrate fan-out.** Boot (`scripts/entrypoint.sh`) and `task db:migrate:all` run
+  `python -m <pkg>.multitenantauth.tenancy.migrate`: the control plane first, then the default DB,
+  then every active tenant DB. For a multi-host rolling deploy, set `APP_RUN_MIGRATIONS=false` on the
+  app hosts and run `task db:migrate:all` ONCE before the roll so N containers don't race.
+- **Rollback is image-only.** Deploy rollback redeploys the prior image and performs **no
+  `alembic downgrade` on any plane** — a downgrade fan-out across the control plane + N tenant DBs
+  would irreversibly drop auth/registry + customer data. Safety rests on the **expand-only** contract
+  (`scripts/check_migrations.py`, now enforced on both chains): every migration is additive, so the
+  prior image runs against the current schema.
+- **Contract migrations are a rollback floor.** A `# deploy: contract` (destructive) migration cannot
+  be crossed by an image-only rollback — the prior image needs schema it dropped. `scripts/rollback_guard.py`
+  refuses such a rollback; override with `ALLOW_CONTRACT_ROLLBACK=1` only if you have a data-restore plan.
+  Image-only rollback is **not** a data backup. (A control-plane contract migration is rare and maximally
+  dangerous — treat it as a manual, coordinated, non-one-click operation.)
+- **Cruft.** Because rollback never downgrades, a rolled-back feature leaves its additive schema behind
+  (N× across tenant DBs). Reclaim it later with a deliberate forward-only contract migration.
+{% endif %}
 ## Antipatterns this seam prevents (don't reintroduce them)
 
 - No rollback target → `rollback` errors if there's no previous release.

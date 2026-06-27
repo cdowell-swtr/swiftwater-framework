@@ -4432,3 +4432,51 @@ def test_taskfile_no_db_migrate_all_without_battery(tmp_path: Path):
     text = (dest / "Taskfile.yml").read_text()
     assert "db:migrate:all:" not in text
     assert "db:migrate:" in text  # the single-DB target is unchanged
+
+
+# Golden = the pre-SP2 strategy.sh bytes, captured BEFORE the rename. A non-battery
+# render MUST reproduce these bytes EXACTLY — that is the spec/DEC-0005 promise ("strategy.sh
+# byte-identical"). Byte-identity (not a substring spot-check) is what catches the FWK39 class:
+# a `{%- … -%}` trim marker silently adding or dropping a trailing/leading newline in the
+# {% else %} branch, which a behavioral assertion would miss but a consumer's pre-commit
+# end-of-file-fixer would "repair" → integrity drift on their first commit.
+_STRATEGY_GOLDEN = (
+    Path(__file__).parent / "fixtures" / "sp2" / "strategy_sh_pre_sp2.golden"
+)
+
+
+def _bash_n_ok(path: Path) -> bool:
+    return (
+        subprocess.run(["bash", "-n", str(path)], capture_output=True).returncode == 0
+    )
+
+
+def test_strategy_rollback_image_only_under_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    sh = dest / "infra" / "deploy" / "strategy.sh"
+    text = sh.read_text()
+    assert "rollback_guard.py" in text
+    assert "image-only" in text.lower()
+    assert '__target_migrate "downgrade' not in text  # NO downgrade on any plane
+    assert _bash_n_ok(sh)
+    # EOF-hook clean (this render is LOCKED too, and there is no multitenantauth precommit
+    # acceptance test): exactly one trailing newline + no trailing whitespace, or a consumer's
+    # end-of-file-fixer / trailing-whitespace hook rewrites it on first commit → drift (FWK39).
+    raw = sh.read_bytes()
+    assert raw.endswith(b"\n") and not raw.endswith(b"\n\n")
+    assert all(line == line.rstrip() for line in text.splitlines())
+
+
+def test_strategy_byte_identical_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # no batteries
+    rendered = (dest / "infra" / "deploy" / "strategy.sh").read_bytes()
+    assert (
+        rendered == _STRATEGY_GOLDEN.read_bytes()
+    )  # verbatim today's file, byte-for-byte
+    # Behavioral spot-checks are subsumed by byte-identity above; kept for a readable failure.
+    text = rendered.decode()
+    assert '__target_migrate "downgrade ${rev}"' in text  # today's contract
+    assert "rollback_guard" not in text
+    assert _bash_n_ok(dest / "infra" / "deploy" / "strategy.sh")
