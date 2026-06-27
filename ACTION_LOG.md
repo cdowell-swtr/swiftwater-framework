@@ -3563,3 +3563,15 @@ references (frozen ACTION_LOG entries, completed plans, PI-registry rows) stay l
 are no active load-bearing absolute paths in-repo today — the active FWK66 plan + all scripts/hooks
 already use repo-relative paths.
 (adopt $DEV_ROOT convention → CLAUDE.md)
+
+#### #0261 · completed · FWK66 (SP2) Task 2 — upgrade_all plane-aware fan-out + integrity lock · 2026-06-26
+Sonnet implementer authored the new LOCKED `multitenantauth/tenancy/migrate.py` (`upgrade_all` control-first
+fail-fast → default DB → active-tenant best-effort; result-map values = exception CLASS names only; `report_failed`;
+`main`), registered it in `BATTERY_LOCKED_SRC` (same task — fail-safe), + the unit test jinja. Controller caught a
+plan defect pre-dispatch: migrate.py is a plain `.py` (Copier `_templates_suffix: .jinja` → verbatim copy, NO Jinja
+render), so the brief's `{{ package_name }}` docstring would render literally → instructed a generic invocation
+string instead. Verified (author/verify split): render `--with multitenantauth` (0 Jinja leak in migrate.py),
+5/5 unit tests (ordering / control-fail-fast / tenant best-effort / no-DSN-in-report / exit codes), integrity-lock
+completeness walk 5 passed (migrate.py locked), ruff check+format clean (fixed 2 line-wrap nits vs. plan blocks),
+mypy clean. Per-task independent review (Opus quality+spec) next.
+(FWK66 Task 2 → verified + committed)
