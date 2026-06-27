@@ -4480,3 +4480,35 @@ def test_strategy_byte_identical_without_battery(tmp_path: Path):
     assert '__target_migrate "downgrade ${rev}"' in text  # today's contract
     assert "rollback_guard" not in text
     assert _bash_n_ok(dest / "infra" / "deploy" / "strategy.sh")
+
+
+# README golden = the pre-SP2 infra/deploy/README.md bytes, captured BEFORE jinja-ification and
+# rendered with the canonical module DATA. README.md is integrity-LOCKED (classes.py) AND
+# interpolates the project/package names, so the golden is DATA-specific: a non-battery render
+# with this DATA MUST reproduce these bytes EXACTLY. Same FWK39 rationale as _STRATEGY_GOLDEN —
+# a `{%- … -%}` trim marker in the {% else %} branch silently shifting a trailing/leading newline
+# would slip past a substring check but trip a consumer's end-of-file-fixer → integrity drift on
+# their first commit. If you change the module DATA, regenerate this golden from a base render.
+_DEPLOY_README_GOLDEN = (
+    Path(__file__).parent / "fixtures" / "sp2" / "deploy_readme_pre_sp2.golden"
+)
+
+
+def test_deploy_readme_plane_aware_section_under_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    text = (dest / "infra" / "deploy" / "README.md").read_text()
+    assert "Plane-aware migrate & rollback (multitenantauth)" in text
+    # the section is additive — the pre-SP2 single-DB guidance is still present
+    assert "deploy: contract" in text
+
+
+def test_deploy_readme_byte_identical_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # no batteries
+    rendered = (dest / "infra" / "deploy" / "README.md").read_bytes()
+    assert (
+        rendered == _DEPLOY_README_GOLDEN.read_bytes()
+    )  # verbatim today's file, byte-for-byte
+    # The plane-aware section is gated out entirely on the non-battery path.
+    assert "Plane-aware migrate & rollback (multitenantauth)" not in rendered.decode()

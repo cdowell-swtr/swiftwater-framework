@@ -3675,3 +3675,17 @@ controller golden); battery strategy bash -n + EOF clean + guard wired + no-down
 ruff+format clean; baseline precommit acceptance PASSED (end-to-end EOF-hook guard on both newly-jinja'd files);
 rendered paths (strategy.sh, README.md) unchanged → no integrity reclassification. Opus task review next (security mechanism).
 (FWK66 Task 8 → verified + committed; Opus review pending)
+
+#### #0270 · amended · FWK66 (SP2) Task 8 — Opus review (spec ✅) + committed README byte-identity guard · 2026-06-26
+Opus task review of ca4e5d5: SPEC ✅ PASS — all 10 binding constraints verified by rendering (battery `rollback()` is
+image-only with ZERO `__target_migrate` calls on any plane; guard runs BEFORE redeploy; full revision passed; both
+non-battery renders byte-identical to their goldens; EOF/whitespace hygiene clean). Code quality: Approved, Minors only.
+Acted on the one substantive Minor: the README non-battery byte-identity rested only on the controller's one-time manual
+diff — no DURABLE regression guard, unlike strategy.sh. Closed the FWK39 gap consistently: committed
+`tests/fixtures/sp2/deploy_readme_pre_sp2.golden` (the pre-SP2 README bytes, captured with the canonical module DATA —
+README.md interpolates project/package names so the golden is DATA-specific, noted in-test) + 2 tests mirroring the
+strategy pair (`test_deploy_readme_byte_identical_without_battery`, `test_deploy_readme_plane_aware_section_under_battery`).
+6/6 render tests green, ruff+format clean. Reconciled the reviewer's "17051" byte count (their render used different
+DATA; my golden + current base render agree at 17147 — verified identical). Cosmetic comment-parity Minor on the battery
+`__target_record_release` → branch-end roll-up. Both `infra/deploy/{strategy.sh,README.md}` confirmed in LOCKED_TRACKED.
+(FWK66 Task 8 review → README golden + tests committed; all 8 tasks done — next = branch-end whole-branch Opus review + Phase-2 Layer-2 gate)

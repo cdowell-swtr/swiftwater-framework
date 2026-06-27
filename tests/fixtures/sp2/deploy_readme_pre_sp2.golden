@@ -1,0 +1,293 @@
+# Deploy strategy — what the framework decided, and the little you configure
+
+Deployment is a **contract**. The framework owns the orchestration (build → push → deploy →
+smoke → sniff → E2E → load) AND the strategic decisions: release versioning, **migration-aware
+rollback**, health-gating, and runtime secrets. `strategy.sh` already implements those. You
+implement only the `__target_*` hooks for your target and set a few config env vars — you
+configure, you do not architect.
+
+## Pick a target
+
+| Target | `__target_place_image` implements |
+|---|---|
+| Compose-over-SSH (VPS) | scp `infra/compose/<env>.yml` to the host, then over ssh `docker compose -f <env>.yml up -d` (pulls `APP_IMAGE`) |
+| Fly.io / Render / Railway | the platform's deploy CLI pointed at `APP_IMAGE` |
+| Kubernetes | `kubectl set image` / a Helm release using `APP_IMAGE` |
+
+A turnkey **compose-over-SSH** target ships now — set `DEPLOY_TARGET=compose-ssh` (see the
+*Turnkey target* section below) instead of writing hooks. Otherwise implement the hooks below
+for your target. (A Traefik/ACME **blue-green** variant is a future follow-up.)
+
+## Turnkey target: compose-over-SSH (1..N hosts)
+
+Instead of implementing the `__target_*` hooks yourself, set **`DEPLOY_TARGET=compose-ssh`**
+(a workflow/Environment variable) to use the framework's shipped reference target,
+`infra/deploy/targets/compose-ssh.sh`. It deploys your pushed image across 1..N app hosts,
+rolling, with no downtime **given a health-draining load balancer + the app's graceful
+shutdown** (the LB is yours to provide — see below).
+
+**Topology.** Each app host runs `infra/compose/app-host.yml` (app-only; **no Postgres**, **no
+Traefik**) serving plain HTTP on a private port. A single **shared external Postgres**
+(`APP_DATABASE_URL`) is referenced by every host. Your **load balancer** terminates TLS and
+**drains a host by health**: route only to hosts whose `/health` returns 200; drain promptly
+when one goes unhealthy. The roll is one host at a time, so with >=2 hosts the LB always has a
+healthy target.
+
+**Migration safety.** The deploy runs the **expand** migration **once** against the shared DB
+(hosts run `APP_RUN_MIGRATIONS=false`); rollback reverses it once **after** the code is rolled
+back. Every per-deploy migration must be backward-compatible (expand-only) -- destructive
+(contract) changes are a separate later release. This is enforced by the contract-direction
+guard (`scripts/check_migrations.py`).
+
+**Config you set (in addition to the target-agnostic table elsewhere in this README):**
+
+| Variable | Where | Meaning |
+| --- | --- | --- |
+| `DEPLOY_TARGET` | Environment variable | `compose-ssh` to use this turnkey target |
+| `DEPLOY_HOSTS` | Environment variable | space-separated app host list, e.g. `"10.0.0.1 10.0.0.2"` |
+| `APP_DATABASE_URL` | secret | the shared external Postgres |
+| `DEPLOY_SSH_USER` | Environment variable | ssh user (default `deploy`); needs an SSH key (secret) + docker access on each host |
+| `DEPLOY_PATH` | Environment variable | dir on each host for the compose file + release state (default `/opt/app`) |
+| `DEPLOY_HOST_PORT` | Environment variable | private app port the LB targets (default `8000`) |
+
+**Builder responsibilities (not shipped):** TLS at the LB; firewall the app port to the LB
+only; provision + back up the shared Postgres.
+
+## What you implement (the only gaps in `strategy.sh`)
+
+| Hook | Must do |
+|---|---|
+| `__target_place_image` | Pull `$APP_IMAGE` and run it from `infra/compose/$DEPLOY_ENV.yml`; do not route traffic until healthy. |
+| `__target_migrate` | Run `alembic <args>` against the target's relational DB using THIS checkout's migrations (rollback's downgrade needs the new migration's down-path). When you add other DB paradigms (document/graph/…), reverse their migrations here too. Run `alembic` either from the CI runner against the target DB, or on the host with the new image — either way using the new release's migration scripts. |
+| `__target_record_release` / `__target_release_history` | Persist + read the `(image, revision)` history per env on the target (durable across runs). |
+| `__target_teardown` | Remove a failed/rolled-back release. |
+
+## What the framework already did (do not weaken)
+
+- **Release versioning** — each deploy records `(image, alembic-revision)`; `current-release`/`releases` read it.
+- **Migration-aware rollback** — `rollback` reverses migrations to the previous release's revision THEN redeploys its image (the image only ever upgrades, so the explicit downgrade is required), and records the rolled-back release so `current-release`/`releases` reflect what is now live. Rollback is **single-step**: it reverts to the immediately-prior release and records it, so running `rollback` twice in a row toggles back to the release you just left — to go back multiple releases, redeploy the desired tag explicitly.
+- **Health-gate** — `await-healthy` polls `/health` and refuses any `breached` SLO (the Phase-1 smoke rule).
+- **Guarantees:** versioned/addressable releases (a rollback target always exists), runtime secrets (never baked into images), the same image promoted staging → prod (no rebuild). No-downtime cutover is the target's job — the shipped `compose-ssh` target rolls with no downtime given a draining load balancer; other targets use the platform's native rolling deploy. (A Traefik/ACME blue-green variant is a future follow-up.)
+
+## Config you set (GitHub Environment + the target)
+
+| Var | Where | Purpose |
+|---|---|---|
+| `DEPLOY_ENV` | workflow (`staging`/`prod`) | selects `infra/compose/<env>.yml` |
+| `DEPLOY_BASE_URL` | Environment variable | the deployment's base URL (endpoints + health-gate) |
+| `APP_IMAGE` | set by the workflow | the pushed registry tag |
+| `POSTGRES_PASSWORD` | **target env + GitHub Environment secret** | DB credential, injected at runtime |
+| `POSTGRES_IMAGE` | set by the workflow **(only with an extension battery)** | the built+pushed custom Postgres tag — see "Custom Postgres image" below |
+| every var in `.env.example` | **the target's environment** | the app reads config from the target's env — NEVER baked into the image |
+
+Set application config + secrets **in the target's environment** (or the platform's secret
+store) and as GitHub Environment secrets — the image carries none of them.
+
+## Migrations: reversible by discipline, across every paradigm
+
+Rollback can only restore a previous release if its migrations can be reversed, so:
+
+- **Write expand/contract migrations.** A rolling deploy runs old and new code against ONE
+  shared schema, so each deploy's migration must be **backward-compatible (expand-only)**: add
+  columns/tables/indexes (additive) and ship code that works with and without them; a
+  destructive **contract** change (drop/rename) breaks the old code still running during the
+  roll. Migrations also run **once** before the roll — set `APP_RUN_MIGRATIONS=false` on the
+  app hosts (it is matched exactly as `true`/`false`; the default is `true`, so dev/single-host
+  self-migrate on start) so the per-container entrypoint does not race them.
+- **Unsafe migrations are blocked, not just discouraged.** The migration guard
+  (`scripts/check_migrations.py`, pre-commit + CI) fails any migration whose `downgrade()` is
+  empty/`pass`/`raise` (irreversible) **or** whose `upgrade()` does a destructive op
+  (`drop_*`, `rename_table`, column rename) — the latter unless the file is marked
+  `# deploy: contract`. **Contract changes are their own post-rollout release:** ship the
+  expand release, let it fully roll out, remove the old code, then a later `# deploy: contract`
+  migration removes the old shape. (Raw-SQL drops via `op.execute` and type-narrowing aren't
+  caught structurally — Plan 7's data-integrity agent adds that.) **Never destroy data that
+  cannot be reconstructed.**
+- **This applies to all database paradigms, not just relational.** PostgreSQL uses Alembic
+  here; document/key-value/graph/time-series/vector stores (Plan 8) carry their own reversible
+  migration tooling and the same discipline + guard. Reverse each active store in
+  `__target_migrate`.
+
+## Antipatterns this seam prevents (don't reintroduce them)
+
+- No rollback target → `rollback` errors if there's no previous release.
+- Secrets baked into images → config/secrets come from the target env at runtime.
+- Skipping staging → prod only deploys an image that passed staging's four phases.
+- Mutating prod during validation → prod runs smoke + **read-only** sniff; never E2E/load writes.
+- Big-bang / irreversible migrations → expand/contract + the migration guard above.
+
+## Validate a real deploy (no framework help needed)
+
+1. Implement the `__target_*` hooks; set the config above.
+2. Merge to `main` → `deploy-staging.yml` builds+pushes, calls your `deploy`, runs the four
+   phases against your `endpoints`, and auto-rolls-back (reversing migrations) on any failure.
+3. Locally point the tiers at any environment: `SMOKE_TARGET=… task test:smoke`,
+   `SNIFF_TARGET=… task test:sniff`, `E2E_TARGET=… uv run pytest tests/e2e`, `K6_TARGET=… task test:load`.
+
+## Observability in staging/prod
+
+The full monitoring stack (Prometheus, Grafana, Alertmanager, Loki, Tempo) ships via
+`infra/compose/observability.yml`. Your `__target_place_image` hook must merge it:
+
+```bash
+docker compose -f infra/compose/$DEPLOY_ENV.yml -f infra/compose/observability.yml up -d
+```
+
+Set `GRAFANA_ADMIN_PASSWORD` as a target secret (GitHub Environment secret + injected into the
+target's environment) — Grafana requires authentication in staging/prod (unlike dev, which
+overrides to anonymous). Materialize `APP_ALERT_WEBHOOK_URL` as the Alertmanager webhook file
+on the target (Task 4 wires `url_file` in `alertmanager.yml`); provide it as a mounted secret,
+not a bare env var.
+
+## Data-store & backend runtime (self-hosted vs managed)
+
+Every externalizable backend — Postgres, Redis, MongoDB, the four Prometheus store-exporters,
+and the OTLP egress — is env-overridable. The same image runs in both modes; the only
+difference is which env vars are set and which compose overlays are merged.
+
+**Resolution precedence (the core contract):** `APP_DATABASE_URL` / `APP_REDIS_URL` /
+`APP_MONGO_URL` set by the operator > the compose file's `${VAR:-default}` literal (the
+co-located-container DSN) > the Python `Settings` default (host-tooling / test fallback). The
+value is an **opaque DSN** — failover hosts, TLS query params, and `?sslmode=verify-full` all
+go in it.
+
+**Self-hosted (default):**
+
+```bash
+docker compose -f infra/compose/$DEPLOY_ENV.yml -f infra/compose/services.yml -f infra/compose/observability.yml up -d
+```
+
+Postgres, battery data stores (MongoDB, Redis), and Celery workers run locally via
+`services.yml`. `observability.yml` **must** be merged alongside `services.yml` —
+`services.yml`'s exporter `depends_on` fragments are image-less and only valid with the
+exporter image definitions in `observability.yml`.
+
+**Managed / external store:** edit `infra/compose/services.yml` to remove the store service
+block(s) you are externalising (their `depends_on` edges are grouped with them and go too),
+then set the matching env vars as target secrets:
+
+| Backend | Env var(s) |
+|---|---|
+| Postgres | `APP_DATABASE_URL` |
+| Redis (app + Celery) | `APP_REDIS_URL`, `APP_CELERY_BROKER_URL`, `APP_CELERY_RESULT_BACKEND` |
+| MongoDB | `APP_MONGO_URL` |
+| Postgres exporter | `POSTGRES_EXPORTER_DSN` |
+| MongoDB exporter | `MONGODB_EXPORTER_URI` |
+| Celery exporter | `CELERY_EXPORTER_BROKER_URL` |
+| Redis exporter | `REDIS_EXPORTER_ADDR` |
+
+Worker and beat services remain self-hosted (they run the app image) and connect to the
+managed broker via the env vars above.
+
+**Managed / SaaS observability:** set `APP_OTEL_EXPORTER_OTLP_ENDPOINT` at your
+collector (e.g. Grafana Cloud, Honeycomb). No overlay change required — the compose stack
+already reads this from the environment.
+
+**TLS verify-full to a managed store:** also merge `-f infra/compose/tls-ca.yml` and drop
+your CA bundle at `infra/tls/ca/<name>.pem`, then reference it in the DSN:
+
+```
+?sslmode=verify-full&sslrootcert=/etc/ssl/app-ca/<name>.pem
+```
+
+## Battery services in staging/prod
+
+Battery data stores (MongoDB, Redis) and Celery workers live in `infra/compose/services.yml`.
+Your `__target_place_image` hook must merge it alongside `observability.yml`:
+
+```bash
+docker compose -f infra/compose/$DEPLOY_ENV.yml -f infra/compose/services.yml -f infra/compose/observability.yml up -d
+```
+
+Worker and beat services run the promoted `${APP_IMAGE}` with `APP_RUN_MIGRATIONS=false` — the
+app (or a pre-roll migrate step) runs `alembic upgrade head` once; workers must not race it.
+
+**Managed escape hatch:** to use a managed MongoDB or Redis instead of the self-hosted
+containers, set `APP_MONGO_URL`, `APP_REDIS_URL`, `APP_CELERY_BROKER_URL`, and
+`APP_CELERY_RESULT_BACKEND` to the managed endpoint (as target secrets) and omit the
+data-store services from the merge. Worker and beat services stay self-hosted (they run the
+app image) and connect to the managed broker via the env vars above.
+
+## Custom Postgres image (extension batteries)
+
+Extension batteries (pgvector, timescaledb, age) bake their extensions into a custom Postgres image via
+`infra/docker/postgres.Dockerfile`. Dev and test compose files build this image from the local
+Dockerfile; prod and staging reference it via `${POSTGRES_IMAGE}`. (Managed Postgres often offers
+pgvector/timescaledb as the escape hatch; **Apache AGE** is rarely managed — self-host the custom image.)
+
+**Self-host:** build and push the custom image alongside `APP_IMAGE`, then set `POSTGRES_IMAGE`:
+
+```bash
+docker build -f infra/docker/postgres.Dockerfile -t $POSTGRES_IMAGE . && docker push $POSTGRES_IMAGE
+```
+
+**Managed escape hatch:** point `APP_DATABASE_URL` at a managed Postgres instance that already
+provides the required extensions (e.g. RDS with pgvector, Timescale Cloud, Supabase, or Cloud SQL).
+Leave `POSTGRES_IMAGE` unset and omit the self-hosted `postgres` service from the merge — the
+managed instance handles the data tier.
+
+## Alert channels
+
+Alert channels are chosen at `framework new` (interactive wizard or `--alerts webhook,slack`) and
+reconfigured at any time with:
+
+```bash
+framework upskill <project> --alerts slack,email
+```
+
+This is a **set-replacement** — it overwrites the previous selection and re-renders
+`alertmanager.yml` and the `.env.example` managed section for the new channel set.
+
+### Secrets: mounted files at deploy
+
+Each configured channel requires its secret materialized as a file on the deploy host and mounted
+into the `alertmanager` container at `/etc/alertmanager/<name>`:
+
+| Channel | Mount path | Secret env var |
+|---|---|---|
+| `webhook` | `/etc/alertmanager/webhook_url` | `APP_ALERT_WEBHOOK_URL` |
+| `slack` | `/etc/alertmanager/slack_api_url` | `APP_ALERT_SLACK_API_URL` |
+| `pagerduty` | `/etc/alertmanager/pagerduty_routing_key` | `APP_ALERT_PAGERDUTY_ROUTING_KEY` |
+| `email` | `/etc/alertmanager/smtp_auth_password` | `APP_ALERT_SMTP_AUTH_PASSWORD` |
+
+Materialize each secret from your secret store (e.g. GitHub Environment secret → deploy step)
+before starting the Alertmanager container.
+
+### Email: envsubst required at deploy
+
+The email channel's non-secret fields (`APP_ALERT_SMTP_TO`, `APP_ALERT_SMTP_FROM`,
+`APP_ALERT_SMTP_SMARTHOST`, `APP_ALERT_SMTP_AUTH_USERNAME`) are written as `${...}` placeholders
+in `alertmanager.yml`. The busybox-based Alertmanager image has no `envsubst`, so **the deploy
+host must expand them before mounting**:
+
+```bash
+rendered="$(mktemp)"   # unique path — avoids collisions across concurrent deploys
+envsubst < infra/observability/alertmanager/alertmanager.yml > "$rendered"
+# then mount "$rendered" at /etc/alertmanager/alertmanager.yml in the container
+```
+
+Only the email channel uses `${...}` placeholders; webhook, slack, and pagerduty configs use
+`*_file` directives and need no envsubst.
+
+### Precondition: `check_alert_secrets.sh`
+
+The `deploy` op runs `infra/deploy/check_alert_secrets.sh` before any containers start. It
+hard-fails the deploy if a configured channel's secret env var is empty or unset — catching a
+silent no-op at deploy time rather than during a real incident.
+
+### CD smoke: `strategy.sh alert-smoke`
+
+After deploy, the CD workflow runs `strategy.sh alert-smoke` (advisory, `continue-on-error`):
+it fires a synthetic auto-resolved alert and checks
+`alertmanager_notifications_failed_total`. If the counter is non-zero after the smoke, the step
+warns but does **not** fail the deploy (notification delivery is best-effort; the smoke surfaces
+misconfiguration early).
+
+Set `ALERTMANAGER_URL` as a GitHub Environment variable pointing to your deployed Alertmanager's
+URL (e.g. `https://alertmanager.example.com`). If unset it defaults to `http://localhost:9093`
+and the smoke exits advisory — a harmless no-op in CI environments where Alertmanager is not
+reachable.
+
+## Notifications
+
+`notify.sh` logs by default. Wire your channel there (reuse the Alertmanager destination).
