@@ -3716,3 +3716,18 @@ observability on host ports, no per-stack Traefik `:80`/`:443` binding) so N gen
 likely shape = (1) decouple Traefik from the `dev` profile, (2) `FORWARDED_ALLOW_IPS=*` + proxy-header honoring (a
 pre-existing framework-wide `X-Forwarded-Proto` gap, not box-specific); upstream-first per cross-repo/v4, ships a release.
 (operator request → FWK69 stub added)
+
+#### #0273 · recorded · FWK70 filed — pre-existing acceptance test-fixture bug surfaced by the branch-end gate · 2026-06-27
+The FWK66 branch-end **full** local gate (ruff/format/mypy clean; `pytest -q` incl. docker acceptance + renders) finished
+**1 failed / 1174 passed / 3 skipped (2829s)**. The one red is `test_rendered_project_integrity_verifies_tamper_and_restore`:
+`restore_file(dest, "alembic.ini")` → `require_version_sync` → `VersionSkewError: .copier-answers.yml has no _commit`.
+**Proven pre-existing + orthogonal to FWK66, NOT a regression:** restore.py / version_sync.py / copier_runner.py / checker.py /
+source.py are all 0 revs on this branch (master-identical); `HEAD..master` = 0; `require_version_sync` entered `restore_file`
+in FWK34 (`afd8d8c`, ~11 days ago); `render_project` renders the template subdir as a **non-VCS local path** so never records
+`_commit`. It stayed green on master because the gating CI `gate` job is `pytest --ignore=tests/acceptance` (`ci.yml:29`) — this
+test never runs in CI. **It is a test-fixture bug, not a product bug:** `restore_file` is correct to require `_commit`; a real
+`framework new` (`gh:` ref) scaffold always has one, so `framework restore` is fine for real consumers. Advisor-confirmed
+disposition: **file, don't fix here** — not merge-blocking, unrelated to SP2, and keeping the branch diff scoped to SP2 keeps the
+crown-jewels security review + release notes clean. Filed as PLAN `Next` **FWK70** (test-only → no release; fix verified with that
+one test alone, never the 47-min gate). Did NOT re-run the gate — 1174/1175 with the one fail provably orthogonal is a clean baseline.
+(FWK66 branch-end gate → FWK70 filed; Layer-2 all-Opus security pass launched in background)
