@@ -3798,3 +3798,23 @@ ignore, added `tenants = cast("dict[str, str]", report["tenants"])` (the value i
 ✅, **`mypy src` Success (64 files)** ✅, migrate + rollback_guard DB-free tests **19 passed**. Behavior-preserving (cast is
 a runtime no-op). Re-pushing → CI should turn all three render combos + render-complete green, then merge.
 (template-payload mypy red caught by PR CI → fixed)
+
+#### #0278 · completed · FWK66 (SP2) — fix cross-module test-isolation leak (SP2 acceptance test polluted control DB → broke a pre-existing SP1 test) · 2026-06-27
+After the mypy fix, PR #86's render-matrix multitenantauth combos failed a SECOND, deeper way: a pytest `F` in the
+coverage run — `test_tenant_provisioning.py::test_provision_creates_migrates_and_activates` →
+`psycopg.OperationalError: database "demo_tenant_<uuid>" does not exist`. **Diagnosed via systematic reproduction**
+(rendered battery project, real docker Postgres): the SP1 test PASSES in isolation (6/6) but FAILS deterministically when
+SP2's NEW `test_migrate_fanout_acceptance.py` runs first (`migrate` < `tenant` in collection order → 1 failed/7 passed,
+reproduced locally). **Root cause — a slug-noop short-circuit, NOT my P15/mypy changes:** `provision_tenant` is idempotent
+by slug (a live ACTIVE slug → returns the existing id as a no-op, creates no physical DB). The SP2 acceptance module
+provisions tenants `acme`/`globex`/`ghost` and calls `truncate_control()` only at each test's START, never in teardown — so
+it LEAVES an active `acme` row in the SHARED control DB. The SP1 module's first test then `provision_tenant(slug="acme")` →
+finds SP2's leftover active `acme` → no-op → returns the stale id whose physical DB SP2 already dropped → the connect fails.
+The SP1 module's `_clean_control` truncates only AFTER each test, so its first test inherits the pollution. Pre-existing SP1
+test + `provision.py` are UNCHANGED on this branch (provision's slug-noop is correct); the bug is the NEW SP2 test's hygiene.
+Surfaced only now because PR #86 is the branch's first render-matrix run (the full combined suite); per-task local
+verification ran subsets ([[meridian-is-the-de-facto-integration-test]], [[dogfood-e2e-harness-and-task-ci-coverage-gap]]).
+**Fix (in the NEW SP2 test, SP1 untouched):** added `truncate_control` to the module's autouse `_env` fixture and call it in
+TEARDOWN — leaving the shared control DB clean, mirroring the SP1 module's `_clean_control` pattern. **Verified in the render:**
+the repro pair now 8/8, and the FULL functional group **175 passed** (was the failing group). Re-pushing.
+(cross-module control-DB pollution → truncate-in-teardown → functional group green)

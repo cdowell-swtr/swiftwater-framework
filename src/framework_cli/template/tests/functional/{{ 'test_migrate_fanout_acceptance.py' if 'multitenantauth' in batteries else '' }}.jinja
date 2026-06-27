@@ -19,7 +19,7 @@ from {{ package_name }}.multitenantauth.tenancy.session import (
 
 
 @pytest.fixture(autouse=True)
-def _env(monkeypatch, control_db_url, engine):
+def _env(monkeypatch, control_db_url, engine, truncate_control):
     # Control on the dedicated ctrl DB; default business DB = the testcontainer DB.
     monkeypatch.setenv("APP_CONTROL_DATABASE_URL", control_db_url)
     monkeypatch.setenv(
@@ -36,6 +36,10 @@ def _env(monkeypatch, control_db_url, engine):
     invalidate_dsn_cache()
     reset_tenant_engines()
     yield
+    # Truncate the SHARED control DB so this module's tenant rows (e.g. the reused `acme` slug)
+    # never leak into a downstream module: a leftover active slug would short-circuit its
+    # provision_tenant to a no-op, returning an id whose physical DB this module already dropped.
+    truncate_control()
     get_settings.cache_clear()
     dispose_control_engine()
     invalidate_dsn_cache()
