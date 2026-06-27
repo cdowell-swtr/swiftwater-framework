@@ -1,0 +1,55 @@
+"""rollback_guard decision logic (unit, no alembic walk — the walk functions are patched)."""
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+_GUARD = Path("scripts/rollback_guard.py")
+
+
+def _load():
+    spec = importlib.util.spec_from_file_location("rollback_guard", _GUARD)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@pytest.fixture
+def guard(monkeypatch):
+    mod = _load()
+    monkeypatch.setattr(mod, "_app_contract_in_range", lambda rev: [])
+    monkeypatch.setattr(mod, "_control_contract_any", lambda: [])
+    return mod
+
+
+def test_usage_error_without_target(guard):
+    assert guard.main([]) == 2
+
+
+def test_clean_rollback_allowed(guard):
+    assert guard.main(["abc123"]) == 0
+
+
+def test_app_contract_in_range_refuses(guard, monkeypatch):
+    monkeypatch.setattr(guard, "_app_contract_in_range", lambda rev: ["0007_drop.py"])
+    assert guard.main(["abc123"]) == 1
+
+
+def test_control_contract_refuses(guard, monkeypatch):
+    monkeypatch.setattr(guard, "_control_contract_any", lambda: ["c0004_drop.py"])
+    assert guard.main(["abc123"]) == 1
+
+
+def test_override_allows_with_warning(guard, monkeypatch):
+    monkeypatch.setattr(guard, "_app_contract_in_range", lambda rev: ["0007_drop.py"])
+    monkeypatch.setenv("ALLOW_CONTRACT_ROLLBACK", "1")
+    assert guard.main(["abc123"]) == 0
+
+
+def test_marker_detection(guard, tmp_path):
+    f = tmp_path / "m.py"
+    f.write_text("# deploy: contract\ndef upgrade(): ...\n")
+    assert guard._has_marker(f) is True
+    f.write_text("def upgrade(): ...\n")
+    assert guard._has_marker(f) is False

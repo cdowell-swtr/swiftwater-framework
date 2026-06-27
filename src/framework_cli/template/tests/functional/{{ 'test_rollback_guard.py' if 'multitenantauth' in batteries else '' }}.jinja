@@ -1,0 +1,54 @@
+"""rollback_guard against the project's REAL alembic chains: clean head → allowed; a generated
+contract migration in range → refused."""
+
+import importlib.util
+import subprocess
+from pathlib import Path
+
+
+def _load():
+    spec = importlib.util.spec_from_file_location(
+        "rollback_guard", Path("scripts/rollback_guard.py")
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_clean_chain_allows_rollback_to_prior_head():
+    mod = _load()
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    head = script.get_current_head()
+    prior = script.get_revision(head).down_revision or head
+    # No shipped migration carries the contract marker → no offenders in range.
+    assert mod._app_contract_in_range(prior) == []
+    assert mod._control_contract_any() == []
+
+
+def test_contract_migration_in_range_is_refused(tmp_path):
+    mod = _load()
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    head_before = script.get_current_head()
+    # Generate a real, chained revision, then mark it contract + add a drop.
+    subprocess.run(
+        ["alembic", "revision", "-m", "fwk66 contract probe", "--rev-id", "zzcontract"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    new = next(p for p in Path("migrations/versions").glob("zzcontract*.py"))
+    new.write_text("# deploy: contract\n" + new.read_text())
+    try:
+        offenders = mod._app_contract_in_range(head_before)
+        assert any("zzcontract" in o for o in offenders)
+        assert (
+            mod.main([head_before]) == 1
+        )  # refuse from old head (range contains the contract rev)
+    finally:
+        new.unlink()

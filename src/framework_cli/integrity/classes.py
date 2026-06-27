@@ -134,6 +134,7 @@ BATTERY_LOCKED: dict[str, tuple[str, ...]] = {
     "infra/docker/postgres.Dockerfile": ("pgvector", "timescaledb", "age"),
     "scripts/export-graphql-schema.sh": ("graphql",),
     "scripts/pact-publish.sh": ("consumers",),
+    "scripts/rollback_guard.py": ("multitenantauth",),
     ".github/workflows/docs.yml": ("docs",),
 }
 

@@ -3636,3 +3636,16 @@ check_migrations.py is a LOCKED re-touch (no Jinja, already registered). Verifie
 regression-safe — baseline render still scans only migrations/versions (control dir absent → skipped), so the
 existing `test_rendered_project_blocks_contract_migration` acceptance behavior is unchanged. Review→branch-end.
 (FWK66 Task 6 → verified + committed)
+
+#### #0267 · completed · FWK66 (SP2) Task 7 — rollback_guard.py contract floor (image-only rollback safety) · 2026-06-26
+Sonnet authored the security-sensitive rollback FLOOR: `scripts/rollback_guard.py` (battery-conditional, verbatim
+.py, 0 Jinja) refuses (exit 1) an image-only rollback that crosses a `# deploy: contract` migration — app chain
+(target,head] range OR ANY control-chain contract; override ALLOW_CONTRACT_ROLLBACK=1; fail-CLOSED on any
+resolution error. + unit decision test (6) + functional real-alembic-walk test (2). Controller caught registrations
+the plan OMITTED (required, else completeness gates fail): (a) `BATTERY_LOCKED["scripts/rollback_guard.py"]=
+("multitenantauth",)` in integrity classes.py; (b) a runtime_coverage SurfaceClass (EXEMPT — exercised by the
+rendered project's own template-payload tests, matching the generated-CI-script precedent); (c) bumped
+`test_battery_locked_covers_the_expected_files` 25→26 + spot-check. Also removed an unused `import sys` + 4 ruff
+line-wrap fixes vs. plan blocks. Verified: 6/6 unit + 2/2 functional, ruff+format+mypy clean, runtime_coverage 9
+passed, integrity 72 passed, baseline render has NO rollback_guard.py. Opus task review next (security mechanism).
+(FWK66 Task 7 → verified + committed; Opus review pending)
