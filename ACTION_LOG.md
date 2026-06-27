@@ -3782,3 +3782,19 @@ so its narrative was a reconstruction that under-reported P15 — the scorecard 
 + verdicts extracted from agent transcripts), and the `.mjs` verdict-passing must be fixed before the next Layer-2 run. Scorecard
 `docs/superpowers/eval-scorecards/2026-06-27-fwk66-sp2-layer2-security-matrix.md`. Next = finishing-the-branch → PR → Phase-2 release.
 (Layer-2 PASSED + P15 fixed → ready to finish the branch)
+
+#### #0277 · completed · FWK66 (SP2) — fix render-matrix mypy red in migrate.py (template-payload type error caught by PR CI) · 2026-06-27
+PR #86's first render-matrix run failed the `multitenantauth`, `multitenantauth+workers`, and `full` combos (and the
+required `render-complete` umbrella) — all at the generated project's `task ci`→`mypy src` on the SAME line:
+`src/demo/multitenantauth/tenancy/migrate.py:109: error: "object" has no attribute "items" [attr-defined]` (1 error, both
+the single-battery 64-file and full 120-file checks). NOT a Docker Hub flake (correlated on the multitenantauth battery,
+not an unrelated combo — [[render-matrix-dockerhub-flake-triage]]) and NOT the P15 rollback_guard change. Root cause:
+`report_failed`'s `report["tenants"]` is typed `object` (the dict is `dict[str, object]`), so `.items()` is `attr-defined`;
+an earlier task's `# type: ignore[union-attr]` had the WRONG code so it never suppressed anything. This slipped every local
+check because the framework's own `mypy src` **excludes `template/`** — template-payload is only type-checked when RENDERED
+(the render-matrix's generated `task ci`), exactly [[release-readiness-needs-render-not-local-gate]]. Fix: removed the bogus
+ignore, added `tenants = cast("dict[str, str]", report["tenants"])` (the value is a dict by construction — set in
+`upgrade_all`) + `from typing import cast`. Verified in a rendered battery project: `ruff check` ✅, `ruff format --check`
+✅, **`mypy src` Success (64 files)** ✅, migrate + rollback_guard DB-free tests **19 passed**. Behavior-preserving (cast is
+a runtime no-op). Re-pushing → CI should turn all three render combos + render-complete green, then merge.
+(template-payload mypy red caught by PR CI → fixed)

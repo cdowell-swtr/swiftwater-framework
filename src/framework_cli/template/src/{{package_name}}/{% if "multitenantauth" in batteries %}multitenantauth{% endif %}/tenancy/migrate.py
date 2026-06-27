@@ -15,6 +15,7 @@ import json
 import logging
 import sys
 from pathlib import Path
+from typing import cast
 
 from alembic import command
 from alembic.config import Config
@@ -106,7 +107,8 @@ def report_failed(report: dict[str, object]) -> list[str]:
         failed.append("control")
     if report["default"] not in ("ok", None):
         failed.append("default")
-    failed.extend(t for t, v in report["tenants"].items() if v != "ok")  # type: ignore[union-attr]
+    tenants = cast("dict[str, str]", report["tenants"])  # always a dict
+    failed.extend(t for t, v in tenants.items() if v != "ok")
     return failed
 
 
