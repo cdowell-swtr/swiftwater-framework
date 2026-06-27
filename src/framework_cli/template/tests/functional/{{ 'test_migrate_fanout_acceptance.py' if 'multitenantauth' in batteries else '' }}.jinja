@@ -1,0 +1,112 @@
+"""SP2 conformance (real Postgres): upgrade_all reaches control + default + every tenant DB,
+isolation holds, and a broken tenant is flagged best-effort. Never skip-neutral."""
+
+import pytest
+from sqlalchemy import inspect, make_url, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.config.settings import get_settings
+from {{ package_name }}.db.control import repository as control_repo
+from {{ package_name }}.db.control.engine import dispose_control_engine
+from {{ package_name }}.multitenantauth.tenancy.dsn import default_tenant_dsn
+from {{ package_name }}.multitenantauth.tenancy.migrate import report_failed, upgrade_all
+from {{ package_name }}.multitenantauth.tenancy.provision import provision_tenant
+from {{ package_name }}.multitenantauth.tenancy.session import (
+    invalidate_dsn_cache,
+    reset_tenant_engines,
+    tenant_session,
+)
+
+
+@pytest.fixture(autouse=True)
+def _env(monkeypatch, control_db_url, engine, truncate_control):
+    # Control on the dedicated ctrl DB; default business DB = the testcontainer DB.
+    monkeypatch.setenv("APP_CONTROL_DATABASE_URL", control_db_url)
+    monkeypatch.setenv(
+        "APP_DATABASE_URL", str(engine.url.render_as_string(hide_password=False))
+    )
+    monkeypatch.setenv("APP_TENANT_DB_NAME_PREFIX", "{{ package_name }}_fanout")
+    get_settings.cache_clear()
+    # upgrade_all enumerates tenants via control_session_factory() — the PROCESS-GLOBAL control
+    # engine singleton. Dispose it so it rebinds to APP_CONTROL_DATABASE_URL set above; without
+    # this, a singleton built by an earlier test (different URL) survives cache_clear and the
+    # fan-out reads the wrong control DB. This is the first test to drive the singleton against
+    # the dedicated ctrl DB (SP1's acceptance tests used Session(ctrl_engine) directly).
+    dispose_control_engine()
+    invalidate_dsn_cache()
+    reset_tenant_engines()
+    yield
+    # Truncate the SHARED control DB so this module's tenant rows (e.g. the reused `acme` slug)
+    # never leak into a downstream module: a leftover active slug would short-circuit its
+    # provision_tenant to a no-op, returning an id whose physical DB this module already dropped.
+    truncate_control()
+    get_settings.cache_clear()
+    dispose_control_engine()
+    invalidate_dsn_cache()
+    reset_tenant_engines()
+
+
+def test_upgrade_all_reaches_every_plane_and_is_isolated(
+    ctrl_engine, truncate_control, drop_tenant_db
+):
+    truncate_control()
+    dbs = []
+    try:
+        with Session(ctrl_engine) as cs:
+            acme = provision_tenant(cs, "Acme", slug="acme")
+            globex = provision_tenant(cs, "Globex", slug="globex")
+            cs.commit()
+        dbs = [make_url(default_tenant_dsn(t)).database for t in (acme, globex)]
+
+        report = upgrade_all()
+        assert report["control"] == "ok"
+        assert report["default"] == "ok"
+        assert report["tenants"] == {acme: "ok", globex: "ok"}
+        assert report_failed(report) == []
+
+        # Every tenant DB has the business schema; isolation holds.
+        invalidate_dsn_cache()
+        with Session(ctrl_engine) as cs:
+            with tenant_session(acme, control_session=cs) as ts:
+                assert "items" in inspect(ts.bind).get_table_names()
+                ts.execute(text("INSERT INTO items (name) VALUES ('acme-only')"))
+                ts.commit()
+            with tenant_session(globex, control_session=cs) as ts:
+                names = [r[0] for r in ts.execute(text("SELECT name FROM items"))]
+                assert "acme-only" not in names  # A's write invisible to B
+    finally:
+        reset_tenant_engines()
+        for db in dbs:
+            drop_tenant_db(db)
+
+
+def test_broken_tenant_is_flagged_others_still_migrate(
+    ctrl_engine, truncate_control, drop_tenant_db
+):
+    truncate_control()
+    dbs = []
+    try:
+        with Session(ctrl_engine) as cs:
+            acme = provision_tenant(cs, "Acme", slug="acme")
+            cs.commit()
+            # Inject an ACTIVE tenant whose DSN points nowhere (no physical DB).
+            control_repo.add_tenant(
+                cs,
+                id="ghost",
+                name="Ghost",
+                slug="ghost",
+                dsn="postgresql+psycopg://app:app@127.0.0.1:5599/{{ package_name }}_fanout_ghost",
+                status="active",
+            )
+            cs.commit()
+        dbs = [make_url(default_tenant_dsn(acme)).database]
+
+        report = upgrade_all()
+        assert report["control"] == "ok"
+        assert report["tenants"][acme] == "ok"
+        assert report["tenants"]["ghost"] != "ok"  # connection failure, flagged
+        assert "ghost" in report_failed(report)
+    finally:
+        reset_tenant_engines()
+        for db in dbs:
+            drop_tenant_db(db)

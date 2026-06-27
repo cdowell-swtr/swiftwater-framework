@@ -4375,26 +4375,29 @@ def test_render_without_multitenantauth_env_example_lacks_auth_vars(tmp_path: Pa
     assert "APP_PASSWORD_PEPPER" not in env_example
 
 
-def test_render_multitenantauth_entrypoint_runs_control_chain_and_seed(tmp_path: Path):
-    """With multitenantauth, entrypoint.sh must run the control alembic chain then the
-    authz seed, both after the app chain, all gated on APP_RUN_MIGRATIONS."""
+def test_render_multitenantauth_entrypoint_runs_planeaware_fanout_then_seeds(
+    tmp_path: Path,
+):
+    """With multitenantauth (SP2), entrypoint.sh runs the plane-aware migrate FAN-OUT (control
+    + default + every active tenant DB, Task 2) then the authz seed — NOT the bare per-plane
+    alembic chains — all gated on APP_RUN_MIGRATIONS. The fan-out replaces the per-plane
+    `alembic upgrade head` lines so one boot can't silently leave tenant DBs stale."""
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
     entry = (dest / "scripts" / "entrypoint.sh").read_text()
-    # App chain still present.
-    assert "alembic upgrade head" in entry
-    # Control chain present with explicit config flag.
-    assert "alembic -c alembic_control.ini upgrade head" in entry
-    # Control seed present.
+    # Plane-aware fan-out present; the explicit control-chain command is gone. (NB: the string
+    # "alembic upgrade head" still appears in an explanatory COMMENT, so we assert on the
+    # control-chain command — which never appears in comments — for the bare-chain removal.)
+    assert "python -m demo.multitenantauth.tenancy.migrate" in entry
+    assert "alembic -c alembic_control.ini upgrade head" not in entry
+    # Control vocabulary seed still present.
     assert "python -m demo.multitenantauth.authz.seed" in entry
-    # Ordering: app chain → control chain → control seed → consumer seed (within the
-    # migrations block). The control vocabulary must be seeded BEFORE the consumer seed so
-    # any consumer data depending on the authz vocabulary always finds it present.
-    app_chain_pos = entry.index("alembic upgrade head")
-    control_chain_pos = entry.index("alembic -c alembic_control.ini upgrade head")
-    control_seed_pos = entry.index("python -m demo.multitenantauth.authz.seed")
+    # Ordering: fan-out → control seed → consumer seed. The control vocabulary must be seeded
+    # BEFORE the consumer seed so any consumer data depending on it always finds it present.
+    migrate_pos = entry.index("python -m demo.multitenantauth.tenancy.migrate")
+    authz_seed_pos = entry.index("python -m demo.multitenantauth.authz.seed")
     consumer_seed_pos = entry.index("python scripts/seed.py")
-    assert app_chain_pos < control_chain_pos < control_seed_pos < consumer_seed_pos
+    assert migrate_pos < authz_seed_pos < consumer_seed_pos
     # All within the APP_RUN_MIGRATIONS gate.
     assert "APP_RUN_MIGRATIONS" in entry
 
@@ -4408,6 +4411,109 @@ def test_render_without_multitenantauth_entrypoint_has_no_control_chain_or_seed(
     entry = (dest / "scripts" / "entrypoint.sh").read_text()
     # Baseline app chain is still present.
     assert "alembic upgrade head" in entry
-    # Control-chain and seed must be absent.
+    # Control-chain, plane-aware fan-out, and authz seed must all be absent.
     assert "alembic_control.ini" not in entry
+    assert "tenancy.migrate" not in entry
     assert "multitenantauth.authz.seed" not in entry
+
+
+def test_taskfile_db_migrate_all_under_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    text = (dest / "Taskfile.yml").read_text()
+    assert "db:migrate:all:" in text
+    assert "python -m demo.multitenantauth.tenancy.migrate" in text
+    assert "uv run alembic upgrade head" in text  # bare db:migrate still present
+
+
+def test_taskfile_no_db_migrate_all_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    text = (dest / "Taskfile.yml").read_text()
+    assert "db:migrate:all:" not in text
+    assert "db:migrate:" in text  # the single-DB target is unchanged
+
+
+# Golden = the pre-SP2 strategy.sh bytes, captured BEFORE the rename. A non-battery
+# render MUST reproduce these bytes EXACTLY — that is the spec/DEC-0005 promise ("strategy.sh
+# byte-identical"). Byte-identity (not a substring spot-check) is what catches the FWK39 class:
+# a `{%- … -%}` trim marker silently adding or dropping a trailing/leading newline in the
+# {% else %} branch, which a behavioral assertion would miss but a consumer's pre-commit
+# end-of-file-fixer would "repair" → integrity drift on their first commit.
+_STRATEGY_GOLDEN = (
+    Path(__file__).parent / "fixtures" / "sp2" / "strategy_sh_pre_sp2.golden"
+)
+
+
+def _bash_n_ok(path: Path) -> bool:
+    return (
+        subprocess.run(["bash", "-n", str(path)], capture_output=True).returncode == 0
+    )
+
+
+def test_strategy_rollback_image_only_under_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    sh = dest / "infra" / "deploy" / "strategy.sh"
+    text = sh.read_text()
+    assert "rollback_guard.py" in text
+    assert "image-only" in text.lower()
+    assert '__target_migrate "downgrade' not in text  # NO downgrade on any plane
+    assert _bash_n_ok(sh)
+    # EOF-hook clean (this render is LOCKED too, and there is no multitenantauth precommit
+    # acceptance test): exactly one trailing newline + no trailing whitespace, or a consumer's
+    # end-of-file-fixer / trailing-whitespace hook rewrites it on first commit → drift (FWK39).
+    raw = sh.read_bytes()
+    assert raw.endswith(b"\n") and not raw.endswith(b"\n\n")
+    assert all(line == line.rstrip() for line in text.splitlines())
+
+
+def test_strategy_byte_identical_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # no batteries
+    rendered = (dest / "infra" / "deploy" / "strategy.sh").read_bytes()
+    assert (
+        rendered == _STRATEGY_GOLDEN.read_bytes()
+    )  # verbatim today's file, byte-for-byte
+    # Behavioral spot-checks are subsumed by byte-identity above; kept for a readable failure.
+    text = rendered.decode()
+    assert '__target_migrate "downgrade ${rev}"' in text  # today's contract
+    assert "rollback_guard" not in text
+    assert _bash_n_ok(dest / "infra" / "deploy" / "strategy.sh")
+
+
+# README golden = the pre-SP2 infra/deploy/README.md bytes, captured BEFORE jinja-ification and
+# rendered with the canonical module DATA. README.md is integrity-LOCKED (classes.py) AND
+# interpolates the project/package names, so the golden is DATA-specific: a non-battery render
+# with this DATA MUST reproduce these bytes EXACTLY. Same FWK39 rationale as _STRATEGY_GOLDEN —
+# a `{%- … -%}` trim marker in the {% else %} branch silently shifting a trailing/leading newline
+# would slip past a substring check but trip a consumer's end-of-file-fixer → integrity drift on
+# their first commit. If you change the module DATA, regenerate this golden from a base render.
+_DEPLOY_README_GOLDEN = (
+    Path(__file__).parent / "fixtures" / "sp2" / "deploy_readme_pre_sp2.golden"
+)
+
+
+def test_deploy_readme_plane_aware_section_under_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    text = (dest / "infra" / "deploy" / "README.md").read_text()
+    assert "Plane-aware migrate & rollback (multitenantauth)" in text
+    # the section is additive — the pre-SP2 single-DB guidance is still present
+    assert "deploy: contract" in text
+    # ...but the pre-SP2 single-DB rollback prose must be SUPERSEDED, not left to contradict the
+    # image-only section (whole-branch review: an operator reading top-to-bottom otherwise forms
+    # the wrong model for a destructive op). Battery-only inline pointers resolve the conflict.
+    assert "is **superseded**" in text  # the "Migration-aware rollback" bullet
+    assert "do **not** call this hook" in text  # the __target_migrate hook row
+
+
+def test_deploy_readme_byte_identical_without_battery(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)  # no batteries
+    rendered = (dest / "infra" / "deploy" / "README.md").read_bytes()
+    assert (
+        rendered == _DEPLOY_README_GOLDEN.read_bytes()
+    )  # verbatim today's file, byte-for-byte
+    # The plane-aware section is gated out entirely on the non-battery path.
+    assert "Plane-aware migrate & rollback (multitenantauth)" not in rendered.decode()

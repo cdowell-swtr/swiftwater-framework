@@ -3466,3 +3466,355 @@ unused `from pathlib import Path` (left over when the P10 path expr was simplifi
 already returns a Path). Local pre-flight ran `ruff check src/demo` (src only); `task ci` runs `ruff check .` over
 `tests/` too — the task-ci coverage-gap class. Removed the import; re-render `ruff check .` + `mypy` clean.
 (FWK61 SP1 CI lint fix → ledger)
+
+#### #0255 · completed · FWK66 (SP2) — plane-aware migrate/deploy/rollback brainstorm → spec APPROVED + PI ledger reconciliation · 2026-06-25
+Started FWK58 Phase 2 SP2 (= **FWK66**) — plane-aware migrate/deploy/rollback — via the brainstorm→spec flow on
+branch `fwk66-plane-aware-migrate-deploy-rollback`. **Orientation** (2 Explore passes + SP1 spec/scorecard +
+DEC-0004): the template has no fan-out today (entrypoint migrates only control + the live `database_url` business
+DB, never tenant DBs); `strategy.sh` rollback blindly `downgrade`s one chain. Confirmed from code that the demo
+routes bind `get_session()`→`database_url` (none consume `tenant_db`) → the forward sequence is **3-step**
+(control → default business DB → fan-out over active tenants), purely additive. **Surprise correction:** Meridian's
+migrate fan-out is **no longer broken** — DEC-0004's drift note (missing `slug`, `all_tenant_dsns` ImportError) is
+stale; Meridian now has a working control-first `upgrade_all()` + plane-aware `entrypoint_tenancy.sh` + plane-split
+seed. The genuinely-unwired part on their side is the **CD deploy/rollback** (their open MDN46). **Design decisions
+(operator-approved):** one spec for all three; control-fail-fast + tenant-best-effort + non-zero-exit result map;
+sequential fan-out (parallelism = YAGNI); **image-only rollback under the battery** (no `alembic downgrade` on any
+plane; relies on the expand-only contract; **contract migrations = an explicit rollback floor**, refuse a one-click
+rollback that crosses one); everything battery-gated, non-battery render byte-identical (`strategy.sh` → `.jinja`);
+`check_migrations.py` scans both chains. Operator surfaced + we nailed the load-bearing mental model: images carry
+**code, not data** — rollback-by-image leaves all DBs at the forward (expanded) schema untouched; the accepted cost
+is N× schema **cruft** reclaimed later by a deliberate forward-only contract migration. **Spec APPROVED**
+`docs/superpowers/specs/2026-06-25-fwk66-sp2-plane-aware-migrate-deploy-rollback-design.md`; **PUR**
+`docs/superpowers/decisions/DEC-0005-multitenantauth-phase2-sp2-migrate-deploy-rollback-promote-up.md` (`designed`;
+corrects DEC-0004's drift note; generator confirmation requested). **PI ledger reconciliation** (rides this first
+commit, per the FWK61-Phase-2 ID map — master protected, no doc-only PR): re-scoped FWK61 → "Phase 2 SP1 (shipped
+v0.4.2)"; renumbered the done PI-v3 row **FWK64 → FWK65** (collision with the open cross-repo FWK64 resolved; the
+`chore(FWK64)` git label is immutable); added **FWK66** (SP2, this work), **FWK67** (SP3, folds FWK63 t1–t4 +
+Phase-1 preconditions), **FWK68** (convention-lock presence+floor, parked); ticked **FWK62** → done (SHIPPED v0.4.1)
+and corrected the **FWK64** cross-repo row's stale "register in implementers.md" prose (PR #13 merged; only the
+`adopted`-flip remains, gated on Meridian's fork-deletion). Next: user reviews the spec → writing-plans.
+(FWK66 spec + PI reconciliation → ledger)
+
+#### #0256 · completed · FWK66 (SP2) — implementation plan written (8 TDD tasks) · 2026-06-25
+Spec approved → wrote the implementation plan `docs/superpowers/plans/2026-06-25-fwk66-sp2-plane-aware-migrate-deploy-rollback.md`.
+**8 TDD tasks:** (1) `active_tenant_dsns` control-repo enumeration [LOCKED re-touch; functional]; (2) `upgrade_all`
+fan-out runner in new locked `tenancy/migrate.py` + BATTERY_LOCKED_SRC registration [unit — ordering/control-fail-fast/
+best-effort/no-DSN-in-report]; (3) real-PG fan-out + isolation + broken-tenant acceptance [never skip-neutral];
+(4) plane-aware entrypoint [render-content]; (5) `db:migrate:all` Taskfile target [render-content]; (6)
+`check_migrations.py` scans both chains [framework-level importlib]; (7) `rollback_guard.py` contract-floor [unit
+decision + functional alembic-walk]; (8) `strategy.sh`→`.jinja` image-only rollback + guard wiring + README, non-battery
+byte-identical [render-content + bash -n]. Grounded in exact code (read provision.py/repository.py/both env.py/control
+engine/integrity classes/Taskfile + the render_project test helper). Each task = real code, no placeholders.
+Execution: subagent-driven, author/verify split, per-task Opus quality, branch-end whole-branch Opus + Layer-2 all-Opus
+stance×focus gate (migration-data-safety cell). Next: execution-choice handoff → build.
+(FWK66 plan → ledger)
+
+#### #0257 · amended · FWK66 (SP2) — plan hardened after advisor review (6 execution-time traps) · 2026-06-25
+Advisor review of the plan surfaced 6 harness/conformance-fidelity traps (no design change); patched all into
+`docs/superpowers/plans/2026-06-25-fwk66-sp2-plane-aware-migrate-deploy-rollback.md`. (1) **strategy.sh is
+`LOCKED_TRACKED`** (verified `integrity/classes.py:38`) → jinja-ifying it is the FWK39 newline-drift class; added a
+byte-identity **golden** (`tests/fixtures/sp2/strategy_sh_pre_sp2.golden`, snapshotted before the `git mv`), a battery-branch
+EOF-clean byte assertion, and the baseline `test_rendered_project_precommit_runs_clean` acceptance as the end-to-end FWK39
+catch — and reframed the Step-5 `integrity --ci` claim (a fresh render re-checksums to itself → cannot prove byte-fidelity).
+(2) Task 3 `_upgrade_default` is an expected idempotent **no-op** (verified the `engine` fixture already `alembic upgrade
+head`s that DB) — documented so it isn't "fixed". (3) Task 3 `_env` must **dispose the process-global control-engine
+singleton** (`dispose_control_engine()` before/after — verified the helper exists in `db.control.engine`); it's the first
+test to drive the singleton against the dedicated ctrl DB. (4) Task 2 call-site made self-consistent: module-level
+`active_tenant_dsns` import + bare call (so the unit test's `monkeypatch.setattr(migrate, ...)` bites); removed the
+contradictory follow-up note. (5) Named the **subprocess-per-target fallback** behind the `upgrade_all` seam if in-process
+multi-`command.upgrade` interferes (Task 3 is the canary). (6) Cosmetic: dropped a dead `if False` ternary in Task 7.
+Next: execution-choice handoff → build.
+(FWK66 plan hardening → ledger)
+
+#### #0258 · note · working-tree $DEV_ROOT path mutation — detected + reverted · 2026-06-26
+Operator flagged that an over-eager agent had search-replaced all `/home/chris/Claude Code/Projects`
+and `~/Claude Code/Projects` absolute paths with the literal `$DEV_ROOT` across files — corrupting
+immutable historical records (ACTION_LOG entries, archived/old superpowers plans, DEC PURs). Assessed:
+20 tracked docs carried `$DEV_ROOT`, ALL unstaged working-tree changes; diff was perfectly symmetric
+(44 ins / 44 del) and every changed line was a pure path substitution (no legitimate edits mixed in).
+Verified the corruption never entered git history: every committed blob across this branch (6a62b2b,
+ab0a21a, 1cd4c28) and the pre-session baseline (master 14c9311) had ZERO `$DEV_ROOT` — my commits
+staged clean content; the mutation hit the working tree only. Reverted with `git checkout HEAD -- <the
+20 files>`; post-restore `git grep -l DEV_ROOT` = 0. SDD scratch + Task-1 WIP untouched. (Cross-repo
+caveat: the same agent likely mutated sibling repos — patterns/meridian — not visible from here; operator
+to check those.)
+(DEV_ROOT working-tree corruption → reverted, history clean)
+
+#### #0259 · completed · FWK66 (SP2) Task 1 — active_tenant_dsns control-repo enumeration · 2026-06-26
+Task 1 was already authored by a prior session (working-tree WIP, clean of `$DEV_ROOT`): `active_tenant_dsns`
+added to the LOCKED `db/control/repository.py` after `get_tenant_dsn` (exact plan code; `select`/`Tenant`
+already imported) + the functional test jinja. Controller-verified (author/verify split — subagent dispatch
+blocked by weekly quota, reset ~2026-06-26 23:00 PT): rendered `--with multitenantauth`, `uv sync`, ran the
+real-PG functional test via testcontainers — **1 passed**. ruff check + ruff format --check clean (fixed one
+format nit vs. the plan's block: `add_tenant(...)` args exploded one-per-line by the magic trailing comma —
+[[ruff-format-check-after-inline-edits]]). repository.py is a pre-registered BATTERY_LOCKED_SRC re-touch
+(no new lock registration); the locked-file completeness walk is unaffected. Per-task independent review
+(Sonnet spec / Opus quality) DEFERRED to quota-return / branch-end whole-branch Opus pass.
+(FWK66 Task 1 → verified + committed)
+
+#### #0260 · note · adopt $DEV_ROOT projects-root convention (forward-only) · 2026-06-26
+Operator decision (option A) after the $DEV_ROOT mutation revert (#0258): adopt `$DEV_ROOT` (exported
+in shell rc = the projects root, `/home/chris/Claude Code/Projects` on this box) as the convention for
+all LOAD-BEARING paths — runbook commands, scratch scripts, fixture/`cd` paths, sibling-repo refs that
+actually execute — so the projects dir can be relocated later and to dodge the space-in-`Claude Code`
+quoting hazard. Documented in CLAUDE.md operating-environment. FORWARD-ONLY: historical/prose path
+references (frozen ACTION_LOG entries, completed plans, PI-registry rows) stay literal — NOT rewritten
+(the over-eager agent's error was rewriting history; here we keep the good half). Audit confirmed there
+are no active load-bearing absolute paths in-repo today — the active FWK66 plan + all scripts/hooks
+already use repo-relative paths.
+(adopt $DEV_ROOT convention → CLAUDE.md)
+
+#### #0261 · completed · FWK66 (SP2) Task 2 — upgrade_all plane-aware fan-out + integrity lock · 2026-06-26
+Sonnet implementer authored the new LOCKED `multitenantauth/tenancy/migrate.py` (`upgrade_all` control-first
+fail-fast → default DB → active-tenant best-effort; result-map values = exception CLASS names only; `report_failed`;
+`main`), registered it in `BATTERY_LOCKED_SRC` (same task — fail-safe), + the unit test jinja. Controller caught a
+plan defect pre-dispatch: migrate.py is a plain `.py` (Copier `_templates_suffix: .jinja` → verbatim copy, NO Jinja
+render), so the brief's `{{ package_name }}` docstring would render literally → instructed a generic invocation
+string instead. Verified (author/verify split): render `--with multitenantauth` (0 Jinja leak in migrate.py),
+5/5 unit tests (ordering / control-fail-fast / tenant best-effort / no-DSN-in-report / exit codes), integrity-lock
+completeness walk 5 passed (migrate.py locked), ruff check+format clean (fixed 2 line-wrap nits vs. plan blocks),
+mypy clean. Per-task independent review (Opus quality+spec) next.
+(FWK66 Task 2 → verified + committed)
+
+#### #0262 · amended · FWK66 (SP2) Task 2 — Opus review (spec ✅) + enumeration-failure hardening · 2026-06-26
+Opus task review of d278bc9: **spec compliance ✅** (all binding constraints — Python-API alembic, control-fail-fast
+→ default-record → tenant-best-effort → non-zero exit, active-only, no-DSN-leak on every traced surface, integrity
+lock, no Jinja in the verbatim .py, module-level monkeypatch seams). **Code quality: one Important** — the tenant-
+enumeration read (`control_session_factory()() / active_tenant_dsns(cs)`) sat outside any try/except, so a control-
+registry read failure would make `upgrade_all` RAISE instead of returning its dict (contract + no-leak-by-construction
+gap; brief-inherited — the plan left this path unspecified). Controller decision (fail-closed, spec's fail-fast intent):
+wrapped the enumeration; on failure record it under `control` (class name only), abort, touch no tenant, return the
+report → `main()` non-zero. Added `test_tenant_enumeration_failure_is_control_fail_and_aborts` (asserts control=class-name,
+tenants empty, "control" in report_failed, message not leaked). Re-verified: 6/6 unit, integrity walk 5 passed, ruff+mypy
+clean. Formal re-review folded into the branch-end whole-branch Opus pass (fix = the reviewer's exact prescription).
+1 optional Minor (cast vs `# type: ignore[union-attr]`) → final.
+(FWK66 Task 2 review + enumeration hardening → committed)
+
+#### #0263 · completed · FWK66 (SP2) Task 3 — real-PG fan-out + isolation + broken-tenant acceptance · 2026-06-26
+Test-only task (exercises Tasks 1-2). Haiku authored `tests/functional/test_migrate_fanout_acceptance.py.jinja`.
+Controller caught a 2nd plan defect pre-dispatch: the brief imported `reset_tenant_engines` from `tenancy.engine_registry`
+(ImportError — it lives in `tenancy.session`, line 118; verified against SP1's test_tenant_provisioning) → instructed the
+session import. Verified (never-skip-neutral real-PG tier, testcontainers): 2/2 — fan-out reaches control+default+both
+tenant DBs at head with isolation proven both directions (A's `items` write invisible to B); broken/ghost active tenant
+flagged != "ok" in the result map + report_failed while the real tenant migrates. ruff check+format clean (fixed 4
+line-wrap nits vs. plan block). Review folded into branch-end whole-branch Opus (test-only, exercises reviewed code).
+Roll-up Minor (pre-existing, NOT SP2): alembic emits `No path_separator found in configuration` DeprecationWarning —
+consider adding `path_separator = os` to the alembic.ini / alembic_control.ini templates (hygiene follow-up).
+(FWK66 Task 3 → real-PG acceptance verified + committed)
+
+#### #0264 · completed · FWK66 (SP2) Task 4 — plane-aware container entrypoint · 2026-06-26
+Haiku authored the entrypoint.sh.jinja restructure: under the battery, boot runs the plane-aware fan-out
+(`python -m <pkg>.multitenantauth.tenancy.migrate`, Task 2) + authz seed INSTEAD of the two bare alembic
+chains; non-battery keeps `alembic upgrade head`. entrypoint.sh is LOCKED_TRACKED, so the FWK39 byte-drift risk
+applies — controller byte-verified the non-battery render is IDENTICAL to a pre-edit golden (trim markers
+`{%- if/else/endif %}` correct), battery render bash -n + EOF-clean (single trailing newline, no trailing ws).
+Deviations (controller, documented): (a) the pre-existing `test_render_multitenantauth_entrypoint_runs_control_chain_and_seed`
+asserted the OLD two-alembic-chain behavior → REWROTE it to the new plane-aware behavior + ordering
+(migrate→authz→consumer), renamed `..._runs_planeaware_fanout_then_seeds`; can't assert "alembic upgrade head"
+absence (it's in an explanatory comment) so assert control-chain-command absence instead. (b) Consolidated the
+2 plan-specified new tests into the rewritten pre-existing pair (DRY — they were strict subsets); added a
+`tenancy.migrate not in entry` assert to the non-battery test. 4 entrypoint tests green; ruff check+format clean.
+Review folded into branch-end whole-branch Opus.
+(FWK66 Task 4 → verified + committed)
+
+#### #0265 · completed · FWK66 (SP2) Task 5 — db:migrate:all Taskfile target · 2026-06-26
+Haiku authored the battery-gated `db:migrate:all` target (runs the plane-aware fan-out, Task 2 — the multi-host
+pre-roll handle) after `db:seed:`, + 2 render-content tests. Taskfile.yml is LOCKED_TRACKED → controller
+byte-verified the non-battery render is IDENTICAL to a pre-edit golden (trim markers `{%- if/endif %}` correct);
+battery render YAML-valid (yaml.safe_load) with both `db:migrate:all` and the unchanged bare `db:migrate` present.
+2 render-content tests green; ruff check+format clean. Review→branch-end whole-branch Opus.
+(FWK66 Task 5 → verified + committed)
+
+#### #0266 · completed · FWK66 (SP2) Task 6 — check_migrations.py scans both alembic chains · 2026-06-26
+Haiku authored: added `CONTROL_VERSIONS = Path("migrations_control/versions")` + a dirs-parameterized
+`main(dirs=None)` that scans BOTH chains (app + control, each only if present); removed the `if not
+VERSIONS.is_dir(): return 0` early guard (per-dir `if d.is_dir()` handles absence). The `# deploy: contract`
+marker is now authoritative in the control chain too — Task 7's rollback floor needs it. New framework-level
+test `tests/test_check_migrations.py` (importlib-loads the template script, temp dirs): RED→GREEN 4/4
+(clean app passes; unmarked destructive control fails; contract-marked control passes; absent dir skipped).
+check_migrations.py is a LOCKED re-touch (no Jinja, already registered). Verified: ruff check+format+mypy clean;
+regression-safe — baseline render still scans only migrations/versions (control dir absent → skipped), so the
+existing `test_rendered_project_blocks_contract_migration` acceptance behavior is unchanged. Review→branch-end.
+(FWK66 Task 6 → verified + committed)
+
+#### #0267 · completed · FWK66 (SP2) Task 7 — rollback_guard.py contract floor (image-only rollback safety) · 2026-06-26
+Sonnet authored the security-sensitive rollback FLOOR: `scripts/rollback_guard.py` (battery-conditional, verbatim
+.py, 0 Jinja) refuses (exit 1) an image-only rollback that crosses a `# deploy: contract` migration — app chain
+(target,head] range OR ANY control-chain contract; override ALLOW_CONTRACT_ROLLBACK=1; fail-CLOSED on any
+resolution error. + unit decision test (6) + functional real-alembic-walk test (2). Controller caught registrations
+the plan OMITTED (required, else completeness gates fail): (a) `BATTERY_LOCKED["scripts/rollback_guard.py"]=
+("multitenantauth",)` in integrity classes.py; (b) a runtime_coverage SurfaceClass (EXEMPT — exercised by the
+rendered project's own template-payload tests, matching the generated-CI-script precedent); (c) bumped
+`test_battery_locked_covers_the_expected_files` 25→26 + spot-check. Also removed an unused `import sys` + 4 ruff
+line-wrap fixes vs. plan blocks. Verified: 6/6 unit + 2/2 functional, ruff+format+mypy clean, runtime_coverage 9
+passed, integrity 72 passed, baseline render has NO rollback_guard.py. Opus task review next (security mechanism).
+(FWK66 Task 7 → verified + committed; Opus review pending)
+
+#### #0268 · amended · FWK66 (SP2) Task 7 — Opus review (spec ✅) + fail-closed regression guards · 2026-06-26
+Opus task review of f33b491: spec ✅ (range (target,heads] correct & off-by-one-safe; control = any-marker;
+fail-closed verified against alembic source; override on both paths via strict `=="1"`; no leak; registrations
+correct). Code quality: ONE Important — the fail-CLOSED branch (the spec's #1 property) had NO regression test:
+a `return 1`→`return 0` slip in the `except` would pass the whole suite. Added 2 unit tests
+(`test_resolution_error_fails_closed`, `test_resolution_error_override_still_allows`) → 8/8 green, ruff+format clean.
+2 Minors → branch-end roll-up: (M1) `if rev.revision == target_rev` over-blocks on an ABBREVIATED target rev
+(safe/over-block direction only) → Task 8 must pass the FULL revision to rollback_guard; (M2) the control-chain
+`if not cfg_path.exists(): return []` branch is untested (spec-endorsed, can't legitimately fire under the battery).
+Inherited (not this task): raw-SQL/type-narrowing contract changes evade the marker → evade the floor (deferred to
+the data-integrity review agent; floor is only as complete as check_migrations' marker enforcement).
+(FWK66 Task 7 review + fail-closed guards → committed)
+
+#### #0269 · completed · FWK66 (SP2) Task 8 — image-only rollback in strategy.sh + plane-aware README · 2026-06-26
+Sonnet authored the final, byte-identity-critical task: `infra/deploy/strategy.sh` → `strategy.sh.jinja` (LOCKED,
+newly jinja-ified). Battery `rollback()` = IMAGE-ONLY — calls `uv run python scripts/rollback_guard.py "${rev}"`
+(full alembic rev per Task-7 review M1) + redeploys the prior image; NO `__target_migrate "downgrade"` on any plane.
+Non-battery `{% else %}` branch = the verbatim pre-SP2 body. `infra/deploy/README.md` → `README.md.jinja` with the
+plane-aware section GATED under `{% if "multitenantauth" %}` (controller adjustment vs. brief — keeps baseline deploy
+READMEs clean instead of appending mt content everywhere). Controller-verified (FWK39 class): BOTH non-battery renders
+BYTE-IDENTICAL to pre-SP2 goldens (strategy via committed tests/fixtures/sp2/strategy_sh_pre_sp2.golden; README via
+controller golden); battery strategy bash -n + EOF clean + guard wired + no-downgrade; 3 render-content tests green;
+ruff+format clean; baseline precommit acceptance PASSED (end-to-end EOF-hook guard on both newly-jinja'd files);
+rendered paths (strategy.sh, README.md) unchanged → no integrity reclassification. Opus task review next (security mechanism).
+(FWK66 Task 8 → verified + committed; Opus review pending)
+
+#### #0270 · amended · FWK66 (SP2) Task 8 — Opus review (spec ✅) + committed README byte-identity guard · 2026-06-26
+Opus task review of ca4e5d5: SPEC ✅ PASS — all 10 binding constraints verified by rendering (battery `rollback()` is
+image-only with ZERO `__target_migrate` calls on any plane; guard runs BEFORE redeploy; full revision passed; both
+non-battery renders byte-identical to their goldens; EOF/whitespace hygiene clean). Code quality: Approved, Minors only.
+Acted on the one substantive Minor: the README non-battery byte-identity rested only on the controller's one-time manual
+diff — no DURABLE regression guard, unlike strategy.sh. Closed the FWK39 gap consistently: committed
+`tests/fixtures/sp2/deploy_readme_pre_sp2.golden` (the pre-SP2 README bytes, captured with the canonical module DATA —
+README.md interpolates project/package names so the golden is DATA-specific, noted in-test) + 2 tests mirroring the
+strategy pair (`test_deploy_readme_byte_identical_without_battery`, `test_deploy_readme_plane_aware_section_under_battery`).
+6/6 render tests green, ruff+format clean. Reconciled the reviewer's "17051" byte count (their render used different
+DATA; my golden + current base render agree at 17147 — verified identical). Cosmetic comment-parity Minor on the battery
+`__target_record_release` → branch-end roll-up. Both `infra/deploy/{strategy.sh,README.md}` confirmed in LOCKED_TRACKED.
+(FWK66 Task 8 review → README golden + tests committed; all 8 tasks done — next = branch-end whole-branch Opus review + Phase-2 Layer-2 gate)
+
+#### #0271 · completed · FWK66 (SP2) branch-end whole-branch Opus review → README contradiction fix · 2026-06-27
+Whole-branch Opus code-quality review (master..HEAD): **APPROVE WITH MINORS** — all 3 cross-task seams verified correct
+(entrypoint→migrate module path matches; strategy→rollback_guard receives the FULL alembic rev so Task-7 M1 is satisfied,
+guard runs before redeploy, zero `__target_migrate "downgrade"` on any plane; fan-out tenant isolation is correct BY
+CONSTRUCTION — `migrate_tenant` builds a fresh `NullPool` engine per DSN, never the request-path engine registry, so a
+mid-loop exception can't cross-contaminate; control fail-fast aborts before any tenant DB; no DSN/credential leak on any
+path). One Important, docs-only: the BATTERY `infra/deploy/README.md` carried contradictory rollback guidance — the new
+image-only section vs. un-gated pre-SP2 prose ("Migration-aware rollback … explicit downgrade is required"; the
+`__target_migrate` hook rationale, false under the battery). An operator reading top-to-bottom forms the wrong model for
+a destructive op. Fixed with **inline** battery-gated `{% if %}…{% endif %}` pointers on the two flagged lines (the
+`__target_migrate` row + the "Migration-aware rollback" bullet) — inline tags carry NO newlines, so the non-battery render
+stays byte-identical (the committed golden test confirms zero drift; deliberately NOT block-level gating, which would add
+stray blank lines → FWK39 drift). Strengthened `test_deploy_readme_plane_aware_section_under_battery` to assert the
+superseding pointers are present under the battery. 3/3 README render tests green; ruff+format clean. Minors (cosmetic
+comment-parity; release-history preamble duplicated across the strategy branches; the asymmetric-but-inert control-config
+fail-open) → branch-end roll-up, none escalate. Verdict stands: branch functionally sound.
+(FWK66 whole-branch review → README fix committed; next = Phase-2 Layer-2 all-Opus security gate)
+
+#### #0272 · completed · FWK69 recorded — `behind-edge` edge-proxy promote-up PLAN stub · 2026-06-27
+Per operator request, recorded the `behind-edge` capability (surfaced by the `local-reverse-proxy` box tool; PUR
+`DEC-0006-behind-edge-promote-up.md`, assoc. PR #81) as a new PLAN `Next` row **FWK69** — nothing more (recording only,
+not started, needs its own brainstorm). Captures: generalize into the framework a dev stack runnable *behind-edge* (app +
+observability on host ports, no per-stack Traefik `:80`/`:443` binding) so N generated stacks share one box edge proxy;
+likely shape = (1) decouple Traefik from the `dev` profile, (2) `FORWARDED_ALLOW_IPS=*` + proxy-header honoring (a
+pre-existing framework-wide `X-Forwarded-Proto` gap, not box-specific); upstream-first per cross-repo/v4, ships a release.
+(operator request → FWK69 stub added)
+
+#### #0273 · recorded · FWK70 filed — pre-existing acceptance test-fixture bug surfaced by the branch-end gate · 2026-06-27
+The FWK66 branch-end **full** local gate (ruff/format/mypy clean; `pytest -q` incl. docker acceptance + renders) finished
+**1 failed / 1174 passed / 3 skipped (2829s)**. The one red is `test_rendered_project_integrity_verifies_tamper_and_restore`:
+`restore_file(dest, "alembic.ini")` → `require_version_sync` → `VersionSkewError: .copier-answers.yml has no _commit`.
+**Proven pre-existing + orthogonal to FWK66, NOT a regression:** restore.py / version_sync.py / copier_runner.py / checker.py /
+source.py are all 0 revs on this branch (master-identical); `HEAD..master` = 0; `require_version_sync` entered `restore_file`
+in FWK34 (`afd8d8c`, ~11 days ago); `render_project` renders the template subdir as a **non-VCS local path** so never records
+`_commit`. It stayed green on master because the gating CI `gate` job is `pytest --ignore=tests/acceptance` (`ci.yml:29`) — this
+test never runs in CI. **It is a test-fixture bug, not a product bug:** `restore_file` is correct to require `_commit`; a real
+`framework new` (`gh:` ref) scaffold always has one, so `framework restore` is fine for real consumers. Advisor-confirmed
+disposition: **file, don't fix here** — not merge-blocking, unrelated to SP2, and keeping the branch diff scoped to SP2 keeps the
+crown-jewels security review + release notes clean. Filed as PLAN `Next` **FWK70** (test-only → no release; fix verified with that
+one test alone, never the 47-min gate). Did NOT re-run the gate — 1174/1175 with the one fail provably orthogonal is a clean baseline.
+(FWK66 branch-end gate → FWK70 filed; Layer-2 all-Opus security pass launched in background)
+
+#### #0274 · recorded · FWK71 filed — review-system expansion candidates (idea-stage, low priority) · 2026-06-27
+Per operator note, recorded two idea-stage candidate-expansion docs the operator left under
+`src/framework_cli/review/agents/` (currently **untracked** working docs): `_proposed-agents.md` (~90 candidate reviewers
+beyond the ~25 shipped, bucketed by cadence) + `_proposed-stances.md` (security-panel stance taxonomy beyond the 5 baseline
+`break-in/harden/destroy/disrupt/leak`). Operator clarified these are **"not even backlog — potential future expansion
+services"** and wants only a **stub, not a priority**. Filed as PLAN `Next` **FWK71** (recording only; if picked up → own
+brainstorm, prompt-fit triage, Gate-vs-advisory + eval calibration; related FWK55 + the reviewer-tuning arc). Deliberately
+did NOT incorporate the richer stance catalog (`cross-plane`/`race`/`irreversibility`/`revocation-failure`) into the running
+FWK66 Layer-2 gate — operator confirmed idea-stage, and the launched pass already covers the plan-required migration-data-safety
+cell; mid-gate taxonomy swap would be scope creep. Left the `_proposed-*` files untracked (operator's working docs).
+(operator note → FWK71 stub added; running Layer-2 pass left undisturbed)
+
+#### #0275 · completed · FWK71 — commit the two `_proposed-*` review-expansion docs for future reference · 2026-06-27
+Per operator follow-up, committed the two idea-stage catalogs into the repo (were untracked working docs):
+`src/framework_cli/review/agents/_proposed-agents.md` + `_proposed-stances.md`. Confirmed safe to track: the registry is
+an explicit list (not a glob), nothing enumerates `agents/*.md` (`baselines.py` iterates scorecards, `decisions.py` globs a
+decisions dir, `audit/brief.py` only iterates subdirs via `is_dir()`), the `_proposed-` prefix keeps them out of discovery,
+and the full branch-end gate already ran green with both present on disk — so tracking them is inert. Updated the FWK71 row
+(untracked → tracked for future reference).
+(operator follow-up → docs tracked)
+
+#### #0276 · completed · FWK66 (SP2) Phase-2 Layer-2 all-Opus security matrix PASSED + P15 fail-open fixed in-branch · 2026-06-27
+Ran the Phase-2 Layer-2 adversarial stance×focus security matrix (all-Opus `claude-opus-4-8`, effort high) on the SP2
+migrate/deploy/rollback surface — clean `--with multitenantauth` render at HEAD `2f36159`. 34 agents: 3 baseline producers →
+12 stance×focus cells (`operator/chaos/dataloss` × `F-ISO/F-CRED/F-ORDER/F-ROLLBACK`, incl. the migration-data-safety cell) →
+triage (18 raw → 17 promoted) → default-to-refuted verify → synthesis. **GATE GREEN — 0 confirmed Critical/High.** All four
+crown-jewel invariants re-verified on the shipped surface (I-ISO fresh per-DSN NullPool engine per call; I-CRED class-name-only
+sinks + SP1 `%%`-escape intact; I-FAILFAST control-first abort reproduced; I-ROLLBACK image-only, fail-closed, full-rev).
+**The matrix earned its keep BELOW the Crit/High line** — reading every confirmed disposition (not just the gated band)
+surfaced **P15**: a confirmed Medium FIX-NOW *fail-OPEN* of the I-ROLLBACK floor. `rollback_guard._app_contract_in_range`
+used `script.walk_revisions(target,"heads")`, which on a MERGE topology omits a marked `# deploy: contract` on a merged
+side-branch → an image-only rollback to a merge parent silently crosses it (reachable after the standard `alembic merge heads`).
+Both the precomputed Crit/High count (P15 is Medium) and the degraded synthesis narrative ("fix-now: none") missed it; caught
+by reading the per-agent verify verdicts. **FIXED in-branch** (advisor-confirmed: strict tightening, unlocked code, this branch):
+replaced the walk with the true downgrade set **ancestor-set difference** `ancestors(heads) − (ancestors(target) ∪ {target})`.
+The verifier's *suggested* fix (`iterate_revisions(heads,target,select_for_downgrade=True)`) was **empirically disproven** —
+run against the repro chain it ALSO missed the side-branch contract; the advisor's "prove the API before trusting it" discipline
+caught it before shipping a still-broken floor. Added 2 non-vacuous TDD merge-topology regression tests (synthetic merge chain,
+since the real chain is linear); RED/GREEN proven in a synced battery render (old impl → `AssertionError: []`; fix → 12/12 guard
+tests green); rendered guard+tests `ruff format --check` clean at the rendered project's 88-col default; my edits are confined to
+`template/` (excluded from the framework's own ruff/mypy), `"deploy: contract" in guard` copier-runner assertion still holds, no
+byte-golden for the guard. **P11** (marker-evasion: raw-SQL/type-narrowing destructive migrations carry no marker → evade both
+`check_migrations.py` and the guard) and **P16** (`_control_contract_any` always-in-range over-refusal — fail-CLOSED) confirmed
+but by-design/disclosed → **DOCUMENTED-LIMITATION**, carried to SP3 (FWK67) alongside the override audit trail (P13/P17) and the
+SP1 data-plane preconditions (the matrix re-surfaced the empty-DSN→default-DB fail-open → reinforces the placeholder-DSN sentinel).
+Recorded a provenance caveat: the workflow's Phase-5 synthesis received verify verdicts as `[object]` (script data-passing bug),
+so its narrative was a reconstruction that under-reported P15 — the scorecard is built from the gate-of-record (script precompute
++ verdicts extracted from agent transcripts), and the `.mjs` verdict-passing must be fixed before the next Layer-2 run. Scorecard
+`docs/superpowers/eval-scorecards/2026-06-27-fwk66-sp2-layer2-security-matrix.md`. Next = finishing-the-branch → PR → Phase-2 release.
+(Layer-2 PASSED + P15 fixed → ready to finish the branch)
+
+#### #0277 · completed · FWK66 (SP2) — fix render-matrix mypy red in migrate.py (template-payload type error caught by PR CI) · 2026-06-27
+PR #86's first render-matrix run failed the `multitenantauth`, `multitenantauth+workers`, and `full` combos (and the
+required `render-complete` umbrella) — all at the generated project's `task ci`→`mypy src` on the SAME line:
+`src/demo/multitenantauth/tenancy/migrate.py:109: error: "object" has no attribute "items" [attr-defined]` (1 error, both
+the single-battery 64-file and full 120-file checks). NOT a Docker Hub flake (correlated on the multitenantauth battery,
+not an unrelated combo — [[render-matrix-dockerhub-flake-triage]]) and NOT the P15 rollback_guard change. Root cause:
+`report_failed`'s `report["tenants"]` is typed `object` (the dict is `dict[str, object]`), so `.items()` is `attr-defined`;
+an earlier task's `# type: ignore[union-attr]` had the WRONG code so it never suppressed anything. This slipped every local
+check because the framework's own `mypy src` **excludes `template/`** — template-payload is only type-checked when RENDERED
+(the render-matrix's generated `task ci`), exactly [[release-readiness-needs-render-not-local-gate]]. Fix: removed the bogus
+ignore, added `tenants = cast("dict[str, str]", report["tenants"])` (the value is a dict by construction — set in
+`upgrade_all`) + `from typing import cast`. Verified in a rendered battery project: `ruff check` ✅, `ruff format --check`
+✅, **`mypy src` Success (64 files)** ✅, migrate + rollback_guard DB-free tests **19 passed**. Behavior-preserving (cast is
+a runtime no-op). Re-pushing → CI should turn all three render combos + render-complete green, then merge.
+(template-payload mypy red caught by PR CI → fixed)
+
+#### #0278 · completed · FWK66 (SP2) — fix cross-module test-isolation leak (SP2 acceptance test polluted control DB → broke a pre-existing SP1 test) · 2026-06-27
+After the mypy fix, PR #86's render-matrix multitenantauth combos failed a SECOND, deeper way: a pytest `F` in the
+coverage run — `test_tenant_provisioning.py::test_provision_creates_migrates_and_activates` →
+`psycopg.OperationalError: database "demo_tenant_<uuid>" does not exist`. **Diagnosed via systematic reproduction**
+(rendered battery project, real docker Postgres): the SP1 test PASSES in isolation (6/6) but FAILS deterministically when
+SP2's NEW `test_migrate_fanout_acceptance.py` runs first (`migrate` < `tenant` in collection order → 1 failed/7 passed,
+reproduced locally). **Root cause — a slug-noop short-circuit, NOT my P15/mypy changes:** `provision_tenant` is idempotent
+by slug (a live ACTIVE slug → returns the existing id as a no-op, creates no physical DB). The SP2 acceptance module
+provisions tenants `acme`/`globex`/`ghost` and calls `truncate_control()` only at each test's START, never in teardown — so
+it LEAVES an active `acme` row in the SHARED control DB. The SP1 module's first test then `provision_tenant(slug="acme")` →
+finds SP2's leftover active `acme` → no-op → returns the stale id whose physical DB SP2 already dropped → the connect fails.
+The SP1 module's `_clean_control` truncates only AFTER each test, so its first test inherits the pollution. Pre-existing SP1
+test + `provision.py` are UNCHANGED on this branch (provision's slug-noop is correct); the bug is the NEW SP2 test's hygiene.
+Surfaced only now because PR #86 is the branch's first render-matrix run (the full combined suite); per-task local
+verification ran subsets ([[meridian-is-the-de-facto-integration-test]], [[dogfood-e2e-harness-and-task-ci-coverage-gap]]).
+**Fix (in the NEW SP2 test, SP1 untouched):** added `truncate_control` to the module's autouse `_env` fixture and call it in
+TEARDOWN — leaving the shared control DB clean, mirroring the SP1 module's `_clean_control` pattern. **Verified in the render:**
+the repro pair now 8/8, and the FULL functional group **175 passed** (was the failing group). Re-pushing.
+(cross-module control-DB pollution → truncate-in-teardown → functional group green)

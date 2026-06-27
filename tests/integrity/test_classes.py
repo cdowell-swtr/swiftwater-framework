@@ -197,8 +197,8 @@ def test_classification_categories_are_pairwise_disjoint():
 def test_battery_locked_covers_the_expected_files():
     from framework_cli.integrity.classes import BATTERY_LOCKED, LOCKED_TRACKED
 
-    # 25 battery-conditional framework files; none also in the baseline locked set.
-    assert len(BATTERY_LOCKED) == 25
+    # 26 battery-conditional framework files; none also in the baseline locked set.
+    assert len(BATTERY_LOCKED) == 26
     for path, gate in BATTERY_LOCKED.items():
         assert path not in LOCKED_TRACKED, (
             f"{path} is both baseline-locked and battery-locked"
@@ -216,6 +216,8 @@ def test_battery_locked_covers_the_expected_files():
     )
     assert BATTERY_LOCKED[".github/workflows/docs.yml"] == ("docs",)
     assert BATTERY_LOCKED["alembic_control.ini"] == ("multitenantauth",)
+    # FWK66/SP2: the rollback floor renders only under multitenantauth.
+    assert BATTERY_LOCKED["scripts/rollback_guard.py"] == ("multitenantauth",)
 
 
 def test_rules_default_is_baseline_only():

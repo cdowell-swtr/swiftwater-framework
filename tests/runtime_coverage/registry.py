@@ -490,6 +490,16 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "generated-CI script — runs in ci.yml's contracts job on real GHA, not a local pytest",
     ),
     SurfaceClass(
+        "script:scripts/rollback_guard.py",
+        "scripts/rollback_guard.py",
+        _EM,
+        # Battery-conditional rollback floor; its decision logic + alembic-walk are exercised by
+        # the rendered project's own tests/unit/test_rollback_guard_decision.py and
+        # tests/functional/test_rollback_guard.py (template-payload tier), not a framework local pytest.
+        "rollback floor exercised by the rendered project's own template-payload tests "
+        "(test_rollback_guard_decision + test_rollback_guard), not a framework local pytest",
+    ),
+    SurfaceClass(
         "script:scripts/seed.py",
         "scripts/seed.py",
         _EX,
