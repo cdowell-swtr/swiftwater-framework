@@ -3849,3 +3849,26 @@ silently unprotected); then local `git branch -m master main` + re-point trackin
 the operator. The `CLAUDE.md` `$DEV_ROOT/...swiftwater-framework` operating-env path-ref update is deferred to FWK67
 (rides the same relocation).
 (template already on main → framework default master→main; transition PR now, native rename + local + handoff to follow)
+
+#### #0281 · completed · FWK67 (SP3) — brainstorm + spec + plan, design-panel-hardened · 2026-06-27
+Brainstormed FWK67 (multitenantauth Phase-2 SP3) and wrote the spec + plan on branch
+`fwk67-sp3-authz-retouch-lifecycle`. Scope settled via operator decisions: **route-complete** (ships the three
+control-plane lifecycle routes with preconditions met), erasure = **two-phase, build soft-deactivate now**
+(hard-teardown a named deferred trigger), `subtree_exists` = **override-seam-only** initially. Hardened BEFORE
+spec-lock via the FWK58 two-layer adversarial method run as a Workflow: a **6-lens all-Opus design panel**
+(`wf_9505b8c3-7bd`, 37 raised → 14 confirmed, default-to-refute verification) + a separately-**recovered
+completeness-critic lens** (the panel's 6th lens died on a transient `server_error` — see FWK73; re-run
+standalone, 9 findings / 3 High). All findings dispositioned; **5 brainstorm decisions reversed by the panels**
+(spec §10): (1) `subtree_exists` **deferred** — unused by any SP3 route + needs a locked `expr.py` signature
+change (composite-string vs discrete-param); (2) Route A **split** into single-domain routes — the mixed
+`ANY(tenant,platform)` operator arm was dead code (membership-404 before the expr) and a platform-only route on
+a `{tenant_id}` path red-fails the shipped T2 fitness test; (3) **lock-scope corrected** — the manifest locks
+nearly the whole `multitenantauth` tree (routes/service/registry/repository/models), so the whole code build is
+heavy all-Opus review, not "routes unlocked"; (4) slug reaper → **lazy-delete** (nothing reads expired history;
+avoids a workers-battery coupling); (5) lifecycle mutations **audited** (new `TenantLifecycleEvent`). Also caught
+the **seed-catalog false-closure** (new guards reference unseeded perms → every route 403/400) and the **Route B
+first-grant deadlock** (bootstrap `ANY` guard). Plan = 14 TDD tasks / 5 phases, subagent-driven; branch-end
+all-Opus Layer-2 matrix; PUR DEC-0007; combined SP2+SP3 release. Also dropped the **FWK73** stub (stage-gate the
+panel/Layer-2 Workflow so a load-bearing lens lost to a transient error can't silently degrade coverage — same
+class as FWK46, one layer up). Spec/plan committed; subagent build next.
+(brainstorm → design panel → spec → plan; build pending)
