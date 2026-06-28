@@ -18,9 +18,23 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+    # Traefik discovery labels, instance-parameterized so N stacks coexist behind one shared
+    # edge (the FWK88 seam). `${STACK_INSTANCE}` (exported by scripts/compose.sh, default the
+    # slug) makes the router/service name collision-free; `${APP_ROUTE_HOST}` lets `task dev:edge`
+    # compute the per-tier hostname (nested tier-1 `<svc>.<slug>.localhost` / flat tier-2
+    # `<svc>-<slug>-<inst>.localhost`). Both carry a `:-{{ project_slug }}` / `:-{{ project_slug }}.localhost`
+    # default so a bare `docker compose up` that bypasses the wrapper still resolves to today's
+    # values. Labels stay LIST-form: compose interpolates `${VAR}` in a list element (a value) but
+    # NOT in a map key, and the router name must live in the key half of `routers.<name>.rule`.
+    # `swiftwater.instance` is the frozen constraint label every discovering component scopes by.
+    # The browsable obs UIs (grafana/prometheus/alertmanager) take the same schema — the router/
+    # service labels AND `swiftwater.instance` together (FWK97's Traefik `constraints` only discover
+    # containers carrying the label, so obs without it would be silently unrouted) — added edge-gated
+    # by the dev:edge overlay so plain `task dev` keeps routing only the app.
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.app.rule=Host(`{{ project_slug }}.localhost`)"
-      - "traefik.http.routers.app.entrypoints=websecure"
-      - "traefik.http.routers.app.tls=true"
-      - "traefik.http.services.app.loadbalancer.server.port=8000"
+      - "traefik.http.routers.app-${STACK_INSTANCE:-{{ project_slug }}}.rule=Host(`${APP_ROUTE_HOST:-{{ project_slug }}.localhost}`)"
+      - "traefik.http.routers.app-${STACK_INSTANCE:-{{ project_slug }}}.entrypoints=websecure"
+      - "traefik.http.routers.app-${STACK_INSTANCE:-{{ project_slug }}}.tls=true"
+      - "traefik.http.services.app-${STACK_INSTANCE:-{{ project_slug }}}.loadbalancer.server.port=8000"
+      - "swiftwater.instance=${STACK_INSTANCE:-{{ project_slug }}}"

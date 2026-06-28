@@ -180,6 +180,87 @@ def test_render_compose_structure(tmp_path: Path):
     assert "test" in test["services"]["app"]["profiles"]
 
 
+def test_render_compose_instance_parameterized_labels(tmp_path: Path):
+    """FWK93: the app's Traefik discovery labels are instance-parameterized so N stacks
+    coexist behind one shared edge. Router/service names carry `${STACK_INSTANCE}` (Fork A),
+    the Host rule is env-driven via `${APP_ROUTE_HOST}` (the dev:edge task computes the per-tier
+    host), plus the frozen `swiftwater.instance` constraint label. Every `${STACK_INSTANCE}`
+    carries a `:-{{ project_slug }}` default so a bare `docker compose up` (bypassing the
+    wrapper) still resolves to the slug — never `app-`. Asserted on the RAW label strings
+    (docker-free; the compose-resolved parity is the docker-gated complement below)."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    base = yaml.safe_load((dest / "infra" / "compose" / "base.yml").read_text())
+    labels = base["services"]["app"]["labels"]
+    assert isinstance(labels, list), (
+        "labels stay list-form (compose can't interpolate map keys)"
+    )
+
+    inst = "${STACK_INSTANCE:-demo}"  # the parameterized instance, slug-defaulted for bypass safety
+    assert "traefik.enable=true" in labels
+    assert (
+        f"traefik.http.routers.app-{inst}.rule=Host(`${{APP_ROUTE_HOST:-demo.localhost}}`)"
+        in labels
+    )
+    assert f"traefik.http.routers.app-{inst}.entrypoints=websecure" in labels
+    assert f"traefik.http.routers.app-{inst}.tls=true" in labels
+    assert f"traefik.http.services.app-{inst}.loadbalancer.server.port=8000" in labels
+    # the frozen instance constraint label (consumed by FWK97's Traefik constraints)
+    assert f"swiftwater.instance={inst}" in labels
+    # no un-parameterized router/service name leaks (the pre-FWK93 static `app` form)
+    for raw in labels:
+        assert "routers.app." not in raw, f"static router name leaked: {raw!r}"
+        assert "services.app." not in raw, f"static service name leaked: {raw!r}"
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_compose_config_resolved_labels_default_parity(tmp_path: Path):
+    """R1 default-parity for the discovery labels, on RESOLVED `docker compose config` output
+    (not file bytes — the contract mandates `${STACK_INSTANCE}` interpolation, which changes the
+    text). Unset: router/service resolve to `app-demo` (== slug) routing `demo.localhost` to
+    port 8000 — functionally identical to today. A worktree instance + computed APP_ROUTE_HOST
+    flows through scripts/compose.sh into a collision-free `app-demo-wt1`."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    def resolved_labels(extra_env: dict[str, str]) -> dict[str, str]:
+        env = {**os.environ}
+        for k in ("STACK_INSTANCE", "COMPOSE_PROJECT_NAME", "APP_ROUTE_HOST"):
+            env.pop(k, None)
+        env.update(extra_env)
+        r = subprocess.run(
+            ["./scripts/compose.sh", "-f", "infra/compose/base.yml", "config"],
+            cwd=dest,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert r.returncode == 0, f"compose config failed:\n{r.stderr}"
+        return yaml.safe_load(r.stdout)["services"]["app"]["labels"]
+
+    # Default (unset): parity — router/service `app-demo`, Host `demo.localhost`, port 8000.
+    d = resolved_labels({})
+    assert d["traefik.enable"] == "true"
+    assert d["traefik.http.routers.app-demo.rule"] == "Host(`demo.localhost`)"
+    assert d["traefik.http.routers.app-demo.entrypoints"] == "websecure"
+    assert d["traefik.http.routers.app-demo.tls"] == "true"
+    assert d["traefik.http.services.app-demo.loadbalancer.server.port"] == "8000"
+    assert d["swiftwater.instance"] == "demo"
+
+    # Worktree instance: collision-free name + the task-computed per-tier host flow through.
+    w = resolved_labels(
+        {"STACK_INSTANCE": "demo-wt1", "APP_ROUTE_HOST": "app-demo-wt1.localhost"}
+    )
+    assert (
+        w["traefik.http.routers.app-demo-wt1.rule"] == "Host(`app-demo-wt1.localhost`)"
+    )
+    assert w["traefik.http.services.app-demo-wt1.loadbalancer.server.port"] == "8000"
+    assert w["swiftwater.instance"] == "demo-wt1"
+
+
 def test_render_env_services_and_tasks(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
