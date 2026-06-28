@@ -22,11 +22,16 @@ from {{ package_name }}.multitenantauth.authz.roles import BUILTIN_BUNDLES, BUIL
 
 
 def test_catalog_contains_exactly_the_expected_permissions() -> None:
-    """The shipped catalog has exactly 3 permissions — no accidental extras."""
+    """The shipped catalog has exactly the expected permissions — no accidental extras.
+    (FWK67 SP3 added the tenant-lifecycle + resource-grant vocabulary.)"""
     assert ALL_NAMES == {
         "tenant:read",
         "tenant:manage-members",
         "platform:provision-tenant",
+        "tenant:deactivate",
+        "tenant:rename-slug",
+        "platform:manage-tenant-lifecycle",
+        "resource:manage",
     }
 
 
@@ -74,14 +79,22 @@ def test_platform_provision_tenant_is_live_and_platform_domain() -> None:
 def test_builtin_tenant_roles_defined() -> None:
     assert BUILTIN_DOMAINS["tenant.admin"] == "tenant"
     assert BUILTIN_DOMAINS["tenant.member"] == "tenant"
-    assert BUILTIN_BUNDLES["tenant.admin"] == {"tenant:read", "tenant:manage-members"}
+    assert BUILTIN_BUNDLES["tenant.admin"] == {
+        "tenant:read",
+        "tenant:manage-members",
+        "tenant:deactivate",
+        "tenant:rename-slug",
+    }
     assert BUILTIN_BUNDLES["tenant.member"] == {"tenant:read"}
 
 
 def test_platform_admin_role_defined_and_bundles_provision_perm() -> None:
     """platform.admin is platform-domain and bundles exactly platform:provision-tenant."""
     assert BUILTIN_DOMAINS["platform.admin"] == "platform"
-    assert BUILTIN_BUNDLES["platform.admin"] == {"platform:provision-tenant"}
+    assert BUILTIN_BUNDLES["platform.admin"] == {
+        "platform:provision-tenant",
+        "platform:manage-tenant-lifecycle",
+    }
 
 
 # ── No Meridian / EDR / product vocabulary ────────────────────────────────────

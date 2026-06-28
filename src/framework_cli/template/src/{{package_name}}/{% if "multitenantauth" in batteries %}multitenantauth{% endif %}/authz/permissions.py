@@ -62,6 +62,16 @@ CATALOG: tuple[PermDef, ...] = (
     # platform-domain permissions (live)
     # Required by: POST /tenants (Task 16a — platform:provision-tenant guard)
     PermDef("platform:provision-tenant", "platform", "Provision a new tenant", True),
+    # FWK67 SP3 — tenant-lifecycle + resource-grant vocabulary
+    PermDef("tenant:deactivate", "tenant", "Suspend (deactivate) the tenant", True),
+    PermDef("tenant:rename-slug", "tenant", "Rename the tenant's URL slug", True),
+    PermDef(
+        "platform:manage-tenant-lifecycle",
+        "platform",
+        "Operator: suspend/reactivate any tenant",
+        True,
+    ),
+    PermDef("resource:manage", "resource", "Manage resource-scoped role grants", True),
 )
 
 ALL_NAMES: frozenset[str] = frozenset(d.name for d in CATALOG)

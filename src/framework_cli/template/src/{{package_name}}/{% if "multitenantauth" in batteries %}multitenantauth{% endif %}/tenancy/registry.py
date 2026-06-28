@@ -200,10 +200,19 @@ def rename_slug(
 
 
 def record_lifecycle_event(
-    s: Session, *, actor_id: uuid.UUID | None, tenant_id: str, action: str, detail: str | None = None
+    s: Session,
+    *,
+    actor_id: uuid.UUID | None,
+    tenant_id: str,
+    action: str,
+    detail: str | None = None,
 ) -> None:
     """Append an append-only TenantLifecycleEvent. Caller owns the transaction."""
-    s.add(m.TenantLifecycleEvent(actor_id=actor_id, tenant_id=tenant_id, action=action, detail=detail))
+    s.add(
+        m.TenantLifecycleEvent(
+            actor_id=actor_id, tenant_id=tenant_id, action=action, detail=detail
+        )
+    )
 
 
 def resolve_slug(session: Session, slug: str) -> tuple[str, bool] | None:

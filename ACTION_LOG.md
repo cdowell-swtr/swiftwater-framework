@@ -3898,3 +3898,14 @@ locked `deps.py` guard (ctx now references the precomputed local), removing the 
 the FWK62 review flagged (t4). Behaviour-preserving (pure control-DB read). Controller-authored (trivial
 locked reorder); verified on render: **65/65** (deps + fitness + service + expr suites). Review → branch-end Opus.
 (FWK67 SP3 build Task 3/14)
+
+#### #0285 · completed · FWK67 (SP3) Task 4 — seed catalog: lifecycle/resource vocab + resource.admin role · 2026-06-27
+Extended the (unlocked, consumer-editable) policy catalog: 4 new permissions (`tenant:deactivate`,
+`tenant:rename-slug`, `platform:manage-tenant-lifecycle`, `resource:manage`) + a new resource-domain built-in
+role `resource.admin` — REQUIRED for the SP3 routes to function (else they'd 403/400; the completeness-lens
+CMP-1 false-closure). Controller-authored; **updated the coupled existing assertions** in `test_authz_seed` +
+`test_authz_catalog` (a plan gap — both hardcode the exact catalog/bundles). Verified on render: **25/25**
+(catalog + seed + fitness). Folded in a **ruff-format cleanup** of Task 2's `tenant.py` + `registry.py`
+(back-ported from the render — [[ruff-format-check-after-inline-edits]]; their rendered output wasn't
+format-clean). Review → branch-end Opus.
+(FWK67 SP3 build Task 4/14)
