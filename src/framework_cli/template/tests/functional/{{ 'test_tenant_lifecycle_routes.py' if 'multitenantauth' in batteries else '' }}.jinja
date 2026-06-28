@@ -71,6 +71,8 @@ def _seed_vocab(s: Session) -> None:
     ``tenant.admin`` includes ``tenant:deactivate`` (Task 4 grant bundled here
     for isolation — the generated project's real roles DB migration owns this
     in production).
+    ``platform.admin`` includes ``platform:manage-tenant-lifecycle`` (Task 4)
+    for the operator suspend/reactivate routes.
     """
     from uuid import uuid4
 
@@ -78,6 +80,7 @@ def _seed_vocab(s: Session) -> None:
         ("tenant:read", "tenant"),
         ("tenant:manage-members", "tenant"),
         ("tenant:deactivate", "tenant"),
+        ("platform:manage-tenant-lifecycle", "platform"),
     ]
     for name, domain in perms:
         s.execute(
@@ -94,6 +97,7 @@ def _seed_vocab(s: Session) -> None:
             "tenant",
             {"tenant:read", "tenant:manage-members", "tenant:deactivate"},
         ),
+        ("platform.admin", "platform", {"platform:manage-tenant-lifecycle"}),
     ]
     role_ids: dict[str, object] = {}
     for rname, rdomain, _ in roles_def:
@@ -237,4 +241,138 @@ def test_member_without_perm_cannot_deactivate(
     _make_plain_member(probe, admin_cookie, admin_tid, member_uid)
 
     r = probe.post(f"/tenants/{admin_tid}/deactivate", headers=_headers(member_cookie))
+    assert r.status_code == 403
+
+
+# ── helpers for operator (platform-scoped) routes ─────────────────────────────
+
+
+def _grant_platform_admin(lc_engine: Engine, email_canonical: str) -> None:
+    """Grant ``platform.admin`` to the user with *email_canonical* (no actor audit)."""
+    from {{ package_name }}.multitenantauth.authz.service import add_platform_role
+
+    with Session(lc_engine) as s:
+        uid = s.execute(
+            text("SELECT id FROM app_user WHERE email_canonical=:e"),
+            {"e": email_canonical},
+        ).scalar_one()
+        add_platform_role(s, user_id=uid, role_name="platform.admin", actor_id=None)
+        s.commit()
+
+
+# ── POST /tenants/suspend ─────────────────────────────────────────────────────
+
+
+def test_nonmember_operator_can_suspend(probe: TestClient, lc_engine: Engine) -> None:
+    """Platform operator (not a member of target) → POST /tenants/suspend → 204; T suspended."""
+    # Operator O: founder of their own tenant (NOT T)
+    _, op_cookie = _signup_and_login(probe, "op@op-suspend.com", "op-suspend")
+    _grant_platform_admin(lc_engine, "op@op-suspend.com")
+
+    # Target tenant T
+    target_tid, _ = _signup_and_login(
+        probe, "owner@target-suspend.com", "target-suspend"
+    )
+
+    r = probe.post(
+        "/tenants/suspend",
+        headers=_headers(op_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r.status_code == 204
+
+    with Session(lc_engine) as s:
+        from {{ package_name }}.db.control import models as m
+
+        tenant = s.get(m.Tenant, target_tid)
+        assert tenant is not None
+        assert tenant.status == "suspended"
+
+
+# ── POST /tenants/reactivate ──────────────────────────────────────────────────
+
+
+def test_nonmember_operator_can_reactivate_suspended(
+    probe: TestClient, lc_engine: Engine
+) -> None:
+    """Platform operator reactivates a suspended tenant → 204; T flips to active."""
+    _, op_cookie = _signup_and_login(probe, "op@op-reactivate.com", "op-reactivate")
+    _grant_platform_admin(lc_engine, "op@op-reactivate.com")
+
+    target_tid, _ = _signup_and_login(
+        probe, "owner@target-reactivate.com", "target-reactivate"
+    )
+
+    # Pre-suspend T directly in DB
+    with Session(lc_engine) as s:
+        from {{ package_name }}.db.control import models as m
+
+        t = s.get(m.Tenant, target_tid)
+        assert t is not None
+        t.status = "suspended"
+        s.commit()
+
+    r = probe.post(
+        "/tenants/reactivate",
+        headers=_headers(op_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r.status_code == 204
+
+    with Session(lc_engine) as s:
+        from {{ package_name }}.db.control import models as m
+
+        tenant = s.get(m.Tenant, target_tid)
+        assert tenant is not None
+        assert tenant.status == "active"
+
+
+def test_reactivate_non_suspended_is_409(probe: TestClient, lc_engine: Engine) -> None:
+    """Reactivating an active tenant → 409 (not suspended)."""
+    _, op_cookie = _signup_and_login(probe, "op@op-409.com", "op-409")
+    _grant_platform_admin(lc_engine, "op@op-409.com")
+
+    target_tid, _ = _signup_and_login(probe, "owner@target-409.com", "target-409")
+    # Target is active (default after signup)
+
+    r = probe.post(
+        "/tenants/reactivate",
+        headers=_headers(op_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r.status_code == 409
+
+
+def test_reactivate_absent_is_404(probe: TestClient, lc_engine: Engine) -> None:
+    """Reactivating a non-existent tenant → 404."""
+    _, op_cookie = _signup_and_login(probe, "op@op-404.com", "op-404")
+    _grant_platform_admin(lc_engine, "op@op-404.com")
+
+    r = probe.post(
+        "/tenants/reactivate",
+        headers=_headers(op_cookie),
+        json={"tenant_id": "ghostxyz"},
+    )
+    assert r.status_code == 404
+
+
+def test_tenant_admin_cannot_reactivate(probe: TestClient, lc_engine: Engine) -> None:
+    """A plain tenant.admin (no platform role) cannot reactivate → 403."""
+    _, admin_cookie = _signup_and_login(probe, "admin@noplat.com", "noplat")
+    target_tid, _ = _signup_and_login(probe, "owner@target-noplat.com", "target-noplat")
+
+    # Pre-suspend target
+    with Session(lc_engine) as s:
+        from {{ package_name }}.db.control import models as m
+
+        t = s.get(m.Tenant, target_tid)
+        assert t is not None
+        t.status = "suspended"
+        s.commit()
+
+    r = probe.post(
+        "/tenants/reactivate",
+        headers=_headers(admin_cookie),
+        json={"tenant_id": target_tid},
+    )
     assert r.status_code == 403

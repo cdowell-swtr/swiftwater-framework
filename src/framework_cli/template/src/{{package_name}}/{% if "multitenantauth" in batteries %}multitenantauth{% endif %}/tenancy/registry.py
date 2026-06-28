@@ -138,6 +138,16 @@ def deactivate_tenant(s: Session, tenant_id: str) -> None:
     tenant.status = "suspended"
 
 
+def reactivate_tenant(s: Session, tenant_id: str) -> None:
+    """Operator reactivation: suspended → active. LookupError if absent; ValueError if not suspended."""
+    tenant = s.get(m.Tenant, tenant_id)
+    if tenant is None:
+        raise LookupError(tenant_id)
+    if tenant.status != "suspended":
+        raise ValueError(f"tenant {tenant_id!r} is {tenant.status!r}, not 'suspended'")
+    tenant.status = "active"
+
+
 def activate_tenant(session: Session, tenant_id: str) -> Tenant:
     """Flip the tenant status to 'active' and return the updated Tenant.
 

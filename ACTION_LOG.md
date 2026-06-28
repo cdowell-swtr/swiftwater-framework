@@ -3917,3 +3917,17 @@ author; controller fixed an `occurred_at`→`at` column-name guess + ruff-format
 line-joins). Verified on render: **2/2** route tests (admin 204+suspended+event; member 403) + fitness 6/6 + format
 clean (135 files). Review → branch-end Opus.
 (FWK67 SP3 build Task 5/14)
+
+#### #0287 · completed · FWK67 (SP3) Task 6 — Route A.2/A.3 operator suspend + reactivate · 2026-06-27
+Added `registry.reactivate_tenant` (suspended→active; LookupError if absent, ValueError if not suspended) + two
+platform-scoped routes `POST /tenants/suspend` and `POST /tenants/reactivate`, each guarded
+`Perm("platform:manage-tenant-lifecycle", on="platform")` and carrying the target `tenant_id` in the **request body**
+(not the path) — so the locked guard computes `needs_tenant=False`, a non-member operator is reachable, and the T2
+route-fitness test is not tripped. Reactivate maps LookupError→404 / ValueError→409 (suspended-only precondition);
+both record a lifecycle event. Sonnet author; controller ruff-format-fixed the rendered output (tenants.py back-port
++ 2 package-name-free test line-wraps — [[ruff-format-check-after-inline-edits]]). Verified on render: **7/7**
+lifecycle-route tests (incl. non-member-operator reachability, 409 not-suspended, 404 absent, tenant-admin 403) +
+**47/47** regression (fitness + tenant-role-routes + auth-routes) + format/lint clean. Rolled up for branch-end
+Opus: `reactivate_tenant` overlaps the existing `activate_tenant` (both set status=active) — semantics differ
+(precondition + return type) and it's plan-mandated, but worth a DRY look. Review → branch-end Opus.
+(FWK67 SP3 build Task 6/14)

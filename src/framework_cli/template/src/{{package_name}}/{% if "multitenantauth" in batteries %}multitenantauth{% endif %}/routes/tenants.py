@@ -34,6 +34,7 @@ from ..errors import DomainMismatchError, LastAdminError
 from ..tenancy.registry import (
     activate_tenant,
     deactivate_tenant,
+    reactivate_tenant,
     record_lifecycle_event,
     register_tenant,
     resolve_slug,
@@ -56,6 +57,10 @@ _GENERIC_SLUG_TAKEN = "Tenant slug unavailable"
 class ProvisionTenantBody(BaseModel):
     name: str = Field(max_length=200)
     slug: str = Field(max_length=63)
+
+
+class TenantLifecycleBody(BaseModel):
+    tenant_id: str = Field(max_length=64)
 
 
 class AddMemberBody(BaseModel):
@@ -110,6 +115,57 @@ def provision_tenant(
         s.rollback()
         raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN) from None
     return {"tenant_id": tenant.id, "slug": body.slug}
+
+
+@router.post(
+    "/suspend",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[
+        Depends(guard(Perm("platform:manage-tenant-lifecycle", on="platform")))
+    ],
+)
+def operator_suspend_route(
+    body: TenantLifecycleBody,
+    s: Session = Depends(control_session),
+    user: m.AppUser = Depends(current_user),
+) -> None:
+    """Operator suspend (fleet-wide). tenant_id is a target selector in the body, not an authz operand."""
+    try:
+        deactivate_tenant(s, body.tenant_id)
+        record_lifecycle_event(
+            s, actor_id=user.id, tenant_id=body.tenant_id, action="suspend"
+        )
+        s.commit()
+    except LookupError:
+        s.rollback()
+        raise HTTPException(status_code=404, detail="Tenant not found") from None
+
+
+@router.post(
+    "/reactivate",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[
+        Depends(guard(Perm("platform:manage-tenant-lifecycle", on="platform")))
+    ],
+)
+def operator_reactivate_route(
+    body: TenantLifecycleBody,
+    s: Session = Depends(control_session),
+    user: m.AppUser = Depends(current_user),
+) -> None:
+    """Operator reactivation: suspended → active (409 if not suspended, 404 if absent)."""
+    try:
+        reactivate_tenant(s, body.tenant_id)
+        record_lifecycle_event(
+            s, actor_id=user.id, tenant_id=body.tenant_id, action="reactivate"
+        )
+        s.commit()
+    except LookupError:
+        s.rollback()
+        raise HTTPException(status_code=404, detail="Tenant not found") from None
+    except ValueError as exc:
+        s.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post(
