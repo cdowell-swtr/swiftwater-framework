@@ -317,6 +317,15 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "test_rendered_project_dev_stack_routes_through_traefik",
     ),
     SurfaceClass(
+        "overlay:edge.yml",
+        "infra/compose/edge.yml",
+        _EX,
+        # FWK94: the behind-edge overlay merged (-f base -f observability -f dev -f edge) and
+        # compose-config-resolved — drops traefik (replicas 0) + adds the obs discovery labels.
+        # Live up (stack→box edge→browser) is cross-stream e2e, out of A1's CI scope (carving).
+        "test_compose_config_edge_obs_labels_and_traefik_dropped",
+    ),
+    SurfaceClass(
         "overlay:observability.yml",
         "infra/compose/observability.yml",
         _EX,
@@ -430,6 +439,14 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         # FWK9: the docs-layout validator script is driven by the docs-layout pre-commit hook,
         # which fires in pre-commit --all-files on a fresh render.
         "test_rendered_project_adopts_conventions",
+    ),
+    SurfaceClass(
+        "script:scripts/edge_host.sh",
+        "scripts/edge_host.sh",
+        _EX,
+        # FWK94: computes the per-tier edge route host (tier-1 nested / tier-2 flat) from
+        # STACK_INSTANCE — driven directly for both tiers + multiple services.
+        "test_edge_host_script_computes_per_tier_host",
     ),
     SurfaceClass(
         "script:scripts/doctor.sh",
@@ -588,6 +605,38 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         # FWK20 (H3): the worker is brought up live and a deterministically-failing task is
         # enqueued through the real broker; on_failure writes a dead_letter_tasks row (asserted).
         "test_rendered_workers_live_broker_dlq_and_beat",
+    ),
+    SurfaceClass(
+        "service:edge.yml:traefik",
+        "infra/compose/edge.yml",
+        _EX,
+        # FWK94: the per-stack traefik dropped (deploy.replicas 0) under the edge overlay — the
+        # resolved deploy block is asserted in the docker-gated config test.
+        "test_compose_config_edge_obs_labels_and_traefik_dropped",
+    ),
+    SurfaceClass(
+        "service:edge.yml:grafana",
+        "infra/compose/edge.yml",
+        _EX,
+        # FWK94: grafana gains the instance-parameterized Traefik discovery labels + the frozen
+        # swiftwater.instance constraint label; the resolved labels are asserted in the config test.
+        "test_compose_config_edge_obs_labels_and_traefik_dropped",
+    ),
+    SurfaceClass(
+        "service:edge.yml:prometheus",
+        "infra/compose/edge.yml",
+        _EX,
+        # FWK94: prometheus gains the edge discovery labels + the instance constraint label;
+        # resolved-label assertion in the docker-gated config test.
+        "test_compose_config_edge_obs_labels_and_traefik_dropped",
+    ),
+    SurfaceClass(
+        "service:edge.yml:alertmanager",
+        "infra/compose/edge.yml",
+        _EX,
+        # FWK94: alertmanager gains the edge discovery labels + the instance constraint label;
+        # resolved-label assertion in the docker-gated config test.
+        "test_compose_config_edge_obs_labels_and_traefik_dropped",
     ),
     SurfaceClass(
         "service:observability.yml:alertmanager",

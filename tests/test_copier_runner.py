@@ -261,6 +261,181 @@ def test_compose_config_resolved_labels_default_parity(tmp_path: Path):
     assert w["swiftwater.instance"] == "demo-wt1"
 
 
+def test_render_edge_overlay_drops_traefik_and_labels_obs(tmp_path: Path):
+    """FWK94: the dev:edge overlay drops the per-stack Traefik (no `:443` bind) declaratively via
+    `deploy.replicas: 0` (compose overlays can't *remove* a service — appended profiles/ports
+    prove it — so replicas-0 is the clean drop), and adds the FWK93 discovery-label schema to the
+    browsable obs UIs (grafana/prometheus/alertmanager): router/service name parameterized by
+    `${STACK_INSTANCE}`, env-driven Host via `${<SVC>_ROUTE_HOST}` (the dev:edge task computes the
+    per-tier host), plus the frozen `swiftwater.instance` constraint label — the router/service
+    labels AND the constraint label pinned together so FWK97's Traefik `constraints` don't
+    silently unroute them. RAW-overlay assertions (docker-free); the resolved complement is the
+    docker-gated test below."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    edge = yaml.safe_load((dest / "infra" / "compose" / "edge.yml").read_text())
+    svcs = edge["services"]
+
+    # traefik dropped: replicas 0 (the declarative "drop the service" an overlay can express)
+    assert svcs["traefik"]["deploy"]["replicas"] == 0
+
+    inst = "${STACK_INSTANCE:-demo}"  # slug-defaulted for bypass safety, mirroring base.yml app
+    obs_ports = {"grafana": 3000, "prometheus": 9090, "alertmanager": 9093}
+    for svc, port in obs_ports.items():
+        labels = svcs[svc]["labels"]
+        assert isinstance(labels, list), f"{svc} labels stay list-form"
+        route_var = f"${{{svc.upper()}_ROUTE_HOST:-{svc}.demo.localhost}}"
+        assert "traefik.enable=true" in labels
+        assert f"traefik.http.routers.{svc}-{inst}.rule=Host(`{route_var}`)" in labels
+        assert f"traefik.http.routers.{svc}-{inst}.entrypoints=websecure" in labels
+        assert f"traefik.http.routers.{svc}-{inst}.tls=true" in labels
+        assert (
+            f"traefik.http.services.{svc}-{inst}.loadbalancer.server.port={port}"
+            in labels
+        )
+        # the frozen instance constraint label, pinned together with the router/service labels
+        assert f"swiftwater.instance={inst}" in labels
+        # no un-parameterized router/service name leaks (the static pre-instance form)
+        for raw in labels:
+            assert f"routers.{svc}." not in raw, f"static router leaked: {raw!r}"
+            assert f"services.{svc}." not in raw, f"static service leaked: {raw!r}"
+
+
+def test_render_taskfile_dev_edge_run_mode(tmp_path: Path):
+    """FWK94: `task dev:edge` is an additive run-mode (R2 — `task dev` stays byte-identical). It
+    applies the edge.yml overlay, computes the per-tier route host via scripts/edge_host.sh, and
+    drops the certs precondition (traefik is replicas-0 in edge mode; TLS terminates at the box
+    edge). `dev:edge:down` is identity-aware. Obs labels are edge-gated: they live ONLY in edge.yml
+    so plain `task dev` keeps R1 parity (the per-stack Traefik routes only the app)."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "dev:edge:" in taskfile
+    assert "dev:edge:down:" in taskfile
+
+    # dev:edge applies the edge overlay + computes route hosts via edge_host.sh
+    assert "-f infra/compose/edge.yml" in taskfile
+    assert "./scripts/edge_host.sh app" in taskfile
+    assert "./scripts/edge_host.sh grafana" in taskfile
+
+    # R2: the plain `task dev` up-line is unchanged + additive — no edge overlay pulled in
+    assert (
+        "./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml"
+        " -f infra/compose/dev.yml --profile dev up -d --wait --build"
+    ) in taskfile
+
+    # obs labels are edge-gated — present only in edge.yml, never base/dev/observability (R1)
+    for name in ("base.yml", "dev.yml", "observability.yml"):
+        text = (dest / "infra" / "compose" / name).read_text()
+        assert "routers.grafana" not in text, (
+            f"obs label leaked into {name} (breaks R1 parity)"
+        )
+
+
+def test_edge_host_script_computes_per_tier_host(tmp_path: Path):
+    """FWK94 R3: scripts/edge_host.sh computes the per-tier route host. Tier-1 (instance == slug)
+    → nested `<svc>.<slug>.localhost` (the box `*.<slug>.localhost` cert covers it); tier-2
+    (instance != slug) → flat `<svc>-<instance>.localhost` (the box static `*.localhost` cert
+    covers it). The flat form matches FWK93's `app-demo-wt1.localhost` expectation."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    script = dest / "scripts" / "edge_host.sh"
+
+    def host(svc: str, env: dict[str, str]) -> str:
+        e = {**os.environ}
+        e.pop("STACK_INSTANCE", None)
+        e.update(env)
+        r = subprocess.run(
+            ["bash", str(script), svc], capture_output=True, text=True, env=e
+        )
+        assert r.returncode == 0, r.stderr
+        return r.stdout.strip()
+
+    # Tier-1: STACK_INSTANCE unset → defaults to slug → nested
+    assert host("app", {}) == "app.demo.localhost"
+    assert host("grafana", {}) == "grafana.demo.localhost"
+    # Tier-1 explicit (instance == slug) → still nested
+    assert host("app", {"STACK_INSTANCE": "demo"}) == "app.demo.localhost"
+    # Tier-2: instance != slug → flat single-label (covered by the box `*.localhost` cert)
+    assert host("app", {"STACK_INSTANCE": "demo-wt1"}) == "app-demo-wt1.localhost"
+    assert (
+        host("prometheus", {"STACK_INSTANCE": "demo-wt1"})
+        == "prometheus-demo-wt1.localhost"
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_compose_config_edge_obs_labels_and_traefik_dropped(tmp_path: Path):
+    """FWK94 resolved complement (docker-gated): the dev:edge file set resolves the obs labels to
+    the task-computed per-tier host + the instance label, and drops traefik (replicas 0). R1
+    parity: WITHOUT edge.yml the obs UIs carry NO Traefik labels (plain `task dev` routes only the
+    app). Asserts the drop via the resolved `deploy.replicas`, not config-absence (a replicas-0
+    service still appears in `config`)."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    def config(files: list[str], env: dict[str, str]) -> dict:
+        e = {**os.environ}
+        for k in (
+            "STACK_INSTANCE",
+            "COMPOSE_PROJECT_NAME",
+            "APP_ROUTE_HOST",
+            "GRAFANA_ROUTE_HOST",
+            "PROMETHEUS_ROUTE_HOST",
+            "ALERTMANAGER_ROUTE_HOST",
+        ):
+            e.pop(k, None)
+        e.update(env)
+        args = ["./scripts/compose.sh"]
+        for f in files:
+            args += ["-f", f]
+        args += ["--profile", "dev", "config"]
+        r = subprocess.run(args, cwd=dest, capture_output=True, text=True, env=e)
+        assert r.returncode == 0, f"compose config failed:\n{r.stderr}"
+        return yaml.safe_load(r.stdout)
+
+    edge_files = [
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+        "infra/compose/edge.yml",
+    ]
+    dev_files = edge_files[:-1]  # `task dev`: no edge overlay
+
+    # Edge mode, tier-1: each obs UI resolves with the nested host + the instance label.
+    obs_ports = {"grafana": 3000, "prometheus": 9090, "alertmanager": 9093}
+    cfg = config(
+        edge_files,
+        {
+            "GRAFANA_ROUTE_HOST": "grafana.demo.localhost",
+            "PROMETHEUS_ROUTE_HOST": "prometheus.demo.localhost",
+            "ALERTMANAGER_ROUTE_HOST": "alertmanager.demo.localhost",
+        },
+    )
+    for svc, port in obs_ports.items():
+        lbl = cfg["services"][svc]["labels"]
+        assert (
+            lbl[f"traefik.http.routers.{svc}-demo.rule"]
+            == f"Host(`{svc}.demo.localhost`)"
+        )
+        assert lbl[f"traefik.http.services.{svc}-demo.loadbalancer.server.port"] == str(
+            port
+        )
+        assert lbl["swiftwater.instance"] == "demo"
+    # traefik dropped — assert via the resolved deploy block, not config-absence
+    assert cfg["services"]["traefik"]["deploy"]["replicas"] == 0
+
+    # R1 parity: WITHOUT edge.yml, grafana carries no Traefik labels.
+    cfg_dev = config(dev_files, {})
+    assert "labels" not in cfg_dev["services"]["grafana"], (
+        "obs must be unlabeled under plain `task dev` (R1 parity)"
+    )
+
+
 def test_render_env_services_and_tasks(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

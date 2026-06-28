@@ -1,0 +1,49 @@
+# Behind-edge overlay (FWK94) — applied LAST by `task dev:edge`:
+#   ./scripts/compose.sh -f base.yml -f observability.yml -f dev.yml -f edge.yml --profile dev ...
+# It turns the stack into a discovery target for a shared box edge instead of binding its own
+# Traefik :443: the per-stack `traefik` is dropped and the browsable obs UIs gain the same
+# instance-parameterized Traefik discovery labels the `app` already carries (base.yml, the FWK88
+# seam). Never merged by plain `task dev` — so `task dev` keeps R1 parity (its per-stack Traefik
+# routes only the labeled `app`). Network membership on `swiftwater-shared-edge` lands in FWK95;
+# here the stack is still default-net-only.
+services:
+  # Drop the per-stack Traefik (no `:443` bind) — TLS terminates at the box edge. A compose
+  # overlay can't *remove* a service (profiles/ports merge by append), so `replicas: 0` is the
+  # declarative drop: `docker compose up` honors it and starts zero traefik containers.
+  traefik:
+    deploy:
+      replicas: 0
+
+  # The browsable obs UIs become edge-routable. Same schema as base.yml's `app`: router/service
+  # name carries `${STACK_INSTANCE:-{{ project_slug }}}` (collision-free behind one edge), the Host
+  # rule is env-driven via `${<SVC>_ROUTE_HOST}` (the dev:edge task computes the per-tier host —
+  # nested tier-1 `<svc>.<slug>.localhost` / flat tier-2 `<svc>-<slug>-<inst>.localhost`), and the
+  # frozen `swiftwater.instance` constraint label rides ALONGSIDE the router/service labels (FWK97's
+  # Traefik `constraints` only discover containers carrying it — labeling without it would silently
+  # unroute the UI). Each `${...:-...}` default keeps a bare `docker compose` invocation resolvable.
+  grafana:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana-${STACK_INSTANCE:-{{ project_slug }}}.rule=Host(`${GRAFANA_ROUTE_HOST:-grafana.{{ project_slug }}.localhost}`)"
+      - "traefik.http.routers.grafana-${STACK_INSTANCE:-{{ project_slug }}}.entrypoints=websecure"
+      - "traefik.http.routers.grafana-${STACK_INSTANCE:-{{ project_slug }}}.tls=true"
+      - "traefik.http.services.grafana-${STACK_INSTANCE:-{{ project_slug }}}.loadbalancer.server.port=3000"
+      - "swiftwater.instance=${STACK_INSTANCE:-{{ project_slug }}}"
+
+  prometheus:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus-${STACK_INSTANCE:-{{ project_slug }}}.rule=Host(`${PROMETHEUS_ROUTE_HOST:-prometheus.{{ project_slug }}.localhost}`)"
+      - "traefik.http.routers.prometheus-${STACK_INSTANCE:-{{ project_slug }}}.entrypoints=websecure"
+      - "traefik.http.routers.prometheus-${STACK_INSTANCE:-{{ project_slug }}}.tls=true"
+      - "traefik.http.services.prometheus-${STACK_INSTANCE:-{{ project_slug }}}.loadbalancer.server.port=9090"
+      - "swiftwater.instance=${STACK_INSTANCE:-{{ project_slug }}}"
+
+  alertmanager:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.alertmanager-${STACK_INSTANCE:-{{ project_slug }}}.rule=Host(`${ALERTMANAGER_ROUTE_HOST:-alertmanager.{{ project_slug }}.localhost}`)"
+      - "traefik.http.routers.alertmanager-${STACK_INSTANCE:-{{ project_slug }}}.entrypoints=websecure"
+      - "traefik.http.routers.alertmanager-${STACK_INSTANCE:-{{ project_slug }}}.tls=true"
+      - "traefik.http.services.alertmanager-${STACK_INSTANCE:-{{ project_slug }}}.loadbalancer.server.port=9093"
+      - "swiftwater.instance=${STACK_INSTANCE:-{{ project_slug }}}"

@@ -63,6 +63,40 @@ tasks:
     cmds:
       - docker compose -p {{ project_slug }} down
 
+  dev:edge:
+    desc: Behind-edge dev stack — app + obs labeled for a shared box edge, NO per-stack Traefik :443. Requires a consumer edge on the box (see README; the edge-presence guard lands with network membership).
+    preconditions:
+      - sh: command -v docker
+        msg: "Docker is required for `task dev:edge`. Run `task doctor` to check all host tools."
+      - sh: test -f uv.lock
+        msg: "Run `uv sync` first to create uv.lock (the image build uses --frozen)."
+      - sh: 'if command -v framework >/dev/null 2>&1; then framework integrity; fi'
+        msg: "Framework integrity check failed. Run `framework integrity`, then `framework restore <file>`."
+    env:
+      UID:
+        sh: id -u
+      GID:
+        sh: id -g
+      # Per-tier route host (FWK94 R3): nested <svc>.<slug>.localhost for the main stack, flat
+      # <svc>-<instance>.localhost for a worktree instance — scripts/edge_host.sh decides from
+      # STACK_INSTANCE. Exported so the discovery labels (base.yml app, edge.yml obs) interpolate them.
+      APP_ROUTE_HOST:
+        sh: ./scripts/edge_host.sh app
+      GRAFANA_ROUTE_HOST:
+        sh: ./scripts/edge_host.sh grafana
+      PROMETHEUS_ROUTE_HOST:
+        sh: ./scripts/edge_host.sh prometheus
+      ALERTMANAGER_ROUTE_HOST:
+        sh: ./scripts/edge_host.sh alertmanager
+    cmds:
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml -f infra/compose/edge.yml --profile dev up -d --wait --build
+      - 'echo "Behind edge (no per-stack Traefik). Routes — app: https://$APP_ROUTE_HOST · grafana: https://$GRAFANA_ROUTE_HOST · prometheus: https://$PROMETHEUS_ROUTE_HOST · alertmanager: https://$ALERTMANAGER_ROUTE_HOST"'
+
+  dev:edge:down:
+    desc: Stop the behind-edge dev stack for THIS instance (keeps volumes). Identity-aware via STACK_INSTANCE (tears down this instance, not the main stack).
+    cmds:
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml -f infra/compose/edge.yml down
+
   test:
     desc: Run the test suite
     preconditions:
