@@ -101,7 +101,10 @@ Rollback can only restore a previous release if its migrations can be reversed, 
   `# deploy: contract`. **Contract changes are their own post-rollout release:** ship the
   expand release, let it fully roll out, remove the old code, then a later `# deploy: contract`
   migration removes the old shape. (Raw-SQL drops via `op.execute` and type-narrowing aren't
-  caught structurally — Plan 7's data-integrity agent adds that.) **Never destroy data that
+  caught structurally — Plan 7's data-integrity agent adds that, but it is advisory/opt-in:
+  it runs only when the `ANTHROPIC_<PKG>_CI_RUNTIME` secret is set, posting a `review-*`
+  Check Run; require that check in branch protection to make it gate merges. Otherwise
+  `scripts/check_migrations.py` is the only enforced check.) **Never destroy data that
   cannot be reconstructed.**
 - **This applies to all database paradigms, not just relational.** PostgreSQL uses Alembic
   here; document/key-value/graph/time-series/vector stores (Plan 8) carry their own reversible

@@ -105,3 +105,19 @@ def test_merge_topology_landing_on_or_above_contract_is_allowed(tmp_path, monkey
         mod._app_contract_in_range("r0004") == []
     )  # already at head, nothing to roll back
     assert mod.main(["r0004"]) == 0
+
+
+def test_override_emits_audit_line(tmp_path, monkeypatch, capsys):
+    """P13: exercising the ALLOW_CONTRACT_ROLLBACK=1 break-glass emits a tagged AUDIT line naming the
+    actor (the override is auditable, never silent); the existing ::warning:: is retained."""
+    mod = _load()
+    _write_merge_chain(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ALLOW_CONTRACT_ROLLBACK", "1")
+    monkeypatch.setenv("GITHUB_ACTOR", "deploy-bot")
+    rc = mod.main(["r0003a"])  # crosses the r0003b contract, but the override is set
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "AUDIT" in err
+    assert "deploy-bot" in err  # the actor is recorded
+    assert "::warning::" in err  # existing warning retained

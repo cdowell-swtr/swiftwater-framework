@@ -12,10 +12,14 @@ Two structural guards, both run in pre-commit and CI over migrations/versions/*.
    `# deploy: contract` comment to the file to acknowledge that and exempt it from this guard.
 
 Structural, not semantic: these don't decide whether a drop is *actually* safe given current
-code — Plan 7's data-integrity review agent adds that judgement. Known blind spots deferred to
-that agent: a destructive change expressed as raw SQL (`op.execute("DROP ...")`) or a
-type-narrowing `alter_column(type_=...)` is NOT detected here — only the AST ops listed above
-are. See infra/deploy/README.md for the expand/contract-across-releases workflow.
+code — Plan 7's data-integrity review agent adds that judgement. That agent is off by default /
+advisory: it runs only when the ANTHROPIC_<PKG>_CI_RUNTIME secret is set (<PKG> = your
+uppercased package name), posting a review-* Check Run. To make it load-bearing, set that
+secret AND require the review-* check in branch protection. Until then THIS structural guard is
+the only ENFORCED backstop, and it cannot see the listed blind spots. Known blind spots: a
+destructive change expressed as raw SQL (`op.execute("DROP ...")`) or a type-narrowing
+`alter_column(type_=...)` is NOT detected here — only the AST ops listed above are. See
+infra/deploy/README.md for the expand/contract-across-releases workflow.
 """
 
 from __future__ import annotations

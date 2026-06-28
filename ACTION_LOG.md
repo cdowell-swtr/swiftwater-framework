@@ -4001,3 +4001,18 @@ that scopes every lookup to the closure tenant (`active_tenant_id`) + the callin
 Controller-authored, docs-only (comment block — no behavior change; deps.py is integrity-locked but comments regenerate per-render).
 Verified on render: format/lint clean first render + **11/11** regression (fitness + tenant-routing-deps, behavior unchanged). Review → branch-end Opus.
 (FWK67 SP3 build Task 11/14)
+
+#### #0293 · completed · FWK67 (SP3) Task 12 — SP2 carry-overs: P13 break-glass audit + P11 advisory doc + P16 deferral · 2026-06-27
+Closed three FWK66/SP2 Layer-2 carry-overs. **P13** (TDD): the `ALLOW_CONTRACT_ROLLBACK=1` break-glass in `scripts/rollback_guard.py`
+was silent — added an `_audit_override(crossed)` helper emitting a tagged, greppable `::notice::AUDIT: contract-rollback break-glass
+exercised … by <actor> …` line (actor from `GITHUB_ACTOR`/`USER`/unknown) on BOTH override-proceed branches (the resolution-failure
+fail-closed branch + the offenders branch), keeping the existing `::warning::`. New functional test `test_override_emits_audit_line`
+(synthetic merge chain + `ALLOW_CONTRACT_ROLLBACK=1`/`GITHUB_ACTOR` → rc 0, AUDIT+actor+::warning:: in stderr). **P16**: a one-line
+DEFERRED note in `_control_contract_any` — per-release control-rev tracking is deferred until a control *contract* migration first
+exists; the always-in-range over-refusal is fail-closed/safe today. **P11** (docs-only): reworded `check_migrations.py` header +
+`infra/deploy/README.md` to mark the data-integrity review agent as **off-by-default/advisory** — enabled only by the
+`ANTHROPIC_<PKG>_CI_RUNTIME` secret (posts a `review-*` Check Run); to make it load-bearing, set the secret AND require the `review-*`
+check in branch protection; until then the structural `check_migrations.py` guard is the only ENFORCED backstop (blind spots: raw-SQL
+drops, type-narrowing alter_column). Sonnet author; controller fixed inline-comment spacing (ruff-format, package-name-free).
+Verified on render: **7/7** (5 rollback-guard incl. new P13 + 2 db-migrations) + README renders + format/lint clean. Review → branch-end Opus.
+(FWK67 SP3 build Task 12/14)
