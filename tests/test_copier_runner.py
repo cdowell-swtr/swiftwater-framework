@@ -3957,6 +3957,107 @@ def test_compose_wrapper_shifts_host_ports_by_offset(tmp_path: Path):
     assert defaults["HTTP_HOST_PORT"] == "8000"
 
 
+def test_compose_wrapper_sets_stack_instance_and_project_name(tmp_path: Path):
+    """The rendered scripts/compose.sh resolves STACK_INSTANCE (the FWK88 seam's master
+    parameter) and layers COMPOSE_PROJECT_NAME from it, before exec-ing docker compose
+    (FWK92). Default STACK_INSTANCE is the project slug, so an unset env reproduces today's
+    per-project namespacing and a bare `docker compose up` stays standalone-safe."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    capture = tmp_path / "captured-env.txt"
+    shim = bindir / "docker"
+    shim.write_text('#!/usr/bin/env bash\nenv > "$CAPTURE_FILE"\n')
+    shim.chmod(0o755)
+
+    def run_wrapper(extra_env: dict[str, str]) -> dict[str, str]:
+        env = {
+            **os.environ,
+            "PATH": f"{bindir}:{os.environ['PATH']}",
+            "CAPTURE_FILE": str(capture),
+        }
+        # Strip any inherited values so the wrapper's defaults are what's under test.
+        for k in ("STACK_INSTANCE", "COMPOSE_PROJECT_NAME"):
+            env.pop(k, None)
+        env.update(extra_env)
+        result = subprocess.run(["./scripts/compose.sh", "up"], cwd=dest, env=env)
+        assert result.returncode == 0
+        return dict(
+            line.split("=", 1)
+            for line in capture.read_text().splitlines()
+            if "=" in line
+        )
+
+    # No instance set → STACK_INSTANCE and COMPOSE_PROJECT_NAME both default to the slug
+    # (today's behavior — per-project isolation via base.yml `name: demo`).
+    defaults = run_wrapper({})
+    assert defaults["STACK_INSTANCE"] == "demo"
+    assert defaults["COMPOSE_PROJECT_NAME"] == "demo"
+
+    # An empty STACK_INSTANCE= must still fall back to the slug (colon-minus, not bare minus).
+    empty = run_wrapper({"STACK_INSTANCE": ""})
+    assert empty["STACK_INSTANCE"] == "demo"
+    assert empty["COMPOSE_PROJECT_NAME"] == "demo"
+
+    # A worktree instance flows into both vars.
+    instanced = run_wrapper({"STACK_INSTANCE": "demo-wt1"})
+    assert instanced["STACK_INSTANCE"] == "demo-wt1"
+    assert instanced["COMPOSE_PROJECT_NAME"] == "demo-wt1"
+
+    # An explicit COMPOSE_PROJECT_NAME wins over the STACK_INSTANCE-derived default.
+    overridden = run_wrapper(
+        {"STACK_INSTANCE": "demo-wt1", "COMPOSE_PROJECT_NAME": "explicit"}
+    )
+    assert overridden["COMPOSE_PROJECT_NAME"] == "explicit"
+
+
+def test_env_example_documents_stack_instance(tmp_path: Path):
+    """`.env.example` documents STACK_INSTANCE in the managed region, commented-out (an
+    assigned value would be a two-worktree footgun) so consumers learn the seam parameter."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    env = (dest / ".env.example").read_text()
+    assert "STACK_INSTANCE" in env
+    # Documented, not assigned: the only STACK_INSTANCE line is a comment.
+    for line in env.splitlines():
+        if "STACK_INSTANCE" in line:
+            assert line.lstrip().startswith("#"), (
+                f"STACK_INSTANCE must be documented commented-out, got: {line!r}"
+            )
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_compose_config_resolved_name_default_parity(tmp_path: Path):
+    """R1 default-parity, asserted on RESOLVED `docker compose config` output (not file bytes):
+    with no STACK_INSTANCE the resolved project name is the slug — byte-identical to today —
+    and a worktree instance flows through scripts/compose.sh into the resolved name (FWK92)."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    def resolved_name(extra_env: dict[str, str]) -> str:
+        env = {**os.environ}
+        for k in ("STACK_INSTANCE", "COMPOSE_PROJECT_NAME"):
+            env.pop(k, None)
+        env.update(extra_env)
+        r = subprocess.run(
+            ["./scripts/compose.sh", "-f", "infra/compose/base.yml", "config"],
+            cwd=dest,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert r.returncode == 0, f"compose config failed:\n{r.stderr}"
+        return yaml.safe_load(r.stdout)["name"]
+
+    # Default: resolved project name is the slug — parity with today.
+    assert resolved_name({}) == "demo"
+    # Worktree instance: STACK_INSTANCE flows through the wrapper into the resolved name.
+    assert resolved_name({"STACK_INSTANCE": "demo-wt1"}) == "demo-wt1"
+
+
 def test_dev_compose_urls_are_env_overridable(tmp_path: Path):
     """Every APP_*_URL literal in dev.yml is wrapped so the operator's env wins
     (the FWK6 seam), with today's container DSN as the default fallback."""

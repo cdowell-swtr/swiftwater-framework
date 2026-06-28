@@ -4,6 +4,15 @@
 # only sets a var when it is not already set in the environment. Then exec the compose
 # command passed as arguments.
 set -euo pipefail
+
+# Instance identity (FWK88 seam): STACK_INSTANCE is the master parameter every per-instance
+# namespacing derives from. It defaults to the project slug, so an unset env reproduces the
+# single-stack defaults and a bare `docker compose up` (bypassing this wrapper) stays
+# standalone-safe via base.yml `name: {{ project_slug }}`. COMPOSE_PROJECT_NAME is layered
+# from it (containers/volumes/default network), and an explicit COMPOSE_PROJECT_NAME wins.
+export STACK_INSTANCE="${STACK_INSTANCE:-{{ project_slug }}}"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$STACK_INSTANCE}"
+
 off="${PORT_OFFSET:-0}"
 # Note: if PORT_OFFSET pushes any port past 65535 the bind will fail at runtime.
 _p() {  # _p VAR DEFAULT  -> export VAR=$((DEFAULT+off)) unless already set
