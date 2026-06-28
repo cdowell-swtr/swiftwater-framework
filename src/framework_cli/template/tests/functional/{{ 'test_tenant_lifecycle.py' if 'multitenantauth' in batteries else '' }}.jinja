@@ -1,0 +1,112 @@
+"""TenantLifecycleEvent: append-only audit for tenant-lifecycle mutations.
+
+Tests confirm:
+- record_lifecycle_event() inserts a row with the correct fields.
+- The DB-level CHECK constraint rejects unknown action values.
+"""
+
+from __future__ import annotations
+
+import pytest
+from sqlalchemy import Engine, create_engine, make_url, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control import models as m
+from {{ package_name }}.db.control.base import ControlBase
+from {{ package_name }}.multitenantauth.tenancy.registry import record_lifecycle_event
+
+
+# ── fixtures ──────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def control_engine(pg_url: str) -> Engine:  # type: ignore[return]
+    """Control-plane engine for lifecycle-event tests.
+
+    Creates the tables needed by these tests (app_user, tenant, tenant_lifecycle_event,
+    tenant_slug_history) in an isolated test database. Uses create_all — no alembic needed here.
+    """
+    _ctrl_db = "{{ package_name }}_lifecycle_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(
+        engine,
+        tables=[
+            m.AppUser.__table__,
+            m.Tenant.__table__,
+            m.TenantLifecycleEvent.__table__,
+            m.TenantSlugHistory.__table__,
+        ],
+    )
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def control_session(control_engine: Engine) -> Session:  # type: ignore[return]
+    """Provide a function-scoped Session; truncate lifecycle and tenant tables after each test."""
+    with Session(control_engine) as s:
+        yield s
+    with control_engine.begin() as conn:
+        conn.execute(
+            text(
+                "TRUNCATE TABLE tenant_lifecycle_event, tenant_slug_history, tenant CASCADE"
+            )
+        )
+
+
+# ── tests ─────────────────────────────────────────────────────────────────────
+
+
+def test_records_a_lifecycle_event(control_session: Session) -> None:
+    """record_lifecycle_event inserts one TenantLifecycleEvent row with correct fields."""
+    s = control_session
+    s.add(m.Tenant(id="acme", name="Acme", slug="acme", status="active", dsn="x"))
+    s.flush()
+    record_lifecycle_event(s, actor_id=None, tenant_id="acme", action="suspend")
+    s.flush()
+    ev = s.query(m.TenantLifecycleEvent).filter_by(tenant_id="acme").one()
+    assert ev.action == "suspend" and ev.detail is None
+
+
+def test_action_check_rejects_unknown(control_session: Session) -> None:
+    """The DB CHECK constraint rejects an action value not in the allowed set."""
+    s = control_session
+    s.add(m.Tenant(id="acme", name="Acme", slug="acme", status="active", dsn="x"))
+    s.flush()
+    s.add(m.TenantLifecycleEvent(tenant_id="acme", action="frobnicate"))
+    with pytest.raises(IntegrityError):
+        s.flush()
+
+
+# ── slug_cooling_days wiring (FWK67 SP3) ─────────────────────────────────────
+
+
+def test_rename_slug_uses_cooling_days_setting(control_session, monkeypatch):
+    from datetime import datetime, timezone
+    from {{ package_name }}.config.settings import Settings
+    from {{ package_name }}.multitenantauth.tenancy import registry
+    from {{ package_name }}.db.control import repository as control_repo
+
+    t = registry.register_tenant(control_session, "Cool Co", slug="cool-orig")
+    control_session.flush()
+    monkeypatch.setattr(registry, "get_settings", lambda: Settings(slug_cooling_days=7))
+    registry.rename_slug(control_session, t.id, "cool-new")
+    control_session.flush()
+    hist = control_repo.get_slug_history(control_session, "cool-orig")
+    assert hist is not None
+    delta_days = (hist.reserved_until - datetime.now(timezone.utc)).days
+    assert (
+        6 <= delta_days <= 7
+    )  # 7-day window from the overridden setting, not the 30-day default

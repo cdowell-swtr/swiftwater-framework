@@ -3849,3 +3849,213 @@ silently unprotected); then local `git branch -m master main` + re-point trackin
 the operator. The `CLAUDE.md` `$DEV_ROOT/...swiftwater-framework` operating-env path-ref update is deferred to FWK67
 (rides the same relocation).
 (template already on main → framework default master→main; transition PR now, native rename + local + handoff to follow)
+
+#### #0281 · completed · FWK67 (SP3) — brainstorm + spec + plan, design-panel-hardened · 2026-06-27
+Brainstormed FWK67 (multitenantauth Phase-2 SP3) and wrote the spec + plan on branch
+`fwk67-sp3-authz-retouch-lifecycle`. Scope settled via operator decisions: **route-complete** (ships the three
+control-plane lifecycle routes with preconditions met), erasure = **two-phase, build soft-deactivate now**
+(hard-teardown a named deferred trigger), `subtree_exists` = **override-seam-only** initially. Hardened BEFORE
+spec-lock via the FWK58 two-layer adversarial method run as a Workflow: a **6-lens all-Opus design panel**
+(`wf_9505b8c3-7bd`, 37 raised → 14 confirmed, default-to-refute verification) + a separately-**recovered
+completeness-critic lens** (the panel's 6th lens died on a transient `server_error` — see FWK73; re-run
+standalone, 9 findings / 3 High). All findings dispositioned; **5 brainstorm decisions reversed by the panels**
+(spec §10): (1) `subtree_exists` **deferred** — unused by any SP3 route + needs a locked `expr.py` signature
+change (composite-string vs discrete-param); (2) Route A **split** into single-domain routes — the mixed
+`ANY(tenant,platform)` operator arm was dead code (membership-404 before the expr) and a platform-only route on
+a `{tenant_id}` path red-fails the shipped T2 fitness test; (3) **lock-scope corrected** — the manifest locks
+nearly the whole `multitenantauth` tree (routes/service/registry/repository/models), so the whole code build is
+heavy all-Opus review, not "routes unlocked"; (4) slug reaper → **lazy-delete** (nothing reads expired history;
+avoids a workers-battery coupling); (5) lifecycle mutations **audited** (new `TenantLifecycleEvent`). Also caught
+the **seed-catalog false-closure** (new guards reference unseeded perms → every route 403/400) and the **Route B
+first-grant deadlock** (bootstrap `ANY` guard). Plan = 14 TDD tasks / 5 phases, subagent-driven; branch-end
+all-Opus Layer-2 matrix; PUR DEC-0007; combined SP2+SP3 release. Also dropped the **FWK73** stub (stage-gate the
+panel/Layer-2 Workflow so a load-bearing lens lost to a transient error can't silently degrade coverage — same
+class as FWK46, one layer up). Spec/plan committed; subagent build next.
+(brainstorm → design panel → spec → plan; build pending)
+
+#### #0282 · completed · FWK67 (SP3) Task 1 — AuthzEvent.resource_id + audit completeness · 2026-06-27
+Added nullable `AuthzEvent.resource_id` (`String(255)`) + threaded it through `_record_event` and the three
+resource-domain sites (`assign_resource_role`, `revoke_resource_role`, and the `remove_member` cascade loop —
+changed to iterate the `ResourceRoleAssignment` ORM objects so `a.resource_id` is in scope). Control migration
+`c0004` (additive nullable, down_revision `c0003`). Closes Phase-1 precondition (b). Sonnet author (author/verify
+split); controller-verified on a clean `--with multitenantauth` render: **16/16 `test_authz_service` + 7/7
+control-migration/db-migration** green. Per-task review deferred → branch-end Opus.
+(FWK67 SP3 build Task 1/14)
+
+#### #0283 · completed · FWK67 (SP3) Task 2 — TenantLifecycleEvent audit + recorder (c0005) · 2026-06-27
+Added the append-only `TenantLifecycleEvent` control model (in the already-locked `models/tenant.py`; action
+CHECK `IN ('suspend','reactivate','rename')`) + export + `record_lifecycle_event()` recorder in `registry.py`
++ control migration `c0005` (down_revision `c0004`). Operator decision: lifecycle mutations are audited.
+Sonnet author (1st attempt died on a transient API stall → re-dispatched, the FWK73 bounded-retry pattern).
+**Controller** closed a cross-test-isolation gap the implementer flagged — added `tenant_lifecycle_event` to
+the shared conftest `_CONTROL_TABLES` truncate (the FWK66 #0278 leak class). Verified on render: **23/23**
+(lifecycle 2 + control-migration chain incl. c0005 + `test_authz_service` regression). Review → branch-end Opus.
+(FWK67 SP3 build Task 2/14)
+
+#### #0284 · completed · FWK67 (SP3) Task 3 — DV-5 t4 reorder (deps.py) · 2026-06-27
+Hoisted `platform_perms = platform_permissions(cs, user.id)` above the resolver-factory invocation in the
+locked `deps.py` guard (ctx now references the precomputed local), removing the privilege-influence adjacency
+the FWK62 review flagged (t4). Behaviour-preserving (pure control-DB read). Controller-authored (trivial
+locked reorder); verified on render: **65/65** (deps + fitness + service + expr suites). Review → branch-end Opus.
+(FWK67 SP3 build Task 3/14)
+
+#### #0285 · completed · FWK67 (SP3) Task 4 — seed catalog: lifecycle/resource vocab + resource.admin role · 2026-06-27
+Extended the (unlocked, consumer-editable) policy catalog: 4 new permissions (`tenant:deactivate`,
+`tenant:rename-slug`, `platform:manage-tenant-lifecycle`, `resource:manage`) + a new resource-domain built-in
+role `resource.admin` — REQUIRED for the SP3 routes to function (else they'd 403/400; the completeness-lens
+CMP-1 false-closure). Controller-authored; **updated the coupled existing assertions** in `test_authz_seed` +
+`test_authz_catalog` (a plan gap — both hardcode the exact catalog/bundles). Verified on render: **25/25**
+(catalog + seed + fitness). Folded in a **ruff-format cleanup** of Task 2's `tenant.py` + `registry.py`
+(back-ported from the render — [[ruff-format-check-after-inline-edits]]; their rendered output wasn't
+format-clean). Review → branch-end Opus.
+(FWK67 SP3 build Task 4/14)
+
+#### #0286 · completed · FWK67 (SP3) Task 5 — Route A.1 tenant-admin self-deactivate · 2026-06-27
+Added `registry.deactivate_tenant` (status→suspended, LookupError if absent) + `POST /tenants/{tenant_id}/deactivate`
+guarded `Perm("tenant:deactivate", on="tenant:{tenant_id}")`, records a `suspend` lifecycle event, 404-safe. Sonnet
+author; controller fixed an `occurred_at`→`at` column-name guess + ruff-format (back-ported tenants.py + 3 test
+line-joins). Verified on render: **2/2** route tests (admin 204+suspended+event; member 403) + fitness 6/6 + format
+clean (135 files). Review → branch-end Opus.
+(FWK67 SP3 build Task 5/14)
+
+#### #0287 · completed · FWK67 (SP3) Task 6 — Route A.2/A.3 operator suspend + reactivate · 2026-06-27
+Added `registry.reactivate_tenant` (suspended→active; LookupError if absent, ValueError if not suspended) + two
+platform-scoped routes `POST /tenants/suspend` and `POST /tenants/reactivate`, each guarded
+`Perm("platform:manage-tenant-lifecycle", on="platform")` and carrying the target `tenant_id` in the **request body**
+(not the path) — so the locked guard computes `needs_tenant=False`, a non-member operator is reachable, and the T2
+route-fitness test is not tripped. Reactivate maps LookupError→404 / ValueError→409 (suspended-only precondition);
+both record a lifecycle event. Sonnet author; controller ruff-format-fixed the rendered output (tenants.py back-port
++ 2 package-name-free test line-wraps — [[ruff-format-check-after-inline-edits]]). Verified on render: **7/7**
+lifecycle-route tests (incl. non-member-operator reachability, 409 not-suspended, 404 absent, tenant-admin 403) +
+**47/47** regression (fitness + tenant-role-routes + auth-routes) + format/lint clean. Rolled up for branch-end
+Opus: `reactivate_tenant` overlaps the existing `activate_tenant` (both set status=active) — semantics differ
+(precondition + return type) and it's plan-mandated, but worth a DRY look. Review → branch-end Opus.
+(FWK67 SP3 build Task 6/14)
+
+#### #0288 · completed · FWK67 (SP3) Task 7 — Route B resource grant/revoke (bootstrap ANY + cross-tenant 404) · 2026-06-27
+Added two resource-role routes to the locked `routes/roles.py`: `POST /tenants/{tenant_id}/members/{membership_id}/resources/{resource_id}/roles`
+and `DELETE …/roles/{role_name}`, both behind `_RESOURCE_GUARD = guard(ANY(Perm("resource:manage", on="tenant:{tenant_id}/resource:{resource_id}"),
+Perm("tenant:manage-members", on="tenant:{tenant_id}")))`. The bootstrap is the ANY's **second** leaf — a tenant-admin holds
+`tenant:manage-members`, so the FIRST resource grant succeeds without any pre-existing resource grant (no deadlock); the resource-scoped
+first leaf resolves via the DV-5 `resource_grant(name, path_dict)` seam (always ctx-wired, fail-closed). Cross-tenant safety is a route-layer
+`membership.tenant_id != tenant_id` → 404 (existence never leaked). `assign_resource_role` records a `grant` authz_event carrying
+`resource_id`. Sonnet author; controller back-ported ruff-format (roles.py import-wrap + a method-chain wrap in the test helper —
+both package-name-free). Verified on render: **33/33** in test_tenant_role_routes (28 prior + 5 new: bootstrap-204, cross-tenant-404,
+revoke-204, plain-member-403, wrong-domain-400) + fitness 6/6 + format/lint clean. Test reads the grant event via `_latest_authz_event`
+(JOIN role for domain; `authz_event` has no `role_domain` column; ORDER BY the real `at` column). Review → branch-end Opus.
+(FWK67 SP3 build Task 7/14)
+
+#### #0289 · completed · FWK67 (SP3) Task 8 — Route C rename-slug + lazy-delete (cooling window) · 2026-06-27
+Added `PATCH /tenants/{tenant_id}/slug` (guard `Perm("tenant:rename-slug", on="tenant:{tenant_id}")`, tenant-admin) to the
+locked `routes/tenants.py`: generic-409 collision pre-check via `resolve_slug` (live OR cooling → `_GENERIC_SLUG_TAKEN`,
+never echoes the colliding id, Layer-2 A), then **404-before-mutate** (fetch tenant, None→404, capture old slug) → `rename_slug`
+→ `record_lifecycle_event("rename", detail="old→new")`. Extended the existing `registry.rename_slug` with a **lazy-delete**:
+after `_assert_slug_claimable` passes (so any surviving history row for the new slug is provably EXPIRED), call the new
+`control_repo.delete_slug_history(session, slug)` to clear the stale row on reclaim. `Tenant.id` immutable (id↔slug-desync).
+**Corrected two brief bugs** (advisor-flagged): (1) brief's `s.get(...).slug` would AttributeError→500 on an absent tenant
+before the LookupError→404 could fire → restructured to fetch-and-None-check first; (2) brief's `resolve_slug(...) != tenant_id`
+pre-check compared a `(tid, bool)` tuple to a str → replaced with the simple `is not None` form (spec §line159: claimability via
+resolve_slug; own-cooling reclaim is NOT a requirement). Used the existing `SLUG_COOLING_DAYS` constant (Task 9 promotes it).
+Extended the lifecycle `_seed_vocab` with `tenant:rename-slug` (+tenant.admin grant — else the guard 403s the founder). Sonnet
+author; controller back-ported ruff-format (tenants.py call-wrap + 2 package-name-free test wraps). Verified on render: **12/12**
+lifecycle-route (7 prior + 5 new: rename-200+history+event, cooling-slug-409, lazy-delete-own-expired, missing-tenant-404,
+old-slug-doesn't-route) + **121/121** regression (provision/seed/fitness + slug/tenancy/registry/control -k) + format/lint clean.
+NOTE for branch-end Opus: the route's `if tenant is None: 404` is defensive — the guard's membership-precondition 404s a
+non-existent/non-member tenant first, so the route-body None-check is only reachable on a TOCTOU delete (still correct, no 500).
+Review → branch-end Opus.
+(FWK67 SP3 build Task 8/14)
+
+#### #0290 · completed · FWK67 (SP3) Task 9 — slug_cooling_days setting + ge=1 floor (SP1 P3/P4 class) · 2026-06-27
+Promoted the slug-cooling window from a `registry.SLUG_COOLING_DAYS` module constant to a first-class `Settings` field
+`slug_cooling_days: int = Field(default=30, ge=1)` (in the multitenantauth block of `config/settings.py`, mirroring
+`max_cached_engines`). Removed the constant (registry was its only user — template-wide grep) and rewired `rename_slug` to
+`get_settings().slug_cooling_days` (no circular import — settings imports only stdlib+pydantic). Single source of truth now the
+setting (spec §C4). Sonnet author. Tests: unit floor `Settings(slug_cooling_days=0)`→ValidationError + default==30
+(`test_settings_auth`); a **wiring** functional test (`test_tenant_lifecycle`) that monkeypatches `registry.get_settings` to a
+7-day override, renames, and asserts the history `reserved_until` is a 7-day window (catches a hardcoded-30 regression). Controller
+closed a fixture gap the implementer flagged — added `TenantSlugHistory` to the `control_engine` create_all + TRUNCATE (rename_slug
+touches it). Controller back-ported ruff-format (registry call-wrap + a package-name-free test assert-wrap). Verified on render:
+**50/50** (settings + lifecycle + lifecycle-routes incl. Task 8 rename regression) + format/lint clean. Review → branch-end Opus.
+(FWK67 SP3 build Task 9/14)
+
+#### #0291 · completed · FWK67 (SP3) Task 10 — DV-5 t2 per-leaf resource-binding fitness test + negative control · 2026-06-27
+Added two fitness tests to `test_authz_fitness.py` closing the DV-5 t2 residual: `test_T2_DV5_resource_leaves_bind_canonical_resource_id`
+walks EVERY `Perm` leaf (not the whole node) and asserts any leaf with `/resource:` in `on` binds exactly `{resource_id}` — the
+route-level `resource_params()` set-membership check (T2) passes a multi-resource ALL that binds `{resource_id}` in one leaf and a
+foreign `{other_id}` in another (the foreign leaf would over-grant on the request's single resource_id). The companion
+`test_T2_DV5_route_level_check_is_insufficient` is a negative control proving exactly that gap (route-level check satisfied, per-leaf
+catches the `{other_id}` over-grant). Controller-authored (test-only transcription; verified all assumed API — `Authorized.perm_leaves`/
+`resource_params`, `_api_routes`/`_authorized`/`app`). Verified on render: **8/8** fitness (6 prior + 2), Route B's resource leaf binds
+`{resource_id}` so the per-leaf test passes; format/lint clean on first render. Review → branch-end Opus.
+(FWK67 SP3 build Task 10/14)
+
+#### #0292 · completed · FWK67 (SP3) Task 11 — DV-5 t1/t3 docs: route-naming contract + sample consumer resolver · 2026-06-27
+Extended the DV-5 resolver-seam comment block in `multitenantauth/deps.py` (the always-present, consumer-facing home — generated-project
+`documentation/` only ships under the `docs` battery, so a `multitenantauth`-only project wouldn't get a docs page). Added (t1) a
+**CONSUMER ROUTE CONTRACT** note: name your tenant path param `{tenant_id}` — `needs_tenant` detection and the membership-404 precondition
+both key on the LITERAL name (`needs_tenant = "tenant_id" in resource_params()`; precondition reads `path["tenant_id"]`); a route that names
+it `{org_id}` gets `needs_tenant=False`, the membership check never fires, `tenant_perms` stays empty, and the leaf DENIES every caller —
+fail-closed (no over-grant/leak) but silently broken (always 403). The T2 fitness test catches a `{tenant_id}` path the guard fails to bind
+but cannot see a differently-named param — so the contract lives in the doc. Added (t3) a worked **sample consumer `resource_grant` factory**
+that scopes every lookup to the closure tenant (`active_tenant_id`) + the calling user's membership, binding the active tenant ONCE.
+Controller-authored, docs-only (comment block — no behavior change; deps.py is integrity-locked but comments regenerate per-render).
+Verified on render: format/lint clean first render + **11/11** regression (fitness + tenant-routing-deps, behavior unchanged). Review → branch-end Opus.
+(FWK67 SP3 build Task 11/14)
+
+#### #0293 · completed · FWK67 (SP3) Task 12 — SP2 carry-overs: P13 break-glass audit + P11 advisory doc + P16 deferral · 2026-06-27
+Closed three FWK66/SP2 Layer-2 carry-overs. **P13** (TDD): the `ALLOW_CONTRACT_ROLLBACK=1` break-glass in `scripts/rollback_guard.py`
+was silent — added an `_audit_override(crossed)` helper emitting a tagged, greppable `::notice::AUDIT: contract-rollback break-glass
+exercised … by <actor> …` line (actor from `GITHUB_ACTOR`/`USER`/unknown) on BOTH override-proceed branches (the resolution-failure
+fail-closed branch + the offenders branch), keeping the existing `::warning::`. New functional test `test_override_emits_audit_line`
+(synthetic merge chain + `ALLOW_CONTRACT_ROLLBACK=1`/`GITHUB_ACTOR` → rc 0, AUDIT+actor+::warning:: in stderr). **P16**: a one-line
+DEFERRED note in `_control_contract_any` — per-release control-rev tracking is deferred until a control *contract* migration first
+exists; the always-in-range over-refusal is fail-closed/safe today. **P11** (docs-only): reworded `check_migrations.py` header +
+`infra/deploy/README.md` to mark the data-integrity review agent as **off-by-default/advisory** — enabled only by the
+`ANTHROPIC_<PKG>_CI_RUNTIME` secret (posts a `review-*` Check Run); to make it load-bearing, set the secret AND require the `review-*`
+check in branch protection; until then the structural `check_migrations.py` guard is the only ENFORCED backstop (blind spots: raw-SQL
+drops, type-narrowing alter_column). Sonnet author; controller fixed inline-comment spacing (ruff-format, package-name-free).
+Verified on render: **7/7** (5 rollback-guard incl. new P13 + 2 db-migrations) + README renders + format/lint clean. Review → branch-end Opus.
+(FWK67 SP3 build Task 12/14)
+
+#### #0294 · completed · FWK67 (SP3) Task 13 — lock c0004/c0005 control migrations in BATTERY_LOCKED_SRC · 2026-06-27
+Added the two new control-plane migration files to the integrity lock list (`src/framework_cli/integrity/classes.py`
+`BATTERY_LOCKED_SRC`, gated `("multitenantauth",)`): `migrations_control/versions/c0004_authz_event_resource_id.py` (Task 1) and
+`migrations_control/versions/c0005_tenant_lifecycle_event.py` (Task 2) — so the security-critical control schema for the SP3 audit
+columns/tables is full-file checksummed in every generated project (a consumer cannot silently fork them). Controller-authored
+(framework-source mechanical list addition). Verified at repo root in the framework venv: `test_auth_mechanism_lock.py` **5/5** (no
+mechanism file missing) + `framework integrity: OK` against a fresh `--with multitenantauth` render + ruff-format/check + mypy clean on
+classes.py. (Env note: the framework `.venv` console-script shebangs are stale from a prior repo relocation — `uv run python -m pytest`
+sidesteps it; `uv run framework`/`uv run ruff` are unaffected.) Review → branch-end Opus.
+(FWK67 SP3 build Task 13/14)
+
+#### #0295 · completed · FWK67 (SP3) Task 14 — DEC-0007 promote-up record + PLAN/ACTION_LOG (build complete) · 2026-06-27
+Wrote the SP3 Promote-Up Record `docs/superpowers/decisions/DEC-0007-multitenantauth-phase2-sp3-lifecycle-promote-up.md`
+(cross-repo/v4; generator=meridian, absorber=framework; sub-record of DEC-0003, sibling of DEC-0004/DEC-0005). Status
+**`designed` — absorber build COMPLETE; branch-end gate + combined SP2+SP3 release pending; flips to `adopted` only when
+Meridian deletes its lifecycle/authz fork**. Records: absorbed capability (lifecycle routes + resource-grant audit
+completeness + lifecycle audit), the panel-driven designed-fresh route shapes (Route A single-domain split + body-carried
+operator id, Route B bootstrap `ANY`, lazy-delete cooling), what was specialized (generic vocab only; `subtree_exists`/
+seal-walk explicitly NOT in this slice — deferred, Meridian-owned), the upstream-first migration sequence, and the
+conformance contract gating Meridian's fork-deletion (rendered authz/lifecycle suite + mechanism-lock integrity + the DV-5
+t2 per-leaf fitness test + the branch-end Layer-2 matrix). Updated the PLAN.md FWK67 row → **BUILD COMPLETE** (14 tasks
+enumerated; branch-end review + Layer-2 matrix + release pending). **This closes the FWK67 SP3 subagent-driven build (14/14
+tasks).** NEXT (controller, not a build task): branch-end all-Opus whole-branch review → Phase-2 Layer-2 all-Opus
+stance×focus matrix (scorecard `docs/superpowers/eval-scorecards/2026-06-27-fwk67-sp3-layer2-security-matrix.md`) →
+finishing-a-development-branch → PR → combined SP2+SP3 tagged release.
+(FWK67 SP3 build Task 14/14 — BUILD COMPLETE)
+
+#### #0296 · completed · FWK67 (SP3) post-review M1 fix — operator re-suspend is symmetric 409 (no phantom audit row) · 2026-06-27
+Branch-end whole-branch review (Opus, package `review-96aeb6a..761b435.diff`) returned **Ready-to-merge=YES, 0 Critical / 0 Important, 5 Minors**; the DRY triage item (`reactivate_tenant` vs `activate_tenant`) was disposed KEEP (spec §4 mandates a mirroring helper; delegating would double-fetch). Before the build I ran the advisor-flagged **authoritative combined-render pass** (fresh `--with multitenantauth`, not the patched mirror): `ruff` clean + **`mypy src` clean 64 files (template-payload types, never checked before)** + full `pytest` **427 passed**. Operator chose to FIX **M1** (the one Minor worth a decision): an operator suspending an already-suspended tenant flipped status unconditionally + always recorded a `suspend` `TenantLifecycleEvent` → a phantom no-op audit row, cutting against "audit on real change only" + the deactivate/reactivate asymmetry. Fix (TDD, red→green): `registry.deactivate_tenant` now raises `ValueError` when `status == "suspended"` (mirrors `reactivate_tenant`'s precondition); both suspend routes (`operator_suspend_route` + self `deactivate_tenant_route`) map it to **409** (mirroring `operator_reactivate_route`, `str(exc)`) — event records only after a successful flip, so no phantom row, and the self route can't 500 on the new precondition. New test `test_resuspend_already_suspended_is_409_no_phantom_audit` (first suspend 204 + one row; re-suspend 409 + trail unchanged). Verified on clean render: 13/13 lifecycle-routes + **428/428 full suite** + ruff format/check + mypy clean. Touches LOCKED template source (registry.py + routes/tenants.py) — covered by the next gate (the Phase-2 Layer-2 all-Opus matrix: lifecycle-audit-completeness + deactivate/reactivate-asymmetry cells). M2–M5 accepted as-is per operator (M2 str(exc) convention, M3 flush() inconsistency, M4 CASCADE forward-note for the deferred teardown slice, M5 low-value coverage gaps).
+(FWK67 SP3 — branch-end review applied; NEXT: Layer-2 matrix → finishing-branch → release)
+
+#### #0297 · completed · FWK67 (SP3) Layer-2 P4+P5 — TOCTOU row locks close the AT-RISK audit invariant · 2026-06-27
+The Phase-2 Layer-2 all-Opus adversarial matrix (run wf_9ae4b7ed-c98; 23 agents, ~1.29M tokens) returned **gate GREEN — 0 confirmed Critical/High**, but 6 confirmed Low findings, two **shipped-route-reachable** concurrency TOCTOUs leaving I-AUDIT-COMPLETE **AT-RISK** (both fail-safe — access control intact, audit-log-only). Operator chose **fix both in-branch**: **P4** — two concurrent authorized suspends both passed M1's in-Python guard and each wrote a `suspend` event (a phantom duplicate, the M1 class reopened under concurrency) because `deactivate_tenant`'s `s.get` took no row lock; **P5** — `remove_member`'s non-locking assignment capture raced a concurrent `assign_resource_role`, CASCADE-deleting the new grant with no revoke event (a dangling `grant`). Fix = the repo's own proven `with_for_update` / `SELECT … FOR UPDATE`-before-read idiom (already used by `authz.service._assert_not_last_admin`): `registry.deactivate_tenant` **and** `reactivate_tenant` now `s.get(m.Tenant, id, with_for_update=True)` (symmetric — both lifecycle status-mutators); `service.remove_member` locks the membership row (`s.get(..., with_for_update=True)`) before the capture so a concurrent grant's FOR KEY SHARE serializes and FK-fails cleanly. Verified on a clean `--with multitenantauth` render: **428/428** full suite + ruff format/check + `mypy src` clean (the locks are no-ops without contention → zero regression). Verification basis = static trace + idiom-consistency + full-suite-green; timing races are not deterministically TDD-testable (operator-accepted). Touches LOCKED template source (registry.py + service.py). Other 4 findings (P1 NO-ACTION, P2/P3/P6 DOCUMENTED-LIMITATION) recorded as carry-overs in the scorecard.
+(FWK67 SP3 — Layer-2 P4/P5 fixed; NEXT: dated scorecard → finishing-branch → PR → release)
+
+#### #0298 · completed · FWK67 (SP3) Layer-2 scorecard + provenance (DEC-0007 / PLAN) — security gate PASSED · 2026-06-27
+Wrote the dated Layer-2 adversarial security-matrix scorecard `docs/superpowers/eval-scorecards/2026-06-27-fwk67-sp3-layer2-security-matrix.md` (SP2 format; authored from the in-script gate-of-record + the real serialized verify verdicts, NOT the synthesis narrative — advisor discipline). Records: **gate GREEN, 0 confirmed Critical/High**; all 6 promoted findings CONFIRMED Low (nothing refuted — GREEN earned by severity); the P4/P5 "earned its keep below the line" section with the fix (`0ba950c`, `with_for_update` idiom) taking I-AUDIT-COMPLETE to HOLDS-AFTER-FIX; the per-invariant re-verification (I-LIFECYCLE-AUTH/I-RESOURCE-ISO HOLDS, I-SLUG-INTEGRITY/I-MIGRATION-SAFETY HOLDS-with-documented-limitation); and P1/P2/P3/P6 carry-overs. Matrix run wf_9ae4b7ed-c98: 23 agents, ~1.29M tokens, 15 cells (3 stances × 5 focuses) → triage → static-trace-primary default-to-refuted verify → synthesis fed serialized verdicts (the SP2 `[object]` synthesis-provenance bug is FIXED — workflow narrative and gate-of-record agree). Updated DEC-0007 status → "build COMPLETE + security gate PASSED; tagged release pending" + references (scorecard GREEN). Updated PLAN.md FWK67 row → SECURITY GATE PASSED. **NEXT: finishing-a-development-branch → PR → combined SP2+SP3 tagged release (closes FWK66's deferred untagged tail).**
+(FWK67 SP3 — security gate GREEN; NEXT: finishing-branch → PR → release)
+
+#### #0299 · completed · FWK67 (SP3) regen deploy-README golden (Task-12 P11 base clarification) · 2026-06-27
+Pre-PR framework gate (`uv run pytest --ignore=tests/acceptance`, 1098 passed) caught ONE red: `test_copier_runner.py::test_deploy_readme_byte_identical_without_battery` — the NON-battery `infra/deploy/README.md` no longer matched `tests/fixtures/sp2/deploy_readme_pre_sp2.golden`. Cause: Task 12's P11 reword expanded the base migration-guard bullet's data-integrity-agent note (already present in the base as "Plan 7's data-integrity agent adds that.") with the advisory/opt-in detail (ANTHROPIC_<PKG>_CI_RUNTIME + require the review-* check in branch protection; else check_migrations.py is the only enforced check). Diff confirmed **exactly** that one paragraph, nothing else leaked. The change is correctly BASE-placed (check_migrations.py + the data-integrity reviewer ship in every project, battery or not) — so per the golden's own comment ("regenerate from a base render"), regenerated the golden from a clean non-battery render (test DATA). Both deploy-README tests green (byte-identical-without-battery + plane-aware-under-battery). The per-task rendered-project verification couldn't catch this (test_copier_runner is a FRAMEWORK test, not a generated-project test) — exactly why the full framework gate runs before the PR ([[release-readiness-needs-render-not-local-gate]]).
+(FWK67 SP3 — framework gate green; NEXT: finishing-branch → PR → release)

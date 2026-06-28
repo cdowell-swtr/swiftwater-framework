@@ -56,6 +56,9 @@ def _app_contract_in_range(target_rev: str) -> list[str]:
 
 def _control_contract_any() -> list[str]:
     """Any contract-marked control revision (control rev untracked per-release → always-in-range)."""
+    # DEFERRED (P16): per-release control-rev tracking — until a control *contract* migration first
+    # exists, the control plane is treated as always-in-range (over-refusal). That is fail-closed and
+    # safe today; a precise per-release control floor is deferred to when the first control contract lands.
     cfg_path = Path("alembic_control.ini")
     if not cfg_path.exists():
         return []
@@ -65,6 +68,17 @@ def _control_contract_any() -> list[str]:
         for rev in script.walk_revisions("base", "heads")
         if _has_marker(Path(rev.path))
     ]
+
+
+def _audit_override(crossed: object) -> None:
+    """Emit a tagged, greppable audit line whenever the ALLOW_CONTRACT_ROLLBACK break-glass is used
+    (P13). Names the actor from CI/shell env so the override is attributable, never silent."""
+    actor = os.environ.get("GITHUB_ACTOR") or os.environ.get("USER") or "unknown"
+    print(
+        f"::notice::AUDIT: contract-rollback break-glass exercised "
+        f"(ALLOW_CONTRACT_ROLLBACK=1) by {actor} — crosses {crossed}.",
+        file=sys.stderr,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -81,7 +95,10 @@ def main(argv: list[str] | None = None) -> int:
             f"({type(exc).__name__}); refusing image-only rollback. Override: ALLOW_CONTRACT_ROLLBACK=1.",
             file=sys.stderr,
         )
-        return 0 if os.environ.get("ALLOW_CONTRACT_ROLLBACK") == "1" else 1
+        if os.environ.get("ALLOW_CONTRACT_ROLLBACK") == "1":
+            _audit_override("unresolved range")
+            return 0
+        return 1
     if offenders:
         if os.environ.get("ALLOW_CONTRACT_ROLLBACK") == "1":
             print(
@@ -89,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
                 "ALLOW_CONTRACT_ROLLBACK=1 set — proceeding (ensure a data-restore plan).",
                 file=sys.stderr,
             )
+            _audit_override(offenders)
             return 0
         print(
             f"::error::image-only rollback refused — crosses contract (destructive) migration(s): "

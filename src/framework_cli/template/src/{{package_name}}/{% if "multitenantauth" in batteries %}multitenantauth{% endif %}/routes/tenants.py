@@ -31,7 +31,15 @@ from ..authz.expr import Perm
 from ..authz.service import add_membership, remove_member
 from ..deps import control_session, current_user, guard
 from ..errors import DomainMismatchError, LastAdminError
-from ..tenancy.registry import activate_tenant, register_tenant, resolve_slug
+from ..tenancy.registry import (
+    activate_tenant,
+    deactivate_tenant,
+    reactivate_tenant,
+    record_lifecycle_event,
+    register_tenant,
+    rename_slug,
+    resolve_slug,
+)
 
 router = APIRouter(prefix="/tenants")
 
@@ -49,6 +57,14 @@ _GENERIC_SLUG_TAKEN = "Tenant slug unavailable"
 
 class ProvisionTenantBody(BaseModel):
     name: str = Field(max_length=200)
+    slug: str = Field(max_length=63)
+
+
+class TenantLifecycleBody(BaseModel):
+    tenant_id: str = Field(max_length=64)
+
+
+class RenameSlugBody(BaseModel):
     slug: str = Field(max_length=63)
 
 
@@ -104,6 +120,123 @@ def provision_tenant(
         s.rollback()
         raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN) from None
     return {"tenant_id": tenant.id, "slug": body.slug}
+
+
+@router.post(
+    "/suspend",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[
+        Depends(guard(Perm("platform:manage-tenant-lifecycle", on="platform")))
+    ],
+)
+def operator_suspend_route(
+    body: TenantLifecycleBody,
+    s: Session = Depends(control_session),
+    user: m.AppUser = Depends(current_user),
+) -> None:
+    """Operator suspend (fleet-wide). tenant_id is a target selector in the body, not an authz operand."""
+    try:
+        deactivate_tenant(s, body.tenant_id)
+        record_lifecycle_event(
+            s, actor_id=user.id, tenant_id=body.tenant_id, action="suspend"
+        )
+        s.commit()
+    except LookupError:
+        s.rollback()
+        raise HTTPException(status_code=404, detail="Tenant not found") from None
+    except ValueError as exc:
+        s.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post(
+    "/reactivate",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[
+        Depends(guard(Perm("platform:manage-tenant-lifecycle", on="platform")))
+    ],
+)
+def operator_reactivate_route(
+    body: TenantLifecycleBody,
+    s: Session = Depends(control_session),
+    user: m.AppUser = Depends(current_user),
+) -> None:
+    """Operator reactivation: suspended → active (409 if not suspended, 404 if absent)."""
+    try:
+        reactivate_tenant(s, body.tenant_id)
+        record_lifecycle_event(
+            s, actor_id=user.id, tenant_id=body.tenant_id, action="reactivate"
+        )
+        s.commit()
+    except LookupError:
+        s.rollback()
+        raise HTTPException(status_code=404, detail="Tenant not found") from None
+    except ValueError as exc:
+        s.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{tenant_id}/deactivate",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(guard(Perm("tenant:deactivate", on="tenant:{tenant_id}")))],
+)
+def deactivate_tenant_route(
+    tenant_id: str,
+    s: Session = Depends(control_session),
+    user: m.AppUser = Depends(current_user),
+) -> None:
+    """Tenant-admin self-offboard: suspend the tenant (reversible). Reactivation is operator-only."""
+    try:
+        deactivate_tenant(s, tenant_id)
+        record_lifecycle_event(
+            s, actor_id=user.id, tenant_id=tenant_id, action="suspend"
+        )
+        s.commit()
+    except LookupError:
+        s.rollback()
+        raise HTTPException(status_code=404, detail="Tenant not found") from None
+    except ValueError as exc:
+        s.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.patch(
+    "/{tenant_id}/slug",
+    dependencies=[Depends(guard(Perm("tenant:rename-slug", on="tenant:{tenant_id}")))],
+)
+def rename_slug_route(
+    tenant_id: str,
+    body: RenameSlugBody,
+    s: Session = Depends(control_session),
+    user: m.AppUser = Depends(current_user),
+) -> dict:
+    """Rename the tenant's slug (tenant-admin). Old slug retires into a cooling window."""
+    # Generic-409 pre-check (live OR cooling → taken); never echo the colliding tenant's id (Layer-2 A).
+    if resolve_slug(s, body.slug) is not None:
+        raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN)
+    # Fetch BEFORE mutating so a missing tenant is a clean 404, not an AttributeError 500.
+    tenant = s.get(m.Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    old = tenant.slug
+    try:
+        rename_slug(s, tenant_id, body.slug)
+        record_lifecycle_event(
+            s,
+            actor_id=user.id,
+            tenant_id=tenant_id,
+            action="rename",
+            detail=f"{old}→{body.slug}",
+        )
+        s.commit()
+    except ValueError:
+        s.rollback()
+        raise HTTPException(status_code=400, detail=_GENERIC_BAD_REQUEST) from None
+    except IntegrityError:
+        s.rollback()
+        raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN) from None
+    return {"tenant_id": tenant_id, "slug": body.slug}
 
 
 @router.get(

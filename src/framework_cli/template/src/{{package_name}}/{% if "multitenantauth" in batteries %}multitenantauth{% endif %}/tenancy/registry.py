@@ -17,10 +17,13 @@ resolve_slug(session, slug) -> tuple[str, bool] | None
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from ...config.settings import get_settings
+from ...db.control import models as m
 from ...db.control import repository as control_repo
 from ...db.control.models.tenant import Tenant, _opaque_id
 
@@ -30,9 +33,6 @@ _TENANT_ID_RE = re.compile(r"^[a-z0-9_]+$")
 
 # DNS-label: [a-z0-9], may contain hyphens (not leading/trailing), ≤63 chars (RFC 1123).
 _SLUG_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
-
-# How long a renamed slug is reserved for redirect and squat protection.
-SLUG_COOLING_DAYS: int = 30
 
 
 # ── input validators ──────────────────────────────────────────────────────────
@@ -128,6 +128,39 @@ def register_tenant(
     )
 
 
+def deactivate_tenant(s: Session, tenant_id: str) -> None:
+    """Suspend a tenant (reversible, control-plane).
+
+    LookupError if absent; ValueError if already suspended (mirrors
+    reactivate_tenant's precondition so re-suspend is a 409, not a no-op flip
+    that would write a phantom 'suspend' audit row).
+    """
+    # Lock the tenant row on read (SELECT ... FOR UPDATE): two concurrent authorized
+    # suspends would otherwise both pass the in-Python guard below and each write a
+    # phantom 'suspend' event — the M1 class, reopened under concurrency. The lock
+    # serializes them so the second re-reads 'suspended' and 409s. Mirrors the
+    # TOCTOU-safe pattern in authz.service._assert_not_last_admin.
+    tenant = s.get(m.Tenant, tenant_id, with_for_update=True)
+    if tenant is None:
+        raise LookupError(tenant_id)
+    if tenant.status == "suspended":
+        raise ValueError(f"tenant {tenant_id!r} is already 'suspended'")
+    tenant.status = "suspended"
+
+
+def reactivate_tenant(s: Session, tenant_id: str) -> None:
+    """Operator reactivation: suspended → active. LookupError if absent; ValueError if not suspended."""
+    # Lock the tenant row on read (FOR UPDATE) so two concurrent reactivates serialize:
+    # the second re-reads 'active' and 409s instead of writing a phantom 'reactivate'
+    # event. Symmetric with deactivate_tenant; mirrors _assert_not_last_admin.
+    tenant = s.get(m.Tenant, tenant_id, with_for_update=True)
+    if tenant is None:
+        raise LookupError(tenant_id)
+    if tenant.status != "suspended":
+        raise ValueError(f"tenant {tenant_id!r} is {tenant.status!r}, not 'suspended'")
+    tenant.status = "active"
+
+
 def activate_tenant(session: Session, tenant_id: str) -> Tenant:
     """Flip the tenant status to 'active' and return the updated Tenant.
 
@@ -171,7 +204,7 @@ def rename_slug(
     Steps (in one session flush):
     1. Validate new_slug is a DNS label and claimable.
     2. Look up the tenant; raise LookupError if not found.
-    3. Insert the old slug into TenantSlugHistory with reserved_until = now + SLUG_COOLING_DAYS.
+    3. Insert the old slug into TenantSlugHistory with reserved_until = now + slug_cooling_days (setting).
     4. Set tenant.slug = new_slug.
 
     After this call, ``resolve_slug(old_slug)`` returns ``(tenant_id, True)`` (redirect)
@@ -180,12 +213,18 @@ def rename_slug(
     _validate_slug(new_slug)
     _assert_slug_claimable(session, new_slug)
 
+    # Lazy-delete any EXPIRED history row for new_slug (claimable guarantees it is not
+    # live or cooling; deleting it here keeps the slug_history table clean on reclaim).
+    control_repo.delete_slug_history(session, new_slug)
+
     t = control_repo.get_tenant(session, tenant_id)
     if t is None:
         raise LookupError(f"tenant {tenant_id!r} not found")
 
     old_slug = t.slug
-    reserved_until = datetime.now(timezone.utc) + timedelta(days=SLUG_COOLING_DAYS)
+    reserved_until = datetime.now(timezone.utc) + timedelta(
+        days=get_settings().slug_cooling_days
+    )
 
     control_repo.add_slug_history(
         session,
@@ -195,6 +234,22 @@ def rename_slug(
     )
     t.slug = new_slug
     session.flush()
+
+
+def record_lifecycle_event(
+    s: Session,
+    *,
+    actor_id: uuid.UUID | None,
+    tenant_id: str,
+    action: str,
+    detail: str | None = None,
+) -> None:
+    """Append an append-only TenantLifecycleEvent. Caller owns the transaction."""
+    s.add(
+        m.TenantLifecycleEvent(
+            actor_id=actor_id, tenant_id=tenant_id, action=action, detail=detail
+        )
+    )
 
 
 def resolve_slug(session: Session, slug: str) -> tuple[str, bool] | None:

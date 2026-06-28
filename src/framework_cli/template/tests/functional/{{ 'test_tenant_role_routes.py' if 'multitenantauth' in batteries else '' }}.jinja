@@ -83,6 +83,7 @@ def _seed_vocab(s: Session) -> None:
         ("tenant:read", "tenant"),
         ("tenant:manage-members", "tenant"),
         ("platform:provision-tenant", "platform"),
+        ("resource:manage", "resource"),
     ]
     for name, domain in perms:
         s.execute(
@@ -96,6 +97,7 @@ def _seed_vocab(s: Session) -> None:
         ("tenant.member", "tenant", {"tenant:read"}),
         ("tenant.admin", "tenant", {"tenant:read", "tenant:manage-members"}),
         ("platform.admin", "platform", {"platform:provision-tenant"}),
+        ("resource.admin", "resource", {"resource:manage"}),
     ]
     role_ids: dict[str, object] = {}
     for rname, rdomain, _ in roles_def:
@@ -204,6 +206,28 @@ def _grant_platform_admin(tr_engine: Engine, email_canonical: str) -> None:
     with Session(tr_engine) as s:
         add_platform_role(s, user_id=uid, role_name="platform.admin", actor_id=None)
         s.commit()
+
+
+def _latest_authz_event(tr_engine: Engine) -> dict:
+    """Return the most-recent authz_event row as a dict (for grant/resource assertions).
+
+    Joins with role to surface role_domain (not a column on authz_event itself).
+    Orders by the ``at`` timestamp column (the real column name in the model).
+    """
+    with Session(tr_engine) as s:
+        row = (
+            s.execute(
+                text(
+                    "SELECT ae.action, ae.resource_id, r.domain AS role_domain "
+                    "FROM authz_event ae JOIN role r ON ae.role_id = r.id "
+                    "ORDER BY ae.at DESC LIMIT 1"
+                )
+            )
+            .mappings()
+            .first()
+        )
+    assert row is not None, "no authz_event recorded"
+    return dict(row)
 
 
 def _make_plain_member(
@@ -670,5 +694,110 @@ def test_grant_role_wrong_domain_is_400(probe: TestClient, tr_engine: Engine) ->
         f"/tenants/{admin_tid}/members/{mid}/roles",
         headers=_headers(admin_cookie),
         json={"role_name": "platform.admin"},  # platform-domain role on a tenant route
+    )
+    assert r.status_code == 400
+
+
+# ── POST/DELETE .../resources/{resource_id}/roles — resource grant/revoke ─────
+
+
+def test_tenant_admin_bootstraps_resource_grant(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """A tenant.admin (no pre-existing resource grant) can grant a resource role via
+    the bootstrap ANY second leaf (tenant:manage-members) → 204; authz_event recorded."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@res1.com", "res1")
+    _, _ = _signup_and_login(probe, "target@res1t.com", "res1t")
+    target_uid = _user_id(tr_engine, "target@res1t.com")
+    membership_id = _make_plain_member(probe, admin_cookie, admin_tid, target_uid)
+
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{membership_id}/resources/doc-42/roles",
+        headers=_headers(admin_cookie),
+        json={"role_name": "resource.admin"},
+    )
+    assert r.status_code == 204, r.text
+
+    ev = _latest_authz_event(tr_engine)
+    assert ev["action"] == "grant"
+    assert ev["resource_id"] == "doc-42"
+    assert ev["role_domain"] == "resource"
+
+
+def test_cross_tenant_membership_is_404(probe: TestClient, tr_engine: Engine) -> None:
+    """A membership from tenant B submitted under tenant A's URL → 404.
+    The guard passes (admin-of-A has manage-members on A), but the membership.tenant_id
+    mismatch check inside the route body fires first."""
+    admin_a_tid, admin_a_cookie = _signup_and_login(probe, "admin@resa.com", "resa")
+    # Founder of tenant B — their founder membership belongs to B
+    admin_b_tid, _ = _signup_and_login(probe, "admin@resb.com", "resb")
+    with Session(tr_engine) as s:
+        membership_b = s.execute(
+            text("SELECT id FROM tenant_membership WHERE tenant_id=:tid"),
+            {"tid": admin_b_tid},
+        ).scalar_one()
+
+    r = probe.post(
+        f"/tenants/{admin_a_tid}/members/{membership_b}/resources/doc-42/roles",
+        headers=_headers(admin_a_cookie),
+        json={"role_name": "resource.admin"},
+    )
+    assert r.status_code == 404
+
+
+def test_revoke_resource_role(probe: TestClient, tr_engine: Engine) -> None:
+    """Grant then revoke a resource role → both return 204."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@resr.com", "resr")
+    _, _ = _signup_and_login(probe, "target@resrt.com", "resrt")
+    target_uid = _user_id(tr_engine, "target@resrt.com")
+    membership_id = _make_plain_member(probe, admin_cookie, admin_tid, target_uid)
+
+    # Grant first
+    r_grant = probe.post(
+        f"/tenants/{admin_tid}/members/{membership_id}/resources/doc-42/roles",
+        headers=_headers(admin_cookie),
+        json={"role_name": "resource.admin"},
+    )
+    assert r_grant.status_code == 204, r_grant.text
+
+    # Revoke
+    r_revoke = probe.delete(
+        f"/tenants/{admin_tid}/members/{membership_id}/resources/doc-42/roles/resource.admin",
+        headers=_headers(admin_cookie),
+    )
+    assert r_revoke.status_code == 204, r_revoke.text
+
+
+def test_resource_grant_missing_perm_gets_403(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """A plain tenant.member (no manage-members, no resource:manage grant) gets 403
+    on the resource grant route — proves the bootstrap ANY denies non-privileged members."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@res403.com", "res403")
+    _, member_cookie = _signup_and_login(probe, "member@res403m.com", "res403m")
+    member_uid = _user_id(tr_engine, "member@res403m.com")
+    member_mid = _make_plain_member(probe, admin_cookie, admin_tid, member_uid)
+
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{member_mid}/resources/doc-42/roles",
+        headers=_headers(member_cookie),
+        json={"role_name": "resource.admin"},
+    )
+    assert r.status_code == 403
+
+
+def test_resource_grant_wrong_domain_is_400(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """Granting a tenant-domain role via the resource grant route → 400 (DomainMismatchError)."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@res400.com", "res400")
+    _, _ = _signup_and_login(probe, "target@res400t.com", "res400t")
+    target_uid = _user_id(tr_engine, "target@res400t.com")
+    membership_id = _make_plain_member(probe, admin_cookie, admin_tid, target_uid)
+
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{membership_id}/resources/doc-42/roles",
+        headers=_headers(admin_cookie),
+        json={"role_name": "tenant.admin"},  # tenant-domain role on a resource route
     )
     assert r.status_code == 400

@@ -532,3 +532,103 @@ def test_remove_member_audits_resource_role_revoke(control_engine: Engine) -> No
             )
         )
         assert revoke is not None
+
+
+# ── AuthzEvent.resource_id threading tests (Task 1) ──────────────────────────
+
+
+def test_resource_grant_records_resource_id(control_engine: Engine) -> None:
+    """assign_resource_role sets AuthzEvent.resource_id to the granted resource."""
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "rg@x.com")
+        mem = m.TenantMembership(user_id=u.id, tenant_id="acme")
+        s.add(mem)
+        s.flush()
+        service.assign_resource_role(
+            s,
+            membership_id=mem.id,
+            resource_id="doc-42",
+            role_name="resource.admin",
+            actor_id=None,
+        )
+        s.flush()
+        ev = (
+            s.query(m.AuthzEvent)
+            .filter_by(action="grant")
+            .order_by(m.AuthzEvent.at.desc())
+            .first()
+        )
+        assert ev is not None
+        assert ev.resource_id == "doc-42"
+
+
+def test_tenant_grant_leaves_resource_id_null(control_engine: Engine) -> None:
+    """assign_role (tenant-domain) leaves AuthzEvent.resource_id NULL."""
+    with Session(control_engine) as s:
+        _seed(s)
+        u = _user(s, "tg@x.com")
+        service.add_membership(
+            s,
+            user_id=u.id,
+            tenant_id="acme",
+            role_name="tenant.member",
+            actor_id=None,
+            invited=False,
+        )
+        s.flush()
+        ev = (
+            s.query(m.AuthzEvent)
+            .filter_by(action="grant")
+            .order_by(m.AuthzEvent.at.desc())
+            .first()
+        )
+        assert ev is not None
+        assert ev.resource_id is None
+
+
+def test_remove_member_cascade_revoke_records_resource_id(
+    control_engine: Engine,
+) -> None:
+    """remove_member cascade-revokes include resource_id on each resource-role revoke event.
+
+    This validates two things jointly:
+    1. AuthzEvent.resource_id is populated (column exists + threading).
+    2. The remove_member loop iterates resource_assignments ORM objects (not the
+       resource_role_ids list), so a.resource_id is in scope when calling _record_event.
+       Without the loop fix the revoke events would have resource_id=None even after
+       the column and threading land.
+    """
+    with Session(control_engine) as s:
+        _seed(s)
+        a = _user(s, "cra@x.com")
+        b = _user(s, "crb@x.com")
+        ma = service.add_membership(
+            s,
+            user_id=a.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=None,
+            invited=False,
+        )
+        service.add_membership(  # second admin so removing the first is permitted
+            s,
+            user_id=b.id,
+            tenant_id="acme",
+            role_name="tenant.admin",
+            actor_id=None,
+            invited=False,
+        )
+        service.assign_resource_role(
+            s,
+            membership_id=ma.id,
+            resource_id="doc-42",
+            role_name="resource.admin",
+            actor_id=None,
+        )
+        s.flush()
+        ma_id = ma.id
+        service.remove_member(s, membership_id=ma_id, actor_id=None)
+        s.flush()
+        revoke_events = s.query(m.AuthzEvent).filter_by(action="revoke").all()
+        assert any(e.resource_id == "doc-42" for e in revoke_events)

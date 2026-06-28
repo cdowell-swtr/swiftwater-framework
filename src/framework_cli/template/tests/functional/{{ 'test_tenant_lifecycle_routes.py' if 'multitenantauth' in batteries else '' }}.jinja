@@ -1,0 +1,574 @@
+"""Functional tests for the tenant lifecycle deactivate route (FWK67 SP3 Route A.1).
+
+Coverage:
+- POST /tenants/{tenant_id}/deactivate — 204 (tenant.admin with tenant:deactivate),
+                                          403 (tenant.member without tenant:deactivate)
+
+The probe app mounts auth + tenants routers against a real test control DB so guards,
+sessions, memberships, and lifecycle events are exercised end-to-end.
+
+Non-member routes return 404 by design (membership precondition runs before perm check).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine, create_engine, make_url, select, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control.base import ControlBase
+from {{ package_name }}.multitenantauth.deps import control_session
+from {{ package_name }}.multitenantauth.routes.auth import router as auth_router
+from {{ package_name }}.multitenantauth.routes.tenants import router as tenants_router
+
+pytestmark = pytest.mark.usefixtures("_clean_lc")
+
+# ── control-plane DB + probe app fixtures ──────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def lc_engine(pg_url: str) -> Iterator[Engine]:
+    _ctrl_db = "{{ package_name }}_lc_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(engine)
+    yield engine
+    engine.dispose()
+
+
+_LC_TABLES = (
+    "invite_token, session, authz_event, platform_role_assignment, "
+    "resource_role_assignment, tenant_role_assignment, tenant_membership, "
+    "tenant_lifecycle_event, role_permission, permission, role, app_user, "
+    "tenant, tenant_slug_history"
+)
+
+
+@pytest.fixture
+def _clean_lc(lc_engine: Engine) -> Iterator[None]:
+    yield
+    with lc_engine.begin() as conn:
+        conn.execute(text(f"TRUNCATE TABLE {_LC_TABLES} CASCADE"))
+
+
+def _seed_vocab(s: Session) -> None:
+    """Seed the minimum roles/permissions the lifecycle routes need.
+
+    ``tenant.admin`` includes ``tenant:deactivate`` (Task 4 grant bundled here
+    for isolation — the generated project's real roles DB migration owns this
+    in production).
+    ``platform.admin`` includes ``platform:manage-tenant-lifecycle`` (Task 4)
+    for the operator suspend/reactivate routes.
+    """
+    from uuid import uuid4
+
+    perms = [
+        ("tenant:read", "tenant"),
+        ("tenant:manage-members", "tenant"),
+        ("tenant:deactivate", "tenant"),
+        ("tenant:rename-slug", "tenant"),
+        ("platform:manage-tenant-lifecycle", "platform"),
+    ]
+    for name, domain in perms:
+        s.execute(
+            text(
+                "INSERT INTO permission (name, domain, description, is_active) "
+                "VALUES (:name, :domain, :desc, true) ON CONFLICT DO NOTHING"
+            ),
+            {"name": name, "domain": domain, "desc": name},
+        )
+    roles_def = [
+        ("tenant.member", "tenant", {"tenant:read"}),
+        (
+            "tenant.admin",
+            "tenant",
+            {
+                "tenant:read",
+                "tenant:manage-members",
+                "tenant:deactivate",
+                "tenant:rename-slug",
+            },
+        ),
+        ("platform.admin", "platform", {"platform:manage-tenant-lifecycle"}),
+    ]
+    role_ids: dict[str, object] = {}
+    for rname, rdomain, _ in roles_def:
+        s.execute(
+            text(
+                "INSERT INTO role (id, name, domain, description, is_builtin) "
+                "VALUES (:id, :name, :domain, :desc, true) ON CONFLICT (name) DO NOTHING"
+            ),
+            {"id": uuid4(), "name": rname, "domain": rdomain, "desc": rname},
+        )
+        role_ids[rname] = s.execute(
+            text("SELECT id FROM role WHERE name=:name"), {"name": rname}
+        ).scalar_one()
+    for rname, _, grants in roles_def:
+        for pname in grants:
+            s.execute(
+                text(
+                    "INSERT INTO role_permission (role_id, permission_name) "
+                    "VALUES (:rid, :pname) ON CONFLICT DO NOTHING"
+                ),
+                {"rid": role_ids[rname], "pname": pname},
+            )
+
+
+def _build_probe(lc_engine: Engine, monkeypatch) -> TestClient:
+    monkeypatch.setenv("APP_ENVIRONMENT", "dev")
+    monkeypatch.setenv("APP_SESSION_PEPPER", "lc-session-pepper")
+    monkeypatch.setenv("APP_PASSWORD_PEPPER", "lc-password-pepper")
+    monkeypatch.setenv("APP_SESSION_COOKIE_SECURE", "false")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    with Session(lc_engine) as s:
+        _seed_vocab(s)
+        s.commit()
+
+    app = FastAPI()
+    app.include_router(auth_router)
+    app.include_router(tenants_router)
+
+    def _cs() -> Iterator[Session]:
+        with Session(lc_engine) as s:
+            yield s
+
+    app.dependency_overrides[control_session] = _cs
+    return TestClient(app)
+
+
+@pytest.fixture
+def probe(lc_engine: Engine, monkeypatch) -> Iterator[TestClient]:
+    client = _build_probe(lc_engine, monkeypatch)
+    try:
+        yield client
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _signup_and_login(client: TestClient, email: str, slug: str) -> tuple[str, str]:
+    """Signup a founder+tenant and return (tenant_id, cookie_header)."""
+    r = client.post(
+        "/auth/signup",
+        json={
+            "email": email,
+            "password": "a-secure-password-12",
+            "tenant_name": slug.title(),
+            "slug": slug,
+        },
+    )
+    assert r.status_code == 201, r.text
+    tenant_id: str = r.json()["tenant_id"]
+    cookie = r.headers["set-cookie"].split(";")[0]
+    return tenant_id, cookie
+
+
+def _headers(cookie: str) -> dict:
+    return {"Cookie": cookie}
+
+
+def _make_plain_member(
+    probe: TestClient, admin_cookie: str, tenant_id: str, user_id: object
+) -> str:
+    """Admin adds *user_id* as a plain ``tenant.member`` of *tenant_id*; return membership_id."""
+    r = probe.post(
+        f"/tenants/{tenant_id}/members",
+        headers=_headers(admin_cookie),
+        json={"user_id": str(user_id), "role_name": "tenant.member"},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["membership_id"]
+
+
+# ── POST /tenants/{tenant_id}/deactivate ─────────────────────────────────────
+
+
+def test_tenant_admin_can_self_deactivate(probe: TestClient, lc_engine: Engine) -> None:
+    """Founder (tenant.admin, holds tenant:deactivate) → 204; tenant status flips to
+    'suspended' and a TenantLifecycleEvent with action='suspend' is recorded."""
+    tenant_id, cookie = _signup_and_login(probe, "admin@acme-lc.com", "acme-lc")
+
+    r = probe.post(f"/tenants/{tenant_id}/deactivate", headers=_headers(cookie))
+
+    assert r.status_code == 204
+
+    with Session(lc_engine) as s:
+        from {{ package_name }}.db.control import models as m
+
+        tenant = s.get(m.Tenant, tenant_id)
+        assert tenant is not None
+        assert tenant.status == "suspended"
+
+        events = list(
+            s.scalars(
+                select(m.TenantLifecycleEvent)
+                .where(m.TenantLifecycleEvent.tenant_id == tenant_id)
+                .order_by(m.TenantLifecycleEvent.at)
+            ).all()
+        )
+        assert len(events) == 1
+        assert events[0].action == "suspend"
+
+
+def test_member_without_perm_cannot_deactivate(
+    probe: TestClient, lc_engine: Engine
+) -> None:
+    """A plain tenant.member (no tenant:deactivate) → 403."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@acme2-lc.com", "acme2-lc")
+    _, member_cookie = _signup_and_login(probe, "member@acme2m-lc.com", "acme2m-lc")
+
+    with Session(lc_engine) as s:
+        member_uid = s.execute(
+            text("SELECT id FROM app_user WHERE email_canonical='member@acme2m-lc.com'")
+        ).scalar_one()
+
+    _make_plain_member(probe, admin_cookie, admin_tid, member_uid)
+
+    r = probe.post(f"/tenants/{admin_tid}/deactivate", headers=_headers(member_cookie))
+    assert r.status_code == 403
+
+
+# ── helpers for operator (platform-scoped) routes ─────────────────────────────
+
+
+def _grant_platform_admin(lc_engine: Engine, email_canonical: str) -> None:
+    """Grant ``platform.admin`` to the user with *email_canonical* (no actor audit)."""
+    from {{ package_name }}.multitenantauth.authz.service import add_platform_role
+
+    with Session(lc_engine) as s:
+        uid = s.execute(
+            text("SELECT id FROM app_user WHERE email_canonical=:e"),
+            {"e": email_canonical},
+        ).scalar_one()
+        add_platform_role(s, user_id=uid, role_name="platform.admin", actor_id=None)
+        s.commit()
+
+
+# ── rename-slug helpers ───────────────────────────────────────────────────────
+
+
+def _tenant_slug(lc_engine: Engine, tenant_id: str) -> str:
+    """Return the current slug for tenant_id (direct DB read)."""
+    with Session(lc_engine) as s:
+        return s.execute(
+            text("SELECT slug FROM tenant WHERE id = :tid"), {"tid": tenant_id}
+        ).scalar_one()
+
+
+def _slug_history_has(lc_engine: Engine, slug: str) -> bool:
+    """Return True if tenant_slug_history has a row for slug."""
+    with Session(lc_engine) as s:
+        row = s.execute(
+            text("SELECT 1 FROM tenant_slug_history WHERE slug = :slug"), {"slug": slug}
+        ).scalar_one_or_none()
+        return row is not None
+
+
+def _lifecycle_actions(lc_engine: Engine, tenant_id: str) -> list[str]:
+    """Return list of actions from tenant_lifecycle_event for tenant_id, ordered by at."""
+    with Session(lc_engine) as s:
+        rows = (
+            s.execute(
+                text(
+                    "SELECT action FROM tenant_lifecycle_event "
+                    "WHERE tenant_id = :tid ORDER BY at"
+                ),
+                {"tid": tenant_id},
+            )
+            .scalars()
+            .all()
+        )
+        return list(rows)
+
+
+def _retire_slug(lc_engine: Engine, slug: str, tenant_id: str, days: int) -> None:
+    """Insert a tenant_slug_history row directly (FK: tenant must already exist).
+
+    days > 0  → cooling (reserved_until in the future)
+    days < 0  → expired (reserved_until in the past)
+    """
+    reserved_until = datetime.now(timezone.utc) + timedelta(days=days)
+    with Session(lc_engine) as s:
+        s.execute(
+            text(
+                "INSERT INTO tenant_slug_history (slug, tenant_id, reserved_until) "
+                "VALUES (:slug, :tid, :ru) ON CONFLICT (slug) DO UPDATE "
+                "SET tenant_id = excluded.tenant_id, reserved_until = excluded.reserved_until"
+            ),
+            {"slug": slug, "tid": tenant_id, "ru": reserved_until},
+        )
+        s.commit()
+
+
+# ── POST /tenants/suspend ─────────────────────────────────────────────────────
+
+
+def test_nonmember_operator_can_suspend(probe: TestClient, lc_engine: Engine) -> None:
+    """Platform operator (not a member of target) → POST /tenants/suspend → 204; T suspended."""
+    # Operator O: founder of their own tenant (NOT T)
+    _, op_cookie = _signup_and_login(probe, "op@op-suspend.com", "op-suspend")
+    _grant_platform_admin(lc_engine, "op@op-suspend.com")
+
+    # Target tenant T
+    target_tid, _ = _signup_and_login(
+        probe, "owner@target-suspend.com", "target-suspend"
+    )
+
+    r = probe.post(
+        "/tenants/suspend",
+        headers=_headers(op_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r.status_code == 204
+
+    with Session(lc_engine) as s:
+        from {{ package_name }}.db.control import models as m
+
+        tenant = s.get(m.Tenant, target_tid)
+        assert tenant is not None
+        assert tenant.status == "suspended"
+
+
+def test_resuspend_already_suspended_is_409_no_phantom_audit(
+    probe: TestClient, lc_engine: Engine
+) -> None:
+    """Re-suspending an already-suspended tenant → 409 (symmetric with reactivate);
+    no second 'suspend' TenantLifecycleEvent is written (audit on real change only)."""
+    _, op_cookie = _signup_and_login(probe, "op@op-resuspend.com", "op-resuspend")
+    _grant_platform_admin(lc_engine, "op@op-resuspend.com")
+
+    target_tid, _ = _signup_and_login(
+        probe, "owner@target-resuspend.com", "target-resuspend"
+    )
+
+    # First suspend: 204 + exactly one 'suspend' audit row.
+    r1 = probe.post(
+        "/tenants/suspend",
+        headers=_headers(op_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r1.status_code == 204
+    assert _lifecycle_actions(lc_engine, target_tid) == ["suspend"]
+
+    # Second suspend on the now-suspended tenant: 409, audit trail unchanged.
+    r2 = probe.post(
+        "/tenants/suspend",
+        headers=_headers(op_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r2.status_code == 409
+    assert _lifecycle_actions(lc_engine, target_tid) == ["suspend"]
+
+
+# ── POST /tenants/reactivate ──────────────────────────────────────────────────
+
+
+def test_nonmember_operator_can_reactivate_suspended(
+    probe: TestClient, lc_engine: Engine
+) -> None:
+    """Platform operator reactivates a suspended tenant → 204; T flips to active."""
+    _, op_cookie = _signup_and_login(probe, "op@op-reactivate.com", "op-reactivate")
+    _grant_platform_admin(lc_engine, "op@op-reactivate.com")
+
+    target_tid, _ = _signup_and_login(
+        probe, "owner@target-reactivate.com", "target-reactivate"
+    )
+
+    # Pre-suspend T directly in DB
+    with Session(lc_engine) as s:
+        from {{ package_name }}.db.control import models as m
+
+        t = s.get(m.Tenant, target_tid)
+        assert t is not None
+        t.status = "suspended"
+        s.commit()
+
+    r = probe.post(
+        "/tenants/reactivate",
+        headers=_headers(op_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r.status_code == 204
+
+    with Session(lc_engine) as s:
+        from {{ package_name }}.db.control import models as m
+
+        tenant = s.get(m.Tenant, target_tid)
+        assert tenant is not None
+        assert tenant.status == "active"
+
+
+def test_reactivate_non_suspended_is_409(probe: TestClient, lc_engine: Engine) -> None:
+    """Reactivating an active tenant → 409 (not suspended)."""
+    _, op_cookie = _signup_and_login(probe, "op@op-409.com", "op-409")
+    _grant_platform_admin(lc_engine, "op@op-409.com")
+
+    target_tid, _ = _signup_and_login(probe, "owner@target-409.com", "target-409")
+    # Target is active (default after signup)
+
+    r = probe.post(
+        "/tenants/reactivate",
+        headers=_headers(op_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r.status_code == 409
+
+
+def test_reactivate_absent_is_404(probe: TestClient, lc_engine: Engine) -> None:
+    """Reactivating a non-existent tenant → 404."""
+    _, op_cookie = _signup_and_login(probe, "op@op-404.com", "op-404")
+    _grant_platform_admin(lc_engine, "op@op-404.com")
+
+    r = probe.post(
+        "/tenants/reactivate",
+        headers=_headers(op_cookie),
+        json={"tenant_id": "ghostxyz"},
+    )
+    assert r.status_code == 404
+
+
+def test_tenant_admin_cannot_reactivate(probe: TestClient, lc_engine: Engine) -> None:
+    """A plain tenant.admin (no platform role) cannot reactivate → 403."""
+    _, admin_cookie = _signup_and_login(probe, "admin@noplat.com", "noplat")
+    target_tid, _ = _signup_and_login(probe, "owner@target-noplat.com", "target-noplat")
+
+    # Pre-suspend target
+    with Session(lc_engine) as s:
+        from {{ package_name }}.db.control import models as m
+
+        t = s.get(m.Tenant, target_tid)
+        assert t is not None
+        t.status = "suspended"
+        s.commit()
+
+    r = probe.post(
+        "/tenants/reactivate",
+        headers=_headers(admin_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r.status_code == 403
+
+
+# ── PATCH /tenants/{tenant_id}/slug ──────────────────────────────────────────
+
+
+def test_rename_records_history_and_event(probe: TestClient, lc_engine: Engine) -> None:
+    """Founder renames slug: 200 + new slug set + old slug in history + lifecycle event."""
+    # RED: no PATCH route or tenant:rename-slug perm → will 404/405/403 before this passes.
+    a_tid, a_cookie = _signup_and_login(probe, "founder@acme-rename.com", "acme-orig")
+
+    r = probe.patch(
+        f"/tenants/{a_tid}/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "acme-corp"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["tenant_id"] == a_tid
+    assert body["slug"] == "acme-corp"
+
+    assert _tenant_slug(lc_engine, a_tid) == "acme-corp"
+    assert _slug_history_has(lc_engine, "acme-orig") is True
+    assert _lifecycle_actions(lc_engine, a_tid)[-1] == "rename"
+
+
+def test_rename_to_cooling_slug_is_409(probe: TestClient, lc_engine: Engine) -> None:
+    """Attempting to rename to a cooling (reserved) slug → 409."""
+    # RED: no route → 404/405 before this passes.
+    a_tid, a_cookie = _signup_and_login(probe, "founder@acme-src.com", "acme-src")
+    # Signup B so the FK tenant_id constraint is satisfied for the slug history row.
+    b_tid, _ = _signup_and_login(probe, "founder@acme-b-cooling.com", "acme-b-cooling")
+
+    _retire_slug(lc_engine, "reserved-x", b_tid, days=30)  # still cooling
+
+    r = probe.patch(
+        f"/tenants/{a_tid}/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "reserved-x"},
+    )
+    assert r.status_code == 409, r.text
+
+
+def test_rename_lazy_deletes_own_expired_history(
+    probe: TestClient, lc_engine: Engine
+) -> None:
+    """Reclaiming an expired history row for new_slug lazy-deletes that row on commit."""
+    # RED: no route or lazy-delete logic → row persists / 404 before this passes.
+    a_tid, a_cookie = _signup_and_login(probe, "founder@acme-expired.com", "acme-orig2")
+
+    # Insert an EXPIRED history row for the slug we want to reclaim (A's own old slug).
+    _retire_slug(lc_engine, "want-back", a_tid, days=-1)
+
+    r = probe.patch(
+        f"/tenants/{a_tid}/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "want-back"},
+    )
+    assert r.status_code == 200, r.text
+    assert _tenant_slug(lc_engine, a_tid) == "want-back"
+    # Expired row must be gone — lazy-deleted on reclaim.
+    assert _slug_history_has(lc_engine, "want-back") is False
+
+
+def test_rename_missing_tenant_is_404(probe: TestClient, lc_engine: Engine) -> None:
+    """PATCH with a bogus tenant_id (non-member) → 404, never 500.
+
+    The guard returns 404 for a non-member/unknown tenant — which is the desired
+    behaviour: proves the old brief's .slug-on-None AttributeError 500 never fires.
+    """
+    # RED: no route → 404 (method-not-found) or 405 before this passes.
+    _, a_cookie = _signup_and_login(probe, "founder@acme-bogus.com", "acme-bogus")
+
+    r = probe.patch(
+        "/tenants/ffffffffffffffffffffffffffffffff/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "whatever-slug"},
+    )
+    assert r.status_code == 404, r.text
+
+
+def test_old_slug_does_not_route_after_rename(
+    probe: TestClient, lc_engine: Engine
+) -> None:
+    """After rename A→B, using the OLD slug as a path id returns 404 (id↔slug-desync)."""
+    # RED: no route → 405; after route added confirms slugs are never treated as ids.
+    a_tid, a_cookie = _signup_and_login(probe, "founder@acme-desync.com", "acme-desync")
+
+    # Rename successfully first.
+    r = probe.patch(
+        f"/tenants/{a_tid}/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "acme-desync-new"},
+    )
+    assert r.status_code == 200, r.text
+
+    # Now attempt to use the OLD slug as a tenant_id path segment.
+    r = probe.patch(
+        "/tenants/acme-desync/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "anything"},
+    )
+    assert r.status_code == 404, r.text

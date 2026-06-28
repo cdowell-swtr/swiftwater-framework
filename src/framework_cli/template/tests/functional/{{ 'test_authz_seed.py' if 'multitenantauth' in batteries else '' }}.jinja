@@ -81,11 +81,12 @@ def test_seed_is_idempotent_and_complete(control_engine: Engine) -> None:
         # The custom-DB-role seam (tenant.viewer) is seeded with is_builtin=False.
         assert roles["tenant.viewer"].is_builtin is False
 
-        # Exactly the 3 built-ins + 1 custom DB role.
+        # The 4 built-ins (incl. resource.admin — FWK67 SP3) + 1 custom DB role.
         assert set(roles) == {
             "tenant.admin",
             "tenant.member",
             "platform.admin",
+            "resource.admin",
             "tenant.viewer",
         }
 
@@ -98,7 +99,12 @@ def test_seed_is_idempotent_and_complete(control_engine: Engine) -> None:
                 )
             )
         )
-        assert admin_grants == {"tenant:read", "tenant:manage-members"}
+        assert admin_grants == {
+            "tenant:read",
+            "tenant:manage-members",
+            "tenant:deactivate",
+            "tenant:rename-slug",
+        }
 
         platform_admin_id = roles["platform.admin"].id
         platform_grants = set(
@@ -108,7 +114,32 @@ def test_seed_is_idempotent_and_complete(control_engine: Engine) -> None:
                 )
             )
         )
-        assert platform_grants == {"platform:provision-tenant"}
+        assert platform_grants == {
+            "platform:provision-tenant",
+            "platform:manage-tenant-lifecycle",
+        }
+
+
+def test_lifecycle_and_resource_vocab_seeded(control_engine: Engine) -> None:
+    """FWK67 SP3: the lifecycle + resource permissions and the resource.admin role seed cleanly,
+    and resource.admin is a resource-domain role (so Route B's grant target exists)."""
+    with Session(control_engine) as s:
+        seed_authz(s)
+        reconcile_authz(s)
+        s.commit()
+
+        perms = {p.name for p in s.scalars(select(m.Permission))}
+        assert {
+            "tenant:deactivate",
+            "tenant:rename-slug",
+            "platform:manage-tenant-lifecycle",
+            "resource:manage",
+        } <= perms
+
+        resource_role = s.scalar(select(m.Role).where(m.Role.name == "resource.admin"))
+        assert resource_role is not None
+        assert resource_role.domain == "resource"
+        assert resource_role.is_builtin is True
 
 
 def test_reconcile_passes_after_seed(control_engine: Engine) -> None:

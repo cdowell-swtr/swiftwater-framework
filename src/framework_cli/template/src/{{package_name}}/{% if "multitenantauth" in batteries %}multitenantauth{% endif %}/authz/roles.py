@@ -38,9 +38,15 @@ from __future__ import annotations
 # enforces this; a bundle referencing an unknown or inactive permission raises).
 
 BUILTIN_BUNDLES: dict[str, set[str]] = {
-    "tenant.admin": {"tenant:read", "tenant:manage-members"},
+    "tenant.admin": {
+        "tenant:read",
+        "tenant:manage-members",
+        "tenant:deactivate",
+        "tenant:rename-slug",
+    },
     "tenant.member": {"tenant:read"},
-    "platform.admin": {"platform:provision-tenant"},
+    "platform.admin": {"platform:provision-tenant", "platform:manage-tenant-lifecycle"},
+    "resource.admin": {"resource:manage"},
 }
 
 # Maps each built-in role name to its domain ('tenant' | 'platform' | 'resource').
@@ -51,6 +57,7 @@ BUILTIN_DOMAINS: dict[str, str] = {
     "tenant.admin": "tenant",
     "tenant.member": "tenant",
     "platform.admin": "platform",
+    "resource.admin": "resource",
 }
 
 # ── Custom DB roles — extension seam ──────────────────────────────────────────

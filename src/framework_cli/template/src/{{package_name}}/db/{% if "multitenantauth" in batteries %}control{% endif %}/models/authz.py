@@ -208,6 +208,7 @@ class AuthzEvent(ControlBase):
         Uuid, ForeignKey("role.id"), nullable=False
     )
     tenant_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("tenant.id"))
+    resource_id: Mapped[str | None] = mapped_column(String(255))
     action: Mapped[str] = mapped_column(String(16), nullable=False)  # 'grant'|'revoke'
     at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

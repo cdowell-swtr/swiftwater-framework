@@ -8,6 +8,7 @@ AST. T4: the permission/role vocabulary never appears on a client surface (OpenA
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
@@ -280,6 +281,59 @@ def test_T2_tenant_routes_bind_tenant_id(app: FastAPI) -> None:
         if auth is None or "tenant_id" not in auth.resource_params():
             offenders.append(route.path)
     assert offenders == [], f"tenant routes not bound to {{tenant_id}}: {offenders}"
+
+
+# ── T2 (DV-5 t2): PER-LEAF resource-binding ───────────────────────────────────
+
+_RESOURCE_PARAM = re.compile(r"\{(\w+)\}")
+
+
+def _resource_leaf_params(on: str) -> set[str]:
+    """Params referenced in the resource segment of a Perm `on` pattern (substring after
+    '/resource:'). A resource leaf must bind exactly {resource_id} — never a second, foreign
+    resource param that would over-grant on the request's resource_id."""
+    seg = on.split("/resource:", 1)[1] if "/resource:" in on else ""
+    return set(_RESOURCE_PARAM.findall(seg))
+
+
+def test_T2_DV5_resource_leaves_bind_canonical_resource_id(app: FastAPI) -> None:
+    """PER-LEAF: every Perm leaf with '/resource:' in `on` must bind exactly {resource_id}.
+
+    The route-level ``resource_params()`` check (T2) is insufficient for resource scope: an ALL/ANY
+    that binds {resource_id} in one leaf and a foreign {other_id} in another still satisfies the
+    route-level set membership, yet the foreign leaf would resolve against the request's single
+    resource_id — a multi-resource over-grant. This walks each leaf instead of the whole node.
+    """
+    offenders = []
+    for route in _api_routes(app):
+        auth = _authorized(route)
+        if auth is None:
+            continue
+        for leaf in auth.perm_leaves():
+            if "/resource:" in getattr(leaf, "on", ""):
+                if _resource_leaf_params(leaf.on) != {"resource_id"}:
+                    offenders.append(f"{route.path} :: {leaf.on}")
+    assert offenders == [], f"resource leaves not bound to {{resource_id}}: {offenders}"
+
+
+def test_T2_DV5_route_level_check_is_insufficient() -> None:
+    """Negative control: a multi-resource ALL passes the route-level resource_params() check but
+    FAILS the per-leaf check — proving the per-leaf test catches what T2 alone would miss."""
+    auth = Authorized(
+        ALL(
+            Perm("resource:manage", on="tenant:{t}/resource:{resource_id}"),
+            Perm("resource:manage", on="tenant:{t}/resource:{other_id}"),
+        )
+    )
+    # Route-level check is satisfied — {resource_id} appears among the node's resource params.
+    assert "resource_id" in auth.resource_params()
+    # Per-leaf check catches the {other_id} over-grant the route-level check misses.
+    bad = [
+        leaf
+        for leaf in auth.perm_leaves()
+        if "/resource:" in leaf.on and _resource_leaf_params(leaf.on) != {"resource_id"}
+    ]
+    assert bad, "per-leaf check must catch the {other_id} over-grant"
 
 
 # ── T3: response models must not carry the authz AST ──────────────────────────
