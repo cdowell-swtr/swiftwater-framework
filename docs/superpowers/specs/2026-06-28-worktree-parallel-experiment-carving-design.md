@@ -46,6 +46,25 @@ of M products never collide on a hostname or a Traefik router name. This identit
 is the seam. (Already half-built: the template ships these labels and mounts
 `/var/run/docker.sock` into Traefik — discovery, not a static registry.)
 
+The **same instance identity** `<slug>[-<inst>]` drives three things uniformly, so all per-instance
+namespacing flows from one value A2 sets at provision time:
+
+1. the discovery-label Host rules (above);
+2. **`COMPOSE_PROJECT_NAME = <slug>-<inst>`** — namespaces containers, volumes (so per-instance
+   Postgres data isolation is automatic — no shared-volume corruption between two worktrees of the
+   same product), and the default network. The template already sets `name: {{ project_slug }}` in
+   `base.yml` and documents that `COMPOSE_PROJECT_NAME` overrides it — A2 supplies the override;
+3. the **optional** `PORT_OFFSET` (only when direct host access is wanted).
+
+**Edge↔instance Docker network (A1-internal, deliberately not pinned here).** A shared edge can only
+route to containers it shares a Docker network with; the template defines none today (each stack
+uses its own `<project>_default`). Closing this — a shared external `swiftwater-edge`-style network
+the instances attach to, vs. the box edge dynamically `docker network connect`-ing to each
+instance's default network — is an **A1-internal first-decision**. It is left unpinned because
+**A2/B do not consume the network choice** (they consume the identity, `task dev:edge`, and the
+label schema); A1 records its resolution in its own worktree. This is the one sub-decision the
+carving intentionally defers, and only because it crosses no stream boundary.
+
 ### What the box provides (box-specific — NOT a framework concern)
 
 A shared edge with Docker-socket access **discovers** the labeled containers and routes to them
@@ -141,6 +160,19 @@ finished designs. Post-hoc reconciliation would make the seam an *output* (remov
 on the worktrees to respect it) and would assume temporal symmetry (all streams reaching the
 seam-relevant decision together) that does not hold. The capability under test is precisely:
 **can independent streams build to an interface frozen before any of them designed anything?**
+
+## Learnings (live)
+
+Captured as the experiment runs — the experiment's second product (codify the workflow) starts here,
+in the carving itself.
+
+1. **Seams need an adversarial panel review before they're frozen.** The shared-resource collision
+   classes between instances — multi-product offset budget, edge discovery, mkcert hostname coverage,
+   `COMPOSE_PROJECT_NAME`, the edge↔instance Docker network — were each found *reactively*, roughly
+   one per review pass. A single adversarial panel of distinct collision-class lenses
+   (resource-collision · lifecycle/teardown · isolation · cross-repo/box-boundary · scaling) at the
+   seam-freeze point would have surfaced them in one pass instead of five. Applied retroactively to
+   this seam before forking; generalized as a process in `FWK91`.
 
 ## PLAN mapping emitted by this carving
 
