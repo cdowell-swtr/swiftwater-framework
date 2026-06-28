@@ -17,10 +17,12 @@ resolve_slug(session, slug) -> tuple[str, bool] | None
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from ...db.control import models as m
 from ...db.control import repository as control_repo
 from ...db.control.models.tenant import Tenant, _opaque_id
 
@@ -195,6 +197,13 @@ def rename_slug(
     )
     t.slug = new_slug
     session.flush()
+
+
+def record_lifecycle_event(
+    s: Session, *, actor_id: uuid.UUID | None, tenant_id: str, action: str, detail: str | None = None
+) -> None:
+    """Append an append-only TenantLifecycleEvent. Caller owns the transaction."""
+    s.add(m.TenantLifecycleEvent(actor_id=actor_id, tenant_id=tenant_id, action=action, detail=detail))
 
 
 def resolve_slug(session: Session, slug: str) -> tuple[str, bool] | None:

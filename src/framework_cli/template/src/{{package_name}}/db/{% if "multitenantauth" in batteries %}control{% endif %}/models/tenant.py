@@ -132,3 +132,22 @@ class TenantMembership(ControlBase):
         Index("ix_membership_tenant", "tenant_id"),
         Index("ix_membership_user", "user_id"),
     )
+
+
+class TenantLifecycleEvent(ControlBase):
+    """Append-only audit of tenant-lifecycle mutations (suspend/reactivate/rename).
+    `actor_id` NULL ⇒ a system/operator-tooling action. `detail` carries 'old_slug→new_slug' for rename."""
+
+    __tablename__ = "tenant_lifecycle_event"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("app_user.id"))
+    tenant_id: Mapped[str] = mapped_column(String(64), ForeignKey("tenant.id", ondelete="CASCADE"), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("action IN ('suspend', 'reactivate', 'rename')", name="ck_tle_action"),
+        Index("ix_tle_tenant_at", "tenant_id", "at"),
+    )

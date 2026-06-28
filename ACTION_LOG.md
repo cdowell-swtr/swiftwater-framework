@@ -3881,3 +3881,13 @@ changed to iterate the `ResourceRoleAssignment` ORM objects so `a.resource_id` i
 split); controller-verified on a clean `--with multitenantauth` render: **16/16 `test_authz_service` + 7/7
 control-migration/db-migration** green. Per-task review deferred → branch-end Opus.
 (FWK67 SP3 build Task 1/14)
+
+#### #0283 · completed · FWK67 (SP3) Task 2 — TenantLifecycleEvent audit + recorder (c0005) · 2026-06-27
+Added the append-only `TenantLifecycleEvent` control model (in the already-locked `models/tenant.py`; action
+CHECK `IN ('suspend','reactivate','rename')`) + export + `record_lifecycle_event()` recorder in `registry.py`
++ control migration `c0005` (down_revision `c0004`). Operator decision: lifecycle mutations are audited.
+Sonnet author (1st attempt died on a transient API stall → re-dispatched, the FWK73 bounded-retry pattern).
+**Controller** closed a cross-test-isolation gap the implementer flagged — added `tenant_lifecycle_event` to
+the shared conftest `_CONTROL_TABLES` truncate (the FWK66 #0278 leak class). Verified on render: **23/23**
+(lifecycle 2 + control-migration chain incl. c0005 + `test_authz_service` regression). Review → branch-end Opus.
+(FWK67 SP3 build Task 2/14)
