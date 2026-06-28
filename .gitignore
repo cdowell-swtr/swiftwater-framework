@@ -21,6 +21,8 @@ build/
 .framework/plan21/
 # reviewer-audit (FWK4) run outputs — changelist/preview/checkpoints are local diagnostics
 .framework/reviewer-audit*/
+# reviewer-tuning eval scratch (Plan 21 / FWK reviewer work) — local run outputs + logs
+.framework/tuning-eval*
 
 # MkDocs build output
 site/
