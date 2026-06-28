@@ -352,6 +352,37 @@ def test_nonmember_operator_can_suspend(probe: TestClient, lc_engine: Engine) ->
         assert tenant.status == "suspended"
 
 
+def test_resuspend_already_suspended_is_409_no_phantom_audit(
+    probe: TestClient, lc_engine: Engine
+) -> None:
+    """Re-suspending an already-suspended tenant → 409 (symmetric with reactivate);
+    no second 'suspend' TenantLifecycleEvent is written (audit on real change only)."""
+    _, op_cookie = _signup_and_login(probe, "op@op-resuspend.com", "op-resuspend")
+    _grant_platform_admin(lc_engine, "op@op-resuspend.com")
+
+    target_tid, _ = _signup_and_login(
+        probe, "owner@target-resuspend.com", "target-resuspend"
+    )
+
+    # First suspend: 204 + exactly one 'suspend' audit row.
+    r1 = probe.post(
+        "/tenants/suspend",
+        headers=_headers(op_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r1.status_code == 204
+    assert _lifecycle_actions(lc_engine, target_tid) == ["suspend"]
+
+    # Second suspend on the now-suspended tenant: 409, audit trail unchanged.
+    r2 = probe.post(
+        "/tenants/suspend",
+        headers=_headers(op_cookie),
+        json={"tenant_id": target_tid},
+    )
+    assert r2.status_code == 409
+    assert _lifecycle_actions(lc_engine, target_tid) == ["suspend"]
+
+
 # ── POST /tenants/reactivate ──────────────────────────────────────────────────
 
 

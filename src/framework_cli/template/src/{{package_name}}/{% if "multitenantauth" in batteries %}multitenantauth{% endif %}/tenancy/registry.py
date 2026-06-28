@@ -129,10 +129,17 @@ def register_tenant(
 
 
 def deactivate_tenant(s: Session, tenant_id: str) -> None:
-    """Mark a tenant suspended (reversible, control-plane). Raises LookupError if absent."""
+    """Suspend a tenant (reversible, control-plane).
+
+    LookupError if absent; ValueError if already suspended (mirrors
+    reactivate_tenant's precondition so re-suspend is a 409, not a no-op flip
+    that would write a phantom 'suspend' audit row).
+    """
     tenant = s.get(m.Tenant, tenant_id)
     if tenant is None:
         raise LookupError(tenant_id)
+    if tenant.status == "suspended":
+        raise ValueError(f"tenant {tenant_id!r} is already 'suspended'")
     tenant.status = "suspended"
 
 

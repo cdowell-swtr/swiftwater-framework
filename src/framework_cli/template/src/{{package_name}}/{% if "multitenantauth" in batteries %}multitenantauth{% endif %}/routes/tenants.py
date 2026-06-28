@@ -144,6 +144,9 @@ def operator_suspend_route(
     except LookupError:
         s.rollback()
         raise HTTPException(status_code=404, detail="Tenant not found") from None
+    except ValueError as exc:
+        s.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post(
@@ -193,6 +196,9 @@ def deactivate_tenant_route(
     except LookupError:
         s.rollback()
         raise HTTPException(status_code=404, detail="Tenant not found") from None
+    except ValueError as exc:
+        s.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.patch(
