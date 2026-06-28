@@ -3988,3 +3988,16 @@ catches the `{other_id}` over-grant). Controller-authored (test-only transcripti
 `resource_params`, `_api_routes`/`_authorized`/`app`). Verified on render: **8/8** fitness (6 prior + 2), Route B's resource leaf binds
 `{resource_id}` so the per-leaf test passes; format/lint clean on first render. Review → branch-end Opus.
 (FWK67 SP3 build Task 10/14)
+
+#### #0292 · completed · FWK67 (SP3) Task 11 — DV-5 t1/t3 docs: route-naming contract + sample consumer resolver · 2026-06-27
+Extended the DV-5 resolver-seam comment block in `multitenantauth/deps.py` (the always-present, consumer-facing home — generated-project
+`documentation/` only ships under the `docs` battery, so a `multitenantauth`-only project wouldn't get a docs page). Added (t1) a
+**CONSUMER ROUTE CONTRACT** note: name your tenant path param `{tenant_id}` — `needs_tenant` detection and the membership-404 precondition
+both key on the LITERAL name (`needs_tenant = "tenant_id" in resource_params()`; precondition reads `path["tenant_id"]`); a route that names
+it `{org_id}` gets `needs_tenant=False`, the membership check never fires, `tenant_perms` stays empty, and the leaf DENIES every caller —
+fail-closed (no over-grant/leak) but silently broken (always 403). The T2 fitness test catches a `{tenant_id}` path the guard fails to bind
+but cannot see a differently-named param — so the contract lives in the doc. Added (t3) a worked **sample consumer `resource_grant` factory**
+that scopes every lookup to the closure tenant (`active_tenant_id`) + the calling user's membership, binding the active tenant ONCE.
+Controller-authored, docs-only (comment block — no behavior change; deps.py is integrity-locked but comments regenerate per-render).
+Verified on render: format/lint clean first render + **11/11** regression (fitness + tenant-routing-deps, behavior unchanged). Review → branch-end Opus.
+(FWK67 SP3 build Task 11/14)

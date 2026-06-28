@@ -70,6 +70,36 @@ logger = logging.getLogger(__name__)
 # resource grants: absent ⇒ deny, NOT a fall-back to the flat default (registration is strictly
 # opt-in).
 #
+# CONSUMER ROUTE CONTRACT (DV-5 t1) — name your tenant path param `{tenant_id}`. The membership-404
+# precondition and the `needs_tenant` detection in `guard` both key on the LITERAL name `tenant_id`
+# (`needs_tenant = "tenant_id" in resource_params()`; the precondition reads `path["tenant_id"]`). A
+# tenant-scoped route that names its param `{org_id}` (and writes the guard leaf as
+# `on="tenant:{org_id}"`) gets `needs_tenant=False`: the membership check never fires and
+# `tenant_perms` stays empty, so the leaf evaluates against an empty grant set and DENIES every
+# caller. This is fail-CLOSED (no over-grant, no existence leak) but the route is silently broken —
+# always 403, even for legitimate members. So: bind tenant-scoped leaves to `{tenant_id}` and name
+# the path param `{tenant_id}` to match. The T2 fitness test (`test_T2_tenant_routes_bind_tenant_id`)
+# catches a `{tenant_id}` PATH that the guard fails to bind, but cannot see a DIFFERENTLY-named param
+# — that contract lives here.
+#
+# CONSUMER RESOLVER EXAMPLE (DV-5 t3) — a correct factory scopes every lookup to the closure tenant
+# and the calling user's membership; the active tenant binds ONCE (never per call):
+#
+#   from your_package.multitenantauth.deps import register_authz_resolver_factory
+#
+#   def _resource_grant_factory(cs, user, active_tenant_id):
+#       # active_tenant_id is the resolved, membership-gated tenant — never a raw path value.
+#       def resource_grant(perm_name: str, resource_id: str) -> bool:
+#           # Look the grant up scoped to THIS tenant + THIS user; resource_id is the bare id the
+#           # battery extracted (you never parse a concatenated "tenant:…/resource:…" string).
+#           return my_grants.exists(
+#               tenant_id=active_tenant_id, user_id=user.id, perm=perm_name, resource_id=resource_id,
+#           )
+#       return {"resource_grant": resource_grant}
+#
+#   # Call from your OWN (unlocked) startup — e.g. create_app() — NOT this locked file:
+#   register_authz_resolver_factory(_resource_grant_factory)
+#
 # A mapping whose resource_grant value is a (perm_name, resource_id) -> bool resolver.
 ResourceResolvers = dict[str, Callable[..., bool]]
 AuthzResolverFactory = Callable[[Session, m.AppUser, str], ResourceResolvers]
