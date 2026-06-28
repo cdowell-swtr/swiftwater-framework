@@ -263,6 +263,11 @@ def guard(expr: Expr):
             )
             return hit is not None
 
+        # DV-5 t4: compute platform_perms BEFORE the resolver-factory call below, so a registered
+        # factory can never sit upstream of (and thus influence) the platform-perm computation.
+        # Pure control-DB read — behaviour-preserving.
+        platform_perms = platform_permissions(cs, user.id)
+
         # Default = today's flat resolver (unchanged when no factory is registered).
         resource_grant: Callable[..., bool] = _resource_grant
         factory = _resolver_factory
@@ -288,7 +293,7 @@ def guard(expr: Expr):
 
         ctx = {
             "tenant_perms": tenant_perms,
-            "platform_perms": platform_permissions(cs, user.id),
+            "platform_perms": platform_perms,
             "path": path,
             # Inert: the wildcard-subtree resolver denies and is NOT consumer-overridable in this
             # release (no shipped route uses it; deferred to a real need — A-F10).

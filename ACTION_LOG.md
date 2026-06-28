@@ -3891,3 +3891,10 @@ Sonnet author (1st attempt died on a transient API stall → re-dispatched, the 
 the shared conftest `_CONTROL_TABLES` truncate (the FWK66 #0278 leak class). Verified on render: **23/23**
 (lifecycle 2 + control-migration chain incl. c0005 + `test_authz_service` regression). Review → branch-end Opus.
 (FWK67 SP3 build Task 2/14)
+
+#### #0284 · completed · FWK67 (SP3) Task 3 — DV-5 t4 reorder (deps.py) · 2026-06-27
+Hoisted `platform_perms = platform_permissions(cs, user.id)` above the resolver-factory invocation in the
+locked `deps.py` guard (ctx now references the precomputed local), removing the privilege-influence adjacency
+the FWK62 review flagged (t4). Behaviour-preserving (pure control-DB read). Controller-authored (trivial
+locked reorder); verified on render: **65/65** (deps + fitness + service + expr suites). Review → branch-end Opus.
+(FWK67 SP3 build Task 3/14)
