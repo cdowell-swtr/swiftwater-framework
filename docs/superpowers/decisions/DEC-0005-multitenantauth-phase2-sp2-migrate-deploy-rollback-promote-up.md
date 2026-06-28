@@ -11,8 +11,8 @@
 
 ## Status
 
-**`designed` (spec approved 2026-06-25; build pending).** The generalization decisions below are settled and the
-absorber's design is approved; implementation (subagent-driven, TDD) follows. This sub-record advances the parent
+**`in-migration` — absorber SHIPPED v0.4.3 (FWK66, combined SP2+SP3 release; spec approved 2026-06-25, build complete).** The generalization decisions below are settled and the
+absorber's implementation (subagent-driven, TDD) shipped. This sub-record advances the parent
 DEC-0003 promote-up (still `in-migration`) toward Phase-2 completion — it does **not** change the parent's status,
 and it does **not** move anything to `adopted`. Meridian's async confirmation is requested against this record (see
 *Generator confirmation*); the absorber proceeded by reading Meridian's code directly this round (MD busy), but this
