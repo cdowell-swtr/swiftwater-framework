@@ -12,11 +12,14 @@
 
 ## Status
 
-**`designed` — absorber build COMPLETE (2026-06-27); branch-end gate + release pending.** The generalization
-decisions below are settled, and the absorber's implementation (subagent-driven, TDD; 14 tasks across 5 phases) is
-done and green on a `--with multitenantauth` render. Still pending before this slice ships: the **branch-end
-all-Opus whole-branch review + the Phase-2 Layer-2 stance×focus adversarial matrix** (the security gate), then the
-**combined SP2+SP3 tagged release** (closes FWK66's deferred tail). This sub-record advances the parent DEC-0003
+**`designed` — absorber build COMPLETE + security gate PASSED (2026-06-27); tagged release pending.** The
+generalization decisions below are settled, and the absorber's implementation (subagent-driven, TDD; 14 tasks across
+5 phases) is done and green on a `--with multitenantauth` render. The **security gate is passed**: the branch-end
+all-Opus whole-branch review (0 Critical/0 Important; the one actioned Minor, M1, shipped at `c42f3bd`) and the
+**Phase-2 Layer-2 all-Opus stance×focus adversarial matrix** (`docs/superpowers/eval-scorecards/2026-06-27-fwk67-sp3-layer2-security-matrix.md`
+— **GREEN, 0 confirmed Critical/High**; the two confirmed Low audit-completeness TOCTOUs P4/P5 fixed in-branch at
+`0ba950c`, taking I-AUDIT-COMPLETE to HOLDS-AFTER-FIX). Still pending before this slice ships: the **combined SP2+SP3
+tagged release** (closes FWK66's deferred tail). This sub-record advances the parent DEC-0003
 promote-up (still `in-migration`) toward Phase-2 completion — it does **not** change the parent's status, and it
 does **not** move anything to `adopted`. **Flips to `adopted` only when Meridian deletes its lifecycle/authz fork**
 gated on the conformance contract below.
@@ -123,4 +126,4 @@ not a Negotiation Thread.
 - SP2 PUR: `docs/superpowers/decisions/DEC-0005-multitenantauth-phase2-sp2-migrate-deploy-rollback-promote-up.md`
 - SP1 PUR: `docs/superpowers/decisions/DEC-0004-multitenantauth-phase2-sp1-routing-promote-up.md`
 - Parent PUR: `docs/superpowers/decisions/DEC-0003-multitenantauth-promote-up.md`
-- SP3 Layer-2 scorecard (pending): `docs/superpowers/eval-scorecards/2026-06-27-fwk67-sp3-layer2-security-matrix.md`
+- SP3 Layer-2 scorecard (**GREEN**, 2026-06-27): `docs/superpowers/eval-scorecards/2026-06-27-fwk67-sp3-layer2-security-matrix.md`
