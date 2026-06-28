@@ -3977,3 +3977,14 @@ closed a fixture gap the implementer flagged — added `TenantSlugHistory` to th
 touches it). Controller back-ported ruff-format (registry call-wrap + a package-name-free test assert-wrap). Verified on render:
 **50/50** (settings + lifecycle + lifecycle-routes incl. Task 8 rename regression) + format/lint clean. Review → branch-end Opus.
 (FWK67 SP3 build Task 9/14)
+
+#### #0291 · completed · FWK67 (SP3) Task 10 — DV-5 t2 per-leaf resource-binding fitness test + negative control · 2026-06-27
+Added two fitness tests to `test_authz_fitness.py` closing the DV-5 t2 residual: `test_T2_DV5_resource_leaves_bind_canonical_resource_id`
+walks EVERY `Perm` leaf (not the whole node) and asserts any leaf with `/resource:` in `on` binds exactly `{resource_id}` — the
+route-level `resource_params()` set-membership check (T2) passes a multi-resource ALL that binds `{resource_id}` in one leaf and a
+foreign `{other_id}` in another (the foreign leaf would over-grant on the request's single resource_id). The companion
+`test_T2_DV5_route_level_check_is_insufficient` is a negative control proving exactly that gap (route-level check satisfied, per-leaf
+catches the `{other_id}` over-grant). Controller-authored (test-only transcription; verified all assumed API — `Authorized.perm_leaves`/
+`resource_params`, `_api_routes`/`_authorized`/`app`). Verified on render: **8/8** fitness (6 prior + 2), Route B's resource leaf binds
+`{resource_id}` so the per-leaf test passes; format/lint clean on first render. Review → branch-end Opus.
+(FWK67 SP3 build Task 10/14)
