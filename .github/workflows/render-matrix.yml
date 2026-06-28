@@ -3,7 +3,7 @@ name: render-matrix
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [main]
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC — drift backstop
   workflow_dispatch:

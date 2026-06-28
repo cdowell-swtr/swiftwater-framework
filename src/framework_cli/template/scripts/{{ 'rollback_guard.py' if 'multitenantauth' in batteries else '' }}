@@ -1,0 +1,104 @@
+"""Refuse an image-only rollback that would cross a contract (destructive) migration.
+
+Under multitenantauth, deploy rollback is image-only (no `alembic downgrade` on ANY plane) —
+safe ONLY within an expand-only window. A `# deploy: contract` migration is a rollback floor:
+the prior image needs schema the contract dropped, so crossing it requires a manual data-restore
+plan, not an automated rollback. Refuse (exit 1) if the app chain's (target, head] range contains
+a contract migration, OR if the control chain contains ANY contract migration (the control rev is
+not tracked per-release, so it is treated as always-in-range — the most sensitive plane; a future
+enhancement tracks the control rev per release for a precise control floor). Operator override
+(with a data-restore plan): ALLOW_CONTRACT_ROLLBACK=1.
+
+Usage: python scripts/rollback_guard.py <app_target_revision>
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+
+_CONTRACT_MARKER = "deploy: contract"
+
+
+def _has_marker(path: Path) -> bool:
+    return _CONTRACT_MARKER in path.read_text()
+
+
+def _app_contract_in_range(target_rev: str) -> list[str]:
+    """Contract-marked app revisions an image-only rollback to ``target_rev`` would CROSS — i.e. the
+    revisions a real ``alembic downgrade <target_rev>`` unapplies: ancestors of the current head(s)
+    minus the ancestors of (and including) ``target_rev``. This downgrade-set is correct under a MERGE
+    topology, where a contract on a merged side-branch is crossed by the rollback yet does NOT lie on
+    the linear ``walk_revisions(target, "heads")`` path — that walk silently missed such a contract and
+    the floor failed OPEN (FWK66 SP2 Layer-2 P15). Fail-closed: an unknown/ambiguous ``target_rev``
+    raises (e.g. ResolutionError), so the caller refuses."""
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    head_ancestors = {
+        rev.revision: rev for rev in script.iterate_revisions("heads", "base")
+    }
+    target_ancestors = {
+        rev.revision for rev in script.iterate_revisions(target_rev, "base")
+    }
+    target_ancestors.add(
+        script.get_revision(target_rev).revision
+    )  # the rev we land ON, not cross
+    crossed = set(head_ancestors) - target_ancestors
+    return [
+        Path(head_ancestors[rid].path).name
+        for rid in sorted(crossed)
+        if _has_marker(Path(head_ancestors[rid].path))
+    ]
+
+
+def _control_contract_any() -> list[str]:
+    """Any contract-marked control revision (control rev untracked per-release → always-in-range)."""
+    cfg_path = Path("alembic_control.ini")
+    if not cfg_path.exists():
+        return []
+    script = ScriptDirectory.from_config(Config(str(cfg_path)))
+    return [
+        Path(rev.path).name
+        for rev in script.walk_revisions("base", "heads")
+        if _has_marker(Path(rev.path))
+    ]
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) != 1:
+        print("usage: rollback_guard.py <app_target_revision>", file=sys.stderr)
+        return 2
+    target = args[0]
+    try:
+        offenders = _app_contract_in_range(target) + _control_contract_any()
+    except Exception as exc:  # noqa: BLE001 — cannot prove the range safe → refuse (fail-closed)
+        print(
+            f"::error::rollback guard could not resolve the migration range "
+            f"({type(exc).__name__}); refusing image-only rollback. Override: ALLOW_CONTRACT_ROLLBACK=1.",
+            file=sys.stderr,
+        )
+        return 0 if os.environ.get("ALLOW_CONTRACT_ROLLBACK") == "1" else 1
+    if offenders:
+        if os.environ.get("ALLOW_CONTRACT_ROLLBACK") == "1":
+            print(
+                f"::warning::rollback crosses contract migration(s) {offenders}; "
+                "ALLOW_CONTRACT_ROLLBACK=1 set — proceeding (ensure a data-restore plan).",
+                file=sys.stderr,
+            )
+            return 0
+        print(
+            f"::error::image-only rollback refused — crosses contract (destructive) migration(s): "
+            f"{offenders}. The prior image needs schema a contract migration dropped; recover with a "
+            "data-restore plan, not a rollback. Override with ALLOW_CONTRACT_ROLLBACK=1 only if you have one.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

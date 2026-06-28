@@ -43,6 +43,20 @@ def get_tenant_dsn(session: Session, tenant_id: str) -> str | None:
     return row
 
 
+def active_tenant_dsns(session: Session) -> list[tuple[str, str]]:
+    """Return (tenant_id, dsn) for every active tenant — the migrate fan-out target set.
+
+    Active-only by design: a ``provisioning`` tenant has no committed schema contract yet,
+    and ``suspended`` is an SP3 lifecycle concern. Returns the stored control-row DSN — this
+    is an operator/boot path, not a request path, so it deliberately does NOT go through the
+    request-scoped ``resolve_dsn`` seam.
+    """
+    rows = session.execute(
+        select(Tenant.id, Tenant.dsn).where(Tenant.status == "active")
+    ).all()
+    return [(row.id, row.dsn) for row in rows]
+
+
 def live_slug_tenant_id(session: Session, slug: str) -> str | None:
     """Return the tenant_id for a live (current) slug, or None if not found."""
     return session.execute(

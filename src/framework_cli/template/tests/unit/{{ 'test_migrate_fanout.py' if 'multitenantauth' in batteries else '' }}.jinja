@@ -1,0 +1,99 @@
+"""Plane-aware fan-out: ordering, control-fail-fast, tenant best-effort, no-DSN-in-report (unit, no PG)."""
+
+import contextlib
+
+import pytest
+
+from {{ package_name }}.multitenantauth.tenancy import migrate
+
+
+@pytest.fixture
+def patched(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(migrate, "_upgrade_control", lambda: calls.append("control"))
+    monkeypatch.setattr(migrate, "_upgrade_default", lambda: calls.append("default"))
+    monkeypatch.setattr(
+        migrate, "migrate_tenant", lambda dsn: calls.append(f"tenant:{dsn}")
+    )
+    monkeypatch.setattr(
+        migrate,
+        "control_session_factory",
+        lambda: lambda: contextlib.nullcontext(object()),
+    )
+    monkeypatch.setattr(
+        migrate,
+        "active_tenant_dsns",
+        lambda cs: [("acme", "dsn-a"), ("globex", "dsn-b")],
+    )
+    return calls
+
+
+def test_order_is_control_then_default_then_tenants(patched):
+    report = migrate.upgrade_all()
+    assert patched == ["control", "default", "tenant:dsn-a", "tenant:dsn-b"]
+    assert report["control"] == "ok"
+    assert report["default"] == "ok"
+    assert report["tenants"] == {"acme": "ok", "globex": "ok"}
+    assert migrate.report_failed(report) == []
+
+
+def test_control_failure_aborts_before_any_tenant(patched, monkeypatch):
+    def boom():
+        raise RuntimeError("control down")
+
+    monkeypatch.setattr(migrate, "_upgrade_control", boom)
+    report = migrate.upgrade_all()
+    assert patched == []  # no default, no tenant touched
+    assert report["control"] == "RuntimeError"
+    assert report["default"] is None
+    assert report["tenants"] == {}
+    assert migrate.report_failed(report) == ["control"]
+
+
+def test_tenant_failure_is_best_effort(patched, monkeypatch):
+    def one_bad(dsn):
+        if dsn == "dsn-a":
+            raise ConnectionError("nope")
+        patched.append(f"tenant:{dsn}")
+
+    monkeypatch.setattr(migrate, "migrate_tenant", one_bad)
+    report = migrate.upgrade_all()
+    assert "tenant:dsn-b" in patched  # globex still attempted after acme failed
+    assert report["tenants"] == {"acme": "ConnectionError", "globex": "ok"}
+    assert migrate.report_failed(report) == ["acme"]
+
+
+def test_tenant_enumeration_failure_is_control_fail_and_aborts(patched, monkeypatch):
+    # Reading the active-tenant registry is a control-plane read; if it raises, upgrade_all must
+    # NOT propagate (which would break its dict contract) — it records a control-plane failure,
+    # touches no tenant, and exits non-zero. Class name only, never the message.
+    monkeypatch.setattr(
+        migrate,
+        "active_tenant_dsns",
+        lambda cs: (_ for _ in ()).throw(RuntimeError("control read failed")),
+    )
+    report = migrate.upgrade_all()
+    assert report["control"] == "RuntimeError"
+    assert report["tenants"] == {}  # no tenant touched
+    assert "control" in migrate.report_failed(report)
+    assert "control read failed" not in repr(report)
+
+
+def test_report_never_contains_dsn_or_message(patched, monkeypatch):
+    secret = "postgresql+psycopg://u:SECRET@h/db"
+
+    def leaky(dsn):
+        raise ValueError(secret)
+
+    monkeypatch.setattr(migrate, "migrate_tenant", leaky)
+    report = migrate.upgrade_all()
+    assert report["tenants"]["acme"] == "ValueError"
+    assert "SECRET" not in repr(report)
+
+
+def test_main_exit_codes(patched, monkeypatch):
+    assert migrate.main() == 0
+    monkeypatch.setattr(
+        migrate, "_upgrade_control", lambda: (_ for _ in ()).throw(RuntimeError())
+    )
+    assert migrate.main() == 1

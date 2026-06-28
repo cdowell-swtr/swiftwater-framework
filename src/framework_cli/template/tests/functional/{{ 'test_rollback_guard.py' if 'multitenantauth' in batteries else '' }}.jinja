@@ -1,0 +1,107 @@
+"""rollback_guard against the project's REAL alembic chains: clean head → allowed; a generated
+contract migration in range → refused."""
+
+import importlib.util
+import subprocess
+from pathlib import Path
+
+
+def _load():
+    spec = importlib.util.spec_from_file_location(
+        "rollback_guard", Path("scripts/rollback_guard.py")
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_clean_chain_allows_rollback_to_prior_head():
+    mod = _load()
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    head = script.get_current_head()
+    prior = script.get_revision(head).down_revision or head
+    # No shipped migration carries the contract marker → no offenders in range.
+    assert mod._app_contract_in_range(prior) == []
+    assert mod._control_contract_any() == []
+
+
+def test_contract_migration_in_range_is_refused(tmp_path):
+    mod = _load()
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    head_before = script.get_current_head()
+    # Generate a real, chained revision, then mark it contract + add a drop.
+    subprocess.run(
+        ["alembic", "revision", "-m", "fwk66 contract probe", "--rev-id", "zzcontract"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    new = next(p for p in Path("migrations/versions").glob("zzcontract*.py"))
+    new.write_text("# deploy: contract\n" + new.read_text())
+    try:
+        offenders = mod._app_contract_in_range(head_before)
+        assert any("zzcontract" in o for o in offenders)
+        assert (
+            mod.main([head_before]) == 1
+        )  # refuse from old head (range contains the contract rev)
+    finally:
+        new.unlink()
+
+
+def _write_merge_chain(tmp_path):
+    """Synthetic alembic chain 0001→0002→(0003a, 0003b[contract])→0004merge in tmp_path.
+    A merge topology cannot be produced from the project's real linear chain, so build one by hand."""
+    versions = tmp_path / "migrations" / "versions"
+    versions.mkdir(parents=True)
+    (tmp_path / "alembic.ini").write_text(
+        "[alembic]\nscript_location = {}\n".format(tmp_path / "migrations")
+    )
+
+    def _rev(rid, down, contract=False):
+        body = "# deploy: contract\n" if contract else ""
+        body += (
+            "revision = {!r}\ndown_revision = {!r}\n"
+            "branch_labels = None\ndepends_on = None\n"
+            "def upgrade():\n    pass\ndef downgrade():\n    pass\n"
+        ).format(rid, down)
+        (versions / "{}.py".format(rid)).write_text(body)
+
+    _rev("r0001", None)
+    _rev("r0002", "r0001")
+    _rev("r0003a", "r0002")
+    _rev("r0003b", "r0002", contract=True)  # marked contract on a side branch
+    _rev("r0004", ("r0003a", "r0003b"))  # merge revision
+
+
+def test_merge_topology_marked_contract_on_side_branch_is_refused(
+    tmp_path, monkeypatch
+):
+    """Regression (FWK66 SP2 Layer-2 P15): rolling back to a merge parent CROSSES a `# deploy: contract`
+    on the sibling branch. `walk_revisions(target, "heads")` walked only the linear path and missed it
+    → the floor failed OPEN. The guard now uses the true downgrade set (ancestors(heads) − ancestors(target))."""
+    mod = _load()
+    _write_merge_chain(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    offenders = mod._app_contract_in_range("r0003a")
+    assert any("r0003b" in o for o in offenders), offenders
+    assert (
+        mod.main(["r0003a"]) == 1
+    )  # refuse — crosses the marked contract on the sibling branch
+
+
+def test_merge_topology_landing_on_or_above_contract_is_allowed(tmp_path, monkeypatch):
+    """No over-refusal: landing ON the contract (r0003b) or at head (r0004) crosses nothing → allow."""
+    mod = _load()
+    _write_merge_chain(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    assert mod._app_contract_in_range("r0003b") == []  # we land on it, do not cross it
+    assert (
+        mod._app_contract_in_range("r0004") == []
+    )  # already at head, nothing to roll back
+    assert mod.main(["r0004"]) == 0
