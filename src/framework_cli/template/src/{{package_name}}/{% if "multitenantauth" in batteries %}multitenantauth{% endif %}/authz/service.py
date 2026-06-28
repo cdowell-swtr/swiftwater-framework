@@ -48,6 +48,7 @@ def _record_event(
     tenant_id: str | None,
     action: str,
     role_domain: str = "tenant",
+    resource_id: str | None = None,
 ) -> None:
     """Append an authz audit row (grant/revoke) and emit a metrics counter."""
     s.add(
@@ -57,6 +58,7 @@ def _record_event(
             role_id=role_id,
             tenant_id=tenant_id,
             action=action,
+            resource_id=resource_id,
         )
     )
     auth_metrics.record_grant(action, role_domain)
@@ -280,7 +282,6 @@ def remove_member(
         )
 
     held_role_ids = [a.role_id for a in assignments]
-    resource_role_ids = [a.role_id for a in resource_assignments]
     user_id = membership.user_id
     tenant_id = membership.tenant_id
 
@@ -297,15 +298,16 @@ def remove_member(
             action="revoke",
             role_domain="tenant",
         )
-    for role_id in resource_role_ids:
+    for a in resource_assignments:
         _record_event(
             s,
             actor_id=actor_id,
             subject_user_id=user_id,
-            role_id=role_id,
+            role_id=a.role_id,
             tenant_id=tenant_id,
             action="revoke",
             role_domain="resource",
+            resource_id=a.resource_id,
         )
 
 
@@ -347,6 +349,7 @@ def assign_resource_role(
             tenant_id=membership.tenant_id,
             action="grant",
             role_domain="resource",
+            resource_id=resource_id,
         )
 
 
@@ -381,6 +384,7 @@ def revoke_resource_role(
             tenant_id=membership.tenant_id,
             action="revoke",
             role_domain="resource",
+            resource_id=resource_id,
         )
 
 

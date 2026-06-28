@@ -3872,3 +3872,12 @@ all-Opus Layer-2 matrix; PUR DEC-0007; combined SP2+SP3 release. Also dropped th
 panel/Layer-2 Workflow so a load-bearing lens lost to a transient error can't silently degrade coverage — same
 class as FWK46, one layer up). Spec/plan committed; subagent build next.
 (brainstorm → design panel → spec → plan; build pending)
+
+#### #0282 · completed · FWK67 (SP3) Task 1 — AuthzEvent.resource_id + audit completeness · 2026-06-27
+Added nullable `AuthzEvent.resource_id` (`String(255)`) + threaded it through `_record_event` and the three
+resource-domain sites (`assign_resource_role`, `revoke_resource_role`, and the `remove_member` cascade loop —
+changed to iterate the `ResourceRoleAssignment` ORM objects so `a.resource_id` is in scope). Control migration
+`c0004` (additive nullable, down_revision `c0003`). Closes Phase-1 precondition (b). Sonnet author (author/verify
+split); controller-verified on a clean `--with multitenantauth` render: **16/16 `test_authz_service` + 7/7
+control-migration/db-migration** green. Per-task review deferred → branch-end Opus.
+(FWK67 SP3 build Task 1/14)
