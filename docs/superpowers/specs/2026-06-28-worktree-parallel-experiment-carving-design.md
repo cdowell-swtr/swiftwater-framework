@@ -29,6 +29,22 @@ contract in one pass.
 `FWK88` is the cross-cutting contract (defined here; split impl — labels/network/tiers 1–2 in A1,
 tier-3 in B). B is *not* "tier-3" — tier-3 is one need inside B.
 
+### Fourth, parallel consumer: the box edge (`local-reverse-proxy`)
+
+The existing shared edge is a **static registry → generated nginx → host ports** helper (`stacks.yml`
++ `generate.py` + `ports.py`; per-product `slug`+offset; `*.<slug>.localhost` cert; transient/worktree
+routing explicitly *out of scope*). It does **not** match `FWK88`'s Docker-discovery model — so the
+box **reworks its edge to consume the contract**: discover instances by the `FWK88` labels, route over
+the Docker network, honor the network-isolation invariants + the flat tier-2 hostnames + the
+`*.localhost` cert, and **delete its interim static edge + the README "exclude Traefik" instructions**
+(the `DEC-0006` generator-side copy-deletion). This is the **generator-side adoption** under the
+cross-repo convention (box = generator, framework = absorber). It runs **in parallel** with A1/A2/B,
+fed this same spec, and — because `local-reverse-proxy` is **not git-backed** — it needs no worktree
+and carries **no merge-collision risk**. It consumes A1's label schema (the contract), not A1's code,
+so it's independent on the code axis like B; full end-to-end (worktree stack → box edge → browser)
+integrates at the contract. It is the experiment's strongest a-priori test: an independent repo, in a
+different stack (nginx/Traefik vs Python/compose), building to the frozen seam without coordinating.
+
 ## The frozen seam contract (`FWK88`)
 
 The framework's contribution is **box-agnostic Docker-discovery metadata** on its containers; a
@@ -184,6 +200,8 @@ Owned by the box (`local-reverse-proxy`), recorded so they aren't mistaken for f
   with a clear message** when none is present (not silently produce an unreachable stack). The frozen
   `FWK88` label schema **is** the published contract any adopter builds a conformant edge to —
   `DEC-0006`'s "just upgrade and you have it" is amended to "upgrade + stand up a conformant edge."
+  **`local-reverse-proxy` is the first/reference adopter** — it reworks its static edge to this
+  contract in parallel (see *Fourth, parallel consumer*), proving the on-ramp is real.
 
 ## A-priori & binding
 
@@ -208,6 +226,13 @@ The experiment's second product (codify the workflow) starts in the carving itse
    stack) and that the **actual crossing datum** (the var injecting `<inst>` into the label) was never
    frozen. A human + a capable assistant in dialogue still deferred a blocker the panel caught — that
    is the case for `FWK91`, demonstrated, not asserted.
+3. **The seam reached past the reviewed artifact.** The panel reviewed the framework template (which
+   *does* ship Traefik labels + the docker socket) and inferred "the edge already does Docker
+   discovery" — but the actual shared edge lives in a *different, non-git repo* (`local-reverse-proxy`)
+   and is static registry + host ports. The contract's load-bearing assumption was about a component
+   no reviewer had read. Lesson: a seam review must reach **every repo the seam touches**, not just the
+   one in hand. The upside: the mismatch turned the box into a fourth, cross-repo consumer of the same
+   frozen contract — the strongest a-priori test available.
 
 ## PLAN mapping emitted by this carving
 

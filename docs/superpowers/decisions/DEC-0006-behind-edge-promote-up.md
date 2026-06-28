@@ -9,8 +9,18 @@
 
 ## Status
 
-**`proposed`.** Seeded by the generator and handed to the absorber. No operator gate is open and this is
-not a Negotiation Thread — a single promote-up request for the absorber to dispose of.
+**`proposed` → being disposed (2026-06-28).** Seeded by the generator and handed to the absorber. The
+absorber has now made the generalization decisions in the **first worktree-parallel experiment carving**
+(`docs/superpowers/specs/2026-06-28-worktree-parallel-experiment-carving-design.md`): behind-edge dev
+mode is framework stream **A1** (`FWK75`), built against the frozen **`FWK88`** Docker-discovery seam
+contract. Reconciliation note: the framework chose the **Docker-discovery** model (instance-labels,
+routing over the docker network, no host ports), which the generator's current **static
+`stacks.yml`→nginx→host-ports** edge does *not* match — so the **generator reworks its edge to discover
+the `FWK88` labels** and deletes its interim static edge + the README "exclude Traefik" instructions
+(the generator-side copy-deletion). Per the operator, this generator-side rework runs **in parallel**
+with A1/A2/B, fed the same carving spec; `local-reverse-proxy` is not git-backed, so no worktree and no
+merge-collision. Flip toward `adopted` once the framework ships A1's labels and the generator's reworked
+edge passes a behind-edge behavior conformance test.
 
 ## Source / generator
 
