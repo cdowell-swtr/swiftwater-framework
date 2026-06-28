@@ -135,7 +135,12 @@ def deactivate_tenant(s: Session, tenant_id: str) -> None:
     reactivate_tenant's precondition so re-suspend is a 409, not a no-op flip
     that would write a phantom 'suspend' audit row).
     """
-    tenant = s.get(m.Tenant, tenant_id)
+    # Lock the tenant row on read (SELECT ... FOR UPDATE): two concurrent authorized
+    # suspends would otherwise both pass the in-Python guard below and each write a
+    # phantom 'suspend' event — the M1 class, reopened under concurrency. The lock
+    # serializes them so the second re-reads 'suspended' and 409s. Mirrors the
+    # TOCTOU-safe pattern in authz.service._assert_not_last_admin.
+    tenant = s.get(m.Tenant, tenant_id, with_for_update=True)
     if tenant is None:
         raise LookupError(tenant_id)
     if tenant.status == "suspended":
@@ -145,7 +150,10 @@ def deactivate_tenant(s: Session, tenant_id: str) -> None:
 
 def reactivate_tenant(s: Session, tenant_id: str) -> None:
     """Operator reactivation: suspended → active. LookupError if absent; ValueError if not suspended."""
-    tenant = s.get(m.Tenant, tenant_id)
+    # Lock the tenant row on read (FOR UPDATE) so two concurrent reactivates serialize:
+    # the second re-reads 'active' and 409s instead of writing a phantom 'reactivate'
+    # event. Symmetric with deactivate_tenant; mirrors _assert_not_last_admin.
+    tenant = s.get(m.Tenant, tenant_id, with_for_update=True)
     if tenant is None:
         raise LookupError(tenant_id)
     if tenant.status != "suspended":

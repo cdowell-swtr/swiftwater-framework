@@ -245,7 +245,14 @@ def remove_member(
 
     If the membership holds the admin role, the ≥1-admin invariant is enforced first.
     """
-    membership = _get_membership(s, membership_id)
+    # Lock the membership row (SELECT ... FOR UPDATE) before capturing assignments: a
+    # concurrent assign_resource_role takes FOR KEY SHARE on this parent via its FK, so the
+    # lock serializes it against the CASCADE delete below. Without it, a grant committed
+    # inside the capture→delete window is cascade-removed with no revoke event, leaving a
+    # dangling 'grant' as the last audit word (Layer-2 P5). Mirrors _assert_not_last_admin.
+    membership = s.get(m.TenantMembership, membership_id, with_for_update=True)
+    if membership is None:
+        raise ValueError(f"unknown membership: {membership_id!r}")
 
     assignments = list(
         s.scalars(
