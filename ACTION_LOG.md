@@ -3931,3 +3931,16 @@ lifecycle-route tests (incl. non-member-operator reachability, 409 not-suspended
 Opus: `reactivate_tenant` overlaps the existing `activate_tenant` (both set status=active) — semantics differ
 (precondition + return type) and it's plan-mandated, but worth a DRY look. Review → branch-end Opus.
 (FWK67 SP3 build Task 6/14)
+
+#### #0288 · completed · FWK67 (SP3) Task 7 — Route B resource grant/revoke (bootstrap ANY + cross-tenant 404) · 2026-06-27
+Added two resource-role routes to the locked `routes/roles.py`: `POST /tenants/{tenant_id}/members/{membership_id}/resources/{resource_id}/roles`
+and `DELETE …/roles/{role_name}`, both behind `_RESOURCE_GUARD = guard(ANY(Perm("resource:manage", on="tenant:{tenant_id}/resource:{resource_id}"),
+Perm("tenant:manage-members", on="tenant:{tenant_id}")))`. The bootstrap is the ANY's **second** leaf — a tenant-admin holds
+`tenant:manage-members`, so the FIRST resource grant succeeds without any pre-existing resource grant (no deadlock); the resource-scoped
+first leaf resolves via the DV-5 `resource_grant(name, path_dict)` seam (always ctx-wired, fail-closed). Cross-tenant safety is a route-layer
+`membership.tenant_id != tenant_id` → 404 (existence never leaked). `assign_resource_role` records a `grant` authz_event carrying
+`resource_id`. Sonnet author; controller back-ported ruff-format (roles.py import-wrap + a method-chain wrap in the test helper —
+both package-name-free). Verified on render: **33/33** in test_tenant_role_routes (28 prior + 5 new: bootstrap-204, cross-tenant-404,
+revoke-204, plain-member-403, wrong-domain-400) + fitness 6/6 + format/lint clean. Test reads the grant event via `_latest_authz_event`
+(JOIN role for domain; `authz_event` has no `role_domain` column; ORDER BY the real `at` column). Review → branch-end Opus.
+(FWK67 SP3 build Task 7/14)

@@ -23,8 +23,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...db.control import models as m
-from ..authz.expr import Perm
-from ..authz.service import assign_role, revoke_role
+from ..authz.expr import ANY, Perm
+from ..authz.service import (
+    assign_resource_role,
+    assign_role,
+    revoke_resource_role,
+    revoke_role,
+)
 from ..deps import control_session, current_user, guard
 from ..errors import DomainMismatchError, LastAdminError
 
@@ -115,4 +120,82 @@ def revoke_role_route(
     except (ValueError, DomainMismatchError) as exc:
         # Unknown role (ValueError) or wrong-domain role (DomainMismatchError) → 400, not an
         # uncaught 500 (Layer-2 finding D).
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── resource role routes ───────────────────────────────────────────────────────
+
+_RESOURCE_GUARD = guard(
+    ANY(
+        Perm("resource:manage", on="tenant:{tenant_id}/resource:{resource_id}"),
+        Perm("tenant:manage-members", on="tenant:{tenant_id}"),
+    )
+)
+
+
+class GrantResourceRoleBody(BaseModel):
+    role_name: str = Field(min_length=1)
+
+
+@router.post(
+    "/{tenant_id}/members/{membership_id}/resources/{resource_id}/roles",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(_RESOURCE_GUARD)],
+)
+def grant_resource_role(
+    tenant_id: str,
+    membership_id: uuid.UUID,
+    resource_id: str,
+    body: GrantResourceRoleBody,
+    s: Session = Depends(control_session),
+    user: m.AppUser = Depends(current_user),
+) -> None:
+    """Grant a resource-domain role on {resource_id} to {membership_id}. Tenant-admin bootstraps."""
+    membership = s.get(m.TenantMembership, membership_id)
+    if membership is None or membership.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Membership not found")
+    try:
+        assign_resource_role(
+            s,
+            membership_id=membership_id,
+            resource_id=resource_id,
+            role_name=body.role_name,
+            actor_id=user.id,
+        )
+        s.commit()
+    except (ValueError, DomainMismatchError) as exc:
+        s.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except IntegrityError:
+        s.rollback()  # idempotent concurrent duplicate → 204
+
+
+@router.delete(
+    "/{tenant_id}/members/{membership_id}/resources/{resource_id}/roles/{role_name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(_RESOURCE_GUARD)],
+)
+def revoke_resource_role_route(
+    tenant_id: str,
+    membership_id: uuid.UUID,
+    resource_id: str,
+    role_name: str,
+    s: Session = Depends(control_session),
+    user: m.AppUser = Depends(current_user),
+) -> None:
+    """Revoke a resource-domain role on {resource_id} from {membership_id}."""
+    membership = s.get(m.TenantMembership, membership_id)
+    if membership is None or membership.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Membership not found")
+    try:
+        revoke_resource_role(
+            s,
+            membership_id=membership_id,
+            resource_id=resource_id,
+            role_name=role_name,
+            actor_id=user.id,
+        )
+        s.commit()
+    except (ValueError, DomainMismatchError) as exc:
+        s.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
