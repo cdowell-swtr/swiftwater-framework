@@ -22,64 +22,90 @@ evidence about whether an **a-priori** seam cut actually holds — see *A-priori
 
 | Stream | Parent PLAN id | Load-bearing deliverable (code) | Seam role |
 |---|---|---|---|
-| **A1** | `FWK75` (mutated) | Behind-edge dev mode: supported Traefik-decoupled run-mode (`task dev:edge`) · `X-Forwarded-Proto` trust in the app · behind-edge conformance test · dispose `DEC-0006`. Implements **tiers 1–2** of the contract. | **defines** contract; **provides** `task dev:edge` |
-| **A2** | `FWK74` (mutated) | Worktree-aware stack provisioning: a tool/command that assigns a worktree's `PORT_OFFSET`, brings its stack up via `task dev:edge`, and (de)registers the chosen edge subdomains · the per-worktree offset/edge-registration convention · worktree SDD-flow capture. | **consumes** tier-2 |
+| **A1** | `FWK75` (mutated) | Behind-edge dev mode: a supported run-mode (`task dev:edge`) that runs the stack **without a per-stack Traefik binding `:443`** while **keeping the Docker-discovery labels** on its containers · **instance-parameterized labels** (so multiple instances coexist behind one shared edge) · `X-Forwarded-Proto` trust in the app · behind-edge conformance test · dispose `DEC-0006`. | **defines** `FWK88` labels; **provides** `task dev:edge` |
+| **A2** | `FWK74` (mutated) | Worktree-aware stack provisioning: a tool/command that assigns a worktree's **box-agnostic instance identity** (→ the discovery-label parameter) + an optional `PORT_OFFSET` (only if direct host access is wanted), and brings the stack up via `task dev:edge` · the per-worktree identity/offset convention · worktree SDD-flow capture. | **consumes** tier-2 |
 | **B** | `FWK89` (new) | Test inner-loop speed — **the whole of test parallelization**: `pytest-xdist` + the parallel-safety hardening it requires (per-worker tmp/render isolation, testcontainer instancing — incl. **tier-3** transient instances) · tiered fast/full gate (`FWK77`). | **consumes** tier-3 |
 
-The contract itself is a cross-cutting id: **`FWK88`** (defined here, implemented split: tiers 1–2
-in A1, tier-3 within B). B is *not* "tier-3" — tier-3 instances are one need inside B's broader
-parallelization work.
+The contract is a cross-cutting id: **`FWK88`** (defined here; implemented split — the
+instance-labels + tiers 1–2 in A1, tier-3 in B). B is *not* "tier-3" — tier-3 instances are one
+need inside B's broader parallelization work.
 
-## The frozen seam contract — three-tier instance/port allocation (`FWK88`)
+## The frozen seam contract — instance addressing via Docker discovery (`FWK88`)
 
-A single runtime contract, **frozen here, a priori**. Expressed as responsibilities, expectations,
-and the data that crosses the boundary — *not* a file partition.
+The framework's contribution is **box-agnostic Docker-discovery metadata** on its containers; a
+**box-specific edge** discovers it. Frozen here, a priori. Expressed as responsibilities,
+expectations, and the data that crosses the boundary — *not* a file partition.
+
+### What the framework provides (box-agnostic — this is the frozen seam)
+
+Each stack's containers carry **instance-parameterized Docker labels** — the same Traefik-schema
+labels the template **already ships** (`traefik.http.routers.<svc>.rule=Host(...)`,
+`...services.<svc>.loadbalancer.server.port=...`), but with the Host rule and router/service names
+**parameterized by a box-agnostic instance identity** `<product-slug>[-<instance>]`, so N instances
+of M products never collide on a hostname or a Traefik router name. This identity + addressing data
+is the seam. (Already half-built: the template ships these labels and mounts
+`/var/run/docker.sock` into Traefik — discovery, not a static registry.)
+
+### What the box provides (box-specific — NOT a framework concern)
+
+A shared edge with Docker-socket access **discovers** the labeled containers and routes to them
+**over the Docker network** (`container:port`), terminating TLS on the one host `:443`. The
+mechanism is the box's call — a shared Traefik (Docker provider) or nginx-via-docker-gen — and lives
+in `local-reverse-proxy` (it is on `DEC-0006`'s NOT-promoted list). This document does **not** freeze
+it.
+
+### Consequence: host ports are optional
+
+Because the edge routes over the Docker network, **HTTP edge access needs no host ports** — only the
+edge binds `:443`. `PORT_OFFSET` (`FWK31`) is needed **only for optional direct host-port access**
+(hitting a DB/app on `localhost:PORT` without the edge — IDE/debug). A worktree that only needs edge
+access publishes no host ports and draws nothing from any budget. When host access *is* wanted,
+offsets come from a box-global pool; the honest cap (~**5** concurrent host-publishing stacks — from
+the `step-1000` cross-service collision at offset-diff 5, where app `8000` meets grafana `3000`, plus
+the `32768` tier-3 floor) applies **only to that opt-in surface**, not to edge routing.
 
 ### Tiers
 
-| Tier | Instance | `PORT_OFFSET` | Edge engagement | Implemented by |
+| Tier | Instance | Edge (hostname form) | Host ports | Implemented by |
 |---|---|---|---|---|
-| **1 · persistent** | main-branch dev stack | `0` (base) | **full** fan-out — app + all observability subdomains (`grafana.<slug>.localhost`, `prometheus.<slug>.localhost`, …) | A1 |
-| **2 · temporary** | per-worktree dev stack | `k × 1000` (k = worktree index) | **opt-in per work package** — app by default, plus only the obs subdomains that package touches | A1 (run-mode) + A2 (provisioning) |
-| **3 · transient** | per-test-run / per-`xdist`-worker stack | OS-ephemeral (see below) | **none** — test-local, reached directly by its test | B |
+| **1 · persistent** | main-branch dev stack | yes — **nested** `<slug>.localhost` + `<svc>.<slug>.localhost` obs | base (offset 0), as today | A1 |
+| **2 · temporary** | per-worktree dev stack | yes — **flat single-label** `<slug>-<inst>.localhost` + `<svc>-<slug>-<inst>.localhost` obs (opt-in) | **optional** — `PORT_OFFSET` from the pool only if direct host access is wanted | A1 (labels) + A2 (provisioning) |
+| **3 · transient** | per-test-run / per-`xdist`-worker stack | no | OS-ephemeral (`32768–60999`), test-local | B |
 
-### Concrete bands (binding)
+### Hostname scheme & TLS (cert seam)
 
-- **Port-derivation** — already shipped & binding (`FWK31`): `scripts/compose.sh` shifts every
-  published host port by `${PORT_OFFSET:-0}`. Base map = the `_p` table (`HTTP 8000`, `POSTGRES
-  5432`, `TRAEFIK_HTTPS 443`, `TRAEFIK_HTTP 80`, `MONGO 27017`, `REDIS 6379`, `FRONTEND 5173`,
-  `PROMETHEUS 9090`, `GRAFANA 3000`, `ALERTMANAGER 9093`, `LOKI 3100`, `TEMPO 3200`, exporters
-  `9187/9216/9808/9121`). A2 consumes this; **A1 must not break it**.
-- **Tier-3 band** — OS-ephemeral ports (Linux default `32768–60999`). **Disjoint from tiers 1–2 by
-  construction** because the highest base port (mongo `27017`) `+ PORT_OFFSET` stays below `32768`
-  as long as the worktree index **`k ≤ 5`** (`27017 + 5×1000 = 32017 < 32768`). The experiment uses
-  `k ∈ {1,2,3}`. **Binding constraint: `k ≤ 5`** — raising it requires lowering the step or
-  reserving a different tier-3 band, which is a contract change (re-cut here, not in a worktree).
+Cert generation is box-specific (`DEC-0006` NOT-promoted), and stays **static** — no per-worktree
+cert work — because the framework picks hostname forms that two **static** box-side mkcert certs
+already cover:
 
-### Run-mode selector (pinned)
+- **Tier 1 (persistent)** keeps the **nested** form `<svc>.<slug>.localhost`, covered by the box's
+  **existing** per-product `*.<slug>.localhost` cert. Unchanged.
+- **Tier 2 (worktree)** uses the **flat single-label** form `<svc>-<slug>-<inst>.localhost` so the
+  box's static **`*.localhost`** wildcard covers every dynamic instance. Nested two-labels-deep
+  names (`grafana.<slug>-<inst>.localhost`) are **avoided** for tier-2 precisely because
+  `*.localhost` cannot cover them.
 
-`task dev:edge` brings the **full** stack (app + observability) up with **Traefik excluded**
-(`:443`/`:80` unbound), all other host ports per `PORT_OFFSET`. A2 invokes `task dev:edge`; A1
-implements it. The *mechanics* (profile split) are A1's to design; the **invocation + guarantee is
-frozen**.
+The framework owns the **flat-vs-nested label choice** (this is `FWK88`/A1); the certs themselves
+are box-side.
 
-### Stays box-specific (NOT promoted — A1 constraint, from `FWK75`)
+### The seam (runtime data crossing)
 
-The nginx edge itself, `*.localhost` / `grafana.<slug>.localhost` naming, the mkcert edge cert,
-`stacks.yml`, and the name→port generator belong to `local-reverse-proxy`. A1 ships only the
-generic capability (a stack that *can* run behind a shared edge).
+The **Docker label schema** — instance-parameterized Host rules + router/service names + service
+port. Frozen here, a priori, binding. The edge's *discovery* of those labels is box-side and is not
+frozen by us.
 
 ## Top-level merge-order DAG (binding merge-deps)
 
 ```
-A1 (FWK75) ──provides task dev:edge──▶ A2 (FWK74)
-B  (FWK89) ── independent (consumes only the frozen FWK88 contract; no code dep on A1/A2)
+A1 (FWK75) ──provides task dev:edge + the instance-label schema──▶ A2 (FWK74)
+B  (FWK89) ── independent (consumes only the frozen FWK88 tier-3 band; no code dep on A1/A2)
 ```
 
-- **A1 merges before A2**, OR A2 stubs the `task dev:edge` run-mode for its own tests and integrates
-  against real A1 at the end. State the choice in A2's worktree before it forks.
-- **B is independent** — it depends on the *contract* (tier-3 disjointness, `k ≤ 5`), not on A1/A2
-  code, so it merges whenever ready.
+- **A1 merges before A2**, OR A2 stubs the `task dev:edge` run-mode + assumes the frozen label
+  schema for its own tests and integrates against real A1 at the end. State the choice in A2's
+  worktree before it forks.
+- **B is independent** — it depends on the *contract* (tier-3 OS-ephemeral disjointness), not on
+  A1/A2 code, so it merges whenever ready.
 - `FWK88` is **not** a merge node — it is this frozen spec.
 
 ## Per-worktree protocol (the carving applied fractally)
@@ -101,12 +127,12 @@ Each worktree, on entry, takes its parent PLAN row + **this spec** and:
 
 ## Bootstrap & validation contention
 
-The experiment is **runnable today** — `PORT_OFFSET` already ships (`FWK31`), so three stacks
-coexist now (`k = 0/1/2/3`), each binding its own `:k443`. Behind-edge (A1) is therefore a *product*
-of the experiment, not a *prerequisite*: it replaces the ugly `:k443` URLs + the hand-rolled
-Traefik-exclusion with clean `*.localhost` + one TLS edge. File-level conflicts on shared files
-(`Taskfile.yml`, `pyproject.toml`, CI workflows, `PLAN.md`, `ACTION_LOG.md`) are ordinary merges —
-Git's job, same as any human team; they are **not** pre-partitioned.
+The experiment is **runnable today** — the template already ships Docker-discovery labels +
+`PORT_OFFSET` (`FWK31`), so multiple stacks already coexist. Behind-edge (A1) is therefore a
+*product* of the experiment, not a *prerequisite*: it replaces the per-stack Traefik + ugly direct
+host ports with instance-parameterized labels behind one shared box edge. File-level conflicts on
+shared files (`Taskfile.yml`, `pyproject.toml`, CI workflows, `PLAN.md`, `ACTION_LOG.md`) are
+ordinary merges — Git's job, same as any human team; they are **not** pre-partitioned.
 
 ## A-priori & binding
 
@@ -118,13 +144,13 @@ seam-relevant decision together) that does not hold. The capability under test i
 
 ## PLAN mapping emitted by this carving
 
-- `FWK75` → **mutated** into the A1 parent (behind-edge dev mode; tiers 1–2; scope preserved incl.
-  the NOT-promoted box-specific list).
+- `FWK75` → **mutated** into the A1 parent (behind-edge dev mode; defines the `FWK88` labels +
+  tiers 1–2; scope preserved incl. the NOT-promoted box-specific list).
 - `FWK74` → **mutated** into the A2 parent (worktree-aware stack provisioning; tier-2 consumer).
   Dropped as done: "land `$DEV_ROOT` + FWK72 relocation first" (FWK72 closed). Moved to A1: the
-  worktree-aware Traefik-decouple profile.
-- `FWK88` → **new**, cross-cutting: the three-tier instance/port allocation contract (this spec is
-  its definition; implementation split A1 tiers 1–2 / B tier-3).
+  worktree-aware Traefik-decouple run-mode.
+- `FWK88` → **new**, cross-cutting: instance addressing via Docker discovery (this spec is its
+  definition; the edge itself is box-specific and out of scope).
 - `FWK89` → **new** B parent (test inner-loop speed) → children `FWK76` (parallelize, owns tier-3
   transient instances) + `FWK77` (tier commit-vs-merge).
 - `FWK90` → **new**, follow-up to `FWK89`: tight per-mutation test scoping at interim runs (run only
