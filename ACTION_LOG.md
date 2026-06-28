@@ -3964,3 +3964,16 @@ NOTE for branch-end Opus: the route's `if tenant is None: 404` is defensive — 
 non-existent/non-member tenant first, so the route-body None-check is only reachable on a TOCTOU delete (still correct, no 500).
 Review → branch-end Opus.
 (FWK67 SP3 build Task 8/14)
+
+#### #0290 · completed · FWK67 (SP3) Task 9 — slug_cooling_days setting + ge=1 floor (SP1 P3/P4 class) · 2026-06-27
+Promoted the slug-cooling window from a `registry.SLUG_COOLING_DAYS` module constant to a first-class `Settings` field
+`slug_cooling_days: int = Field(default=30, ge=1)` (in the multitenantauth block of `config/settings.py`, mirroring
+`max_cached_engines`). Removed the constant (registry was its only user — template-wide grep) and rewired `rename_slug` to
+`get_settings().slug_cooling_days` (no circular import — settings imports only stdlib+pydantic). Single source of truth now the
+setting (spec §C4). Sonnet author. Tests: unit floor `Settings(slug_cooling_days=0)`→ValidationError + default==30
+(`test_settings_auth`); a **wiring** functional test (`test_tenant_lifecycle`) that monkeypatches `registry.get_settings` to a
+7-day override, renames, and asserts the history `reserved_until` is a 7-day window (catches a hardcoded-30 regression). Controller
+closed a fixture gap the implementer flagged — added `TenantSlugHistory` to the `control_engine` create_all + TRUNCATE (rename_slug
+touches it). Controller back-ported ruff-format (registry call-wrap + a package-name-free test assert-wrap). Verified on render:
+**50/50** (settings + lifecycle + lifecycle-routes incl. Task 8 rename regression) + format/lint clean. Review → branch-end Opus.
+(FWK67 SP3 build Task 9/14)

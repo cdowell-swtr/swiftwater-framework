@@ -242,3 +242,15 @@ def test_pool_and_overflow_knobs_reject_unlimited_sentinels() -> None:
     for field in ("tenant_max_overflow", "control_max_overflow"):
         with pytest.raises(ValidationError):
             Settings(**{field: -1})
+
+
+# ── slug_cooling_days (FWK67 SP3) ─────────────────────────────────────────────
+
+
+def test_slug_cooling_days_default_is_30():
+    assert Settings().slug_cooling_days == 30
+
+
+def test_slug_cooling_days_floor_rejects_zero():
+    with pytest.raises(ValidationError):
+        Settings(slug_cooling_days=0)

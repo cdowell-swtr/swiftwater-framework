@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from ...config.settings import get_settings
 from ...db.control import models as m
 from ...db.control import repository as control_repo
 from ...db.control.models.tenant import Tenant, _opaque_id
@@ -32,9 +33,6 @@ _TENANT_ID_RE = re.compile(r"^[a-z0-9_]+$")
 
 # DNS-label: [a-z0-9], may contain hyphens (not leading/trailing), ≤63 chars (RFC 1123).
 _SLUG_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
-
-# How long a renamed slug is reserved for redirect and squat protection.
-SLUG_COOLING_DAYS: int = 30
 
 
 # ── input validators ──────────────────────────────────────────────────────────
@@ -191,7 +189,7 @@ def rename_slug(
     Steps (in one session flush):
     1. Validate new_slug is a DNS label and claimable.
     2. Look up the tenant; raise LookupError if not found.
-    3. Insert the old slug into TenantSlugHistory with reserved_until = now + SLUG_COOLING_DAYS.
+    3. Insert the old slug into TenantSlugHistory with reserved_until = now + slug_cooling_days (setting).
     4. Set tenant.slug = new_slug.
 
     After this call, ``resolve_slug(old_slug)`` returns ``(tenant_id, True)`` (redirect)
@@ -209,7 +207,9 @@ def rename_slug(
         raise LookupError(f"tenant {tenant_id!r} not found")
 
     old_slug = t.slug
-    reserved_until = datetime.now(timezone.utc) + timedelta(days=SLUG_COOLING_DAYS)
+    reserved_until = datetime.now(timezone.utc) + timedelta(
+        days=get_settings().slug_cooling_days
+    )
 
     control_repo.add_slug_history(
         session,

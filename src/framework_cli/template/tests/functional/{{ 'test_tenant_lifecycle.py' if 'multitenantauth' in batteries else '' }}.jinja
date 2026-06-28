@@ -24,8 +24,8 @@ from {{ package_name }}.multitenantauth.tenancy.registry import record_lifecycle
 def control_engine(pg_url: str) -> Engine:  # type: ignore[return]
     """Control-plane engine for lifecycle-event tests.
 
-    Creates the tables needed by these tests (app_user, tenant, tenant_lifecycle_event)
-    in an isolated test database. Uses create_all — no alembic needed here.
+    Creates the tables needed by these tests (app_user, tenant, tenant_lifecycle_event,
+    tenant_slug_history) in an isolated test database. Uses create_all — no alembic needed here.
     """
     _ctrl_db = "{{ package_name }}_lifecycle_test"
     base = make_url(pg_url)
@@ -46,6 +46,7 @@ def control_engine(pg_url: str) -> Engine:  # type: ignore[return]
             m.AppUser.__table__,
             m.Tenant.__table__,
             m.TenantLifecycleEvent.__table__,
+            m.TenantSlugHistory.__table__,
         ],
     )
     yield engine
@@ -58,7 +59,11 @@ def control_session(control_engine: Engine) -> Session:  # type: ignore[return]
     with Session(control_engine) as s:
         yield s
     with control_engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE tenant_lifecycle_event, tenant CASCADE"))
+        conn.execute(
+            text(
+                "TRUNCATE TABLE tenant_lifecycle_event, tenant_slug_history, tenant CASCADE"
+            )
+        )
 
 
 # ── tests ─────────────────────────────────────────────────────────────────────
@@ -83,3 +88,25 @@ def test_action_check_rejects_unknown(control_session: Session) -> None:
     s.add(m.TenantLifecycleEvent(tenant_id="acme", action="frobnicate"))
     with pytest.raises(IntegrityError):
         s.flush()
+
+
+# ── slug_cooling_days wiring (FWK67 SP3) ─────────────────────────────────────
+
+
+def test_rename_slug_uses_cooling_days_setting(control_session, monkeypatch):
+    from datetime import datetime, timezone
+    from {{ package_name }}.config.settings import Settings
+    from {{ package_name }}.multitenantauth.tenancy import registry
+    from {{ package_name }}.db.control import repository as control_repo
+
+    t = registry.register_tenant(control_session, "Cool Co", slug="cool-orig")
+    control_session.flush()
+    monkeypatch.setattr(registry, "get_settings", lambda: Settings(slug_cooling_days=7))
+    registry.rename_slug(control_session, t.id, "cool-new")
+    control_session.flush()
+    hist = control_repo.get_slug_history(control_session, "cool-orig")
+    assert hist is not None
+    delta_days = (hist.reserved_until - datetime.now(timezone.utc)).days
+    assert (
+        6 <= delta_days <= 7
+    )  # 7-day window from the overridden setting, not the 30-day default
