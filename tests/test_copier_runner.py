@@ -10,7 +10,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from framework_cli.copier_runner import render_project
+# FWK94: a per-worker render cache (drop-in for copier_runner.render_project) renders
+# each distinct answer-set once and copytrees a fresh, isolated tree per caller — see
+# tests/_render_cache.py. This module issues 283 renders over ~20 distinct answer-sets.
+from tests._render_cache import render_project
 
 DATA = {
     "project_name": "Demo",

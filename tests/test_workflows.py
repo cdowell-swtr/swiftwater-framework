@@ -45,7 +45,12 @@ def test_framework_ci_fast_tier():
     assert "ruff check" in run
     assert "ruff format --check" in run
     assert "mypy src" in run
-    assert "pytest -q --ignore=tests/acceptance" in run
+    # FWK93: the gate shards the fast tier with pytest-xdist (-n auto).
+    # FWK96: the fast tier ignores only the two docker/dind acceptance files (not the
+    # whole dir) — the partition/coverage guard lives in tests/test_test_tiers.py.
+    assert "pytest -q -n auto" in run
+    assert "--ignore=tests/acceptance/test_rendered_project.py" in run
+    assert "--ignore=tests/acceptance/test_deploy_e2e.py" in run
     assert "uv lock --check" in run
     assert "uv build" in run
 

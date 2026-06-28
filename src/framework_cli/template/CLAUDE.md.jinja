@@ -50,6 +50,8 @@ Tests live in three tiers, each with its own coverage context:
 
 Coverage gates by stage (spec §6): **pre-commit** runs unit+functional at **>=70%** (E2E is too slow/heavy for the inner loop); **CI** runs all three at **>=85%**. A line covered only by E2E is integration-only coverage, not a failure.
 
+The suite runs **serial by design**: the DB tests share a session-scoped Postgres test container, so `pytest -n auto` would start one container per worker — a net slowdown until the suite is large. If yours grows big enough to need parallelism, share one container across workers (the pytest-xdist file-lock pattern) with per-worker DB isolation, not a bare `-n auto`.
+
 ## CI/CD
 
 - `task ci` — full local pre-flight (lint, the 85% gate, pip-audit, OpenAPI export) against your working tree. Run it before pushing.

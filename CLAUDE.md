@@ -27,11 +27,21 @@ Before every commit, update `PLAN.md` (tick the task; move finished items to `Do
 
 ## Quality gate (must be green before commit / merge)
 ```bash
-uv run pytest -q              # all tests
 uv run ruff check .           # lint
 uv run ruff format --check .  # formatting — CI's `gate` job runs this; `ruff check` alone misses it
 uv run mypy src               # type-check (framework source only)
+task test:fast                # FAST tier — non-docker suite, -n auto; mirrors the CI `gate`
+task test:full                # FULL tier — + docker acceptance, bounded -n; run at branch-end
 ```
+**Test tiers (FWK96).** The suite is split fast (per-commit) vs full (per-merge/branch-end):
+`task test:fast` is the non-docker suite under `-n auto` and is byte-for-byte the CI `gate`'s
+pytest invocation; `task test:full` adds the two docker/dind acceptance files. The docker
+acceptance tests are intentionally **not** a required CI check (heavy + dind-flaky on GHA) —
+they run only at branch-end via the full tier. That is a *documented* exception, not a silent
+gap: `tests/test_test_tiers.py` enforces that every fast-tier `--ignore` is recorded with a
+reason, and that the local fast tier and the CI gate never drift. See
+`docs/maintenance/test-tiers.md`. (`uv run pytest -q` / `task test` still runs everything serially.)
+
 `uv` is the package manager — run all tooling via `uv run`. If `uv` is not found, make sure its install directory is on PATH (restart the session after a fresh install).
 
 ## Critical conventions
