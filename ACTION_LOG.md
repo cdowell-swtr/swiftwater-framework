@@ -4016,3 +4016,14 @@ check in branch protection; until then the structural `check_migrations.py` guar
 drops, type-narrowing alter_column). Sonnet author; controller fixed inline-comment spacing (ruff-format, package-name-free).
 Verified on render: **7/7** (5 rollback-guard incl. new P13 + 2 db-migrations) + README renders + format/lint clean. Review → branch-end Opus.
 (FWK67 SP3 build Task 12/14)
+
+#### #0294 · completed · FWK67 (SP3) Task 13 — lock c0004/c0005 control migrations in BATTERY_LOCKED_SRC · 2026-06-27
+Added the two new control-plane migration files to the integrity lock list (`src/framework_cli/integrity/classes.py`
+`BATTERY_LOCKED_SRC`, gated `("multitenantauth",)`): `migrations_control/versions/c0004_authz_event_resource_id.py` (Task 1) and
+`migrations_control/versions/c0005_tenant_lifecycle_event.py` (Task 2) — so the security-critical control schema for the SP3 audit
+columns/tables is full-file checksummed in every generated project (a consumer cannot silently fork them). Controller-authored
+(framework-source mechanical list addition). Verified at repo root in the framework venv: `test_auth_mechanism_lock.py` **5/5** (no
+mechanism file missing) + `framework integrity: OK` against a fresh `--with multitenantauth` render + ruff-format/check + mypy clean on
+classes.py. (Env note: the framework `.venv` console-script shebangs are stale from a prior repo relocation — `uv run python -m pytest`
+sidesteps it; `uv run framework`/`uv run ruff` are unaffected.) Review → branch-end Opus.
+(FWK67 SP3 build Task 13/14)
