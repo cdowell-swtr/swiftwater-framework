@@ -80,6 +80,24 @@ itself by it, so discovery is instance-scoped, not box-global:
   `__meta_docker_container_label_com_docker_compose_project` (== this instance) — else it scrapes
   every container on the box into the wrong Loki (cross-instance log bleed; PII risk via anon Grafana).
 
+### Labeled service set — which services the edge can route (amended; the box's Finding 1)
+
+A discovery edge routes **only labeled containers**. The template today labels **only `app`**
+(`base.yml.jinja:22-26`); the observability UIs carry **no** Traefik labels, so a discovery edge would
+route the app and *silently* route no observability. (The *prior static edge* routed obs via host-port
+mapping, which needs no labels — the Docker-discovery reframe dropped that routability. The tier table
+assumed obs was routable; the template never delivered it.) **A1 adds the discovery labels**
+(instance-parameterized Host rule + router/service names + the constraint label, exactly like `app`)
+to the browsable obs UIs:
+
+- **Labeled / routable:** `app` (8000), `grafana` (3000), `prometheus` (9090), `alertmanager` (9093)
+  — the browsable web UIs (the prior static edge's routed set).
+- **Not labeled / not edge-routed:** `loki`, `tempo`, the exporters, `otel-collector` — scrape /
+  query / ingest endpoints, not browsable UIs (Loki/Tempo are reached *through* Grafana as datasources).
+- Hostname forms per the tier table: tier-1 nested `<svc>.<slug>.localhost`; tier-2 flat
+  `<svc>-<slug>-<inst>.localhost`. **Tier-2 obs is opt-in** per work package (A2 chooses which of the
+  labeled obs UIs to expose).
+
 ### Hostname scheme & TLS (cert seam — box-side, static)
 
 Cert generation is box-specific (`DEC-0006` NOT-promoted) and stays **static**:
@@ -103,11 +121,17 @@ A1-internal:
   ambiguously across instances (silent cross-instance data corruption; creds are uniform `app/app`).
 - **Tier-3 transient instances MUST NOT join the shared edge network and MUST NOT mount the host
   docker socket** — disjoint by construction, not by hostname omission.
-- The A1 mechanism choice (shared `external` net vs. box `docker network connect`) is bound by: (a)
-  **standalone-safe** — the shipped/default render MUST NOT reference a pre-existing `external`
-  network (it would break every standalone `docker compose up` + prod/staging); (b) `task dev:edge`
-  **idempotently ensures** the network on up and **disconnects before `down`** (no active-endpoint
-  teardown deadlock).
+- **The shared edge network name is FROZEN: `swiftwater-shared-edge`** (amended; the box's Finding 2).
+  Edge-routed services attach to *that* named network, and the box edge's `--providers.docker.network`
+  uses the **identical string** — it is a cross-stream datum (A1 ↔ box), not A1-internal. The
+  `docker network connect`-per-stack alternative is **excluded** (it yields no single shared network
+  name the edge's provider can use). The name is bound by: (a) **standalone-safe** — the shipped/default
+  render MUST NOT reference a pre-existing `external` network (it would break every standalone
+  `docker compose up` + prod/staging), so the shared network is **edge-mode-gated** (referenced/attached
+  only under `task dev:edge`, never in the default `task dev`); (b) `task dev:edge` **idempotently
+  ensures** `swiftwater-shared-edge` on up and **disconnects before `down`** (no active-endpoint
+  teardown deadlock). A1 retains latitude only in *how* it ensures the network (e.g. an idempotent
+  `docker network create` vs. an edge-gated compose overlay), **not** in the name or the attach model.
 
 ### Host-port pool & budget
 
@@ -233,6 +257,28 @@ The experiment's second product (codify the workflow) starts in the carving itse
    no reviewer had read. Lesson: a seam review must reach **every repo the seam touches**, not just the
    one in hand. The upside: the mismatch turned the box into a fourth, cross-repo consumer of the same
    frozen contract — the strongest a-priori test available.
+4. **The cross-repo consumer caught what the panel couldn't — twice in one trip.** Building its
+   discovery edge to the frozen seam, the box surfaced two cross-stream data the contract left
+   unfrozen: (1) the **labeled service set** — the discovery reframe silently dropped obs routability
+   (the prior static edge routed obs by host-port, needing no labels; a discovery edge routes only
+   labeled services, and only `app` is labeled); (2) the **shared edge network name** — the box's
+   `--providers.docker.network` and A1's attach-step must use one identical string, yet the contract
+   had marked the network mechanism "A1-internal." Both are the same class as B1/B3 — the network and
+   the crossing datum kept being mis-scoped as A1-internal. The panel reviewed only the framework
+   template, so it *could not* catch these: they live at the seam between the template and a
+   *different repo's* edge. The loud-finding rule (surface, don't quietly adapt) is what made each
+   amendment clean. Operational confirmation of learning #3.
+
+5. **A shared monotonic counter is the collision class Git cannot catch.** All three worktrees
+   branched at `FWK91` and independently minted their sub-PLAN rows from `FWK92` — A1 took 92–99, A2
+   and B both took 92–96. Unlike a textual conflict, non-adjacent row inserts three-way-merge **clean**,
+   yielding silent triplicate IDs (and even an adjacent-line conflict "resolves" by keeping both
+   same-ID rows). This is the documented exception to *"shared files always conflict, that's what Git's
+   for"* (the rule that retired a-priori file-sandboxing): ID allocation from a shared counter isn't
+   textual, so Git is blind to it. Per the operator, **not** fixed by an a-priori partition — it's a
+   **per-stream merge-discipline override** (re-key your block to the next free range when you rebase to
+   merge), a limited-lifetime patch the standing protocol didn't contemplate, root-cured later by
+   Bearing's MCP PLAN service. The streams record the re-key step in their own internal merge-DAGs.
 
 ## PLAN mapping emitted by this carving
 
