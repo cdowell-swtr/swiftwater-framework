@@ -4027,3 +4027,19 @@ mechanism file missing) + `framework integrity: OK` against a fresh `--with mult
 classes.py. (Env note: the framework `.venv` console-script shebangs are stale from a prior repo relocation — `uv run python -m pytest`
 sidesteps it; `uv run framework`/`uv run ruff` are unaffected.) Review → branch-end Opus.
 (FWK67 SP3 build Task 13/14)
+
+#### #0295 · completed · FWK67 (SP3) Task 14 — DEC-0007 promote-up record + PLAN/ACTION_LOG (build complete) · 2026-06-27
+Wrote the SP3 Promote-Up Record `docs/superpowers/decisions/DEC-0007-multitenantauth-phase2-sp3-lifecycle-promote-up.md`
+(cross-repo/v4; generator=meridian, absorber=framework; sub-record of DEC-0003, sibling of DEC-0004/DEC-0005). Status
+**`designed` — absorber build COMPLETE; branch-end gate + combined SP2+SP3 release pending; flips to `adopted` only when
+Meridian deletes its lifecycle/authz fork**. Records: absorbed capability (lifecycle routes + resource-grant audit
+completeness + lifecycle audit), the panel-driven designed-fresh route shapes (Route A single-domain split + body-carried
+operator id, Route B bootstrap `ANY`, lazy-delete cooling), what was specialized (generic vocab only; `subtree_exists`/
+seal-walk explicitly NOT in this slice — deferred, Meridian-owned), the upstream-first migration sequence, and the
+conformance contract gating Meridian's fork-deletion (rendered authz/lifecycle suite + mechanism-lock integrity + the DV-5
+t2 per-leaf fitness test + the branch-end Layer-2 matrix). Updated the PLAN.md FWK67 row → **BUILD COMPLETE** (14 tasks
+enumerated; branch-end review + Layer-2 matrix + release pending). **This closes the FWK67 SP3 subagent-driven build (14/14
+tasks).** NEXT (controller, not a build task): branch-end all-Opus whole-branch review → Phase-2 Layer-2 all-Opus
+stance×focus matrix (scorecard `docs/superpowers/eval-scorecards/2026-06-27-fwk67-sp3-layer2-security-matrix.md`) →
+finishing-a-development-branch → PR → combined SP2+SP3 tagged release.
+(FWK67 SP3 build Task 14/14 — BUILD COMPLETE)
