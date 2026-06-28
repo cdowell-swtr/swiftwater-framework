@@ -208,6 +208,15 @@ Each worktree, on entry, takes its parent PLAN row + **this spec** and:
 4. **Builds and records its own local impl + merge-deps DAG.**
 5. **Executes one sub-PLAN at a time** (brainstorm → spec-if-needed → TDD → commit), `/clear`, next.
 6. **Respects the top-level merge-deps** when integrating back to `main`.
+7. **Reconciles numbering only at merge, in merge order — never mid-run.** A worktree's PLAN `FWK`
+   ids and `ACTION_LOG` entries are **provisional/local** while it runs (mid-run commits, even PRs,
+   keep them as-minted). At integration, **in merge order**, renumber the worktree's ids + log entries
+   to the next free monotonic block after `main`'s current max, so each worktree's contribution lands
+   as an **atomic subtree** — a contiguous renumbered block, not interleaved. **Do not reconcile
+   mid-run:** an earlier-merging sibling shifts the base, so any mid-run renumber goes stale and must be
+   redone at merge (wasted work — observed live). Monotonicity is a **merge-time invariant**, not a
+   during-run one. (Remedy for learning #5; a candidate to promote into `pi-convention.md` — see
+   `FWK92`.)
 
 ## Box-side preconditions & accepted dev-only risks
 
@@ -269,16 +278,20 @@ The experiment's second product (codify the workflow) starts in the carving itse
    *different repo's* edge. The loud-finding rule (surface, don't quietly adapt) is what made each
    amendment clean. Operational confirmation of learning #3.
 
-5. **A shared monotonic counter is the collision class Git cannot catch.** All three worktrees
-   branched at `FWK91` and independently minted their sub-PLAN rows from `FWK92` — A1 took 92–99, A2
-   and B both took 92–96. Unlike a textual conflict, non-adjacent row inserts three-way-merge **clean**,
-   yielding silent triplicate IDs (and even an adjacent-line conflict "resolves" by keeping both
-   same-ID rows). This is the documented exception to *"shared files always conflict, that's what Git's
-   for"* (the rule that retired a-priori file-sandboxing): ID allocation from a shared counter isn't
-   textual, so Git is blind to it. Per the operator, **not** fixed by an a-priori partition — it's a
-   **per-stream merge-discipline override** (re-key your block to the next free range when you rebase to
-   merge), a limited-lifetime patch the standing protocol didn't contemplate, root-cured later by
-   Bearing's MCP PLAN service. The streams record the re-key step in their own internal merge-DAGs.
+5. **A shared monotonic counter is the collision class Git cannot catch — and it joins the panel
+   thread.** All three worktrees branched at `FWK91` and independently minted their sub-PLAN rows from
+   `FWK92` (A1: 92–99; A2/B: 92–96). Unlike a textual conflict, non-adjacent row inserts three-way-merge
+   **clean** → silent triplicate IDs (an adjacent-line conflict "resolves" by keeping both same-ID rows).
+   This is the documented exception to *"shared files always conflict, that's what Git's for"* (the rule
+   that retired a-priori file-sandboxing): allocation from a shared counter isn't textual, so Git is
+   blind to it. It is the **same meta-pattern as learning #1** — a shared-resource collision class found
+   *reactively*, here post-fork — so it folds into the adversarial-panel thread: `FWK91`'s generalized
+   lens set gains a **shared-namespace / monotonic-allocation lens** (IDs, host ports, project names, any
+   global counter), which would have flagged it at the carving freeze. The remedy is **not** an a-priori
+   partition (the standing protocol didn't contemplate parallel allocation; Bearing's MCP PLAN service
+   root-cures it) but a **binding merge-time reconciliation rule** — see *Per-worktree protocol* step 7:
+   renumber at merge, in merge order, never mid-run. A candidate to promote into `pi-convention.md` once
+   the experiment validates it.
 
 ## PLAN mapping emitted by this carving
 
