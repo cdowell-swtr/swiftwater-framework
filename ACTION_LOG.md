@@ -3944,3 +3944,23 @@ both package-name-free). Verified on render: **33/33** in test_tenant_role_route
 revoke-204, plain-member-403, wrong-domain-400) + fitness 6/6 + format/lint clean. Test reads the grant event via `_latest_authz_event`
 (JOIN role for domain; `authz_event` has no `role_domain` column; ORDER BY the real `at` column). Review → branch-end Opus.
 (FWK67 SP3 build Task 7/14)
+
+#### #0289 · completed · FWK67 (SP3) Task 8 — Route C rename-slug + lazy-delete (cooling window) · 2026-06-27
+Added `PATCH /tenants/{tenant_id}/slug` (guard `Perm("tenant:rename-slug", on="tenant:{tenant_id}")`, tenant-admin) to the
+locked `routes/tenants.py`: generic-409 collision pre-check via `resolve_slug` (live OR cooling → `_GENERIC_SLUG_TAKEN`,
+never echoes the colliding id, Layer-2 A), then **404-before-mutate** (fetch tenant, None→404, capture old slug) → `rename_slug`
+→ `record_lifecycle_event("rename", detail="old→new")`. Extended the existing `registry.rename_slug` with a **lazy-delete**:
+after `_assert_slug_claimable` passes (so any surviving history row for the new slug is provably EXPIRED), call the new
+`control_repo.delete_slug_history(session, slug)` to clear the stale row on reclaim. `Tenant.id` immutable (id↔slug-desync).
+**Corrected two brief bugs** (advisor-flagged): (1) brief's `s.get(...).slug` would AttributeError→500 on an absent tenant
+before the LookupError→404 could fire → restructured to fetch-and-None-check first; (2) brief's `resolve_slug(...) != tenant_id`
+pre-check compared a `(tid, bool)` tuple to a str → replaced with the simple `is not None` form (spec §line159: claimability via
+resolve_slug; own-cooling reclaim is NOT a requirement). Used the existing `SLUG_COOLING_DAYS` constant (Task 9 promotes it).
+Extended the lifecycle `_seed_vocab` with `tenant:rename-slug` (+tenant.admin grant — else the guard 403s the founder). Sonnet
+author; controller back-ported ruff-format (tenants.py call-wrap + 2 package-name-free test wraps). Verified on render: **12/12**
+lifecycle-route (7 prior + 5 new: rename-200+history+event, cooling-slug-409, lazy-delete-own-expired, missing-tenant-404,
+old-slug-doesn't-route) + **121/121** regression (provision/seed/fitness + slug/tenancy/registry/control -k) + format/lint clean.
+NOTE for branch-end Opus: the route's `if tenant is None: 404` is defensive — the guard's membership-precondition 404s a
+non-existent/non-member tenant first, so the route-body None-check is only reachable on a TOCTOU delete (still correct, no 500).
+Review → branch-end Opus.
+(FWK67 SP3 build Task 8/14)

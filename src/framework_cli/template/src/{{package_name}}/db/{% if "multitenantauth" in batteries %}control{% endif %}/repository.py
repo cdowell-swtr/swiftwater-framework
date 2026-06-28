@@ -106,3 +106,11 @@ def is_slug_cooling(session: Session, slug: str) -> bool:
     if row.reserved_until is None:
         return False
     return row.reserved_until > datetime.now(timezone.utc)
+
+
+def delete_slug_history(session: Session, slug: str) -> None:
+    """Delete a TenantSlugHistory row by slug if present (lazy-delete on reclaim). Caller commits."""
+    row = session.get(TenantSlugHistory, slug)
+    if row is not None:
+        session.delete(row)
+        session.flush()

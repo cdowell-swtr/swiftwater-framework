@@ -13,6 +13,7 @@ Non-member routes return 404 by design (membership precondition runs before perm
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi import FastAPI
@@ -80,6 +81,7 @@ def _seed_vocab(s: Session) -> None:
         ("tenant:read", "tenant"),
         ("tenant:manage-members", "tenant"),
         ("tenant:deactivate", "tenant"),
+        ("tenant:rename-slug", "tenant"),
         ("platform:manage-tenant-lifecycle", "platform"),
     ]
     for name, domain in perms:
@@ -95,7 +97,12 @@ def _seed_vocab(s: Session) -> None:
         (
             "tenant.admin",
             "tenant",
-            {"tenant:read", "tenant:manage-members", "tenant:deactivate"},
+            {
+                "tenant:read",
+                "tenant:manage-members",
+                "tenant:deactivate",
+                "tenant:rename-slug",
+            },
         ),
         ("platform.admin", "platform", {"platform:manage-tenant-lifecycle"}),
     ]
@@ -260,6 +267,62 @@ def _grant_platform_admin(lc_engine: Engine, email_canonical: str) -> None:
         s.commit()
 
 
+# ── rename-slug helpers ───────────────────────────────────────────────────────
+
+
+def _tenant_slug(lc_engine: Engine, tenant_id: str) -> str:
+    """Return the current slug for tenant_id (direct DB read)."""
+    with Session(lc_engine) as s:
+        return s.execute(
+            text("SELECT slug FROM tenant WHERE id = :tid"), {"tid": tenant_id}
+        ).scalar_one()
+
+
+def _slug_history_has(lc_engine: Engine, slug: str) -> bool:
+    """Return True if tenant_slug_history has a row for slug."""
+    with Session(lc_engine) as s:
+        row = s.execute(
+            text("SELECT 1 FROM tenant_slug_history WHERE slug = :slug"), {"slug": slug}
+        ).scalar_one_or_none()
+        return row is not None
+
+
+def _lifecycle_actions(lc_engine: Engine, tenant_id: str) -> list[str]:
+    """Return list of actions from tenant_lifecycle_event for tenant_id, ordered by at."""
+    with Session(lc_engine) as s:
+        rows = (
+            s.execute(
+                text(
+                    "SELECT action FROM tenant_lifecycle_event "
+                    "WHERE tenant_id = :tid ORDER BY at"
+                ),
+                {"tid": tenant_id},
+            )
+            .scalars()
+            .all()
+        )
+        return list(rows)
+
+
+def _retire_slug(lc_engine: Engine, slug: str, tenant_id: str, days: int) -> None:
+    """Insert a tenant_slug_history row directly (FK: tenant must already exist).
+
+    days > 0  → cooling (reserved_until in the future)
+    days < 0  → expired (reserved_until in the past)
+    """
+    reserved_until = datetime.now(timezone.utc) + timedelta(days=days)
+    with Session(lc_engine) as s:
+        s.execute(
+            text(
+                "INSERT INTO tenant_slug_history (slug, tenant_id, reserved_until) "
+                "VALUES (:slug, :tid, :ru) ON CONFLICT (slug) DO UPDATE "
+                "SET tenant_id = excluded.tenant_id, reserved_until = excluded.reserved_until"
+            ),
+            {"slug": slug, "tid": tenant_id, "ru": reserved_until},
+        )
+        s.commit()
+
+
 # ── POST /tenants/suspend ─────────────────────────────────────────────────────
 
 
@@ -376,3 +439,105 @@ def test_tenant_admin_cannot_reactivate(probe: TestClient, lc_engine: Engine) ->
         json={"tenant_id": target_tid},
     )
     assert r.status_code == 403
+
+
+# ── PATCH /tenants/{tenant_id}/slug ──────────────────────────────────────────
+
+
+def test_rename_records_history_and_event(probe: TestClient, lc_engine: Engine) -> None:
+    """Founder renames slug: 200 + new slug set + old slug in history + lifecycle event."""
+    # RED: no PATCH route or tenant:rename-slug perm → will 404/405/403 before this passes.
+    a_tid, a_cookie = _signup_and_login(probe, "founder@acme-rename.com", "acme-orig")
+
+    r = probe.patch(
+        f"/tenants/{a_tid}/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "acme-corp"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["tenant_id"] == a_tid
+    assert body["slug"] == "acme-corp"
+
+    assert _tenant_slug(lc_engine, a_tid) == "acme-corp"
+    assert _slug_history_has(lc_engine, "acme-orig") is True
+    assert _lifecycle_actions(lc_engine, a_tid)[-1] == "rename"
+
+
+def test_rename_to_cooling_slug_is_409(probe: TestClient, lc_engine: Engine) -> None:
+    """Attempting to rename to a cooling (reserved) slug → 409."""
+    # RED: no route → 404/405 before this passes.
+    a_tid, a_cookie = _signup_and_login(probe, "founder@acme-src.com", "acme-src")
+    # Signup B so the FK tenant_id constraint is satisfied for the slug history row.
+    b_tid, _ = _signup_and_login(probe, "founder@acme-b-cooling.com", "acme-b-cooling")
+
+    _retire_slug(lc_engine, "reserved-x", b_tid, days=30)  # still cooling
+
+    r = probe.patch(
+        f"/tenants/{a_tid}/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "reserved-x"},
+    )
+    assert r.status_code == 409, r.text
+
+
+def test_rename_lazy_deletes_own_expired_history(
+    probe: TestClient, lc_engine: Engine
+) -> None:
+    """Reclaiming an expired history row for new_slug lazy-deletes that row on commit."""
+    # RED: no route or lazy-delete logic → row persists / 404 before this passes.
+    a_tid, a_cookie = _signup_and_login(probe, "founder@acme-expired.com", "acme-orig2")
+
+    # Insert an EXPIRED history row for the slug we want to reclaim (A's own old slug).
+    _retire_slug(lc_engine, "want-back", a_tid, days=-1)
+
+    r = probe.patch(
+        f"/tenants/{a_tid}/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "want-back"},
+    )
+    assert r.status_code == 200, r.text
+    assert _tenant_slug(lc_engine, a_tid) == "want-back"
+    # Expired row must be gone — lazy-deleted on reclaim.
+    assert _slug_history_has(lc_engine, "want-back") is False
+
+
+def test_rename_missing_tenant_is_404(probe: TestClient, lc_engine: Engine) -> None:
+    """PATCH with a bogus tenant_id (non-member) → 404, never 500.
+
+    The guard returns 404 for a non-member/unknown tenant — which is the desired
+    behaviour: proves the old brief's .slug-on-None AttributeError 500 never fires.
+    """
+    # RED: no route → 404 (method-not-found) or 405 before this passes.
+    _, a_cookie = _signup_and_login(probe, "founder@acme-bogus.com", "acme-bogus")
+
+    r = probe.patch(
+        "/tenants/ffffffffffffffffffffffffffffffff/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "whatever-slug"},
+    )
+    assert r.status_code == 404, r.text
+
+
+def test_old_slug_does_not_route_after_rename(
+    probe: TestClient, lc_engine: Engine
+) -> None:
+    """After rename A→B, using the OLD slug as a path id returns 404 (id↔slug-desync)."""
+    # RED: no route → 405; after route added confirms slugs are never treated as ids.
+    a_tid, a_cookie = _signup_and_login(probe, "founder@acme-desync.com", "acme-desync")
+
+    # Rename successfully first.
+    r = probe.patch(
+        f"/tenants/{a_tid}/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "acme-desync-new"},
+    )
+    assert r.status_code == 200, r.text
+
+    # Now attempt to use the OLD slug as a tenant_id path segment.
+    r = probe.patch(
+        "/tenants/acme-desync/slug",
+        headers=_headers(a_cookie),
+        json={"slug": "anything"},
+    )
+    assert r.status_code == 404, r.text

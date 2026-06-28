@@ -200,6 +200,10 @@ def rename_slug(
     _validate_slug(new_slug)
     _assert_slug_claimable(session, new_slug)
 
+    # Lazy-delete any EXPIRED history row for new_slug (claimable guarantees it is not
+    # live or cooling; deleting it here keeps the slug_history table clean on reclaim).
+    control_repo.delete_slug_history(session, new_slug)
+
     t = control_repo.get_tenant(session, tenant_id)
     if t is None:
         raise LookupError(f"tenant {tenant_id!r} not found")

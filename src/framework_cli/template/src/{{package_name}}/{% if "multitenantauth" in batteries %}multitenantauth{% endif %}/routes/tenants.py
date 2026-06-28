@@ -37,6 +37,7 @@ from ..tenancy.registry import (
     reactivate_tenant,
     record_lifecycle_event,
     register_tenant,
+    rename_slug,
     resolve_slug,
 )
 
@@ -61,6 +62,10 @@ class ProvisionTenantBody(BaseModel):
 
 class TenantLifecycleBody(BaseModel):
     tenant_id: str = Field(max_length=64)
+
+
+class RenameSlugBody(BaseModel):
+    slug: str = Field(max_length=63)
 
 
 class AddMemberBody(BaseModel):
@@ -188,6 +193,44 @@ def deactivate_tenant_route(
     except LookupError:
         s.rollback()
         raise HTTPException(status_code=404, detail="Tenant not found") from None
+
+
+@router.patch(
+    "/{tenant_id}/slug",
+    dependencies=[Depends(guard(Perm("tenant:rename-slug", on="tenant:{tenant_id}")))],
+)
+def rename_slug_route(
+    tenant_id: str,
+    body: RenameSlugBody,
+    s: Session = Depends(control_session),
+    user: m.AppUser = Depends(current_user),
+) -> dict:
+    """Rename the tenant's slug (tenant-admin). Old slug retires into a cooling window."""
+    # Generic-409 pre-check (live OR cooling → taken); never echo the colliding tenant's id (Layer-2 A).
+    if resolve_slug(s, body.slug) is not None:
+        raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN)
+    # Fetch BEFORE mutating so a missing tenant is a clean 404, not an AttributeError 500.
+    tenant = s.get(m.Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    old = tenant.slug
+    try:
+        rename_slug(s, tenant_id, body.slug)
+        record_lifecycle_event(
+            s,
+            actor_id=user.id,
+            tenant_id=tenant_id,
+            action="rename",
+            detail=f"{old}→{body.slug}",
+        )
+        s.commit()
+    except ValueError:
+        s.rollback()
+        raise HTTPException(status_code=400, detail=_GENERIC_BAD_REQUEST) from None
+    except IntegrityError:
+        s.rollback()
+        raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN) from None
+    return {"tenant_id": tenant_id, "slug": body.slug}
 
 
 @router.get(
