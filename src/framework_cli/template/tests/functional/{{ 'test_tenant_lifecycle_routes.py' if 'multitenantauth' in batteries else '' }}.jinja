@@ -1,0 +1,240 @@
+"""Functional tests for the tenant lifecycle deactivate route (FWK67 SP3 Route A.1).
+
+Coverage:
+- POST /tenants/{tenant_id}/deactivate — 204 (tenant.admin with tenant:deactivate),
+                                          403 (tenant.member without tenant:deactivate)
+
+The probe app mounts auth + tenants routers against a real test control DB so guards,
+sessions, memberships, and lifecycle events are exercised end-to-end.
+
+Non-member routes return 404 by design (membership precondition runs before perm check).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine, create_engine, make_url, select, text
+from sqlalchemy.orm import Session
+
+from {{ package_name }}.db.control.base import ControlBase
+from {{ package_name }}.multitenantauth.deps import control_session
+from {{ package_name }}.multitenantauth.routes.auth import router as auth_router
+from {{ package_name }}.multitenantauth.routes.tenants import router as tenants_router
+
+pytestmark = pytest.mark.usefixtures("_clean_lc")
+
+# ── control-plane DB + probe app fixtures ──────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def lc_engine(pg_url: str) -> Iterator[Engine]:
+    _ctrl_db = "{{ package_name }}_lc_test"
+    base = make_url(pg_url)
+    ctrl_url = base.set(database=_ctrl_db).render_as_string(hide_password=False)
+    maint_url = base.set(database="postgres").render_as_string(hide_password=False)
+    maint = create_engine(maint_url, isolation_level="AUTOCOMMIT")
+    with maint.connect() as c:
+        if not c.execute(
+            text(f"SELECT 1 FROM pg_database WHERE datname='{_ctrl_db}'")
+        ).scalar():
+            c.execute(text(f'CREATE DATABASE "{_ctrl_db}"'))
+    maint.dispose()
+
+    engine = create_engine(ctrl_url)
+    ControlBase.metadata.create_all(engine)
+    yield engine
+    engine.dispose()
+
+
+_LC_TABLES = (
+    "invite_token, session, authz_event, platform_role_assignment, "
+    "resource_role_assignment, tenant_role_assignment, tenant_membership, "
+    "tenant_lifecycle_event, role_permission, permission, role, app_user, "
+    "tenant, tenant_slug_history"
+)
+
+
+@pytest.fixture
+def _clean_lc(lc_engine: Engine) -> Iterator[None]:
+    yield
+    with lc_engine.begin() as conn:
+        conn.execute(text(f"TRUNCATE TABLE {_LC_TABLES} CASCADE"))
+
+
+def _seed_vocab(s: Session) -> None:
+    """Seed the minimum roles/permissions the lifecycle routes need.
+
+    ``tenant.admin`` includes ``tenant:deactivate`` (Task 4 grant bundled here
+    for isolation — the generated project's real roles DB migration owns this
+    in production).
+    """
+    from uuid import uuid4
+
+    perms = [
+        ("tenant:read", "tenant"),
+        ("tenant:manage-members", "tenant"),
+        ("tenant:deactivate", "tenant"),
+    ]
+    for name, domain in perms:
+        s.execute(
+            text(
+                "INSERT INTO permission (name, domain, description, is_active) "
+                "VALUES (:name, :domain, :desc, true) ON CONFLICT DO NOTHING"
+            ),
+            {"name": name, "domain": domain, "desc": name},
+        )
+    roles_def = [
+        ("tenant.member", "tenant", {"tenant:read"}),
+        (
+            "tenant.admin",
+            "tenant",
+            {"tenant:read", "tenant:manage-members", "tenant:deactivate"},
+        ),
+    ]
+    role_ids: dict[str, object] = {}
+    for rname, rdomain, _ in roles_def:
+        s.execute(
+            text(
+                "INSERT INTO role (id, name, domain, description, is_builtin) "
+                "VALUES (:id, :name, :domain, :desc, true) ON CONFLICT (name) DO NOTHING"
+            ),
+            {"id": uuid4(), "name": rname, "domain": rdomain, "desc": rname},
+        )
+        role_ids[rname] = s.execute(
+            text("SELECT id FROM role WHERE name=:name"), {"name": rname}
+        ).scalar_one()
+    for rname, _, grants in roles_def:
+        for pname in grants:
+            s.execute(
+                text(
+                    "INSERT INTO role_permission (role_id, permission_name) "
+                    "VALUES (:rid, :pname) ON CONFLICT DO NOTHING"
+                ),
+                {"rid": role_ids[rname], "pname": pname},
+            )
+
+
+def _build_probe(lc_engine: Engine, monkeypatch) -> TestClient:
+    monkeypatch.setenv("APP_ENVIRONMENT", "dev")
+    monkeypatch.setenv("APP_SESSION_PEPPER", "lc-session-pepper")
+    monkeypatch.setenv("APP_PASSWORD_PEPPER", "lc-password-pepper")
+    monkeypatch.setenv("APP_SESSION_COOKIE_SECURE", "false")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    with Session(lc_engine) as s:
+        _seed_vocab(s)
+        s.commit()
+
+    app = FastAPI()
+    app.include_router(auth_router)
+    app.include_router(tenants_router)
+
+    def _cs() -> Iterator[Session]:
+        with Session(lc_engine) as s:
+            yield s
+
+    app.dependency_overrides[control_session] = _cs
+    return TestClient(app)
+
+
+@pytest.fixture
+def probe(lc_engine: Engine, monkeypatch) -> Iterator[TestClient]:
+    client = _build_probe(lc_engine, monkeypatch)
+    try:
+        yield client
+    finally:
+        client.close()
+        from {{ package_name }}.config.settings import get_settings
+
+        get_settings.cache_clear()
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _signup_and_login(client: TestClient, email: str, slug: str) -> tuple[str, str]:
+    """Signup a founder+tenant and return (tenant_id, cookie_header)."""
+    r = client.post(
+        "/auth/signup",
+        json={
+            "email": email,
+            "password": "a-secure-password-12",
+            "tenant_name": slug.title(),
+            "slug": slug,
+        },
+    )
+    assert r.status_code == 201, r.text
+    tenant_id: str = r.json()["tenant_id"]
+    cookie = r.headers["set-cookie"].split(";")[0]
+    return tenant_id, cookie
+
+
+def _headers(cookie: str) -> dict:
+    return {"Cookie": cookie}
+
+
+def _make_plain_member(
+    probe: TestClient, admin_cookie: str, tenant_id: str, user_id: object
+) -> str:
+    """Admin adds *user_id* as a plain ``tenant.member`` of *tenant_id*; return membership_id."""
+    r = probe.post(
+        f"/tenants/{tenant_id}/members",
+        headers=_headers(admin_cookie),
+        json={"user_id": str(user_id), "role_name": "tenant.member"},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["membership_id"]
+
+
+# ── POST /tenants/{tenant_id}/deactivate ─────────────────────────────────────
+
+
+def test_tenant_admin_can_self_deactivate(probe: TestClient, lc_engine: Engine) -> None:
+    """Founder (tenant.admin, holds tenant:deactivate) → 204; tenant status flips to
+    'suspended' and a TenantLifecycleEvent with action='suspend' is recorded."""
+    tenant_id, cookie = _signup_and_login(probe, "admin@acme-lc.com", "acme-lc")
+
+    r = probe.post(f"/tenants/{tenant_id}/deactivate", headers=_headers(cookie))
+
+    assert r.status_code == 204
+
+    with Session(lc_engine) as s:
+        from {{ package_name }}.db.control import models as m
+
+        tenant = s.get(m.Tenant, tenant_id)
+        assert tenant is not None
+        assert tenant.status == "suspended"
+
+        events = list(
+            s.scalars(
+                select(m.TenantLifecycleEvent)
+                .where(m.TenantLifecycleEvent.tenant_id == tenant_id)
+                .order_by(m.TenantLifecycleEvent.at)
+            ).all()
+        )
+        assert len(events) == 1
+        assert events[0].action == "suspend"
+
+
+def test_member_without_perm_cannot_deactivate(
+    probe: TestClient, lc_engine: Engine
+) -> None:
+    """A plain tenant.member (no tenant:deactivate) → 403."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@acme2-lc.com", "acme2-lc")
+    _, member_cookie = _signup_and_login(probe, "member@acme2m-lc.com", "acme2m-lc")
+
+    with Session(lc_engine) as s:
+        member_uid = s.execute(
+            text("SELECT id FROM app_user WHERE email_canonical='member@acme2m-lc.com'")
+        ).scalar_one()
+
+    _make_plain_member(probe, admin_cookie, admin_tid, member_uid)
+
+    r = probe.post(f"/tenants/{admin_tid}/deactivate", headers=_headers(member_cookie))
+    assert r.status_code == 403

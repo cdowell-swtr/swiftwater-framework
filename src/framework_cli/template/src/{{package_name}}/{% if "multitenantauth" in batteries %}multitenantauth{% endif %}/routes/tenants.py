@@ -31,7 +31,13 @@ from ..authz.expr import Perm
 from ..authz.service import add_membership, remove_member
 from ..deps import control_session, current_user, guard
 from ..errors import DomainMismatchError, LastAdminError
-from ..tenancy.registry import activate_tenant, register_tenant, resolve_slug
+from ..tenancy.registry import (
+    activate_tenant,
+    deactivate_tenant,
+    record_lifecycle_event,
+    register_tenant,
+    resolve_slug,
+)
 
 router = APIRouter(prefix="/tenants")
 
@@ -104,6 +110,28 @@ def provision_tenant(
         s.rollback()
         raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN) from None
     return {"tenant_id": tenant.id, "slug": body.slug}
+
+
+@router.post(
+    "/{tenant_id}/deactivate",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(guard(Perm("tenant:deactivate", on="tenant:{tenant_id}")))],
+)
+def deactivate_tenant_route(
+    tenant_id: str,
+    s: Session = Depends(control_session),
+    user: m.AppUser = Depends(current_user),
+) -> None:
+    """Tenant-admin self-offboard: suspend the tenant (reversible). Reactivation is operator-only."""
+    try:
+        deactivate_tenant(s, tenant_id)
+        record_lifecycle_event(
+            s, actor_id=user.id, tenant_id=tenant_id, action="suspend"
+        )
+        s.commit()
+    except LookupError:
+        s.rollback()
+        raise HTTPException(status_code=404, detail="Tenant not found") from None
 
 
 @router.get(

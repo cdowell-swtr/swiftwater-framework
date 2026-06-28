@@ -130,6 +130,14 @@ def register_tenant(
     )
 
 
+def deactivate_tenant(s: Session, tenant_id: str) -> None:
+    """Mark a tenant suspended (reversible, control-plane). Raises LookupError if absent."""
+    tenant = s.get(m.Tenant, tenant_id)
+    if tenant is None:
+        raise LookupError(tenant_id)
+    tenant.status = "suspended"
+
+
 def activate_tenant(session: Session, tenant_id: str) -> Tenant:
     """Flip the tenant status to 'active' and return the updated Tenant.
 

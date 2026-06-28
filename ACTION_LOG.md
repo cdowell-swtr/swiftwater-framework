@@ -3909,3 +3909,11 @@ CMP-1 false-closure). Controller-authored; **updated the coupled existing assert
 (back-ported from the render — [[ruff-format-check-after-inline-edits]]; their rendered output wasn't
 format-clean). Review → branch-end Opus.
 (FWK67 SP3 build Task 4/14)
+
+#### #0286 · completed · FWK67 (SP3) Task 5 — Route A.1 tenant-admin self-deactivate · 2026-06-27
+Added `registry.deactivate_tenant` (status→suspended, LookupError if absent) + `POST /tenants/{tenant_id}/deactivate`
+guarded `Perm("tenant:deactivate", on="tenant:{tenant_id}")`, records a `suspend` lifecycle event, 404-safe. Sonnet
+author; controller fixed an `occurred_at`→`at` column-name guess + ruff-format (back-ported tenants.py + 3 test
+line-joins). Verified on render: **2/2** route tests (admin 204+suspended+event; member 403) + fitness 6/6 + format
+clean (135 files). Review → branch-end Opus.
+(FWK67 SP3 build Task 5/14)
