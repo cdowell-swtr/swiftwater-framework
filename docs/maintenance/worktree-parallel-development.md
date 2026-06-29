@@ -243,3 +243,32 @@ shape **how you run** a worktree experiment, surfaced here so they aren't buried
 And two about the seam itself, for the *next* carving: **run an adversarial panel before freezing**
 (`FWK91`; §1), and **make that panel reach every repo the seam touches** — the load-bearing assumption
 may live in a repo no reviewer has read.
+
+### Second experiment (2026-06-29) — execution-validated additions
+
+The full record is the second carving spec
+(`docs/superpowers/specs/2026-06-29-second-worktree-parallel-experiment-carving-design.md`, §Learnings +
+§Panel record). What running it end-to-end (three streams → PRs #103/#104/#105) *added*:
+
+4. **Milestone M is lived, not just designed.** The re-key-then-merge protocol (§7) ran across three
+   merges: each later stream **self-reconciled** its FWK IDs + ACTION_LOG numbers above the running
+   high-water mark (ids 118→131, log #0375→#0397) with zero collisions. Learning #1's "plan for the
+   re-key" resolves to: streams do it themselves, at merge, in merge order.
+5. **A carving can need more than one adversarial pass.** The draft's first panel killed a *phantom*
+   seam (an invented signal-coupling with no data flow in the code) and recut three streams to two; a
+   **second** panel caught that recut as an *over-correction* (file-disjoint work needlessly serialized)
+   and restored three. One pass is not always enough — and "no coupling" means **more** parallelizable,
+   never "serialize."
+6. **Three exclusion heuristics that look principled but aren't.** Don't hold a row out of a parallel run
+   for: *"needs a brainstorm"* (worktrees brainstorm internally), *"touches a frozen contract"* (the
+   freeze may be transient/expired, or the change is contract *completion*), or *a soft dependency*
+   (that's a placement signal → the depended-on stream's tail, e.g. `FWK48` at S2's tail).
+7. **The panel is fractal.** A stream touching a safety-critical or contract surface runs its *own*
+   layer-2 panel before changing it. `FWK116`'s caught **3 real holes and rejected the author's first
+   namespace scheme** — the carving-panel value, one level down. Not ceremony.
+8. **Kill debt in-stream.** A big row decomposes into top-level sub-rows that **all land in the stream**
+   (`FWK48`→118-120, `FWK116`→128/129); deferring the hard halves to future rows perpetuates the debt
+   the experiment exists to kill.
+9. **Per-stream branch-end adversarial review earns its keep at integration.** A focused review of each
+   completed stream caught a real provenance gap in S2 (closed in-stream as `FWK121/122`) and confirmed
+   S1's contract-completion was disjoint-by-construction — *before* merge, not after.
