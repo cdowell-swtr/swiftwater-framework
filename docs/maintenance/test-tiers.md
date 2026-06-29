@@ -19,13 +19,9 @@ stacks don't contend on the daemon.
 `task test` / `uv run pytest -q` still runs **everything, serially** — kept as a simple
 escape hatch; it is not a tier.
 
-> **Tier-3 namespace migration (`FWK116`, post-v0.4.4).** The full tier's transient acceptance
-> stacks were renamed `<slug>-t-<uuid>` → `<slug>-<inst>-t-<uuid>` (a per-worktree namespace, so
-> concurrent runs across worktrees no longer reap each other's stacks). The start-sweep recognizes
-> only the **new** form, so if you ran `task test:full` on a **≤ v0.4.4** checkout and then switch to
-> a newer one, any leftover old-format `<slug>-t-<uuid>` stacks are **not** auto-reaped — clear them
-> once by hand (e.g. `docker ps -aq --filter name=<slug>-t- | xargs -r docker rm -f`). One-time only;
-> new-format stacks self-clean.
+> The full tier's transient acceptance stacks are namespaced `<slug>-<inst>-t-<uuid>`
+> (`FWK116`) — a per-worktree namespace, so concurrent runs across worktrees never reap each
+> other's stacks. The start-sweep recognizes this form; new-format stacks self-clean.
 
 ## The coverage contract (why there is no silent gap)
 
