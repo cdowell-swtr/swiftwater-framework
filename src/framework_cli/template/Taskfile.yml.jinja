@@ -226,6 +226,11 @@ tasks:
     desc: Encrypted backup of every active durable store to $BACKUP_DEST (see infra/backup/README.md).
     cmds:
       - ./infra/backup/backup.sh
+
+  backup:prune:
+    desc: Apply GFS-lite retention to $BACKUP_DEST (also run automatically by `task backup`).
+    cmds:
+      - ./infra/backup/prune.sh
 {%- if "multitenantauth" in batteries %}
 
   db:migrate:all:

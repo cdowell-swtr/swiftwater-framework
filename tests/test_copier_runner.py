@@ -5555,3 +5555,11 @@ def test_backup_core_renders_in_baseline(tmp_path):
     assert "BACKUP_DEST=" in env and "BACKUP_PUBKEY=" in env
     task = (dest / "Taskfile.yml").read_text()
     assert "backup:" in task
+
+
+def test_prune_renders_with_retention(tmp_path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": []})
+    prune = (dest / "infra/backup/prune.sh").read_text()
+    assert "BACKUP_RETENTION_DAILY" in prune and "BACKUP_RETENTION_WEEKLY" in prune
+    assert (dest / "Taskfile.yml").read_text().count("backup:prune") >= 1

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# GFS-lite retention for $BACKUP_DEST: keep the newest $BACKUP_RETENTION_DAILY dumps per store,
+# plus one per ISO-week for the last $BACKUP_RETENTION_WEEKLY weeks; delete the rest.
+set -euo pipefail
+: "${BACKUP_DEST:=./backups}"
+: "${BACKUP_RETENTION_DAILY:=7}"
+: "${BACKUP_RETENTION_WEEKLY:=4}"
+slug="{{ project_slug }}"
+
+{% raw %}prune_store() {  # $1 = glob prefix, e.g. demo-postgres
+  local prefix="$1"
+  mapfile -t all < <(ls -1t "$BACKUP_DEST/${prefix}-"*.age 2>/dev/null || true)
+  [ "${#all[@]}" -gt 0 ] || return 0
+  declare -A keep=()
+  # newest N daily
+  for f in "${all[@]:0:$BACKUP_RETENTION_DAILY}"; do keep["$f"]=1; done
+  # one per ISO-week for the last M weeks (filename ts is ...-YYYYMMDDThhmmssZ...)
+  declare -A week_seen=()
+  for f in "${all[@]}"; do
+    local ts week
+    ts="$(basename "$f" | grep -oE '[0-9]{8}T[0-9]{6}Z' | head -1)" || continue
+    week="$(date -u -d "${ts:0:8}" +%G-%V 2>/dev/null || echo "")"
+    [ -n "$week" ] || continue
+    if [ -z "${week_seen[$week]:-}" ] && [ "${#week_seen[@]}" -lt "$BACKUP_RETENTION_WEEKLY" ]; then
+      week_seen[$week]=1; keep["$f"]=1
+    fi
+  done
+  for f in "${all[@]}"; do [ -n "${keep[$f]:-}" ] || { echo "prune: rm $(basename "$f")"; rm -f "$f"; }; done
+}
+{% endraw %}prune_store "${slug}-postgres"
+{%- if "mongodb" in batteries %}
+prune_store "${slug}-mongo"
+{%- endif %}
