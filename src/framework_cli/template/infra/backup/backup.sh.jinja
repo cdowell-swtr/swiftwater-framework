@@ -15,13 +15,33 @@ mkdir -p "$BACKUP_DEST"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 slug="{{ project_slug }}"
 
+dump_postgres() {
+  local out="$BACKUP_DEST/${slug}-postgres-${ts}.dump.age" tmp
+  tmp="$(mktemp "${BACKUP_DEST}/.${slug}-postgres-${ts}.XXXXXX")"
+  if ./scripts/compose.sh exec -T postgres pg_dump -Fc -U app app | age -r "$BACKUP_PUBKEY" > "$tmp"; then
+    mv "$tmp" "$out"
+  else
+    rm -f "$tmp"; echo "backup: postgres dump FAILED" >&2; return 1
+  fi
+}
+{%- if "mongodb" in batteries %}
+
+dump_mongo() {
+  local out="$BACKUP_DEST/${slug}-mongo-${ts}.archive.gz.age" tmp
+  tmp="$(mktemp "${BACKUP_DEST}/.${slug}-mongo-${ts}.XXXXXX")"
+  if ./scripts/compose.sh exec -T mongo mongodump --archive --gzip --db app | age -r "$BACKUP_PUBKEY" > "$tmp"; then
+    mv "$tmp" "$out"
+  else
+    rm -f "$tmp"; echo "backup: mongo dump FAILED" >&2; return 1
+  fi
+}
+{%- endif %}
+
 echo "backup: postgres -> $BACKUP_DEST"
-./scripts/compose.sh exec -T postgres pg_dump -Fc -U app app \
-  | age -r "$BACKUP_PUBKEY" > "$BACKUP_DEST/${slug}-postgres-${ts}.dump.age"
-{% if "mongodb" in batteries %}
+dump_postgres
+{%- if "mongodb" in batteries %}
 echo "backup: mongo -> $BACKUP_DEST"
-./scripts/compose.sh exec -T mongo mongodump --archive --gzip --db app \
-  | age -r "$BACKUP_PUBKEY" > "$BACKUP_DEST/${slug}-mongo-${ts}.archive.gz.age"
-{% endif %}
+dump_mongo
+{%- endif %}
 ./infra/backup/prune.sh
 echo "backup complete (${ts})"
