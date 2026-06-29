@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Compute the per-tier edge route host for one service (FWK94 / the FWK88 seam). `task dev:edge`
+# calls this once per routable service and exports the result as ${<SVC>_ROUTE_HOST}, which the
+# Traefik discovery labels (base.yml `app`, edge.yml obs UIs) interpolate into their Host rule.
+#
+# Tier-1 (STACK_INSTANCE == the project slug — the persistent main stack): nested
+#   <svc>.<slug>.localhost, covered by the box's per-product `*.<slug>.localhost` cert.
+# Tier-2 (STACK_INSTANCE != the slug — a per-worktree instance): flat single-label
+#   <svc>-<instance>.localhost (the instance already carries the slug prefix, e.g. demo-wt1 →
+#   <svc>-demo-wt1.localhost), so the box's static `*.localhost` wildcard cert covers every
+#   dynamic instance with zero per-worktree cert work.
+#
+# Usage: edge_host.sh <service>   e.g.  edge_host.sh grafana
+set -euo pipefail
+svc="$1"
+slug="{{ project_slug }}"
+inst="${STACK_INSTANCE:-$slug}"
+if [ "$inst" = "$slug" ]; then
+  echo "${svc}.${slug}.localhost"
+else
+  echo "${svc}-${inst}.localhost"
+fi

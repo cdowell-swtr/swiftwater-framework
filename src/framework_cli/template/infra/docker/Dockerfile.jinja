@@ -31,4 +31,14 @@ COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
 RUN chmod +x /app/scripts/entrypoint.sh
 EXPOSE 8000
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
-CMD ["uvicorn", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000", "{{ package_name }}.main:app"]
+# --forwarded-allow-ips locks the X-Forwarded-Proto/For trust scope to the docker-net source so
+# the app builds https URLs / sets Secure cookies correctly behind a TLS-terminating edge (the
+# per-stack Traefik OR the shared edge). Scope = the RFC1918 superset (docker's default-address-pool
+# is host-configurable — bridges can land in 10.x / 192.168.x, not just 172.16/12 — and the
+# shared-edge subnet is docker-auto-assigned) + 127.0.0.1 (uvicorn's own default — kept so we ADD
+# trust rather than narrow it). NEVER `*`. This is a CLI flag, so it beats the FORWARDED_ALLOW_IPS
+# env var — an operator cannot silently widen trust to `*` via env; tighten in prod by overriding
+# this `command` with a narrower CIDR (e.g. just the load balancer). This CMD is also the server
+# command for the compose-ssh deploy (infra/compose/app-host.yml inherits it behind the builder's
+# load balancer), so that production-behind-an-edge path is covered here, not only in dev.
+CMD ["uvicorn", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000", "--forwarded-allow-ips", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1", "{{ package_name }}.main:app"]

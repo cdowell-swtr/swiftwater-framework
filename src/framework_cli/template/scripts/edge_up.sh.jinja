@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Ensure the shared box-edge network + fail-fast if no consumer edge is present (FWK95 / the FWK88
+# seam). `task dev:edge` runs this BEFORE the compose `up`, so a behind-edge stack never comes up
+# silently unreachable. Lives in the task layer (not compose.sh/edge.yml) so every compose-level
+# test still drives the stack directly.
+#
+# 1. Ensure: `docker network create` is idempotent here (A1's frozen latitude is only *how* to
+#    ensure the net — this is the create path; `external: true` in edge.yml then attaches to it).
+# 2. Guard: network-EXISTENCE is NOT a signal that an edge is attached — step 1 creates the net on
+#    the first run regardless. The real signal is a FOREIGN endpoint on the shared net: a container
+#    whose compose project differs from ours (the box edge, or a non-compose edge with an empty
+#    label). No foreign endpoint → fail-fast with an off-box on-ramp message.
+#
+#    Accepted limitation (carving-sanctioned): another worktree's app attached to the shared net
+#    with no edge running would also read as "edge present" — a false-pass. In practice the edge is
+#    up whenever anything is behind it. Distinguishing the edge precisely would need a new
+#    cross-stream marker label the contract did not freeze.
+set -euo pipefail
+
+NET="swiftwater-shared-edge"
+# Our compose project (= COMPOSE_PROJECT_NAME, which scripts/compose.sh derives from STACK_INSTANCE,
+# default the slug). Used only to EXCLUDE our own containers from the foreign-endpoint check.
+project="${COMPOSE_PROJECT_NAME:-${STACK_INSTANCE:-{{ project_slug }}}}"
+
+# 1. Idempotently ensure the shared edge network exists.
+docker network create "$NET" >/dev/null 2>&1 || true
+
+# 2. Count containers on the shared net whose compose project is NOT ours (empty label = a
+#    non-compose edge, which is foreign too).
+foreign="$(docker ps --filter "network=${NET}" \
+  --format '{{ "{{" }} .Label "com.docker.compose.project" {{ "}}" }}' 2>/dev/null \
+  | awk -v me="$project" '$0 != me { c++ } END { print c + 0 }')"
+
+if [ "${foreign:-0}" -eq 0 ]; then
+  cat >&2 <<EOF
+ERROR: no consumer edge found on the '${NET}' network.
+'task dev:edge' routes through a shared box edge instead of binding its own Traefik :443, so it
+needs a conformant edge running on this box. The FWK88 discovery-label schema is the contract any
+edge builds to (see README). Start your box edge, then retry — or use 'task dev' for a
+self-contained per-stack Traefik stack.
+EOF
+  exit 1
+fi

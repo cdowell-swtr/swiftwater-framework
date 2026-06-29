@@ -50,18 +50,61 @@ tasks:
       - sh: command -v docker
         msg: "Docker is required for `task dev:reset`. Run `task doctor` to check all host tools."
     cmds:
-      - docker compose -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev down -v
+      # Route through compose.sh so the project name resolves from STACK_INSTANCE (FWK96): from a
+      # worktree this wipes THIS instance, not the main stack. Keep the -f file set — `down -v`
+      # needs it to enumerate the named volumes to remove.
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml --profile dev down -v
       - task: dev
 
   dev:logs:
     desc: Follow the dev stack's logs (Ctrl-C stops following; the stack keeps running).
     cmds:
-      - docker compose -p {{ project_slug }} logs -f
+      # Identity-aware (FWK96): compose.sh resolves COMPOSE_PROJECT_NAME from STACK_INSTANCE, so a
+      # worktree follows its own instance. Fileless `logs` finds the project by name.
+      - ./scripts/compose.sh logs -f
 
   dev:down:
     desc: Stop the dev stack but KEEP volumes (data survives). Use dev:reset to wipe + rebuild.
     cmds:
-      - docker compose -p {{ project_slug }} down
+      # Identity-aware (FWK96): see dev:logs. Fileless `down` removes this instance's containers.
+      - ./scripts/compose.sh down
+
+  dev:edge:
+    desc: Behind-edge dev stack — app + obs labeled for a shared box edge, NO per-stack Traefik :443. Ensures the shared edge net + fail-fast if no consumer edge is present (see README).
+    preconditions:
+      - sh: command -v docker
+        msg: "Docker is required for `task dev:edge`. Run `task doctor` to check all host tools."
+      - sh: test -f uv.lock
+        msg: "Run `uv sync` first to create uv.lock (the image build uses --frozen)."
+      - sh: 'if command -v framework >/dev/null 2>&1; then framework integrity; fi'
+        msg: "Framework integrity check failed. Run `framework integrity`, then `framework restore <file>`."
+    env:
+      UID:
+        sh: id -u
+      GID:
+        sh: id -g
+      # Per-tier route host (FWK94 R3): nested <svc>.<slug>.localhost for the main stack, flat
+      # <svc>-<instance>.localhost for a worktree instance — scripts/edge_host.sh decides from
+      # STACK_INSTANCE. Exported so the discovery labels (base.yml app, edge.yml obs) interpolate them.
+      APP_ROUTE_HOST:
+        sh: ./scripts/edge_host.sh app
+      GRAFANA_ROUTE_HOST:
+        sh: ./scripts/edge_host.sh grafana
+      PROMETHEUS_ROUTE_HOST:
+        sh: ./scripts/edge_host.sh prometheus
+      ALERTMANAGER_ROUTE_HOST:
+        sh: ./scripts/edge_host.sh alertmanager
+    cmds:
+      # Ensure the shared edge net + fail-fast if no consumer edge is attached — BEFORE the up, so
+      # a behind-edge stack never comes up unreachable (FWK95).
+      - ./scripts/edge_up.sh
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml -f infra/compose/edge.yml --profile dev up -d --wait --build
+      - 'echo "Behind edge (no per-stack Traefik). Routes — app: https://$APP_ROUTE_HOST · grafana: https://$GRAFANA_ROUTE_HOST · prometheus: https://$PROMETHEUS_ROUTE_HOST · alertmanager: https://$ALERTMANAGER_ROUTE_HOST"'
+
+  dev:edge:down:
+    desc: Stop the behind-edge dev stack for THIS instance (keeps volumes). Identity-aware via STACK_INSTANCE (tears down this instance, not the main stack).
+    cmds:
+      - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml -f infra/compose/edge.yml down
 
   test:
     desc: Run the test suite

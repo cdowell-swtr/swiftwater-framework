@@ -57,7 +57,16 @@ services:
 
   promtail:
     image: grafana/promtail:3.2.1
-    command: ["-config.file=/etc/promtail/promtail-config.yml"]
+    # -config.expand-env=true substitutes ${COMPOSE_PROJECT_NAME} into promtail-config.yml's
+    # instance-scoping `keep` relabel at runtime (FWK97), so the mounted config stays static/shared
+    # while each instance scrapes only its own containers. COMPOSE_PROJECT_NAME is plumbed in below.
+    command:
+      ["-config.file=/etc/promtail/promtail-config.yml", "-config.expand-env=true"]
+    environment:
+      # This instance's compose project (== STACK_INSTANCE via scripts/compose.sh) — the value the
+      # keep relabel matches the `com.docker.compose.project` label against. :-{{ project_slug }}
+      # keeps a bare `docker compose up` (no wrapper) scoping to the slug.
+      COMPOSE_PROJECT_NAME: "${COMPOSE_PROJECT_NAME:-{{ project_slug }}}"
     volumes:
       - "../observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"

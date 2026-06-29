@@ -14,6 +14,17 @@ scrape_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
     relabel_configs:
+      # Instance-scoped scrape (FWK97): keep ONLY this stack's containers — those whose compose
+      # project label equals this instance's COMPOSE_PROJECT_NAME. Promtail mounts the shared docker
+      # socket, so without this `keep` it would scrape every container on the box into this Loki
+      # (cross-instance log bleed; PII risk via anon Grafana). The value is substituted at runtime
+      # by `-config.expand-env=true` (the compose command sets it) from the COMPOSE_PROJECT_NAME env
+      # — so this shared/static file stays correct across every instance (worktrees included).
+      # NOTE: expand-env runs os.Expand over the WHOLE file, so a literal `$` in any future regex
+      # must be written `$$` to avoid mangling. Relabel regexes are auto-anchored; none here need `$`.
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_project"]
+        regex: "${COMPOSE_PROJECT_NAME}"
+        action: keep
       - source_labels: ["__meta_docker_container_name"]
         regex: "/(.*)"
         target_label: container
