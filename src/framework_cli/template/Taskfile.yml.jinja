@@ -202,6 +202,7 @@ tasks:
     desc: Lint and type-check (ruff, mypy, actionlint, shellcheck).
     cmds:
       - uv run ruff check .
+      - uv run ruff format --check .
       - uv run mypy src
       - uv run pre-commit run actionlint --all-files
       - uv run pre-commit run shellcheck --all-files

@@ -19,10 +19,14 @@ instance-addressing contract governs them:
 
 Known boundaries (recorded, not silently absorbed — see ACTION_LOG):
   * Two *concurrent* acceptance sessions on one box (e.g. two worktrees, both slug
-    ``demo``) share the ``demo-t-`` namespace, so one session's start-sweep would reap
-    the other's live stacks. Out of B3's scope; tracked as FWK99 (age-filter the
-    start-sweep is the cheap fix). Bites only when the full/docker tier is run
-    concurrently across worktrees (branch-end, not per-commit).
+    ``demo``) share the ``demo-t-`` namespace. **Start-sweep: fixed (FWK99)** — it now
+    grace-filters (``stale_only``), reaping only stale leftovers and sparing a peer's
+    young live stack. **Finish-sweep: residual** — it must reap this run's own young
+    stacks so it cannot grace-filter, so a session finishing while a peer still runs can
+    still reap the peer's young stacks. Fully closing it needs the per-worktree-namespace
+    fix (fold ``<inst>`` into the prefix → ``<slug>-<inst>-t-…``), which touches the frozen
+    tier-2↔tier-3 disjointness contract → left as the FWK99 follow-up. Bites only when the
+    full/docker tier runs concurrently across worktrees (branch-end, not per-commit).
   * ``test_rendered_project._run_image_serving`` uses a bare ``docker run`` (no compose
     project label), so the prefix sweep won't catch a leaked one — it is already
     context-manager-removed on every exit path.
@@ -30,8 +34,11 @@ Known boundaries (recorded, not silently absorbed — see ACTION_LOG):
 
 from __future__ import annotations
 
+import re
 import subprocess
+import time
 from collections.abc import Callable
+from datetime import datetime
 from uuid import uuid4
 
 # The acceptance render slug (DATA["project_slug"]); `test_tier3_contract.py` pins this
@@ -43,7 +50,18 @@ TIER3_PREFIX = f"{TIER3_SLUG}-t-"
 # The label docker compose auto-applies to every container/volume/network it creates.
 COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
 
+# FWK99 start-sweep grace period. A tier-3 stack lives only for ONE test (brought up,
+# asserted, context-manager-torn-down — minutes). A `<slug>-t-…` stack whose newest container
+# is older than this is almost certainly a crashed-run leftover, not a concurrent peer session's
+# still-live stack in the shared namespace. The start-sweep reaps only those (so two worktrees
+# both running `task test:full` don't reap each other mid-run). The threshold is a *fixed* age,
+# NOT "older than this session's start": everything visible to a start-sweep predates the sweep,
+# so a session-start threshold reaps everything (a no-op). One hour is comfortably above any
+# single tier-3 test yet well below a prior-day leftover.
+TIER3_STALE_AGE_SECONDS = 3600.0
+
 Runner = Callable[[list[str]], str]
+Clock = Callable[[], float]
 
 
 def tier3_project_name() -> str:
@@ -99,9 +117,70 @@ def reap_project(project: str, run: Runner = _run) -> None:
         run(["docker", "network", "rm", *networks])
 
 
-def sweep_tier3_stacks(run: Runner = _run) -> set[str]:
-    """Reap every tier-3 transient stack present in docker. Returns the projects reaped."""
+def _parse_docker_time(value: str) -> float | None:
+    """Parse a docker ``.Created`` RFC3339(/Nano) timestamp to epoch seconds; ``None`` if blank
+    or unparseable. Docker emits up to 9 fractional digits and a trailing ``Z``; clamp the
+    fraction to 6 digits (``datetime.fromisoformat``'s limit) and normalize ``Z`` to ``+00:00``."""
+    s = value.strip()
+    if not s:
+        return None
+    m = re.match(
+        r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$", s
+    )
+    if not m:
+        return None
+    base, frac, tz = m.group(1), m.group(2) or "", m.group(3) or "+00:00"
+    if tz == "Z":
+        tz = "+00:00"
+    if frac:
+        frac = frac[:7]  # '.' + up to 6 digits
+    try:
+        return datetime.fromisoformat(f"{base}{frac}{tz}").timestamp()
+    except ValueError:
+        return None
+
+
+def project_created_at(project: str, run: Runner = _run) -> float | None:
+    """The NEWEST container-creation epoch among ``project``'s containers, or ``None`` if it has
+    no containers (an orphan volume/network remnant — never a live stack). 'Newest' so a stack
+    counts as young if *any* of its containers is recent (conservative against reaping a peer)."""
+    sel = f"--filter=label={COMPOSE_PROJECT_LABEL}={project}"
+    ids = run(["docker", "ps", "-aq", sel]).split()
+    times = [
+        t
+        for cid in ids
+        if (
+            t := _parse_docker_time(
+                run(["docker", "inspect", "-f", "{{.Created}}", cid])
+            )
+        )
+        is not None
+    ]
+    return max(times) if times else None
+
+
+def sweep_tier3_stacks(
+    run: Runner = _run,
+    *,
+    stale_only: bool = False,
+    now: Clock = time.time,
+) -> set[str]:
+    """Reap tier-3 transient stacks present in docker; returns the projects reaped.
+
+    ``stale_only`` (the **start**-sweep, FWK99): reap only stacks whose newest container is older
+    than ``TIER3_STALE_AGE_SECONDS`` — crashed-run leftovers — and SPARE a young stack (a
+    concurrent peer session's still-live run in the shared ``<slug>-t-`` namespace). A project
+    with no containers is never a live stack → reaped. Default (the **finish**-sweep) reaps every
+    tier-3 stack: it must tear down this run's own young stacks, so it cannot grace-filter (the
+    residual cross-session hazard it leaves at finish is closed only by the per-worktree-namespace
+    follow-up, not this start-side fix)."""
     projects = list_tier3_projects(run)
+    reaped: set[str] = set()
     for project in projects:
+        if stale_only:
+            created = project_created_at(project, run)
+            if created is not None and (now() - created) < TIER3_STALE_AGE_SECONDS:
+                continue  # young → a concurrent peer's live stack; spare it
         reap_project(project, run)
-    return projects
+        reaped.add(project)
+    return reaped

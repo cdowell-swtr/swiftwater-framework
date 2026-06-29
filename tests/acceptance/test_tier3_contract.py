@@ -16,6 +16,7 @@ the full tier.
 """
 
 import re
+from datetime import datetime
 
 import yaml
 
@@ -123,6 +124,89 @@ def test_sweep_lists_then_reaps_each(monkeypatch):
     assert out == {"demo-t-1", "demo-t-2"}
 
 
+# --- FWK99: start-sweep grace filter (cross-session safety in the shared <slug>-t- namespace) ---
+
+
+def test_start_sweep_spares_young_peer_and_reaps_stale_and_orphan(monkeypatch):
+    """The start-sweep (`stale_only=True`) reaps only stacks whose newest container is older
+    than the grace period — a crashed-run leftover — and SPARES a young stack (a concurrent
+    peer session's still-live run in the shared `demo-t-` namespace). A project with no
+    containers (an orphan volume/network remnant) is never a live stack → reaped.
+
+    The discriminator is a *fixed* age threshold, NOT "older than this session's start": every
+    stack visible to a start-sweep predates the sweep, so a session-start threshold is a no-op
+    (it would reap everything, i.e. current behavior). A healthy tier-3 stack lives only minutes,
+    so a fixed grace separates leftovers (old) from a peer mid-test (young)."""
+    monkeypatch.setattr(
+        _tier3,
+        "list_tier3_projects",
+        lambda run=None: {"demo-t-young", "demo-t-stale", "demo-t-orphan"},
+    )
+    now = 1_000_000.0
+    ages = {
+        "demo-t-young": now - 30.0,  # 30s old → a peer mid-test, spare it
+        "demo-t-stale": now
+        - (_tier3.TIER3_STALE_AGE_SECONDS + 60.0),  # older than grace
+        "demo-t-orphan": None,  # no containers → not a live stack
+    }
+    monkeypatch.setattr(_tier3, "project_created_at", lambda p, run=None: ages[p])
+    reaped: list[str] = []
+    monkeypatch.setattr(_tier3, "reap_project", lambda p, run=None: reaped.append(p))
+    out = _tier3.sweep_tier3_stacks(
+        run=lambda cmd: "", stale_only=True, now=lambda: now
+    )
+    assert set(reaped) == {"demo-t-stale", "demo-t-orphan"}
+    assert "demo-t-young" not in reaped
+    assert out == {"demo-t-stale", "demo-t-orphan"}
+
+
+def test_finish_sweep_reaps_all_including_young(monkeypatch):
+    """The finish-sweep (default, no `stale_only`) reaps EVERY tier-3 stack — it must tear down
+    this run's own young stacks, so it cannot grace-filter. (The residual cross-session hazard it
+    carries at finish — A finishes while peer B runs → A reaps B's young stacks — is closed only by
+    the per-worktree-namespace follow-up, not this start-side fix.)"""
+    monkeypatch.setattr(
+        _tier3, "list_tier3_projects", lambda run=None: {"demo-t-young", "demo-t-stale"}
+    )
+    monkeypatch.setattr(_tier3, "project_created_at", lambda p, run=None: 1_000_000.0)
+    reaped: list[str] = []
+    monkeypatch.setattr(_tier3, "reap_project", lambda p, run=None: reaped.append(p))
+    out = _tier3.sweep_tier3_stacks(run=lambda cmd: "", now=lambda: 1_000_000.0)
+    assert set(reaped) == {"demo-t-young", "demo-t-stale"}
+    assert out == {"demo-t-young", "demo-t-stale"}
+
+
+def test_project_created_at_returns_newest_container_time():
+    """`project_created_at` returns the NEWEST container-creation epoch among a project's
+    containers (a stack counts as 'young' if any container is recent)."""
+
+    def run(cmd: list[str]) -> str:
+        if cmd[:3] == ["docker", "ps", "-aq"]:
+            return "cid_old\ncid_new\n"
+        if cmd[:3] == ["docker", "inspect", "-f"]:
+            return {
+                "cid_old": "2026-06-28T22:00:00.000000000Z",
+                "cid_new": "2026-06-28T22:05:00Z",
+            }[cmd[-1]]
+        return ""
+
+    got = _tier3.project_created_at("demo-t-x", run=run)
+    assert got == datetime.fromisoformat("2026-06-28T22:05:00+00:00").timestamp()
+
+
+def test_project_created_at_is_none_without_containers():
+    assert _tier3.project_created_at("demo-t-x", run=lambda cmd: "") is None
+
+
+def test_parse_docker_time_handles_nanoseconds_z_and_garbage():
+    assert (
+        _tier3._parse_docker_time("2026-06-28T22:05:00.123456789Z")
+        == datetime.fromisoformat("2026-06-28T22:05:00.123456+00:00").timestamp()
+    )
+    assert _tier3._parse_docker_time("  ") is None
+    assert _tier3._parse_docker_time("not-a-timestamp") is None
+
+
 # --- isolation guards: no edge net, no socket in the default transient stack ---
 
 
@@ -199,13 +283,17 @@ def test_session_hooks_sweep_on_controller_when_docker_is_present(monkeypatch):
 
     calls = []
     monkeypatch.setattr(
-        conftest._tier3, "sweep_tier3_stacks", lambda: calls.append("swept")
+        conftest._tier3,
+        "sweep_tier3_stacks",
+        lambda **kw: calls.append(kw.get("stale_only", False)),
     )
     monkeypatch.setattr(conftest.shutil, "which", lambda name: "/usr/bin/docker")
     controller = _FakeSession(worker=False)
     conftest.pytest_sessionstart(session=controller)
     conftest.pytest_sessionfinish(session=controller, exitstatus=0)
-    assert calls == ["swept", "swept"]  # start-sweep + finish-sweep
+    # Both sweeps fire on the controller; the start-sweep grace-filters (FWK99,
+    # `stale_only=True`), the finish-sweep reaps everything (`stale_only` defaulted False).
+    assert calls == [True, False]
 
 
 def test_session_hooks_do_not_sweep_on_an_xdist_worker(monkeypatch):
@@ -215,7 +303,9 @@ def test_session_hooks_do_not_sweep_on_an_xdist_worker(monkeypatch):
 
     monkeypatch.setattr(conftest.shutil, "which", lambda name: "/usr/bin/docker")
     called = []
-    monkeypatch.setattr(conftest._tier3, "sweep_tier3_stacks", lambda: called.append(1))
+    monkeypatch.setattr(
+        conftest._tier3, "sweep_tier3_stacks", lambda **kw: called.append(1)
+    )
     worker = _FakeSession(worker=True)
     conftest.pytest_sessionstart(session=worker)
     conftest.pytest_sessionfinish(session=worker, exitstatus=0)
@@ -227,7 +317,9 @@ def test_session_hooks_are_a_noop_without_docker(monkeypatch):
 
     monkeypatch.setattr(conftest.shutil, "which", lambda name: None)
     called = []
-    monkeypatch.setattr(conftest._tier3, "sweep_tier3_stacks", lambda: called.append(1))
+    monkeypatch.setattr(
+        conftest._tier3, "sweep_tier3_stacks", lambda **kw: called.append(1)
+    )
     controller = _FakeSession(worker=False)
     conftest.pytest_sessionstart(session=controller)
     conftest.pytest_sessionfinish(session=controller, exitstatus=0)

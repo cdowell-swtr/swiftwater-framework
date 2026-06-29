@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from framework_cli.batteries import battery_names, resolve
 
 #: The framework tag this dogfood run pins (installed by the generated integrity step-0).
-DOGFOOD_COMMIT = "v0.4.3"
+DOGFOOD_COMMIT = "v0.4.4"
 
 #: Workflow jobs present in every generated ci.yml regardless of batteries.
 ALWAYS_ON_JOBS: frozenset[str] = frozenset(
