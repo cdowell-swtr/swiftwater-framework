@@ -1088,12 +1088,37 @@ def test_render_includes_alembic(tmp_path: Path):
     render_project(dest, DATA)
     ini = (dest / "alembic.ini").read_text()
     assert "script_location = migrations" in ini
+    # FWK115: pin the alembic path_separator so the locked `.ini` never emits the
+    # `No path_separator found` DeprecationWarning (a hard break once alembic drops the
+    # legacy fallback); the locked file means a consumer can't fix it themselves.
+    assert "path_separator = os" in ini
     env = (dest / "migrations" / "env.py").read_text()
     assert "from demo.db.base import Base" in env
     assert "get_settings().database_url" in env
     assert (dest / "migrations" / "script.py.mako").is_file()
     initial = (dest / "migrations" / "versions" / "0001_initial.py").read_text()
     assert "create_table" in initial and '"items"' in initial
+
+
+def test_render_multitenantauth_alembic_control_has_path_separator(tmp_path: Path):
+    """FWK115: the multitenantauth-gated `alembic_control.ini` carries the same
+    `path_separator = os` pin as the base `alembic.ini` — both locked `[alembic]` sections."""
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["multitenantauth"]})
+    ini = (dest / "alembic_control.ini").read_text()
+    assert "script_location = migrations_control" in ini
+    assert "path_separator = os" in ini
+
+
+def test_render_lint_task_enforces_ruff_format_check(tmp_path: Path):
+    """FWK114: the generated Taskfile `lint` task must run `ruff format --check`, not only
+    `ruff check` — else `task lint`/`task ci` pass while not format-clean (the Bearing-reported
+    local-parity gap; the generated `ci.yml` already format-checks). Locked file → the consumer
+    can't add it themselves."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "uv run ruff format --check ." in taskfile
 
 
 def test_render_wires_items_route(tmp_path: Path):

@@ -35,9 +35,16 @@ def _should_sweep(session) -> bool:
 def pytest_sessionstart(session):
     """FWK95 tier-3 reaping (start-sweep): reap any transient `<slug>-t-*` stack a prior
     run left behind — a SIGKILL'd / crashed worker means `sessionfinish` never ran for
-    it. Guarded so the fast (non-docker) tier never shells out and workers never sweep."""
+    it. Guarded so the fast (non-docker) tier never shells out and workers never sweep.
+
+    `stale_only=True` (FWK99): reap only STALE leftovers (newest container older than the
+    grace period), so a *concurrent* peer session's still-live `<slug>-t-…` stack (two
+    worktrees both running `task test:full` against the shared `demo-t-` namespace) is spared
+    rather than torn down mid-run. The finish-sweep below still reaps everything (it must reap
+    this run's own young stacks); its residual cross-session hazard is the FWK99 namespace
+    follow-up's to close, not this start-side filter's."""
     if _should_sweep(session):
-        _tier3.sweep_tier3_stacks()
+        _tier3.sweep_tier3_stacks(stale_only=True)
 
 
 def pytest_sessionfinish(session, exitstatus):

@@ -320,3 +320,31 @@ The experiment's second product (codify the workflow) starts in the carving itse
   instances, guaranteed-reaped, reserved namespace) + `FWK77` (tier commit-vs-merge).
 - `FWK90` → follow-up to `FWK89`: tight per-mutation test scoping at interim runs.
 - `FWK91` → adversarial panel review for specs & seams (the process this carving demonstrated).
+
+## Promotion hand-off (`FWK92` — capture-only)
+
+The experiment was validated end-to-end (runtime payoff, `ACTION_LOG #0368`: fresh-render
+dual-instance e2e behind the live box edge — discovery, routing, isolation, host-port
+collision-avoidance, cert trust, teardown all green). **This spec — §Learnings 1–6 + the
+*Per-worktree protocol* step 7 + `docs/maintenance/worktree-parallel-development.md` (`FWK112`) — is
+the durable record-of-record for the transferable workflow.** The three reusable parts:
+
+1. **A-priori binding seam method + per-worktree fractal protocol** (novel).
+2. **Adversarial-panel-before-freeze** lens set incl. the shared-namespace/monotonic-allocation lens
+   (`FWK91`; §Learnings 1/2/5) — generalizes the existing adversarial-security-review method from
+   security to design/seam artifacts; **must reach every repo the seam touches** (§Learnings 3/4).
+3. **Merge-time reconciliation rule** (step 7; §Learning 5) — provisional ids while a stream runs,
+   renumber in merge order to a contiguous atomic subtree, never mid-run; prefix-agnostic.
+
+**The framework does NOT drive the promote-up.** Operator decision (2026-06-28): capture the
+learnings here and hand the *implementation* (generalize into convention(s), tag, vendor back) to the
+**absorber** — `cdowell-swtr/patterns`, most likely via **Bearing's MCP task-management service**
+(the same service expected to root-cure §Learning 5's shared-counter collision and §Learning 6's
+amendment-fan-out). Candidate homes (the absorber's call, *not* settled here): a new
+`worktree-parallel-convention.md` composing with `pi-convention` (the merge-time rule) and
+`adversarial-security-review-convention` (the design-seam lens) — vs. three independent amendments.
+Conformance for a *process* promotion is itself the open question; the proposed seed is this
+experiment's captured behavior (`#0368` + the `FWK112` honest-tense capture) replayed against the
+generalized convention. When the absorber adopts, the framework vendors the convention and retires
+its forward-looking "candidate to promote" claims (this section + step 7's note); the dated spec
+stays as history.
