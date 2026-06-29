@@ -1,0 +1,37 @@
+# Backups & recovery
+
+Encrypted, battery-aware backups of every durable store this stack runs. **Core capability**
+(Postgres ships base) — `task backup` always backs up Postgres; Mongo is added when the
+`mongodb` battery is on; AGE / TimescaleDB / pgvector data lives in Postgres and is restored
+extension-correctly by the drill. Redis + observability stores are rebuildable and not backed up.
+
+## One-time setup
+1. **Install `age`** (single static binary): `apt install age` (or from github.com/FiloSottile/age).
+2. **Generate a keypair:** `age-keygen -o ~/.config/{{ project_slug }}/backup-identity.txt`.
+   It prints the **public** key (`age1...`).
+3. **Configure `.env`:** set `BACKUP_PUBKEY=age1...`, `BACKUP_IDENTITY=~/.config/{{ project_slug }}/backup-identity.txt`,
+   and `BACKUP_DEST` to your off-box destination (this box: a Google-Drive-synced folder under `/mnt`).
+4. **Custody the PRIVATE key OFF the box** (password manager / a second location). **Losing it makes
+   every off-box backup unrecoverable** — this is interim custody until secrets-backing (FWK85) lands.
+5. **Verify the whole chain now:** `task backup && task backup:verify`. The drill decrypts + restores
+   into a throwaway DB; if your key is wrong it fails *here*, not during a real recovery.
+
+## Schedule it (operator-wired, disabled by default)
+```bash
+mkdir -p ~/.config/systemd/user
+cp infra/backup/{{ project_slug }}-backup.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now {{ project_slug }}-backup.timer   # nightly 02:00
+```
+(Run `loginctl enable-linger $USER` so the timer fires while you're logged out.)
+
+## Recovery
+- **Drill (safe, non-destructive):** `task backup:verify`.
+- **Restore into the live stack (DESTRUCTIVE):** `task restore` (asks for typed confirmation).
+
+## RPO / RTO
+- **RPO ≈ 24h** (nightly timer) — at most a day of data lost.
+- **RTO ≈ minutes** — `task restore` from the latest decrypted dump.
+
+Durability layers on this box: dump → `/mnt/<gdrive>` (Windows host, survives a WSL-VM reset) →
+Google Drive sync (off-machine, survives host loss).

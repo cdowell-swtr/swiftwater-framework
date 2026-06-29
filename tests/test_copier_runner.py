@@ -5577,3 +5577,18 @@ def test_restore_and_drill_render(tmp_path):
     assert "restore:" in task and "backup:verify" in task
     for sh in (restore, drill):
         assert "{{" not in sh and "{%" not in sh
+
+
+def test_systemd_units_and_runbook_render(tmp_path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": []})
+    svc = dest / "infra/backup/demo-backup.service"
+    tmr = dest / "infra/backup/demo-backup.timer"
+    readme = dest / "infra/backup/README.md"
+    assert svc.is_file() and tmr.is_file() and readme.is_file()
+    assert "ExecStart=" in svc.read_text()
+    assert "OnCalendar=" in tmr.read_text()
+    r = readme.read_text()
+    for token in ("BACKUP_DEST", "age", "RPO", "RTO", "systemctl"):
+        assert token in r, f"runbook missing {token}"
+    assert "backups/" in (dest / ".gitignore").read_text()

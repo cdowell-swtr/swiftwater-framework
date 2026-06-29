@@ -1,0 +1,10 @@
+[Unit]
+Description=Encrypted backup of the {{ project_name }} stack
+Documentation=file:%h/{{ project_slug }}/infra/backup/README.md
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/{{ project_slug }}
+# Load BACKUP_* from the project .env (edit the path if your checkout lives elsewhere).
+EnvironmentFile=%h/{{ project_slug }}/.env
+ExecStart=%h/{{ project_slug }}/infra/backup/backup.sh
