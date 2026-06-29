@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
-from framework_cli.review.audit.pipeline import run_audit
+import pytest
+
+from framework_cli.review.audit.pipeline import CheckpointProvenanceError, run_audit
 from tests.review.audit.conftest import StubBackend
 
 
@@ -224,6 +226,367 @@ def test_run_audit_logs_stage_transitions(tmp_path: Path):
     assert "Stage 2" in joined
     assert "Stage 3" in joined
     assert "vetted" in joined
+
+
+def test_run_audit_surfaces_persistent_skeptic_parse_failure(tmp_path: Path):
+    """FWK46: a skeptic that stays unparseable is surfaced loudly through run_audit's
+    log AND recorded as parse_failures in the persisted full changelist — not a silent
+    dropped vote."""
+
+    def scripted(system, messages):
+        text = " ".join(b.get("text", "") for b in system)
+        if "reviewer-prompt AUDITOR" in text:
+            return json.dumps(
+                {
+                    "agent": "security",
+                    "edits": [],
+                    "proposed_block_threshold": "high",
+                    "fixture_verdicts": {},
+                }
+            )
+        if "roster RECONCILER" in text:
+            return json.dumps(
+                {
+                    "agents": [
+                        {
+                            "agent": "security",
+                            "proposed_block_threshold": "high",
+                            "edits": [
+                                {
+                                    "target": "domain_prompt",
+                                    "rationale": "r",
+                                    "before": "a",
+                                    "after": "b",
+                                }
+                            ],
+                            "fixture_verdicts": {},
+                        }
+                    ],
+                    "preamble_edits": [],
+                }
+            )
+        if "adversarial SKEPTIC" in text:
+            return "not parseable at all"
+        return "{}"
+
+    logged: list[str] = []
+    run_audit(
+        ["security"],
+        backend=StubBackend(scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=tmp_path / "out",
+        skeptics=1,
+        log=logged.append,
+    )
+
+    assert any("parse" in m.lower() and "security" in m for m in logged)
+    full = json.loads((tmp_path / "out" / "changelist-full.json").read_text())
+    verdict = full["agents"][0]["edits"][0]["verdict"]
+    assert verdict["parse_failures"] == 1
+
+
+# ---------------------------------------------------------------------------
+# FWK47 — --resume checkpoint-provenance guard
+# ---------------------------------------------------------------------------
+
+
+def _noop_scripted(system, messages):
+    """An audit that proposes no edits — Stage 3 has nothing to refute, so the
+    provenance guard (which fires before any stage) is what these tests exercise."""
+    text = " ".join(b.get("text", "") for b in system)
+    if "AUDITOR" in text:
+        return json.dumps(
+            {
+                "agent": "security",
+                "edits": [],
+                "proposed_block_threshold": "high",
+                "fixture_verdicts": {},
+            }
+        )
+    if "RECONCILER" in text:
+        return json.dumps({"agents": [], "preamble_edits": []})
+    return "{}"
+
+
+def test_run_audit_writes_provenance_on_fresh_run(tmp_path: Path):
+    out = tmp_path / "out"
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    prov = json.loads((out / "audit-provenance.json").read_text())
+    assert prov["fingerprint"]
+    assert prov["targets"] == "security"
+    assert prov["skeptics"] == "1"
+
+
+def test_run_audit_resume_refuses_when_skeptics_changed(tmp_path: Path):
+    out = tmp_path / "out"
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    with pytest.raises(CheckpointProvenanceError) as exc:
+        run_audit(
+            ["security"],
+            backend=StubBackend(_noop_scripted),
+            root=Path.cwd(),
+            baseline_dir=None,
+            out_dir=out,
+            skeptics=3,
+            resume=True,
+        )
+    assert "skeptics" in exc.value.changed
+
+
+def test_run_audit_resume_refuses_when_targets_changed(tmp_path: Path):
+    out = tmp_path / "out"
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    with pytest.raises(CheckpointProvenanceError) as exc:
+        run_audit(
+            ["security", "usability"],
+            backend=StubBackend(_noop_scripted),
+            root=Path.cwd(),
+            baseline_dir=None,
+            out_dir=out,
+            skeptics=1,
+            resume=True,
+        )
+    assert "targets" in exc.value.changed
+
+
+def test_run_audit_resume_refuses_on_in_place_fixture_edit(tmp_path: Path):
+    """FWK121: an IN-PLACE edit to a fixture under fixtures_root (same path, new
+    content) must invalidate a resume — the FWK47 failure class for BYO fixtures,
+    which a path-only fingerprint missed."""
+    out = tmp_path / "out"
+    froot = tmp_path / "fx"
+    case = froot / "security" / "good" / "c"
+    case.mkdir(parents=True)
+    patch = case / "change.patch"
+    patch.write_text("ORIGINAL fixture body\n")
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+        fixtures_root=froot,
+    )
+    patch.write_text("EDITED IN PLACE — different body\n")  # same path, new content
+    with pytest.raises(CheckpointProvenanceError) as exc:
+        run_audit(
+            ["security"],
+            backend=StubBackend(_noop_scripted),
+            root=Path.cwd(),
+            baseline_dir=None,
+            out_dir=out,
+            skeptics=1,
+            fixtures_root=froot,
+            resume=True,
+        )
+    assert "fixtures" in exc.value.changed
+
+
+def test_run_audit_resume_refuses_on_changed_project_reviewer_prompt(tmp_path: Path):
+    """FWK121: an untracked project-reviewer prompt change must invalidate a resume.
+    Simulated as two separate invocations by mutating the registry overlay between runs."""
+    from framework_cli.review import registry
+    from framework_cli.review.registry import AgentSpec, ContextPolicy
+
+    orig = dict(registry._SPECS)
+    try:
+        registry._SPECS["proj-rev"] = AgentSpec(
+            name="proj-rev",
+            prompt="VERSION A — flag X",
+            block_threshold=None,
+            active_when="always",
+            model="claude-sonnet-4-6",
+            context=ContextPolicy("diff"),
+        )
+        out = tmp_path / "out"
+        run_audit(
+            ["proj-rev"],
+            backend=StubBackend(_noop_scripted),
+            root=tmp_path,
+            baseline_dir=None,
+            out_dir=out,
+            skeptics=1,
+        )
+        # the untracked prompt is edited (a fresh process re-registers the new content)
+        registry._SPECS["proj-rev"] = AgentSpec(
+            name="proj-rev",
+            prompt="VERSION B — flag X and Y",
+            block_threshold=None,
+            active_when="always",
+            model="claude-sonnet-4-6",
+            context=ContextPolicy("diff"),
+        )
+        with pytest.raises(CheckpointProvenanceError) as exc:
+            run_audit(
+                ["proj-rev"],
+                backend=StubBackend(_noop_scripted),
+                root=tmp_path,
+                baseline_dir=None,
+                out_dir=out,
+                skeptics=1,
+                resume=True,
+            )
+        assert "prompts" in exc.value.changed
+    finally:
+        registry._SPECS.clear()
+        registry._SPECS.update(orig)
+
+
+def test_run_audit_resume_proceeds_when_inputs_match(tmp_path: Path):
+    out = tmp_path / "out"
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    # identical inputs → fingerprint matches → resume proceeds without raising
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+        resume=True,
+    )
+
+
+def test_run_audit_resume_warns_when_provenance_absent(tmp_path: Path):
+    """A legacy checkpoint with no provenance file can't be verified — proceed but
+    surface a warning rather than silently binding to possibly-stale inputs."""
+    out = tmp_path / "out"
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    (out / "audit-provenance.json").unlink()
+    logged: list[str] = []
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+        resume=True,
+        log=logged.append,
+    )
+    assert any("provenance" in m.lower() for m in logged)
+
+
+def test_project_target_audit_oracle_reads_render_based_fixtures(tmp_path: Path):
+    """FWK120: the project-target oracle end-to-end — auditing a project-roster agent
+    against the real, render-based fixtures (src/demo/... diffs) produces a changelist.
+    Locks in FWK118's fixtures seam against the committed generated-project fixtures."""
+    backend = StubBackend(_noop_scripted)
+    run_audit(
+        ["security"],
+        backend=backend,
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=tmp_path / "out",
+        skeptics=1,
+        fixtures_root=Path("tests/eval/fixtures"),
+    )
+    auditor = next(
+        c
+        for c in backend.messages.calls
+        if "AUDITOR" in " ".join(b.get("text", "") for b in c["system"])
+    )
+    sys_text = " ".join(b.get("text", "") for b in auditor["system"])
+    assert "src/demo/" in sys_text  # the fixtures are diffs against a generated project
+    assert (tmp_path / "out" / "changelist.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# FWK118 — target-aware audit core (fixtures_root threading)
+# ---------------------------------------------------------------------------
+
+
+def test_run_audit_reads_fixtures_from_fixtures_root(tmp_path: Path):
+    """run_audit audits against the fixtures under the given fixtures_root, not the
+    framework's own tests/eval/fixtures — the seam both combo halves need (FWK118)."""
+    froot = tmp_path / "projfx"
+    case = froot / "security" / "good" / "mycase"
+    case.mkdir(parents=True)
+    (case / "change.patch").write_text("ZZMARKER_PROJECT_FIXTURE diff body\n")
+
+    backend = StubBackend(_noop_scripted)
+    run_audit(
+        ["security"],
+        backend=backend,
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=tmp_path / "out",
+        skeptics=1,
+        fixtures_root=froot,
+    )
+    auditor = next(
+        c
+        for c in backend.messages.calls
+        if "AUDITOR" in " ".join(b.get("text", "") for b in c["system"])
+    )
+    sys_text = " ".join(b.get("text", "") for b in auditor["system"])
+    assert "ZZMARKER_PROJECT_FIXTURE" in sys_text
+
+
+def test_run_audit_resume_refuses_when_fixtures_root_changed(tmp_path: Path):
+    out = tmp_path / "out"
+    fx1 = tmp_path / "fx1"
+    fx1.mkdir()
+    fx2 = tmp_path / "fx2"
+    fx2.mkdir()
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+        fixtures_root=fx1,
+    )
+    with pytest.raises(CheckpointProvenanceError) as exc:
+        run_audit(
+            ["security"],
+            backend=StubBackend(_noop_scripted),
+            root=Path.cwd(),
+            baseline_dir=None,
+            out_dir=out,
+            skeptics=1,
+            fixtures_root=fx2,
+            resume=True,
+        )
+    assert "fixtures" in exc.value.changed
 
 
 def test_run_audit_produces_vetted_changelist(tmp_path: Path):

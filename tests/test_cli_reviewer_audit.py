@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -196,6 +197,178 @@ def test_run_audit_passes_concurrency_to_fanout(tmp_path, monkeypatch):
     assert recorded_concurrencies == [5, 5], (
         f"Expected [5, 5] but got {recorded_concurrencies}"
     )
+
+
+def test_reviewer_audit_resume_refuses_stale_checkpoint(tmp_path, monkeypatch):
+    """FWK47: resuming a checkpoint produced against different inputs (here a changed
+    --skeptics) is refused with a clear message + non-zero exit, not silently reused."""
+    import framework_cli.cli as climod
+    from tests.review.audit.conftest import StubBackend
+
+    def _scripted(system, messages):
+        text = " ".join(b.get("text", "") for b in system)
+        if "AUDITOR" in text:
+            return json.dumps(
+                {
+                    "agent": "security",
+                    "edits": [],
+                    "proposed_block_threshold": "high",
+                    "fixture_verdicts": {},
+                }
+            )
+        if "RECONCILER" in text:
+            return json.dumps({"agents": [], "preamble_edits": []})
+        return "{}"
+
+    monkeypatch.setattr(climod, "_make_backend", lambda *a, **k: StubBackend(_scripted))
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **k: type("R", (), {"backend": "subagent", "reason": ""})(),
+    )
+
+    out = tmp_path / "audit-out"
+    fresh = runner.invoke(
+        app, ["reviewer-audit", "security", "--out", str(out), "--skeptics", "1"]
+    )
+    assert fresh.exit_code == 0, fresh.output
+
+    stale = runner.invoke(
+        app,
+        [
+            "reviewer-audit",
+            "security",
+            "--out",
+            str(out),
+            "--skeptics",
+            "3",
+            "--resume",
+        ],
+    )
+    assert stale.exit_code == 2, stale.output
+    assert "stale" in stale.output.lower() or "provenance" in stale.output.lower()
+    assert "skeptics" in stale.output
+
+
+def test_reviewer_audit_target_project_selects_active_agents(tmp_path, monkeypatch):
+    """FWK118: --target project audits the active_agents() project roster (the agents
+    a generated project actually runs), excluding framework_only agents."""
+    import framework_cli.cli as climod
+    import framework_cli.review.audit.pipeline as pipeline_mod
+    from framework_cli.review.audit.changelist import Changelist
+
+    captured: dict[str, object] = {}
+
+    def spy_run_audit(targets, **kw):
+        captured["targets"] = list(targets)
+        captured["fixtures_root"] = kw.get("fixtures_root")
+        return Changelist()
+
+    monkeypatch.setattr(pipeline_mod, "run_audit", spy_run_audit)
+    monkeypatch.setattr(climod, "_make_backend", lambda *a, **k: object())
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **k: type("R", (), {"backend": "subagent", "reason": ""})(),
+    )
+
+    out = tmp_path / "o"
+    result = runner.invoke(
+        app,
+        [
+            "reviewer-audit",
+            "--target",
+            "project",
+            "--fixtures-root",
+            str(tmp_path / "fx"),
+            "--out",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "security" in captured["targets"]  # an always-on, non-framework_only agent
+    assert "coverage-gap" not in captured["targets"]  # framework_only → excluded
+    assert str(captured["fixtures_root"]) == str(tmp_path / "fx")
+
+
+def test_reviewer_audit_target_project_defaults_fixtures_to_byo_dir(
+    tmp_path, monkeypatch
+):
+    """FWK120: in a project with `.framework/reviewers/fixtures/`, `reviewer-audit
+    --target project` (no --fixtures-root) defaults to that dir — a consumer tunes
+    their own reviewers with one command (rookie-free, low burden)."""
+    import framework_cli.cli as climod
+    import framework_cli.review.audit.pipeline as pipeline_mod
+    from framework_cli.review.audit.changelist import Changelist
+
+    (tmp_path / ".framework" / "reviewers" / "fixtures").mkdir(parents=True)
+
+    captured: dict[str, object] = {}
+
+    def spy_run_audit(targets, **kw):
+        captured["fixtures_root"] = kw.get("fixtures_root")
+        return Changelist()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(pipeline_mod, "run_audit", spy_run_audit)
+    monkeypatch.setattr(climod, "_make_backend", lambda *a, **k: object())
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **k: type("R", (), {"backend": "subagent", "reason": ""})(),
+    )
+
+    result = runner.invoke(
+        app, ["reviewer-audit", "--target", "project", "--out", str(tmp_path / "o")]
+    )
+    assert result.exit_code == 0, result.output
+    assert str(captured["fixtures_root"]) == str(
+        Path(".framework") / "reviewers" / "fixtures"
+    )
+
+
+def test_reviewer_audit_target_project_includes_project_local_reviewer(
+    tmp_path, monkeypatch
+):
+    """FWK119: reviewer-audit --target project audits the project's OWN reviewers
+    (discovered from .framework/reviewers/) alongside the built-in project roster."""
+    import framework_cli.cli as climod
+    import framework_cli.review.audit.pipeline as pipeline_mod
+    from framework_cli.review import registry
+    from framework_cli.review.audit.changelist import Changelist
+
+    # restore the registry global after the overlay this test installs
+    orig_specs = dict(registry._SPECS)
+
+    rdir = tmp_path / ".framework" / "reviewers"
+    rdir.mkdir(parents=True)
+    (rdir / "house-style.md").write_text("Flag house-style violations.")
+    (rdir / "house-style.toml").write_text('active_when = "always"\n')
+
+    captured: dict[str, object] = {}
+
+    def spy_run_audit(targets, **kw):
+        captured["targets"] = list(targets)
+        return Changelist()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(pipeline_mod, "run_audit", spy_run_audit)
+    monkeypatch.setattr(climod, "_make_backend", lambda *a, **k: object())
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **k: type("R", (), {"backend": "subagent", "reason": ""})(),
+    )
+    try:
+        result = runner.invoke(
+            app, ["reviewer-audit", "--target", "project", "--out", str(tmp_path / "o")]
+        )
+        assert result.exit_code == 0, result.output
+        assert "house-style" in captured["targets"]
+        assert "security" in captured["targets"]  # built-in project roster still there
+    finally:
+        registry._SPECS.clear()
+        registry._SPECS.update(orig_specs)
 
 
 def test_reviewer_audit_skip_neutral_without_backend(tmp_path, monkeypatch):

@@ -546,6 +546,19 @@ def _explain_no_backend(res: object, *, command: str) -> None:
     typer.echo(f"{command}: {msg}", err=True)
 
 
+def _register_project_reviewers_or_exit() -> list[str]:
+    """Overlay the project's own reviewers (`.framework/reviewers/`) onto the registry
+    so the project-target paths resolve them (FWK119). A collision with a built-in
+    agent is a project-config error → exit 2 with a clear message."""
+    from framework_cli.review.project_reviewers import register_project_reviewers
+
+    try:
+        return register_project_reviewers(Path("."))
+    except ValueError as exc:
+        typer.echo(f"project reviewers: {exc}", err=True)
+        raise typer.Exit(2) from exc
+
+
 def _build_audit_items(
     target_arg: str,
     selected_agents: list[str],
@@ -566,6 +579,7 @@ def _build_audit_items(
     if target == "framework":
         all_agents = sorted(FRAMEWORK_AGENTS)
     else:
+        _register_project_reviewers_or_exit()  # FWK119: project's own reviewers join the roster
         all_agents = active_agents("pull_request", read_batteries(Path(".")))
 
     # Dedupe selected agents while preserving insertion order.
@@ -1504,11 +1518,32 @@ def reviewer_audit(
         help="Parallel audit/refute calls (1 = serial). The free subagent backend has no "
         "backoff, so keep this modest on one subscription.",
     ),
+    target: str = typer.Option(
+        "framework",
+        "--target",
+        help="'framework' (all registered agents; default) or 'project' (the active_agents() "
+        "set a generated project actually runs — excludes framework_only agents).",
+    ),
+    fixtures_root: str = typer.Option(
+        "",
+        "--fixtures-root",
+        help="Dir of fixtures to audit against (default: the target's tests/eval/fixtures). "
+        "Point at project-context fixtures to calibrate the agents as applied to a render.",
+    ),
 ) -> None:
     """Audit reviewer prompts (rubric consistency, severity bar, scope, fixtures) and emit a
     vetted changelist + a dry-run apply-preview patch. No edits are applied (FWK4)."""
-    from framework_cli.review.audit.pipeline import run_audit
+    from framework_cli.review.audit.pipeline import (
+        CheckpointProvenanceError,
+        run_audit,
+    )
     from framework_cli.review.audit.preview import render_patch
+    from framework_cli.source import read_batteries
+
+    if target not in ("framework", "project"):
+        raise typer.BadParameter(
+            f"--target must be 'framework' or 'project' (got '{target}')"
+        )
 
     res = _resolve_review_backend(flag=backend or None, key_env=EVAL_KEY_ENV)
     if res.backend is None:  # type: ignore[attr-defined]
@@ -1518,23 +1553,55 @@ def reviewer_audit(
         raise typer.Exit(0)
 
     _backend = _make_backend(res.backend, EVAL_KEY_ENV)  # type: ignore[attr-defined]
-    targets = list(agents) if agents else agent_names()
+    project_reviewers = (
+        _register_project_reviewers_or_exit() if target == "project" else []
+    )
+    if agents:
+        targets = list(agents)
+    elif target == "project":
+        # The agents a generated project actually runs (mirrors `framework audit
+        # --target project`): the active_agents() set, batteries auto-detected from cwd,
+        # PLUS every custom reviewer the project added under .framework/reviewers/ (FWK119).
+        targets = sorted(
+            set(active_agents("pull_request", read_batteries(Path("."))))
+            | set(project_reviewers)
+        )
+    else:
+        targets = agent_names()
+
+    # Resolve the fixtures dir. An explicit --fixtures-root always wins; otherwise a
+    # project-target run defaults to the project's own .framework/reviewers/fixtures
+    # when present, so a consumer tunes their reviewers with one command (FWK120).
+    resolved_fixtures = Path(fixtures_root) if fixtures_root else None
+    if resolved_fixtures is None and target == "project":
+        byo = Path(".framework") / "reviewers" / "fixtures"
+        if byo.is_dir():
+            resolved_fixtures = byo
     out_dir = Path(out)
     # Progress → stdout: this is an all-human-facing maintainer command (its real outputs
     # are files), so there is no machine-data on stdout to keep clean, and progress is most
     # useful where default capture (`>`, tee) grabs it.
     log = (lambda _m: None) if quiet else (lambda m: typer.echo(m))
-    cl = run_audit(
-        targets,
-        backend=_backend,
-        root=Path.cwd(),
-        baseline_dir=Path(baseline) if baseline else None,
-        out_dir=out_dir,
-        skeptics=skeptics,
-        resume=resume,
-        log=log,
-        concurrency=concurrency,
-    )
+    try:
+        cl = run_audit(
+            targets,
+            backend=_backend,
+            root=Path.cwd(),
+            baseline_dir=Path(baseline) if baseline else None,
+            out_dir=out_dir,
+            skeptics=skeptics,
+            resume=resume,
+            fixtures_root=resolved_fixtures,
+            log=log,
+            concurrency=concurrency,
+        )
+    except CheckpointProvenanceError as exc:
+        typer.echo(
+            f"reviewer-audit: checkpoint is stale — produced against different inputs "
+            f"(changed: {', '.join(exc.changed)}). Re-run without --resume to restart fresh.",
+            err=True,
+        )
+        raise typer.Exit(2) from exc
     # root = the repo we're auditing (run from its root); edits are repo-relative, so this
     # is where each hunk is validated. Run from a subdir and hunks quarantine to notes.
     patch, notes = render_patch(cl, root=Path.cwd())
