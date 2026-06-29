@@ -5586,8 +5586,12 @@ def test_systemd_units_and_runbook_render(tmp_path):
     tmr = dest / "infra/backup/demo-backup.timer"
     readme = dest / "infra/backup/README.md"
     assert svc.is_file() and tmr.is_file() and readme.is_file()
-    assert "ExecStart=" in svc.read_text()
-    assert "OnCalendar=" in tmr.read_text()
+    svc_text = svc.read_text()
+    assert "ExecStart=" in svc_text
+    assert "Type=oneshot" in svc_text  # no lingering process
+    tmr_text = tmr.read_text()
+    assert "OnCalendar=" in tmr_text
+    assert "Persistent=true" in tmr_text  # catch up a missed run after the box was off
     r = readme.read_text()
     for token in ("BACKUP_DEST", "age", "RPO", "RTO", "systemctl"):
         assert token in r, f"runbook missing {token}"

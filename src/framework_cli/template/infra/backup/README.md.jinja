@@ -7,8 +7,8 @@ extension-correctly by the drill. Redis + observability stores are rebuildable a
 
 ## One-time setup
 1. **Install `age`** (single static binary): `apt install age` (or from github.com/FiloSottile/age).
-2. **Generate a keypair:** `age-keygen -o ~/.config/{{ project_slug }}/backup-identity.txt`.
-   It prints the **public** key (`age1...`).
+2. **Generate a keypair:** `mkdir -p ~/.config/{{ project_slug }} && age-keygen -o ~/.config/{{ project_slug }}/backup-identity.txt`
+   (`age-keygen` does not create parent dirs). It prints the **public** key (`age1...`).
 3. **Configure `.env`:** set `BACKUP_PUBKEY=age1...`, `BACKUP_IDENTITY=~/.config/{{ project_slug }}/backup-identity.txt`,
    and `BACKUP_DEST` to your off-box destination (this box: a Google-Drive-synced folder under `/mnt`).
 4. **Custody the PRIVATE key OFF the box** (password manager / a second location). **Losing it makes

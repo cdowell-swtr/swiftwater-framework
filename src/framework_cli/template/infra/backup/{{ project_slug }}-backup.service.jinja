@@ -5,6 +5,7 @@ Documentation=file:%h/{{ project_slug }}/infra/backup/README.md
 [Service]
 Type=oneshot
 WorkingDirectory=%h/{{ project_slug }}
-# Load BACKUP_* from the project .env (edit the path if your checkout lives elsewhere).
-EnvironmentFile=%h/{{ project_slug }}/.env
-ExecStart=%h/{{ project_slug }}/infra/backup/backup.sh
+# Source the project .env through a shell so `~` and `$VAR` expand. systemd's EnvironmentFile does
+# NOT expand `~`/`$HOME`, so a tilde-prefixed BACKUP_DEST/BACKUP_IDENTITY would silently break the
+# timer while `task backup` (bash) still worked. Sourcing in the shell keeps both paths identical.
+ExecStart=/bin/bash -c 'set -a; . ./.env; exec ./infra/backup/backup.sh'
