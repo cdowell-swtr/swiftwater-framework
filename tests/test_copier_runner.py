@@ -1144,6 +1144,59 @@ def test_render_dockerfile_entrypoint(tmp_path: Path):
     assert "uvicorn" in dockerfile and "CMD" in dockerfile
 
 
+def test_render_forwarded_allow_ips_edge_scoped(tmp_path: Path):
+    """FWK98: behind a TLS-terminating edge the app must trust X-Forwarded-Proto/For so it
+    builds https URLs / sets Secure cookies correctly — but ONLY from the docker-net source,
+    NEVER `*`. The scope is a LOCKED uvicorn `--forwarded-allow-ips` flag: a CLI flag beats the
+    FORWARDED_ALLOW_IPS env var, so an operator can't silently widen trust to `*` via env (the
+    FWK97 --configfile-eats-flags footgun class, flipped to our advantage); tighten in prod by
+    overriding the app `command`. Value = the RFC1918 superset (docker's default-address-pool is
+    host-configurable, not just 172.16/12, and the shared-edge subnet is docker-auto-assigned) +
+    127.0.0.1 (keep uvicorn's own default so the base.yml `http://localhost:8000` healthcheck
+    stays a trusted source). The flag rides BOTH the Dockerfile CMD (the prod/staging/base default
+    server command) and the dev.yml `--reload` command."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    cidrs = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1"
+
+    # 1. Dockerfile CMD — exec-form literal (prod/staging/base run this directly, no shell).
+    dockerfile = (dest / "infra" / "docker" / "Dockerfile").read_text()
+    cmd_line = next(line for line in dockerfile.splitlines() if line.startswith("CMD "))
+    cmd = json.loads(cmd_line[len("CMD ") :])
+    assert "--forwarded-allow-ips" in cmd, "CMD must scope the forwarded-header trust"
+    assert cmd[cmd.index("--forwarded-allow-ips") + 1] == cidrs
+    assert "*" not in cmd, "never trust X-Forwarded-* from all sources"
+
+    # 2. dev.yml app command — the --reload invocation carries the same locked flag+value.
+    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    dev_cmd = dev["services"]["app"]["command"]
+    assert "--reload" in dev_cmd
+    assert "--forwarded-allow-ips" in dev_cmd
+    assert dev_cmd[dev_cmd.index("--forwarded-allow-ips") + 1] == cidrs
+    assert "*" not in dev_cmd
+
+    # 3. .env.example documents the behavior — and pointedly does NOT present a settable
+    #    FORWARDED_ALLOW_IPS knob (it would be a silent no-op against the locked flag).
+    env_example = (dest / ".env.example").read_text()
+    assert "X-Forwarded-Proto" in env_example
+    for line in env_example.splitlines():
+        stripped = line.lstrip()
+        assert not (stripped.startswith("FORWARDED_ALLOW_IPS=")), (
+            f"FORWARDED_ALLOW_IPS must not look settable (locked-flag no-op): {line!r}"
+        )
+
+    # 4. The compose-ssh production app (behind the builder's load balancer — arguably the most
+    #    important "behind a TLS-terminating edge" target) must INHERIT the Dockerfile CMD, so it
+    #    gets the locked flag for free. Guard that it never grows its own command override that
+    #    would silently drop the trust scope.
+    app_host = yaml.safe_load((dest / "infra" / "compose" / "app-host.yml").read_text())
+    assert "command" not in app_host["services"]["app"], (
+        "app-host.yml must inherit the Dockerfile CMD (carrying --forwarded-allow-ips); "
+        "a command override here would silently lose the forwarded-header trust scope"
+    )
+
+
 def test_render_postgres_in_dev_and_lite(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

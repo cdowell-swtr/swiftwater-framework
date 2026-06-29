@@ -6,7 +6,10 @@ services:
     # are host-owned, not root-owned. UID/GID come from the env (task dev sets them); the
     # :-1000 default keeps a raw `docker compose` invocation working.
     user: "${UID:-1000}:${GID:-1000}"
-    command: ["uvicorn", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000", "--reload", "{{ package_name }}.main:app"]
+    # --forwarded-allow-ips: trust X-Forwarded-Proto/For only from the docker-net source (the
+    # per-stack Traefik or the shared edge) so the app sees https, never `*`. Locked flag (beats the
+    # FORWARDED_ALLOW_IPS env var) — same scope as the Dockerfile CMD; see infra/docker/Dockerfile.
+    command: ["uvicorn", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000", "--reload", "--forwarded-allow-ips", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1", "{{ package_name }}.main:app"]
     ports:
       - "${HTTP_HOST_PORT:-8000}:8000"
     volumes:
