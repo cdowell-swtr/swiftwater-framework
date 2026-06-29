@@ -1,4 +1,4 @@
-# FWK94 — Provision orchestration (`worktree:up` → export + `task dev:edge`) Implementation Plan
+# FWK110 — Provision orchestration (`worktree:up` → export + `task dev:edge`) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -378,12 +378,14 @@ def test_base_host_ports_mirror_compose_sh():
     # BASE_HOST_PORTS is a hand-copied mirror of compose.sh's `_p VAR DEFAULT` host-port
     # defaults. Parse the template compose.sh and assert the DEFAULT set matches exactly,
     # so a future port added to compose.sh can't silently drift the offset window.
+    # (A1/FWK100 renamed the payload `compose.sh` -> `compose.sh.jinja`; the `_p` port
+    # lines are plain shell, unaffected by the Jinja suffix — Milestone-M rebase fixup.)
     import re as _re
 
     mod = _load()
     compose_sh = (
         Path(__file__).resolve().parents[1]
-        / "src/framework_cli/template/scripts/compose.sh"
+        / "src/framework_cli/template/scripts/compose.sh.jinja"
     )
     defaults = {
         int(m.group(1))

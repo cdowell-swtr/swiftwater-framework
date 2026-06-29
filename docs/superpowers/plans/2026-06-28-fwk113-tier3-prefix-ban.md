@@ -1,4 +1,4 @@
-# FWK97 (child of FWK74 / A2) — tier-3 `t-` prefix ban (pinned-contract enforcement)
+# FWK113 (child of FWK74 / A2) — tier-3 `t-` prefix ban (pinned-contract enforcement)
 
 > **Date:** 2026-06-28 · **Status:** plan · **Author:** Chris (with Claude)
 > **Parent:** FWK74 (A2). **Closes** the FWK74 design's open coordination point #1 (exact tier-3

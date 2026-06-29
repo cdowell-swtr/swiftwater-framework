@@ -108,11 +108,12 @@ Sonnet (Haiku for trivial); code-quality + whole-sub-PLAN reviews → **Opus**. 
 stages but does **not** run the final commit — the controller verifies and commits
 ([[subagent-implementers-stop-before-commit]]).
 
-A worked example of the loop (A2's `FWK92`–`FWK95`): each sub-PLAN was a plan doc under
+A worked example of the loop (A2's `FWK92`–`FWK95`, the **provisional** ids — re-keyed to
+`FWK108`–`FWK113` at Milestone M, the very learning #5 below): each sub-PLAN was a plan doc under
 `docs/superpowers/plans/`, 2–4 TDD tasks appending to one `scripts/worktree.py`, framework-venv
 importlib tests (the `tests/test_check_migrations.py` precedent — pure logic needs no render), then an
 Opus whole-sub-PLAN review on the combined diff before ticking. The full per-task narrative is in
-`ACTION_LOG.md` (#0317–#0337).
+`ACTION_LOG.md` (#0340–#0363; the re-key mapping is #0364).
 
 > **The `/clear`-between-sub-PLANs lifecycle rule.** The operator runs `/clear` between FWK ids to keep
 > each context tight. **Before `/clear`-ing, deprovision or record any running stack** (the durable

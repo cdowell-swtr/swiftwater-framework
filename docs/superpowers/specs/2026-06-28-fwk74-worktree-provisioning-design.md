@@ -106,6 +106,11 @@ operator's per-stream merge-discipline override, A2 **re-keys the whole block to
 at Milestone M** (the rebase-to-merge), not now. The labels below stay 92–96 for the duration of the
 stream's local work.
 
+> **Re-keyed at Milestone M (DONE, 2026-06-28):** A1 (PR #97) and B merged first, so A2 re-keyed its
+> whole block on the rebase to main: **FWK92→108, 93→109, 94→110, 95→111, 96→112**, and the later
+> **FWK97 `t-` ban→113**. The table + DAG below keep the **as-designed provisional** ids (the learning
+> #5 record); the **live** ids are FWK108–113 (see PLAN + ACTION_LOG #0364 for the full mapping).
+
 | Sub-PLAN | Scope | Stub-dep |
 |---|---|---|
 | **FWK92** | Instance identity — derive + sanitize + `STACK_INSTANCE`; tier-3 `t-` namespace guard. Pure, unit-tested. Records the stub-vs-wait decision point. | **stub-free** |
