@@ -106,6 +106,22 @@ tasks:
     cmds:
       - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml -f infra/compose/edge.yml down
 
+  worktree:up:
+    desc: Provision THIS worktree's isolated dev stack behind the shared box edge (FWK74).
+    preconditions:
+      - sh: command -v docker
+        msg: "Docker is required for `task worktree:up`. Run `task doctor` to check all host tools."
+    cmds:
+      - uv run python scripts/worktree.py up
+
+  worktree:down:
+    desc: Tear down THIS worktree's stack + reclaim its volumes, before `git worktree remove` (FWK74).
+    preconditions:
+      - sh: command -v docker
+        msg: "Docker is required for `task worktree:down`. Run `task doctor` to check all host tools."
+    cmds:
+      - uv run python scripts/worktree.py down
+
   test:
     desc: Run the test suite
     preconditions:

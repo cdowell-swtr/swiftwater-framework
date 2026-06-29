@@ -75,6 +75,7 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "scripts/export-openapi.sh",
     "scripts/gen_observability.py",
     "scripts/load.sh",
+    "scripts/worktree.py",
 )
 
 # Framework-shipped files deliberately left unmanaged: composition seams the scaffold invites the

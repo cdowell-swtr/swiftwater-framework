@@ -5293,3 +5293,127 @@ def test_deploy_readme_byte_identical_without_battery(tmp_path: Path):
     )  # verbatim today's file, byte-for-byte
     # The plane-aware section is gated out entirely on the non-battery path.
     assert "Plane-aware migrate & rollback (multitenantauth)" not in rendered.decode()
+
+
+def test_render_worktree_tasks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "worktree:up:" in taskfile
+    assert "scripts/worktree.py up" in taskfile
+    # The symmetric teardown target (FWK95) renders alongside it.
+    assert "worktree:down:" in taskfile
+    assert "scripts/worktree.py down" in taskfile
+    # The orchestration script renders verbatim into the project (non-.jinja payload).
+    assert (dest / "scripts" / "worktree.py").is_file()
+
+
+def _network_alias_to_name(docs_by_file: dict) -> dict:
+    """Map each top-level network alias to its real docker name (the alias itself when
+    no `name:` is set). A compose `networks:` entry is a mapping alias -> spec(dict|None)."""
+    out: dict = {}
+    for doc in docs_by_file.values():
+        for alias, spec in (doc.get("networks") or {}).items():
+            out[alias] = spec.get("name", alias) if isinstance(spec, dict) else alias
+    return out
+
+
+def _svc_network_aliases(svc: dict) -> list:
+    """A service `networks:` is a list (`- default`), a mapping (`default: {...}`), or a
+    bare string; all reduce to the list of network *aliases* the service joins."""
+    nets = (svc or {}).get("networks")
+    if nets is None:
+        return []
+    if isinstance(nets, str):
+        return [nets]
+    if isinstance(nets, dict):
+        return list(nets.keys())
+    return list(nets)
+
+
+def store_edge_violations(docs_by_file: dict, target_net: str, stores: set):
+    """Return (violations, found): a data store attaches — directly OR via a top-level
+    network alias — to `target_net`. Resolving aliases is what catches A1's aliased
+    external-net form (`networks: shared-edge -> {name: swiftwater-shared-edge}`), which a
+    literal service-level name match is blind to. `found` is the set of stores seen (the
+    non-vacuity check). Each violation is (store, file, alias-as-written)."""
+    alias_to_name = _network_alias_to_name(docs_by_file)
+    violations: list = []
+    found: set = set()
+    for fname, doc in docs_by_file.items():
+        for name, svc in (doc.get("services") or {}).items():
+            if name not in stores:
+                continue
+            found.add(name)
+            for alias in _svc_network_aliases(svc):
+                if alias_to_name.get(alias, alias) == target_net:
+                    violations.append((name, fname, alias))
+    return violations, found
+
+
+def test_store_edge_violations_resolves_network_aliases():
+    # The shared edge net is declared in the ALIASED external form A1 actually ships
+    # (edge.yml): a top-level `networks: shared-edge -> {name: swiftwater-shared-edge}`,
+    # with services attaching via the *alias* `shared-edge`, never the literal name. A
+    # guard that matches the literal name at the service level is BLIND to this. The
+    # resolver maps each service's network aliases through the top-level `name:` so a
+    # store smuggled onto the shared edge via the alias is still caught.
+    aliased = {
+        "services": {
+            "postgres": {"networks": ["shared-edge"]},  # smuggled on via the alias
+            "app": {"networks": ["default", "shared-edge"]},
+        },
+        "networks": {
+            "shared-edge": {"name": "swiftwater-shared-edge", "external": True},
+            "default": None,
+        },
+    }
+    violations, found = store_edge_violations(
+        {"edge.yml": aliased}, "swiftwater-shared-edge", {"postgres", "redis", "mongo"}
+    )
+    assert ("postgres", "edge.yml", "shared-edge") in violations
+    assert found == {"postgres"}
+
+    # Safe: the store stays on `default`; only `app` uses the alias -> no store violation.
+    safe = {
+        "services": {
+            "postgres": {"networks": ["default"]},
+            "app": {"networks": ["default", "shared-edge"]},
+        },
+        "networks": {
+            "shared-edge": {"name": "swiftwater-shared-edge"},
+            "default": None,
+        },
+    }
+    v2, _ = store_edge_violations(
+        {"edge.yml": safe}, "swiftwater-shared-edge", {"postgres", "redis", "mongo"}
+    )
+    assert v2 == []
+
+
+def test_data_stores_never_on_shared_edge_net(tmp_path: Path):
+    # FWK95 / FWK88 frozen invariant: data stores stay on the per-project `default`
+    # network, never on the shared edge net `swiftwater-shared-edge` (else worktree A's
+    # app reaches B's Postgres and the `postgres` alias resolves ambiguously). Now
+    # load-bearing post-A1: A1's edge.yml declares the net in the ALIASED external form
+    # (top-level `networks: shared-edge -> {name: swiftwater-shared-edge}`, services join
+    # via the `shared-edge` alias), so the check resolves aliases via store_edge_violations
+    # rather than matching the literal name at the service level (which would be blind).
+    # Render WITH the stores so the guard is non-vacuous: postgres is always present;
+    # mongo needs `mongodb`; redis needs `workers`/`redis`.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb", "workers", "redis"]})
+
+    stores = {"postgres", "redis", "mongo"}
+    docs_by_file = {
+        f.name: (yaml.safe_load(f.read_text()) or {})
+        for f in (dest / "infra" / "compose").glob("*.yml")
+    }
+    violations, found = store_edge_violations(
+        docs_by_file, "swiftwater-shared-edge", stores
+    )
+    assert not violations, (
+        f"data store(s) attached to the shared edge net: {violations}"
+    )
+    # Non-vacuous: the render must actually contain stores, or the guard checks nothing.
+    assert found == stores, f"expected stores {stores} rendered, found {found}"
