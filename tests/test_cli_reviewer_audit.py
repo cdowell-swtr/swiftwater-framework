@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -288,6 +289,42 @@ def test_reviewer_audit_target_project_selects_active_agents(tmp_path, monkeypat
     assert "security" in captured["targets"]  # an always-on, non-framework_only agent
     assert "coverage-gap" not in captured["targets"]  # framework_only → excluded
     assert str(captured["fixtures_root"]) == str(tmp_path / "fx")
+
+
+def test_reviewer_audit_target_project_defaults_fixtures_to_byo_dir(
+    tmp_path, monkeypatch
+):
+    """FWK120: in a project with `.framework/reviewers/fixtures/`, `reviewer-audit
+    --target project` (no --fixtures-root) defaults to that dir — a consumer tunes
+    their own reviewers with one command (rookie-free, low burden)."""
+    import framework_cli.cli as climod
+    import framework_cli.review.audit.pipeline as pipeline_mod
+    from framework_cli.review.audit.changelist import Changelist
+
+    (tmp_path / ".framework" / "reviewers" / "fixtures").mkdir(parents=True)
+
+    captured: dict[str, object] = {}
+
+    def spy_run_audit(targets, **kw):
+        captured["fixtures_root"] = kw.get("fixtures_root")
+        return Changelist()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(pipeline_mod, "run_audit", spy_run_audit)
+    monkeypatch.setattr(climod, "_make_backend", lambda *a, **k: object())
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **k: type("R", (), {"backend": "subagent", "reason": ""})(),
+    )
+
+    result = runner.invoke(
+        app, ["reviewer-audit", "--target", "project", "--out", str(tmp_path / "o")]
+    )
+    assert result.exit_code == 0, result.output
+    assert str(captured["fixtures_root"]) == str(
+        Path(".framework") / "reviewers" / "fixtures"
+    )
 
 
 def test_reviewer_audit_target_project_includes_project_local_reviewer(

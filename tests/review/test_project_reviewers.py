@@ -111,3 +111,55 @@ def test_build_audit_items_registers_project_reviewers(
 
     items = cli._build_audit_items("project", ["house-style"], True, None)
     assert any(getattr(it, "agent", None) == "house-style" for it in items)
+
+
+def _audits_nothing(system, messages):
+    text = " ".join(b.get("text", "") for b in system)
+    if "AUDITOR" in text:
+        return '{"agent": "house-style", "edits": [], "proposed_block_threshold": "low", "fixture_verdicts": {}}'
+    if "RECONCILER" in text:
+        return '{"agents": [], "preamble_edits": []}'
+    return "{}"
+
+
+def test_custom_reviewer_audited_against_its_own_fixtures(
+    tmp_path: Path, restore_specs
+):
+    """FWK120: the consumer oracle end-to-end — a project-local reviewer is audited
+    against ITS OWN fixtures (.framework/reviewers/fixtures/<name>/) and a changelist
+    is produced. Ties FWK119 discovery + FWK118 fixtures_root together."""
+    from framework_cli.review.audit.pipeline import run_audit
+    from tests.review.audit.conftest import StubBackend
+
+    _write_reviewer(tmp_path, "house-style", toml='block_threshold = "low"\n')
+    case = (
+        tmp_path
+        / ".framework"
+        / "reviewers"
+        / "fixtures"
+        / "house-style"
+        / "bad"
+        / "sprawl"
+    )
+    case.mkdir(parents=True)
+    (case / "change.patch").write_text("ZZ_HOUSE_STYLE_FIXTURE diff body\n")
+    register_project_reviewers(tmp_path)
+
+    backend = StubBackend(_audits_nothing)
+    run_audit(
+        ["house-style"],
+        backend=backend,
+        root=tmp_path,
+        baseline_dir=None,
+        out_dir=tmp_path / "out",
+        skeptics=1,
+        fixtures_root=tmp_path / ".framework" / "reviewers" / "fixtures",
+    )
+    auditor = next(
+        c
+        for c in backend.messages.calls
+        if "AUDITOR" in " ".join(b.get("text", "") for b in c["system"])
+    )
+    sys_text = " ".join(b.get("text", "") for b in auditor["system"])
+    assert "ZZ_HOUSE_STYLE_FIXTURE" in sys_text  # the reviewer's own fixture fed in
+    assert (tmp_path / "out" / "changelist.json").exists()

@@ -420,6 +420,30 @@ def test_run_audit_resume_warns_when_provenance_absent(tmp_path: Path):
     assert any("provenance" in m.lower() for m in logged)
 
 
+def test_project_target_audit_oracle_reads_render_based_fixtures(tmp_path: Path):
+    """FWK120: the project-target oracle end-to-end — auditing a project-roster agent
+    against the real, render-based fixtures (src/demo/... diffs) produces a changelist.
+    Locks in FWK118's fixtures seam against the committed generated-project fixtures."""
+    backend = StubBackend(_noop_scripted)
+    run_audit(
+        ["security"],
+        backend=backend,
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=tmp_path / "out",
+        skeptics=1,
+        fixtures_root=Path("tests/eval/fixtures"),
+    )
+    auditor = next(
+        c
+        for c in backend.messages.calls
+        if "AUDITOR" in " ".join(b.get("text", "") for b in c["system"])
+    )
+    sys_text = " ".join(b.get("text", "") for b in auditor["system"])
+    assert "src/demo/" in sys_text  # the fixtures are diffs against a generated project
+    assert (tmp_path / "out" / "changelist.json").exists()
+
+
 # ---------------------------------------------------------------------------
 # FWK118 — target-aware audit core (fixtures_root threading)
 # ---------------------------------------------------------------------------

@@ -1568,6 +1568,15 @@ def reviewer_audit(
         )
     else:
         targets = agent_names()
+
+    # Resolve the fixtures dir. An explicit --fixtures-root always wins; otherwise a
+    # project-target run defaults to the project's own .framework/reviewers/fixtures
+    # when present, so a consumer tunes their reviewers with one command (FWK120).
+    resolved_fixtures = Path(fixtures_root) if fixtures_root else None
+    if resolved_fixtures is None and target == "project":
+        byo = Path(".framework") / "reviewers" / "fixtures"
+        if byo.is_dir():
+            resolved_fixtures = byo
     out_dir = Path(out)
     # Progress → stdout: this is an all-human-facing maintainer command (its real outputs
     # are files), so there is no machine-data on stdout to keep clean, and progress is most
@@ -1582,7 +1591,7 @@ def reviewer_audit(
             out_dir=out_dir,
             skeptics=skeptics,
             resume=resume,
-            fixtures_root=Path(fixtures_root) if fixtures_root else None,
+            fixtures_root=resolved_fixtures,
             log=log,
             concurrency=concurrency,
         )
