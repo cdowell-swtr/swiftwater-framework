@@ -5592,3 +5592,43 @@ def test_systemd_units_and_runbook_render(tmp_path):
     for token in ("BACKUP_DEST", "age", "RPO", "RTO", "systemctl"):
         assert token in r, f"runbook missing {token}"
     assert "backups/" in (dest / ".gitignore").read_text()
+
+
+def test_mongo_store_is_in_backup_when_present(tmp_path):
+    # FWK133 Task 7: a `store` battery (mongodb) must be dumped + restorable, not silently skipped.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb"]})
+    backup = (dest / "infra/backup/backup.sh").read_text()
+    assert "# BACKUP-STORES: postgres mongo" in backup
+    assert "mongodump" in backup
+    assert "mongorestore" in (dest / "infra/backup/restore.sh").read_text()
+
+
+@pytest.mark.parametrize(
+    "battery,needle",
+    [
+        ("age", "CREATE EXTENSION IF NOT EXISTS age"),
+        ("timescaledb", "timescaledb_pre_restore()"),
+        ("timescaledb", "timescaledb_post_restore()"),
+    ],
+)
+def test_extension_drill_has_correct_dance(tmp_path, battery, needle):
+    # FWK133 Task 8: the restore-drill must restore postgres-extension data correctly — AGE loads
+    # its extension before data; TimescaleDB wraps the restore in pre/post-restore hooks.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": [battery]})
+    drill = (dest / "infra/backup/restore_drill.sh").read_text()
+    assert needle in drill, f"{battery} drill missing {needle!r}"
+
+
+def test_extension_drill_builds_battery_correct_image(tmp_path):
+    # FWK133 Task 8: extension stacks must drill against the BUILT extension image, never vanilla
+    # postgres (which would false-green pgvector / always-fail timescale+age). pgvector needs no SQL
+    # dance — only the extension-loaded image, which the drill builds.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["pgvector"]})
+    drill = (dest / "infra/backup/restore_drill.sh").read_text()
+    assert "build postgres" in drill
+    assert (
+        "--exit-on-error" in drill
+    )  # a failed extension restore goes RED, not silent-OK
