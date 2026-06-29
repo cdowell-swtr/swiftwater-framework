@@ -5293,3 +5293,48 @@ def test_deploy_readme_byte_identical_without_battery(tmp_path: Path):
     )  # verbatim today's file, byte-for-byte
     # The plane-aware section is gated out entirely on the non-battery path.
     assert "Plane-aware migrate & rollback (multitenantauth)" not in rendered.decode()
+
+
+def test_render_worktree_tasks(tmp_path: Path):
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    taskfile = (dest / "Taskfile.yml").read_text()
+    assert "worktree:up:" in taskfile
+    assert "scripts/worktree.py up" in taskfile
+    # The symmetric teardown target (FWK95) renders alongside it.
+    assert "worktree:down:" in taskfile
+    assert "scripts/worktree.py down" in taskfile
+    # The orchestration script renders verbatim into the project (non-.jinja payload).
+    assert (dest / "scripts" / "worktree.py").is_file()
+
+
+def test_data_stores_never_on_shared_edge_net(tmp_path: Path):
+    # FWK95 / FWK88 frozen invariant: data stores stay on the per-project `default`
+    # network, never on the shared edge net `swiftwater-shared-edge` (else worktree A's
+    # app reaches B's Postgres and the `postgres` alias resolves ambiguously). Armed
+    # against the FROZEN name today — the shared net is an A1 deliverable not yet present,
+    # so this passes trivially now and becomes load-bearing at the Milestone-M rebase
+    # (it verifies A1's shared-net wiring did not attach a store to the shared edge).
+    # Render WITH the stores so the guard is non-vacuous: postgres is always present;
+    # mongo needs `mongodb`; redis needs `workers`/`redis`.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb", "workers", "redis"]})
+
+    shared_edge = "swiftwater-shared-edge"
+    stores = {"postgres", "redis", "mongo"}
+    found: set[str] = set()
+    for compose_file in (dest / "infra" / "compose").glob("*.yml"):
+        doc = yaml.safe_load(compose_file.read_text()) or {}
+        for name, svc in (doc.get("services") or {}).items():
+            if name not in stores:
+                continue
+            found.add(name)
+            nets = (svc or {}).get("networks") or []
+            # Compose accepts a list (`- default`) or a mapping (`default: {...}`); both
+            # iterate to the network names. A bare string is treated as a single name.
+            attached = {nets} if isinstance(nets, str) else set(nets)
+            assert shared_edge not in attached, (
+                f"{name} attached to {shared_edge} in {compose_file.name}"
+            )
+    # Non-vacuous: the render must actually contain stores, or the guard checks nothing.
+    assert found == stores, f"expected stores {stores} rendered, found {found}"
