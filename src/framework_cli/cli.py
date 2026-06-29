@@ -1507,7 +1507,10 @@ def reviewer_audit(
 ) -> None:
     """Audit reviewer prompts (rubric consistency, severity bar, scope, fixtures) and emit a
     vetted changelist + a dry-run apply-preview patch. No edits are applied (FWK4)."""
-    from framework_cli.review.audit.pipeline import run_audit
+    from framework_cli.review.audit.pipeline import (
+        CheckpointProvenanceError,
+        run_audit,
+    )
     from framework_cli.review.audit.preview import render_patch
 
     res = _resolve_review_backend(flag=backend or None, key_env=EVAL_KEY_ENV)
@@ -1524,17 +1527,25 @@ def reviewer_audit(
     # are files), so there is no machine-data on stdout to keep clean, and progress is most
     # useful where default capture (`>`, tee) grabs it.
     log = (lambda _m: None) if quiet else (lambda m: typer.echo(m))
-    cl = run_audit(
-        targets,
-        backend=_backend,
-        root=Path.cwd(),
-        baseline_dir=Path(baseline) if baseline else None,
-        out_dir=out_dir,
-        skeptics=skeptics,
-        resume=resume,
-        log=log,
-        concurrency=concurrency,
-    )
+    try:
+        cl = run_audit(
+            targets,
+            backend=_backend,
+            root=Path.cwd(),
+            baseline_dir=Path(baseline) if baseline else None,
+            out_dir=out_dir,
+            skeptics=skeptics,
+            resume=resume,
+            log=log,
+            concurrency=concurrency,
+        )
+    except CheckpointProvenanceError as exc:
+        typer.echo(
+            f"reviewer-audit: checkpoint is stale — produced against different inputs "
+            f"(changed: {', '.join(exc.changed)}). Re-run without --resume to restart fresh.",
+            err=True,
+        )
+        raise typer.Exit(2) from exc
     # root = the repo we're auditing (run from its root); edits are repo-relative, so this
     # is where each hunk is validated. Run from a subdir and hunks quarantine to notes.
     patch, notes = render_patch(cl, root=Path.cwd())

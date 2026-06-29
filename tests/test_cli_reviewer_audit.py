@@ -198,6 +198,57 @@ def test_run_audit_passes_concurrency_to_fanout(tmp_path, monkeypatch):
     )
 
 
+def test_reviewer_audit_resume_refuses_stale_checkpoint(tmp_path, monkeypatch):
+    """FWK47: resuming a checkpoint produced against different inputs (here a changed
+    --skeptics) is refused with a clear message + non-zero exit, not silently reused."""
+    import framework_cli.cli as climod
+    from tests.review.audit.conftest import StubBackend
+
+    def _scripted(system, messages):
+        text = " ".join(b.get("text", "") for b in system)
+        if "AUDITOR" in text:
+            return json.dumps(
+                {
+                    "agent": "security",
+                    "edits": [],
+                    "proposed_block_threshold": "high",
+                    "fixture_verdicts": {},
+                }
+            )
+        if "RECONCILER" in text:
+            return json.dumps({"agents": [], "preamble_edits": []})
+        return "{}"
+
+    monkeypatch.setattr(climod, "_make_backend", lambda *a, **k: StubBackend(_scripted))
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **k: type("R", (), {"backend": "subagent", "reason": ""})(),
+    )
+
+    out = tmp_path / "audit-out"
+    fresh = runner.invoke(
+        app, ["reviewer-audit", "security", "--out", str(out), "--skeptics", "1"]
+    )
+    assert fresh.exit_code == 0, fresh.output
+
+    stale = runner.invoke(
+        app,
+        [
+            "reviewer-audit",
+            "security",
+            "--out",
+            str(out),
+            "--skeptics",
+            "3",
+            "--resume",
+        ],
+    )
+    assert stale.exit_code == 2, stale.output
+    assert "stale" in stale.output.lower() or "provenance" in stale.output.lower()
+    assert "skeptics" in stale.output
+
+
 def test_reviewer_audit_skip_neutral_without_backend(tmp_path, monkeypatch):
     import framework_cli.cli as climod
 

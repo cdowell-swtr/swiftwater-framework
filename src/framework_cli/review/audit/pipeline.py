@@ -4,6 +4,7 @@ refute (Stage 3, per proposed edit) → vetted changelist persisted to out_dir."
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -18,7 +19,73 @@ from framework_cli.review.audit.changelist import (
 )
 from framework_cli.review.audit.orchestrator import run_stage
 from framework_cli.review.audit.stages import audit_agent, reconcile, refute
+from framework_cli.review.checkpoint import tree_signature
 from framework_cli.review.registry import agent_names, get_agent
+
+_PROVENANCE = "audit-provenance.json"
+
+
+class CheckpointProvenanceError(RuntimeError):
+    """Raised when --resume meets a checkpoint produced against different inputs
+    (code/agent-prompts/roster, the audited targets, skeptic count, or baseline) —
+    a stale checkpoint must not silently bind to the wrong inputs (FWK47)."""
+
+    def __init__(self, changed: list[str]) -> None:
+        self.changed = changed
+        super().__init__(
+            "reviewer-audit checkpoint is stale — inputs changed: "
+            + (", ".join(changed) or "(fingerprint differs)")
+        )
+
+
+def _baseline_digest(baseline_dir: Path | None) -> str:
+    """A content hash of the evidence baseline dir (gitignored → invisible to the
+    tree signature), so a changed baseline invalidates a resume. '' when absent."""
+    if baseline_dir is None or not baseline_dir.exists():
+        return ""
+    h = hashlib.sha256()
+    for p in sorted(baseline_dir.rglob("*")):
+        if p.is_file():
+            h.update(str(p.relative_to(baseline_dir)).encode("utf-8", "replace"))
+            h.update(b"\0")
+            h.update(p.read_bytes())
+            h.update(b"\0")
+    return h.hexdigest()
+
+
+def _audit_provenance(
+    root: Path, targets: list[str], baseline_dir: Path | None, skeptics: int
+) -> dict[str, str]:
+    """The fingerprint a resume must match. tree_signature(root) captures code +
+    agent prompts + roster (all tracked); targets/skeptics/baseline are the
+    runtime inputs not reflected in the tree."""
+    sha, dirty = tree_signature(root)
+    parts = {
+        "git_sha": sha,
+        "dirty_hash": dirty,
+        "targets": ",".join(sorted(targets)),
+        "skeptics": str(skeptics),
+        "baseline": _baseline_digest(baseline_dir),
+    }
+    digest = hashlib.sha256(
+        json.dumps(parts, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:16]
+    return {"fingerprint": digest, **parts}
+
+
+def _provenance_drift(prior: dict[str, str], current: dict[str, str]) -> list[str]:
+    """Human-readable names of the input fields that changed (git_sha+dirty_hash
+    collapse to 'code')."""
+    changed = []
+    if (prior.get("git_sha"), prior.get("dirty_hash")) != (
+        current.get("git_sha"),
+        current.get("dirty_hash"),
+    ):
+        changed.append("code")
+    for field in ("targets", "skeptics", "baseline"):
+        if prior.get(field) != current.get(field):
+            changed.append(field)
+    return changed
 
 
 def run_audit(
@@ -34,6 +101,25 @@ def run_audit(
     concurrency: int = 1,
 ) -> Changelist:
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # FWK47 — checkpoint-provenance guard. Stamp the inputs a fresh run was produced
+    # against; on resume, refuse a checkpoint whose inputs no longer match (a stale
+    # checkpoint silently binding to the wrong inputs is the failure class here).
+    prov_path = out_dir / _PROVENANCE
+    current = _audit_provenance(root, targets, baseline_dir, skeptics)
+    if resume and prov_path.exists():
+        prior = json.loads(prov_path.read_text())
+        if prior.get("fingerprint") != current["fingerprint"]:
+            raise CheckpointProvenanceError(_provenance_drift(prior, current))
+    elif resume:
+        # A legacy checkpoint with no provenance file can't be verified — proceed,
+        # but say so rather than silently trusting possibly-stale inputs.
+        log(
+            f"reviewer-audit: resuming a checkpoint with no provenance stamp ({prov_path.name} "
+            "absent) — cannot verify inputs match; re-stamping from the current run"
+        )
+    prov_path.write_text(json.dumps(current, indent=2, sort_keys=True))
+
     roster = {n: get_agent(n).block_threshold for n in agent_names()}
 
     # Stage 1 — audit fan-out (per target), checkpointed.

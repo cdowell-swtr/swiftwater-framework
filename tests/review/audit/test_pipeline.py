@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
-from framework_cli.review.audit.pipeline import run_audit
+import pytest
+
+from framework_cli.review.audit.pipeline import CheckpointProvenanceError, run_audit
 from tests.review.audit.conftest import StubBackend
 
 
@@ -282,6 +284,140 @@ def test_run_audit_surfaces_persistent_skeptic_parse_failure(tmp_path: Path):
     full = json.loads((tmp_path / "out" / "changelist-full.json").read_text())
     verdict = full["agents"][0]["edits"][0]["verdict"]
     assert verdict["parse_failures"] == 1
+
+
+# ---------------------------------------------------------------------------
+# FWK47 — --resume checkpoint-provenance guard
+# ---------------------------------------------------------------------------
+
+
+def _noop_scripted(system, messages):
+    """An audit that proposes no edits — Stage 3 has nothing to refute, so the
+    provenance guard (which fires before any stage) is what these tests exercise."""
+    text = " ".join(b.get("text", "") for b in system)
+    if "AUDITOR" in text:
+        return json.dumps(
+            {
+                "agent": "security",
+                "edits": [],
+                "proposed_block_threshold": "high",
+                "fixture_verdicts": {},
+            }
+        )
+    if "RECONCILER" in text:
+        return json.dumps({"agents": [], "preamble_edits": []})
+    return "{}"
+
+
+def test_run_audit_writes_provenance_on_fresh_run(tmp_path: Path):
+    out = tmp_path / "out"
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    prov = json.loads((out / "audit-provenance.json").read_text())
+    assert prov["fingerprint"]
+    assert prov["targets"] == "security"
+    assert prov["skeptics"] == "1"
+
+
+def test_run_audit_resume_refuses_when_skeptics_changed(tmp_path: Path):
+    out = tmp_path / "out"
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    with pytest.raises(CheckpointProvenanceError) as exc:
+        run_audit(
+            ["security"],
+            backend=StubBackend(_noop_scripted),
+            root=Path.cwd(),
+            baseline_dir=None,
+            out_dir=out,
+            skeptics=3,
+            resume=True,
+        )
+    assert "skeptics" in exc.value.changed
+
+
+def test_run_audit_resume_refuses_when_targets_changed(tmp_path: Path):
+    out = tmp_path / "out"
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    with pytest.raises(CheckpointProvenanceError) as exc:
+        run_audit(
+            ["security", "usability"],
+            backend=StubBackend(_noop_scripted),
+            root=Path.cwd(),
+            baseline_dir=None,
+            out_dir=out,
+            skeptics=1,
+            resume=True,
+        )
+    assert "targets" in exc.value.changed
+
+
+def test_run_audit_resume_proceeds_when_inputs_match(tmp_path: Path):
+    out = tmp_path / "out"
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    # identical inputs → fingerprint matches → resume proceeds without raising
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+        resume=True,
+    )
+
+
+def test_run_audit_resume_warns_when_provenance_absent(tmp_path: Path):
+    """A legacy checkpoint with no provenance file can't be verified — proceed but
+    surface a warning rather than silently binding to possibly-stale inputs."""
+    out = tmp_path / "out"
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+    )
+    (out / "audit-provenance.json").unlink()
+    logged: list[str] = []
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+        resume=True,
+        log=logged.append,
+    )
+    assert any("provenance" in m.lower() for m in logged)
 
 
 def test_run_audit_produces_vetted_changelist(tmp_path: Path):
