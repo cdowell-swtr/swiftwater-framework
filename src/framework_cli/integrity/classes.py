@@ -42,7 +42,6 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "infra/deploy/check_alert_secrets.sh",
     "infra/deploy/README.md",
     "infra/docker/Dockerfile",
-    "infra/traefik/traefik.yml",
     "infra/traefik/dynamic/tls.yml",
     "infra/tls/ca/.gitkeep",
     "infra/observability/alertmanager/alertmanager.yml",

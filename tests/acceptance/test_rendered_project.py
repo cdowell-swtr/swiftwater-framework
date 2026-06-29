@@ -1720,7 +1720,7 @@ def test_rendered_dev_stack_http_redirect_and_mongo_health(tmp_path: Path) -> No
             time.sleep(3)
         assert status in (301, 302, 307, 308), (
             f"Traefik :80 did not redirect within 90s (last: {last}) — the web->websecure "
-            "RedirectScheme entrypoint (infra/traefik/traefik.yml) is broken/removed"
+            "RedirectScheme entrypoint (dev.yml traefik command flags) is broken/removed"
         )
         assert location.startswith("https://"), (
             f"redirect Location is not https:// (got {location!r}) — wrong scheme on the "

@@ -619,6 +619,169 @@ def test_compose_config_edge_network_membership(tmp_path: Path):
     )
 
 
+def test_render_dev_traefik_instance_scoped_constraint(tmp_path: Path):
+    """FWK97: the tier-1 per-stack Traefik scopes discovery to its OWN instance via a
+    `--providers.docker.constraints` keyed on the frozen `swiftwater.instance` label — else it
+    discovers every co-resident instance's containers off the shared socket (silent cross-route
+    bleed). LOUD FINDING: that constraint CANNOT be a CLI flag alongside `--configfile` (Traefik
+    treats the file as the SOLE static-config source — CLI flags + `TRAEFIK_*` env are silently
+    ignored, empirically proven). So the static config moves from the mounted `traefik.yml` to
+    inline `command:` flags, letting compose interpolate `${STACK_INSTANCE}` into the constraint at
+    up-time (producer label + consumer constraint share ONE value — no silent drift). The TLS
+    dynamic config is loaded by the separate file provider, untouched. RAW assertions; the resolved
+    complement is the docker-gated test below."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    dev = yaml.safe_load((dest / "infra" / "compose" / "dev.yml").read_text())
+    traefik = dev["services"]["traefik"]
+    cmd = traefik["command"]
+
+    # The file is gone, and nothing references it — the configfile arg + its mount are removed.
+    assert not (dest / "infra" / "traefik" / "traefik.yml").exists(), (
+        "traefik.yml must be deleted — its static config moved to inline command flags"
+    )
+    assert not any("--configfile" in c for c in cmd), (
+        "--configfile makes the file the sole static-config source → the constraint flag is "
+        "silently ignored; it must be dropped"
+    )
+    vols = traefik.get("volumes", [])
+    assert not any("traefik.yml" in v for v in vols), (
+        "traefik.yml mount must be removed"
+    )
+
+    # The dynamic, instance-scoped constraint — compose interpolates ${STACK_INSTANCE} at up-time;
+    # the :-demo default keeps a bare `docker compose up` (bypassing the wrapper) working.
+    assert (
+        "--providers.docker.constraints=Label(`swiftwater.instance`,`${STACK_INSTANCE:-demo}`)"
+        in cmd
+    )
+    # Faithful translation of the rest of the static config (entrypoints + HTTP→HTTPS redirect).
+    assert "--entrypoints.websecure.address=:443" in cmd
+    assert "--entrypoints.web.address=:80" in cmd
+    assert "--entrypoints.web.http.redirections.entrypoint.to=websecure" in cmd
+    assert "--entrypoints.web.http.redirections.entrypoint.scheme=https" in cmd
+    assert "--providers.docker.exposedByDefault=false" in cmd
+    # TLS dynamic config still loaded by the file provider (a separate source from --configfile).
+    assert "--providers.file.directory=/etc/traefik/dynamic" in cmd
+    # the certs + dynamic dirs stay mounted (TLS termination unchanged)
+    assert any("../traefik/dynamic:/etc/traefik/dynamic:ro" in v for v in vols)
+    assert any("../traefik/certs:/etc/traefik/certs:ro" in v for v in vols)
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_compose_config_dev_traefik_constraint_resolves(tmp_path: Path):
+    """FWK97 resolved complement (docker-gated): `docker compose config` resolves the per-stack
+    Traefik's constraint flag to the instance value — slug by default (R1 parity), the worktree
+    instance when STACK_INSTANCE is set. Proves the producer label (base.yml `swiftwater.instance`)
+    and the consumer constraint resolve to the IDENTICAL value, so the constraint can never silently
+    drift from the label it filters on."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    def traefik_cmd(extra_env: dict[str, str]) -> list[str]:
+        e = {**os.environ}
+        for k in ("STACK_INSTANCE", "COMPOSE_PROJECT_NAME", "APP_ROUTE_HOST"):
+            e.pop(k, None)
+        e.update(extra_env)
+        args = ["./scripts/compose.sh"]
+        # observability.yml merged in: grafana is an image-less override in dev.yml, so the dev set
+        # only resolves with the obs overlay present (the --profile dev convention).
+        for f in (
+            "infra/compose/base.yml",
+            "infra/compose/observability.yml",
+            "infra/compose/dev.yml",
+        ):
+            args += ["-f", f]
+        args += ["--profile", "dev", "config"]
+        r = subprocess.run(args, cwd=dest, capture_output=True, text=True, env=e)
+        assert r.returncode == 0, f"compose config failed:\n{r.stderr}"
+        return yaml.safe_load(r.stdout)["services"]["traefik"]["command"]
+
+    # Default (unset): constraint resolves to the slug == the app's resolved swiftwater.instance.
+    assert (
+        "--providers.docker.constraints=Label(`swiftwater.instance`,`demo`)"
+        in traefik_cmd({})
+    )
+    # Worktree instance: constraint tracks STACK_INSTANCE (no drift from the app label).
+    assert (
+        "--providers.docker.constraints=Label(`swiftwater.instance`,`demo-wt1`)"
+        in traefik_cmd({"STACK_INSTANCE": "demo-wt1"})
+    )
+
+
+def test_render_promtail_instance_scoped_keep_relabel(tmp_path: Path):
+    """FWK97: promtail scopes its docker scrape to THIS instance via a `keep` relabel on
+    `__meta_docker_container_label_com_docker_compose_project` (== COMPOSE_PROJECT_NAME) — else it
+    scrapes every container on the box into the wrong Loki (cross-instance log bleed; PII risk via
+    anon Grafana). Promtail runs in EVERY instance (worktrees too), so the filter must be dynamic:
+    `-config.expand-env=true` lets promtail substitute `${COMPOSE_PROJECT_NAME}` (passed into the
+    container env) into the regex at runtime — so the mounted config file stays static/shared."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    pt = yaml.safe_load(
+        (
+            dest / "infra" / "observability" / "promtail" / "promtail-config.yml"
+        ).read_text()
+    )
+    relabels = pt["scrape_configs"][0]["relabel_configs"]
+    keep = next(
+        r
+        for r in relabels
+        if r.get("source_labels")
+        == ["__meta_docker_container_label_com_docker_compose_project"]
+    )
+    assert keep["action"] == "keep"
+    # expand-env substitutes the env value at runtime → the regex tracks this instance's project.
+    assert keep["regex"] == "${COMPOSE_PROJECT_NAME}"
+
+    overlay = yaml.safe_load(
+        (dest / "infra" / "compose" / "observability.yml").read_text()
+    )
+    promtail = overlay["services"]["promtail"]
+    assert "-config.expand-env=true" in promtail["command"]
+    # COMPOSE_PROJECT_NAME is plumbed into the container so expand-env can resolve it; the
+    # :-demo default keeps a bare `docker compose up` (no wrapper) scoping to the slug.
+    assert (
+        promtail["environment"]["COMPOSE_PROJECT_NAME"]
+        == "${COMPOSE_PROJECT_NAME:-demo}"
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_compose_config_promtail_project_filter_resolves(tmp_path: Path):
+    """FWK97 resolved complement (docker-gated): `docker compose config` resolves promtail's
+    COMPOSE_PROJECT_NAME env to the instance — slug by default (R1 parity), the worktree instance
+    when set — and keeps `-config.expand-env=true` so promtail substitutes it into the keep
+    regex at runtime."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    def promtail(extra_env: dict[str, str]) -> dict:
+        e = {**os.environ}
+        for k in ("STACK_INSTANCE", "COMPOSE_PROJECT_NAME"):
+            e.pop(k, None)
+        e.update(extra_env)
+        args = ["./scripts/compose.sh"]
+        for f in ("infra/compose/base.yml", "infra/compose/observability.yml"):
+            args += ["-f", f]
+        args += ["config"]
+        r = subprocess.run(args, cwd=dest, capture_output=True, text=True, env=e)
+        assert r.returncode == 0, f"compose config failed:\n{r.stderr}"
+        return yaml.safe_load(r.stdout)["services"]["promtail"]
+
+    p = promtail({})
+    assert p["environment"]["COMPOSE_PROJECT_NAME"] == "demo"
+    assert "-config.expand-env=true" in p["command"]
+    w = promtail({"STACK_INSTANCE": "demo-wt1"})
+    assert w["environment"]["COMPOSE_PROJECT_NAME"] == "demo-wt1"
+
+
 def test_render_env_services_and_tasks(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
@@ -640,10 +803,10 @@ def test_render_traefik_and_certs_gitignored(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
 
-    static = yaml.safe_load((dest / "infra" / "traefik" / "traefik.yml").read_text())
-    assert "websecure" in static["entryPoints"]
-    assert static["providers"]["docker"]["exposedByDefault"] is False
-
+    # The per-stack Traefik's static config is inline command flags (FWK97 — no mounted
+    # traefik.yml); the websecure entrypoint + docker provider are asserted in
+    # test_render_dev_traefik_instance_scoped_constraint. Here we cover the TLS dynamic config +
+    # cert gitignore.
     tls = yaml.safe_load(
         (dest / "infra" / "traefik" / "dynamic" / "tls.yml").read_text()
     )
