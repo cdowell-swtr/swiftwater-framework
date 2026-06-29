@@ -298,6 +298,17 @@ The experiment's second product (codify the workflow) starts in the carving itse
    renumber at merge, in merge order, never mid-run. A candidate to promote into `pi-convention.md` once
    the experiment validates it.
 
+6. **Contract amendments have two propagation shapes — and choosing between them is a task-management
+   concern, not a carving rule.** The box's findings landed as a **standalone** amendment PR (#92);
+   stream-B's tier-2↔tier-3 marker pin landed **bundled inside its implementation PR** (#94). Both are
+   valid, but they fan out differently: a standalone amendment lets a dependent stream (here A2, which
+   must add the `t-`-prefix ban) pick up the contract change without pulling the surfacing stream's whole
+   implementation; a bundled one couples them. Deliberately **not** settled as a carving-spec rule —
+   per the operator, deferred to the **process design around Bearing's MCP-mediated task-management
+   service** (the same service that root-cures learning #5's shared-counter collision), where an
+   amendment and its dependent fan-out become **first-class tracked tasks** rather than a PR-shape
+   convention each stream re-decides. Recorded here so the future service inherits the requirement.
+
 ## PLAN mapping emitted by this carving
 
 - `FWK75` → A1 parent (behind-edge dev mode; defines `FWK88` labels/network/run-mode + tiers 1–2;
