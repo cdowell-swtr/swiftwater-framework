@@ -74,7 +74,7 @@ def run_audit(
 
     def _refute(item: tuple[str, int, ProposedEdit]) -> dict[str, Any]:
         agent, idx, edit = item
-        v = refute(edit, agent, backend, skeptics=skeptics)
+        v = refute(edit, agent, backend, skeptics=skeptics, log=log)
         return {
             "agent": agent,
             "idx": idx,
@@ -82,6 +82,7 @@ def run_audit(
                 "refuted": v.refuted,
                 "votes": v.votes,
                 "refutation": v.refutation,
+                "parse_failures": v.parse_failures,
             },
         }
 

@@ -201,9 +201,45 @@ Proposed change ({target}): {rationale}
 
 Return JSON ONLY: {{"refuted": true|false, "reason": "<one sentence>"}}. No prose, no fences."""
 
+# Appended to the user turn on a re-prompt so a terse-model parse slip self-corrects
+# instead of being silently dropped (FWK46; FWK43 saw a vote dropped on a parse fail).
+_REFUTE_RETRY_NUDGE = (
+    " Your previous reply was NOT valid JSON. Reply with the JSON object ONLY — "
+    'exactly {"refuted": true|false, "reason": "<one sentence>"} — no prose, no fences.'
+)
+
+
+def _one_skeptic_verdict(
+    system: str, backend: Any, *, parse_retries: int
+) -> dict[str, Any] | None:
+    """Poll one skeptic, re-prompting up to `parse_retries` times on an unparseable
+    reply. Returns the parsed verdict dict, or None if it stays unparseable (FWK46)."""
+    for attempt in range(parse_retries + 1):
+        content = "Refute or fail to refute. JSON only."
+        if attempt:
+            content += _REFUTE_RETRY_NUDGE
+        msg = backend.messages.create(
+            model=AGENTIC_MODEL,
+            max_tokens=600,
+            system=[{"type": "text", "text": system}],
+            messages=[{"role": "user", "content": content}],
+        )
+        text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+        try:
+            return _extract_json(text)
+        except Exception:  # noqa: BLE001 — retry; persistent failure handled by the caller
+            continue
+    return None
+
 
 def refute(
-    edit: ProposedEdit, agent: str, backend: Any, *, skeptics: int = 3
+    edit: ProposedEdit,
+    agent: str,
+    backend: Any,
+    *,
+    skeptics: int = 3,
+    parse_retries: int = 2,
+    log: Callable[[str], None] = lambda _msg: None,
 ) -> Verdict:
     system = _REFUTE_SYSTEM.format(
         agent=agent,
@@ -212,21 +248,21 @@ def refute(
         before=edit.before,
         after=edit.after,
     )
-    refutals, survived = [], 0
+    refutals, survived, parse_failures = [], 0, 0
     for _ in range(skeptics):
-        msg = backend.messages.create(
-            model=AGENTIC_MODEL,
-            max_tokens=600,
-            system=[{"type": "text", "text": system}],
-            messages=[
-                {"role": "user", "content": "Refute or fail to refute. JSON only."}
-            ],
-        )
-        text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
-        try:
-            verdict = _extract_json(text)
-        except Exception:  # noqa: BLE001 — an unparseable skeptic counts as a refutation (default-to-refuted)
-            refutals.append("unparseable skeptic response")
+        verdict = _one_skeptic_verdict(system, backend, parse_retries=parse_retries)
+        if verdict is None:
+            # Loud, not silent: a skeptic that stays unparseable after bounded
+            # re-prompts is recorded + surfaced (a dropped vote can flip a strict
+            # majority — FWK43/FWK46), but still counts conservatively as a non-survival.
+            parse_failures += 1
+            refutals.append(
+                f"unparseable skeptic response (after {parse_retries} re-prompts)"
+            )
+            log(
+                f"refute[{agent}/{edit.target}]: skeptic unparseable after "
+                f"{parse_retries} re-prompts — counted as non-survival, re-run for a clean vote"
+            )
             continue
         if verdict.get("refuted", True):
             refutals.append(str(verdict.get("reason", "")))
@@ -235,4 +271,9 @@ def refute(
     refuted = survived < (
         skeptics // 2 + 1
     )  # survives only on a strict majority fail-to-refute
-    return Verdict(refuted=refuted, votes=survived, refutation=" | ".join(refutals))
+    return Verdict(
+        refuted=refuted,
+        votes=survived,
+        refutation=" | ".join(refutals),
+        parse_failures=parse_failures,
+    )

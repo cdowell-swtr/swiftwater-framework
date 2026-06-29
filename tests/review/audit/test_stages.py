@@ -150,6 +150,60 @@ def test_refute_majority_refutes_kills_change():
     assert "x" in v.refutation or "y" in v.refutation
 
 
+# --- FWK46: bounded re-prompt of an unparseable skeptic + loud persistent failure ---
+
+
+def test_refute_reprompts_unparseable_skeptic_then_parses():
+    """A transient parse slip is recovered by a bounded re-prompt — the vote is NOT
+    silently dropped (FWK43: a dropped vote flips strict-majority-survives)."""
+    responses = iter(
+        [
+            "I think this edit is fine, honestly",  # unparseable first try
+            json.dumps({"refuted": False, "reason": "sound on retry"}),  # parses
+        ]
+    )
+    backend = StubBackend(lambda _system, _messages: next(responses))
+    edit = ProposedEdit(target="domain_prompt", rationale="r", before="a", after="b")
+    v = refute(edit, "security", backend, skeptics=1, parse_retries=2)
+    assert v.refuted is False  # the recovered vote survives
+    assert v.votes == 1
+    assert v.parse_failures == 0
+    assert len(backend.messages.calls) == 2  # one re-prompt was spent
+
+
+def test_refute_persistent_parse_failure_is_loud_and_recorded():
+    """When re-prompts are exhausted the skeptic is recorded as a parse failure and
+    surfaced via the log callable — never a silent non-vote."""
+    backend = StubBackend(lambda _system, _messages: "still not json")
+    edit = ProposedEdit(target="domain_prompt", rationale="r", before="a", after="b")
+    seen: list[str] = []
+    v = refute(edit, "security", backend, skeptics=1, parse_retries=2, log=seen.append)
+    assert v.parse_failures == 1
+    assert v.votes == 0
+    assert v.refuted is True  # conservative default-to-refuted is preserved
+    assert len(backend.messages.calls) == 3  # 1 initial + 2 re-prompts
+    assert any("security" in m and "parse" in m.lower() for m in seen)
+
+
+def test_refute_retries_are_per_skeptic_not_shared():
+    """One skeptic's re-prompts don't consume another skeptic's budget; a later
+    skeptic still parses cleanly on its first attempt."""
+    responses = iter(
+        [
+            "garbage",  # skeptic 0, attempt 0
+            "garbage",  # skeptic 0, attempt 1
+            "garbage",  # skeptic 0, attempt 2 (exhausted → parse failure)
+            json.dumps({"refuted": False, "reason": "ok"}),  # skeptic 1, first try
+        ]
+    )
+    backend = StubBackend(lambda _system, _messages: next(responses))
+    edit = ProposedEdit(target="domain_prompt", rationale="r", before="a", after="b")
+    v = refute(edit, "security", backend, skeptics=2, parse_retries=2)
+    assert v.parse_failures == 1
+    assert v.votes == 1
+    assert len(backend.messages.calls) == 4
+
+
 def test_reconcile_normalizes_review_prefixed_agent_names():
     cl_json = json.dumps(
         {

@@ -226,6 +226,64 @@ def test_run_audit_logs_stage_transitions(tmp_path: Path):
     assert "vetted" in joined
 
 
+def test_run_audit_surfaces_persistent_skeptic_parse_failure(tmp_path: Path):
+    """FWK46: a skeptic that stays unparseable is surfaced loudly through run_audit's
+    log AND recorded as parse_failures in the persisted full changelist — not a silent
+    dropped vote."""
+
+    def scripted(system, messages):
+        text = " ".join(b.get("text", "") for b in system)
+        if "reviewer-prompt AUDITOR" in text:
+            return json.dumps(
+                {
+                    "agent": "security",
+                    "edits": [],
+                    "proposed_block_threshold": "high",
+                    "fixture_verdicts": {},
+                }
+            )
+        if "roster RECONCILER" in text:
+            return json.dumps(
+                {
+                    "agents": [
+                        {
+                            "agent": "security",
+                            "proposed_block_threshold": "high",
+                            "edits": [
+                                {
+                                    "target": "domain_prompt",
+                                    "rationale": "r",
+                                    "before": "a",
+                                    "after": "b",
+                                }
+                            ],
+                            "fixture_verdicts": {},
+                        }
+                    ],
+                    "preamble_edits": [],
+                }
+            )
+        if "adversarial SKEPTIC" in text:
+            return "not parseable at all"
+        return "{}"
+
+    logged: list[str] = []
+    run_audit(
+        ["security"],
+        backend=StubBackend(scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=tmp_path / "out",
+        skeptics=1,
+        log=logged.append,
+    )
+
+    assert any("parse" in m.lower() and "security" in m for m in logged)
+    full = json.loads((tmp_path / "out" / "changelist-full.json").read_text())
+    verdict = full["agents"][0]["edits"][0]["verdict"]
+    assert verdict["parse_failures"] == 1
+
+
 def test_run_audit_produces_vetted_changelist(tmp_path: Path):
     backend = StubBackend(_scripted)
     cl = run_audit(

@@ -17,6 +17,9 @@ class Verdict:
     refuted: bool
     votes: int  # skeptics who FAILED to refute (i.e. the change survives if majority)
     refutation: str = ""
+    parse_failures: int = (
+        0  # skeptics that stayed unparseable after bounded re-prompts (FWK46)
+    )
 
 
 @dataclass(frozen=True)
