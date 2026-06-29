@@ -213,7 +213,9 @@ def _one_skeptic_verdict(
     system: str, backend: Any, *, parse_retries: int
 ) -> dict[str, Any] | None:
     """Poll one skeptic, re-prompting up to `parse_retries` times on an unparseable
-    reply. Returns the parsed verdict dict, or None if it stays unparseable (FWK46)."""
+    reply. Returns the parsed verdict dict, or None if it stays unparseable (FWK46).
+    A reply that parses but is the WRONG SHAPE (e.g. a JSON array, not an object) is
+    treated as a parse failure too — never returned to the caller's `.get()` (FWK122)."""
     for attempt in range(parse_retries + 1):
         content = "Refute or fail to refute. JSON only."
         if attempt:
@@ -226,9 +228,12 @@ def _one_skeptic_verdict(
         )
         text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
         try:
-            return _extract_json(text)
+            parsed = _extract_json(text)
         except Exception:  # noqa: BLE001 — retry; persistent failure handled by the caller
             continue
+        if isinstance(parsed, dict):
+            return parsed
+        # parsed but wrong shape (array/scalar) — retry, then fall through to None
     return None
 
 
