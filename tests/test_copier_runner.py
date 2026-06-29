@@ -4740,8 +4740,13 @@ def test_dev_targets_run_detached_with_summary(tmp_path: Path):
         assert "./scripts/dev_summary.sh" in cmds, f"{target} must print the summary"
 
 
-def test_dev_logs_and_down_targets(tmp_path: Path):
-    """FWK37: on-demand log-follow + a stop that KEEPS volumes (distinct from dev:reset's -v)."""
+def test_dev_logs_down_reset_are_identity_aware(tmp_path: Path):
+    """FWK37 + FWK96: on-demand log-follow + a stop that KEEPS volumes (distinct from dev:reset's
+    -v), now identity-aware. All three route through scripts/compose.sh so they follow/tear down
+    THIS instance (COMPOSE_PROJECT_NAME resolved from STACK_INSTANCE, an explicit override winning)
+    — NOT a hardcoded `-p {{ project_slug }}` that tears down the main stack from a worktree and
+    orphans the worktree's containers. dev:reset keeps the -f file set on purpose: `down -v` needs
+    it to enumerate the named volumes to remove (fileless down -v wouldn't)."""
     dest = tmp_path / "demo"
     render_project(dest, {**DATA})
     import yaml as _y
@@ -4749,10 +4754,22 @@ def test_dev_logs_and_down_targets(tmp_path: Path):
     spec = _y.safe_load((dest / "Taskfile.yml").read_text())
     logs = "\n".join(str(c) for c in spec["tasks"]["dev:logs"]["cmds"])
     down = "\n".join(str(c) for c in spec["tasks"]["dev:down"]["cmds"])
-    assert (
-        "logs -f" in logs and "demo" in logs
-    )  # project-scoped follow (slug=demo in DATA)
+    reset = "\n".join(str(c) for c in spec["tasks"]["dev:reset"]["cmds"])
+
+    for name, cmds in (("dev:logs", logs), ("dev:down", down), ("dev:reset", reset)):
+        assert "./scripts/compose.sh" in cmds, (
+            f"{name} must route through scripts/compose.sh (identity-aware project name)"
+        )
+        assert "-p demo" not in cmds, (
+            f"{name} must not hardcode `-p <slug>` (orphans worktree stacks, FWK96)"
+        )
+
+    assert "logs -f" in logs  # project-scoped follow
     assert "down" in down and "-v" not in down, "dev:down must keep volumes (no -v)"
+    assert "down -v" in reset  # reset wipes volumes
+    assert "-f infra/compose/base.yml" in reset, (
+        "dev:reset keeps the -f file set (down -v needs it to enumerate named volumes)"
+    )
 
 
 def test_render_seeds_agents_md_with_portable_convention_blocks(tmp_path: Path):
