@@ -181,7 +181,7 @@ def test_render_compose_structure(tmp_path: Path):
 
 
 def test_render_compose_instance_parameterized_labels(tmp_path: Path):
-    """FWK93: the app's Traefik discovery labels are instance-parameterized so N stacks
+    """FWK101: the app's Traefik discovery labels are instance-parameterized so N stacks
     coexist behind one shared edge. Router/service names carry `${STACK_INSTANCE}` (Fork A),
     the Host rule is env-driven via `${APP_ROUTE_HOST}` (the dev:edge task computes the per-tier
     host), plus the frozen `swiftwater.instance` constraint label. Every `${STACK_INSTANCE}`
@@ -206,9 +206,9 @@ def test_render_compose_instance_parameterized_labels(tmp_path: Path):
     assert f"traefik.http.routers.app-{inst}.entrypoints=websecure" in labels
     assert f"traefik.http.routers.app-{inst}.tls=true" in labels
     assert f"traefik.http.services.app-{inst}.loadbalancer.server.port=8000" in labels
-    # the frozen instance constraint label (consumed by FWK97's Traefik constraints)
+    # the frozen instance constraint label (consumed by FWK105's Traefik constraints)
     assert f"swiftwater.instance={inst}" in labels
-    # no un-parameterized router/service name leaks (the pre-FWK93 static `app` form)
+    # no un-parameterized router/service name leaks (the pre-FWK101 static `app` form)
     for raw in labels:
         assert "routers.app." not in raw, f"static router name leaked: {raw!r}"
         assert "services.app." not in raw, f"static service name leaked: {raw!r}"
@@ -262,13 +262,13 @@ def test_compose_config_resolved_labels_default_parity(tmp_path: Path):
 
 
 def test_render_edge_overlay_drops_traefik_and_labels_obs(tmp_path: Path):
-    """FWK94: the dev:edge overlay drops the per-stack Traefik (no `:443` bind) declaratively via
+    """FWK102: the dev:edge overlay drops the per-stack Traefik (no `:443` bind) declaratively via
     `deploy.replicas: 0` (compose overlays can't *remove* a service — appended profiles/ports
-    prove it — so replicas-0 is the clean drop), and adds the FWK93 discovery-label schema to the
+    prove it — so replicas-0 is the clean drop), and adds the FWK101 discovery-label schema to the
     browsable obs UIs (grafana/prometheus/alertmanager): router/service name parameterized by
     `${STACK_INSTANCE}`, env-driven Host via `${<SVC>_ROUTE_HOST}` (the dev:edge task computes the
     per-tier host), plus the frozen `swiftwater.instance` constraint label — the router/service
-    labels AND the constraint label pinned together so FWK97's Traefik `constraints` don't
+    labels AND the constraint label pinned together so FWK105's Traefik `constraints` don't
     silently unroute them. RAW-overlay assertions (docker-free); the resolved complement is the
     docker-gated test below."""
     dest = tmp_path / "demo"
@@ -303,7 +303,7 @@ def test_render_edge_overlay_drops_traefik_and_labels_obs(tmp_path: Path):
 
 
 def test_render_taskfile_dev_edge_run_mode(tmp_path: Path):
-    """FWK94: `task dev:edge` is an additive run-mode (R2 — `task dev` stays byte-identical). It
+    """FWK102: `task dev:edge` is an additive run-mode (R2 — `task dev` stays byte-identical). It
     applies the edge.yml overlay, computes the per-tier route host via scripts/edge_host.sh, and
     drops the certs precondition (traefik is replicas-0 in edge mode; TLS terminates at the box
     edge). `dev:edge:down` is identity-aware. Obs labels are edge-gated: they live ONLY in edge.yml
@@ -335,10 +335,10 @@ def test_render_taskfile_dev_edge_run_mode(tmp_path: Path):
 
 
 def test_edge_host_script_computes_per_tier_host(tmp_path: Path):
-    """FWK94 R3: scripts/edge_host.sh computes the per-tier route host. Tier-1 (instance == slug)
+    """FWK102 R3: scripts/edge_host.sh computes the per-tier route host. Tier-1 (instance == slug)
     → nested `<svc>.<slug>.localhost` (the box `*.<slug>.localhost` cert covers it); tier-2
     (instance != slug) → flat `<svc>-<instance>.localhost` (the box static `*.localhost` cert
-    covers it). The flat form matches FWK93's `app-demo-wt1.localhost` expectation."""
+    covers it). The flat form matches FWK101's `app-demo-wt1.localhost` expectation."""
     dest = tmp_path / "demo"
     render_project(dest, DATA)
     script = dest / "scripts" / "edge_host.sh"
@@ -370,7 +370,7 @@ def test_edge_host_script_computes_per_tier_host(tmp_path: Path):
     shutil.which("docker") is None, reason="docker required for compose config"
 )
 def test_compose_config_edge_obs_labels_and_traefik_dropped(tmp_path: Path):
-    """FWK94 resolved complement (docker-gated): the dev:edge file set resolves the obs labels to
+    """FWK102 resolved complement (docker-gated): the dev:edge file set resolves the obs labels to
     the task-computed per-tier host + the instance label, and drops traefik (replicas 0). R1
     parity: WITHOUT edge.yml the obs UIs carry NO Traefik labels (plain `task dev` routes only the
     app). Asserts the drop via the resolved `deploy.replicas`, not config-absence (a replicas-0
@@ -437,7 +437,7 @@ def test_compose_config_edge_obs_labels_and_traefik_dropped(tmp_path: Path):
 
 
 def test_render_edge_overlay_network_membership(tmp_path: Path):
-    """FWK95: the dev:edge overlay puts ONLY the edge-routed services on the FROZEN
+    """FWK103: the dev:edge overlay puts ONLY the edge-routed services on the FROZEN
     `swiftwater-shared-edge` external network (the master isolation control). Each routed service
     lists `default` explicitly too — a compose `networks:` key REPLACES default membership, so
     omitting `default` would sever app→postgres. Data stores get NO `networks:` key in edge.yml,
@@ -470,7 +470,7 @@ def test_render_edge_overlay_network_membership(tmp_path: Path):
 
 
 def test_render_edge_network_is_edge_gated(tmp_path: Path):
-    """FWK95 standalone-safety: shared-net membership lives ONLY in edge.yml. The shipped/default
+    """FWK103 standalone-safety: shared-net membership lives ONLY in edge.yml. The shipped/default
     render (base/dev/observability) MUST NOT reference `swiftwater-shared-edge` or declare any
     external network — else every standalone `docker compose up` + prod/staging would break."""
     dest = tmp_path / "demo"
@@ -489,7 +489,7 @@ def test_render_edge_network_is_edge_gated(tmp_path: Path):
 
 
 def test_edge_up_script_ensures_net_and_guards_edge(tmp_path: Path):
-    """FWK95: scripts/edge_up.sh idempotently ensures `swiftwater-shared-edge` then fail-fast
+    """FWK103: scripts/edge_up.sh idempotently ensures `swiftwater-shared-edge` then fail-fast
     guards on a CONSUMER EDGE being present. Network-existence is NOT the signal (dev:edge itself
     ensures the net, so it exists after run #1 regardless) — the signal is a FOREIGN endpoint on
     the shared net (a container whose compose project != ours). No foreign endpoint → exit 1 with a
@@ -550,9 +550,9 @@ def test_edge_up_script_ensures_net_and_guards_edge(tmp_path: Path):
 
 
 def test_render_taskfile_dev_edge_invokes_edge_up_guard(tmp_path: Path):
-    """FWK95: `task dev:edge` runs scripts/edge_up.sh (ensure net + fail-fast edge guard) BEFORE
+    """FWK103: `task dev:edge` runs scripts/edge_up.sh (ensure net + fail-fast edge guard) BEFORE
     the compose `up`, so a stack never comes up unreachable. The guard lives in the task layer, NOT
-    in compose.sh/edge.yml — so every compose-level test (and FWK99's edge-less conformance) stays
+    in compose.sh/edge.yml — so every compose-level test (and FWK107's edge-less conformance) stays
     unblocked. The README-pointer note in the dev:edge desc is replaced now the guard exists."""
     dest = tmp_path / "demo"
     render_project(dest, DATA)
@@ -571,11 +571,11 @@ def test_render_taskfile_dev_edge_invokes_edge_up_guard(tmp_path: Path):
     shutil.which("docker") is None, reason="docker required for compose config"
 )
 def test_compose_config_edge_network_membership(tmp_path: Path):
-    """FWK95 resolved complement (docker-gated): the dev:edge file set resolves the edge-routed
+    """FWK103 resolved complement (docker-gated): the dev:edge file set resolves the edge-routed
     services (app + obs UIs) onto BOTH the per-project `default` net AND the external
     `swiftwater-shared-edge` net, while data stores resolve to `default` ONLY. `docker compose
     config` is a pure YAML transform — it resolves membership without touching the daemon, so it
-    succeeds whether or not the external net exists (existence is an `up`-time check; FWK99's
+    succeeds whether or not the external net exists (existence is an `up`-time check; FWK107's
     live-up must ensure the net first). The top-level network resolves to the FROZEN name +
     external: true."""
     dest = tmp_path / "demo"
@@ -619,8 +619,94 @@ def test_compose_config_edge_network_membership(tmp_path: Path):
     )
 
 
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_behind_edge_conformance(tmp_path: Path):
+    """FWK88/FWK107 behind-edge conformance capstone.
+
+    Integration-level assertion: ONE render → ONE resolved ``docker compose config``
+    over the full dev:edge file set (base + observability + dev + edge.yml) confirms
+    ALL behind-edge facets hold simultaneously:
+
+    (a) Routable set: app, grafana, prometheus, alertmanager each resolve their
+        ``${STACK_INSTANCE}``-parameterized router/service names and the
+        ``swiftwater.instance`` constraint label — default parity (unset
+        STACK_INSTANCE → slug).
+    (b) Per-stack Traefik dropped: deploy.replicas == 0 in the resolved output.
+    (c) Edge isolation: edge-routed services attach ``swiftwater-shared-edge`` AND
+        keep ``default``; data stores (postgres) resolve to ``default`` ONLY.
+    (d) Default-parity round-trip: all of the above holds with STACK_INSTANCE unset.
+
+    Individual facet detail lives in the preceding per-facet tests (FWK101–FWK105 for
+    labels/edge/network/teardown/constraints). This capstone is the single place where
+    all of those facets resolve together off one render.
+    """
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    e = {**os.environ}
+    for k in (
+        "STACK_INSTANCE",
+        "COMPOSE_PROJECT_NAME",
+        "APP_ROUTE_HOST",
+        "GRAFANA_ROUTE_HOST",
+        "PROMETHEUS_ROUTE_HOST",
+        "ALERTMANAGER_ROUTE_HOST",
+    ):
+        e.pop(k, None)
+
+    args = ["./scripts/compose.sh"]
+    for f in (
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+        "infra/compose/edge.yml",
+    ):
+        args += ["-f", f]
+    args += ["--profile", "dev", "config"]
+    r = subprocess.run(args, cwd=dest, capture_output=True, text=True, env=e)
+    assert r.returncode == 0, f"compose config failed:\n{r.stderr}"
+    cfg = yaml.safe_load(r.stdout)
+    svcs = cfg["services"]
+
+    # (a) Routable set: router/service name carries the slug; constraint label resolves.
+    routable = {"app": 8000, "grafana": 3000, "prometheus": 9090, "alertmanager": 9093}
+    for svc, port in routable.items():
+        lbl = svcs[svc]["labels"]
+        # Router name is parameterized: {svc}-{STACK_INSTANCE:-slug} → {svc}-demo
+        assert f"traefik.http.routers.{svc}-demo.rule" in lbl, (
+            f"{svc}: parameterized router name did not resolve to slug default"
+        )
+        assert lbl[f"traefik.http.services.{svc}-demo.loadbalancer.server.port"] == str(
+            port
+        ), f"{svc}: service port label wrong"
+        # Constraint label: producer (service label) == consumer (traefik constraint) value.
+        assert lbl["swiftwater.instance"] == "demo", (
+            f"{svc}: swiftwater.instance must resolve to slug (default-parity)"
+        )
+
+    # (b) Per-stack Traefik dropped via replicas 0.
+    assert svcs["traefik"]["deploy"]["replicas"] == 0, (
+        "per-stack Traefik must be replicas 0 in edge mode"
+    )
+
+    # (c) Edge-routed services on both nets; data stores default-only.
+    def nets(svc: str) -> set[str]:
+        return set((svcs[svc].get("networks") or {}).keys())
+
+    for svc in ("app", "grafana", "prometheus", "alertmanager"):
+        assert "default" in nets(svc), (
+            f"{svc} severed from default (app→postgres would break)"
+        )
+        assert "shared-edge" in nets(svc), f"{svc} not on the shared edge net"
+    assert nets("postgres") <= {"default"}, (
+        "postgres must stay default-net-only (cross-instance isolation)"
+    )
+
+
 def test_render_dev_traefik_instance_scoped_constraint(tmp_path: Path):
-    """FWK97: the tier-1 per-stack Traefik scopes discovery to its OWN instance via a
+    """FWK105: the tier-1 per-stack Traefik scopes discovery to its OWN instance via a
     `--providers.docker.constraints` keyed on the frozen `swiftwater.instance` label — else it
     discovers every co-resident instance's containers off the shared socket (silent cross-route
     bleed). LOUD FINDING: that constraint CANNOT be a CLI flag alongside `--configfile` (Traefik
@@ -673,7 +759,7 @@ def test_render_dev_traefik_instance_scoped_constraint(tmp_path: Path):
     shutil.which("docker") is None, reason="docker required for compose config"
 )
 def test_compose_config_dev_traefik_constraint_resolves(tmp_path: Path):
-    """FWK97 resolved complement (docker-gated): `docker compose config` resolves the per-stack
+    """FWK105 resolved complement (docker-gated): `docker compose config` resolves the per-stack
     Traefik's constraint flag to the instance value — slug by default (R1 parity), the worktree
     instance when STACK_INSTANCE is set. Proves the producer label (base.yml `swiftwater.instance`)
     and the consumer constraint resolve to the IDENTICAL value, so the constraint can never silently
@@ -713,7 +799,7 @@ def test_compose_config_dev_traefik_constraint_resolves(tmp_path: Path):
 
 
 def test_render_promtail_instance_scoped_keep_relabel(tmp_path: Path):
-    """FWK97: promtail scopes its docker scrape to THIS instance via a `keep` relabel on
+    """FWK105: promtail scopes its docker scrape to THIS instance via a `keep` relabel on
     `__meta_docker_container_label_com_docker_compose_project` (== COMPOSE_PROJECT_NAME) — else it
     scrapes every container on the box into the wrong Loki (cross-instance log bleed; PII risk via
     anon Grafana). Promtail runs in EVERY instance (worktrees too), so the filter must be dynamic:
@@ -755,7 +841,7 @@ def test_render_promtail_instance_scoped_keep_relabel(tmp_path: Path):
     shutil.which("docker") is None, reason="docker required for compose config"
 )
 def test_compose_config_promtail_project_filter_resolves(tmp_path: Path):
-    """FWK97 resolved complement (docker-gated): `docker compose config` resolves promtail's
+    """FWK105 resolved complement (docker-gated): `docker compose config` resolves promtail's
     COMPOSE_PROJECT_NAME env to the instance — slug by default (R1 parity), the worktree instance
     when set — and keeps `-config.expand-env=true` so promtail substitutes it into the keep
     regex at runtime."""
@@ -803,7 +889,7 @@ def test_render_traefik_and_certs_gitignored(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
 
-    # The per-stack Traefik's static config is inline command flags (FWK97 — no mounted
+    # The per-stack Traefik's static config is inline command flags (FWK105 — no mounted
     # traefik.yml); the websecure entrypoint + docker provider are asserted in
     # test_render_dev_traefik_instance_scoped_constraint. Here we cover the TLS dynamic config +
     # cert gitignore.
@@ -1170,11 +1256,11 @@ def test_render_dockerfile_entrypoint(tmp_path: Path):
 
 
 def test_render_forwarded_allow_ips_edge_scoped(tmp_path: Path):
-    """FWK98: behind a TLS-terminating edge the app must trust X-Forwarded-Proto/For so it
+    """FWK106: behind a TLS-terminating edge the app must trust X-Forwarded-Proto/For so it
     builds https URLs / sets Secure cookies correctly — but ONLY from the docker-net source,
     NEVER `*`. The scope is a LOCKED uvicorn `--forwarded-allow-ips` flag: a CLI flag beats the
     FORWARDED_ALLOW_IPS env var, so an operator can't silently widen trust to `*` via env (the
-    FWK97 --configfile-eats-flags footgun class, flipped to our advantage); tighten in prod by
+    FWK105 --configfile-eats-flags footgun class, flipped to our advantage); tighten in prod by
     overriding the app `command`. Value = the RFC1918 superset (docker's default-address-pool is
     host-configurable, not just 172.16/12, and the shared-edge subnet is docker-auto-assigned) +
     127.0.0.1 (keep uvicorn's own default so the base.yml `http://localhost:8000` healthcheck
@@ -4992,7 +5078,7 @@ def test_dev_targets_run_detached_with_summary(tmp_path: Path):
 
 
 def test_dev_logs_down_reset_are_identity_aware(tmp_path: Path):
-    """FWK37 + FWK96: on-demand log-follow + a stop that KEEPS volumes (distinct from dev:reset's
+    """FWK37 + FWK104: on-demand log-follow + a stop that KEEPS volumes (distinct from dev:reset's
     -v), now identity-aware. All three route through scripts/compose.sh so they follow/tear down
     THIS instance (COMPOSE_PROJECT_NAME resolved from STACK_INSTANCE, an explicit override winning)
     — NOT a hardcoded `-p {{ project_slug }}` that tears down the main stack from a worktree and
@@ -5012,7 +5098,7 @@ def test_dev_logs_down_reset_are_identity_aware(tmp_path: Path):
             f"{name} must route through scripts/compose.sh (identity-aware project name)"
         )
         assert "-p demo" not in cmds, (
-            f"{name} must not hardcode `-p <slug>` (orphans worktree stacks, FWK96)"
+            f"{name} must not hardcode `-p <slug>` (orphans worktree stacks, FWK104)"
         )
 
     assert "logs -f" in logs  # project-scoped follow
@@ -5336,7 +5422,7 @@ def test_render_worktree_tasks(tmp_path: Path):
     taskfile = (dest / "Taskfile.yml").read_text()
     assert "worktree:up:" in taskfile
     assert "scripts/worktree.py up" in taskfile
-    # The symmetric teardown target (FWK95) renders alongside it.
+    # The symmetric teardown target (FWK103) renders alongside it.
     assert "worktree:down:" in taskfile
     assert "scripts/worktree.py down" in taskfile
     # The orchestration script renders verbatim into the project (non-.jinja payload).
@@ -5427,7 +5513,7 @@ def test_store_edge_violations_resolves_network_aliases():
 
 
 def test_data_stores_never_on_shared_edge_net(tmp_path: Path):
-    # FWK95 / FWK88 frozen invariant: data stores stay on the per-project `default`
+    # FWK103 / FWK88 frozen invariant: data stores stay on the per-project `default`
     # network, never on the shared edge net `swiftwater-shared-edge` (else worktree A's
     # app reaches B's Postgres and the `postgres` alias resolves ambiguously). Now
     # load-bearing post-A1: A1's edge.yml declares the net in the ALIASED external form

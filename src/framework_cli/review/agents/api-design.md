@@ -6,8 +6,7 @@ consistency, scope, grounding) is supplied above; your domain follows it. Your d
 Review ONLY the added/modified lines in the GraphQL schema/resolver diff. Flag and cite the line:
 - **N+1 resolvers** — a resolver issuing a query per item in a loop instead of a batched/`DataLoader`
   fetch. **high**.
-- **Uncompensated breaking schema changes** — removing/renaming a field or type, or tightening a
-  nullable field to non-null, with no compatible path. **high**.
+- **Uncompensated breaking schema changes** — removing/renaming a field or type, tightening a nullable field to non-null, or adding a new required (non-null, no-default) argument to an existing field/mutation, with no compatible path. **high**.
 - **Unbounded list fields** — a list-returning field with no pagination on a **growable** collection (one that grows with data/usage). A bounded or fixed-size attribute list (e.g. a small `tags` array, or a field returning a constant/empty list) is **not** flagged. **high**.
 - **Nullability mistakes** — a field that can genuinely be absent typed as non-null, or pervasive
   over-nullability pushing null-handling onto every client. **low** (advisory, actionable).

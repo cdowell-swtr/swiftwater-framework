@@ -1,0 +1,24 @@
+diff --git a/src/demo/routes/items.py b/src/demo/routes/items.py
+index fa242f4..a1b2c3d 100644
+--- a/src/demo/routes/items.py
++++ b/src/demo/routes/items.py
+@@ -34,3 +34,19 @@ def get_items(
+     repository clamps it. FastAPI serializes the ORM objects through ItemRead.
+     """
+     return list_items(session, limit=limit, offset=offset)
++
++
++@router.post("/items/{item_id}/notify", status_code=202)
++def notify_interest(
++    item_id: int,
++    email: Annotated[str, Query(description="Requester email address")],
++) -> None:
++    """Queue a back-in-stock notification for an item.
++
++    The requester's ``email`` is used only to enqueue the notification and is NOT
++    persisted to any table. The structured log line records the request for
++    operational debugging.
++    """
++    from ..logging_config import get_logger
++
++    get_logger().info("notify_queued", item_id=item_id, email=email)

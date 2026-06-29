@@ -9,7 +9,7 @@
 
 ## Status
 
-**`proposed` → being disposed (2026-06-28).** Seeded by the generator and handed to the absorber. The
+**`proposed` → `adopted` (disposed 2026-06-29, FWK107/FWK131).** Seeded by the generator and handed to the absorber. The
 absorber has now made the generalization decisions in the **first worktree-parallel experiment carving**
 (`docs/superpowers/specs/2026-06-28-worktree-parallel-experiment-carving-design.md`): behind-edge dev
 mode is framework stream **A1** (`FWK75`), built against the frozen **`FWK88`** Docker-discovery seam
@@ -19,8 +19,17 @@ routing over the docker network, no host ports), which the generator's current *
 the `FWK88` labels** and deletes its interim static edge + the README "exclude Traefik" instructions
 (the generator-side copy-deletion). Per the operator, this generator-side rework runs **in parallel**
 with A1/A2/B, fed the same carving spec; `local-reverse-proxy` is not git-backed, so no worktree and no
-merge-collision. Flip toward `adopted` once the framework ships A1's labels and the generator's reworked
-edge passes a behind-edge behavior conformance test.
+merge-collision.
+
+**Disposal recorded (2026-06-29, FWK107/FWK131).** Both adoption conditions are met: the framework
+**shipped A1's instance-discovery labels in v0.4.4** (FWK75 + the obs-UI labels, the `dev:edge`
+run-mode, and the frozen `swiftwater-shared-edge` network), and the generator's **reworked edge passed
+the live behind-edge guard** (FWK103: `local-reverse-proxy` was up and detected by `scripts/edge_up.sh`
+→ exit 0, the cross-repo on-ramp confirmation; the framework-side conformance test is consolidated in
+FWK107/FWK130). Native behind-edge support is now documented in the generated project's README
+(`task dev:edge`, FWK131), replacing the generator's interim "exclude Traefik + `PORT_OFFSET`"
+workaround. The generator-side copy-deletion (its static edge + the README workaround) is the box's to
+perform on its non-git helper — recorded here as the absorber's disposal, not driven by the framework.
 
 ## Source / generator
 

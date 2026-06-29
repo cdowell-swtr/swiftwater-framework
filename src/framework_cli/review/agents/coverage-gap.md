@@ -43,8 +43,9 @@ or touches; do NOT audit the whole pre-existing tree):
    `infra/` shape) that no test drives.
 2. IN-APP code-path surface. A bootstrap / lifecycle / live-route / worker path the change
    introduces in the template app — `create_app` / lifespan wiring, DB engine/pool lifecycle
-   (`dispose_engine`, pre-ping), a new battery route served through Traefik, worker/beat
-   tracing — that no test drives on its real runtime path (per the strictness above).
+   (`dispose_engine`, pre-ping), a new battery route served through Traefik, a worker/beat
+   startup or task-execution path — that no test drives on its real runtime path (per the
+   strictness above).
 
 DEFER TO THE REGISTRY. Before flagging any surface of an ENUMERABLE kind, read
 `tests/runtime_coverage/registry.py` with your tools. If the surface already has an entry
