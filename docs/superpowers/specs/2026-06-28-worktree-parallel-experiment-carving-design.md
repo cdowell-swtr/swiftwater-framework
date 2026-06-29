@@ -153,9 +153,14 @@ mod-1000 collision among the 16 base ports is grafana(`3000`)↔app(`8000`) at o
 | **2 · temporary** | per-worktree | yes — flat `<svc>-<slug>-<inst>.localhost` (opt-in obs) | shared (edge-routed svcs); stores on default | optional (`PORT_OFFSET`) | A1 labels + A2 provisioning |
 | **3 · transient** | per-test/`xdist` worker | no | **default only — never shared, no socket** | OS-ephemeral `32768+` | B |
 
-**Tier-2 ↔ tier-3 name disjointness (frozen):** B's transient project names carry a reserved marker
-A2's tier-2 generator can never emit (e.g. `<slug>-t-<uuid>`), so the two never collide on
-`COMPOSE_PROJECT_NAME` (shared containers/volumes).
+**Tier-2 ↔ tier-3 name disjointness (frozen — marker PINNED 2026-06-28, operator):** tier-3 transient
+project names are **`<slug>-t-<uuid>`**; the **`<slug>-t-` prefix is reserved for tier-3**. The
+disjointness is **structural, not coincidental**: A2's tier-2 generator (`<slug>-<inst>`) MUST reject any
+`<inst>` beginning with `t-`, so the two never collide on `COMPOSE_PROJECT_NAME` (shared
+containers/volumes). *(Was left unpinned "e.g. `<slug>-t-<uuid>`"; B's stream-B decomposition raised it as
+a loud finding — a slug-value-coincidence marker like `swfwacc-` can't be verified disjoint across the
+parallel A2 stream — and the operator pinned the structural form. B/`FWK95` builds to `<slug>-t-<uuid>`;
+A2/`FWK74` enforces the `t-`-prefix ban on `<inst>`.)*
 
 ## Provision / deprovision lifecycle — FROZEN (the panel's B2)
 

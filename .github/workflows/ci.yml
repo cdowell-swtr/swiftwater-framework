@@ -26,7 +26,15 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy src
-      - run: uv run pytest -q --ignore=tests/acceptance
+      # The FAST tier (FWK96): the non-docker suite, sharded with pytest-xdist -n auto
+      # (FWK93). Default --dist load (not loadscope): the long-pole
+      # tests/test_copier_runner.py is one module, so loadscope would pin all its
+      # functions to a single worker.
+      # Ignore ONLY the two docker/dind acceptance files (not the whole dir) so the
+      # non-docker tests/acceptance/test_conftest_disk_tmp.py unit test still runs here.
+      # These two run in the FULL tier (`task test:full`, branch-end) — a documented,
+      # non-required exception enforced by tests/test_test_tiers.py.
+      - run: uv run pytest -q -n auto --ignore=tests/acceptance/test_rendered_project.py --ignore=tests/acceptance/test_deploy_e2e.py
       - run: uv lock --check
       - run: uv build
 

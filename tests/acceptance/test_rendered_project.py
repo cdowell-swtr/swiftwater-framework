@@ -2,7 +2,6 @@ import hashlib
 import hmac
 import json
 import os
-import re
 import shutil
 import socket
 import ssl
@@ -20,6 +19,7 @@ from framework_cli.copier_runner import render_project
 from framework_cli.downskill import remove_battery
 from framework_cli.integrity.checker import check
 from framework_cli.integrity.restore import restore_file
+from tests.acceptance import _tier3
 
 DATA = {
     "project_name": "Demo",
@@ -202,23 +202,25 @@ def _traefik_ws_upgrade(https_port: int, host: str, ctx: ssl.SSLContext) -> int:
 def _isolate_compose_project(request, monkeypatch):
     """Give each acceptance test its OWN docker compose project namespace.
 
-    The generated project sets no top-level compose `name:`, so
-    `docker compose -f infra/compose/base.yml …` derives the project name from the
-    compose-file directory → `compose`. A developer's `task dev` stack (or another
-    acceptance test) uses the SAME name and so shares container/network/volume names:
-    without isolation an `up` reuses the other stack's containers and the `down -v`
-    teardown DESTROYS its postgres volume. A unique COMPOSE_PROJECT_NAME — honoured by
-    `up` (via `_compose_env()`, which spreads `os.environ`) and by the bare `down` calls
-    (inherited env) alike — keeps each test's stack in its own namespace and scopes
-    `down -v` to that test only. FWK31 (now IMPLEMENTED template-side: a per-slug project
-    name + parameterized host ports) lets two generated projects co-run on one host; this
-    fixture additionally binds every published host port to an ephemeral port (below) so a
-    test stack never collides with a live UAT stack or another test on a fixed host port.
+    The generated project's `base.yml` sets a top-level `name: {{ project_slug }}`, so a
+    developer's `task dev` stack (or another acceptance test) would share that project
+    name and therefore container/network/volume names: without isolation an `up` reuses
+    the other stack's containers and the `down -v` teardown DESTROYS its postgres volume.
+    Setting `COMPOSE_PROJECT_NAME` overrides the compose-file `name:` (env beats `name:`
+    in compose's precedence) — honoured by `up` (via `_compose_env()`, which spreads
+    `os.environ`) and by the bare `down` calls (inherited env) alike — so each test's
+    stack lives in its own namespace and `down -v` is scoped to that test only.
+
+    FWK95 / FWK88 tier-3: the namespace is the pinned **`<slug>-t-<uuid>`** transient
+    marker (`demo-t-…`). The `<slug>-t-` prefix is reserved for tier-3 and is swept-reaped
+    at session start/finish (see `_tier3` + the conftest hooks); A2/FWK74's tier-2
+    generator rejects any `<inst>` beginning with `t-`, so the two tiers are structurally
+    disjoint. FWK31 (per-slug project name + parameterized host ports) lets two generated
+    projects co-run on one host; this fixture additionally binds every published host port
+    to an ephemeral port (below) so a test stack never collides with a live UAT stack or
+    another test on a fixed host port.
     """
-    safe = (
-        re.sub(r"[^a-z0-9]+", "-", request.node.name.lower()).strip("-")[:40] or "test"
-    )
-    monkeypatch.setenv("COMPOSE_PROJECT_NAME", f"swfwacc-{safe}")
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", _tier3.tier3_project_name())
     # FWK31: bind every published host port to an ephemeral port (0 -> docker picks a free
     # one) so a test stack never collides with a live UAT stack or another test. Tests that
     # connect to a service discover the assigned port via `_compose_host_port` below.
@@ -241,6 +243,45 @@ def _isolate_compose_project(request, monkeypatch):
         "REDIS_EXPORTER_HOST_PORT",
     ):
         monkeypatch.setenv(var, "0")
+
+
+def test_isolate_compose_project_uses_tier3_reserved_marker():
+    """The autouse isolation fixture namespaces this test's stack with the pinned
+    FWK88/FWK95 tier-3 marker `<slug>-t-<uuid>` (no docker needed — just the env it set)."""
+    name = os.environ["COMPOSE_PROJECT_NAME"]
+    assert _tier3.is_tier3_project(name), name
+    assert name.startswith(f"{DATA['project_slug']}-t-")
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required to exercise the real reaper"
+)
+def test_tier3_reaper_removes_a_real_labelled_stack():
+    """The label sweep against a LIVE daemon — the actual `docker network/volume ls|rm`
+    invocations the unit tests can only mock (an injected runner can't catch a malformed
+    `--format`/`--filter`, and the sweep swallows errors, so a broken command would leak
+    silently). Image-free (network+volume) so it needs no pull; the container reap path is
+    additionally exercised by the co-run test's `<slug>-t-<uuid>` stacks under the finish
+    sweep. Asserts the labelled resources are gone and the project drops out of discovery.
+    """
+    project = _tier3.tier3_project_name()
+    label = f"--label=com.docker.compose.project={project}"
+    net = f"{project}-net"
+    vol = f"{project}-vol"
+    try:
+        assert (
+            subprocess.run(["docker", "network", "create", label, net]).returncode == 0
+        )
+        assert (
+            subprocess.run(["docker", "volume", "create", label, vol]).returncode == 0
+        )
+        assert project in _tier3.list_tier3_projects()
+        reaped = _tier3.sweep_tier3_stacks()
+        assert project in reaped
+        assert project not in _tier3.list_tier3_projects()
+    finally:
+        subprocess.run(["docker", "network", "rm", net], capture_output=True)
+        subprocess.run(["docker", "volume", "rm", "-f", vol], capture_output=True)
 
 
 @pytest.mark.skipif(
@@ -3931,20 +3972,24 @@ def test_two_dev_lite_stacks_corun_without_collision(tmp_path: Path):
                 time.sleep(2)
         return False
 
+    # FWK95: both stacks are tier-3 transient `<slug>-t-<uuid>` projects (swept-reaped at
+    # session start/finish like every other transient stack).
+    proj_a = _tier3.tier3_project_name()
+    proj_b = _tier3.tier3_project_name()
     # Both stacks are ALWAYS torn down (once each) on every exit path. `down -v` on an
     # already-removed project is an idempotent no-op, so tearing A down inside the body
     # and again here is harmless.
     try:
-        p_a = up("swfwacc-corun-a")
-        p_b = up("swfwacc-corun-b")
+        p_a = up(proj_a)
+        p_b = up(proj_b)
         assert healthy(p_a) and healthy(p_b), (
             "both stacks must serve /health concurrently"
         )
-        down("swfwacc-corun-a")  # tear A down...
+        down(proj_a)  # tear A down...
         assert healthy(p_b), "B stays healthy after A's down -v (isolated volumes)"
     finally:
-        down("swfwacc-corun-a")
-        down("swfwacc-corun-b")
+        down(proj_a)
+        down(proj_b)
 
 
 @pytest.mark.skipif(

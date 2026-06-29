@@ -2,9 +2,23 @@ version: '3'
 
 tasks:
   test:
-    desc: Run the framework test suite
+    desc: Run the framework test suite (serial; everything, incl. docker acceptance)
     cmds:
       - uv run pytest -q
+
+  test:fast:
+    desc: "Fast tier (per-commit/local): non-docker suite, -n auto. Mirrors the CI `gate`."
+    cmds:
+      # Same ignore set as ci.yml's gate (pinned together by tests/test_test_tiers.py):
+      # the two docker/dind acceptance files run in the full tier, not here.
+      - uv run pytest -q -n auto --ignore=tests/acceptance/test_rendered_project.py --ignore=tests/acceptance/test_deploy_e2e.py
+
+  test:full:
+    desc: "Full tier (per-merge/branch-end): fast tier + docker acceptance, bounded -n. NOTE: carries FWK70's known-failing acceptance test until FWK70 lands."
+    cmds:
+      # No --ignore: this is where the docker acceptance tests run. Bounded -n (not
+      # auto) caps concurrent docker stacks so they don't contend on the daemon.
+      - uv run pytest -q -n 4
 
   lint:
     desc: Lint and type-check the framework
