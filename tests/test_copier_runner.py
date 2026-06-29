@@ -5538,3 +5538,20 @@ def test_data_stores_never_on_shared_edge_net(tmp_path: Path):
     )
     # Non-vacuous: the render must actually contain stores, or the guard checks nothing.
     assert found == stores, f"expected stores {stores} rendered, found {found}"
+
+
+def test_backup_core_renders_in_baseline(tmp_path):
+    dest = tmp_path / "demo"
+    render_project(
+        dest, {**DATA, "batteries": []}
+    )  # DATA = the module's canonical answers
+    backup = dest / "infra/backup/backup.sh"
+    assert backup.is_file(), "core backup.sh must render with no batteries"
+    text = backup.read_text()
+    assert "# BACKUP-STORES: postgres" in text
+    assert "pg_dump" in text and "age -r" in text
+    assert "{{" not in text and "{%" not in text, "backup.sh has unrendered Jinja"
+    env = (dest / ".env.example").read_text()
+    assert "BACKUP_DEST=" in env and "BACKUP_PUBKEY=" in env
+    task = (dest / "Taskfile.yml").read_text()
+    assert "backup:" in task

@@ -221,6 +221,11 @@ tasks:
     desc: Load seed data (idempotent — skips if data already exists).
     cmds:
       - uv run python scripts/seed.py
+
+  backup:
+    desc: Encrypted backup of every active durable store to $BACKUP_DEST (see infra/backup/README.md).
+    cmds:
+      - ./infra/backup/backup.sh
 {%- if "multitenantauth" in batteries %}
 
   db:migrate:all:

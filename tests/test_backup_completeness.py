@@ -110,9 +110,6 @@ def test_no_unclassified_volume_in_baseline(baseline: Path) -> None:
     )
 
 
-@pytest.mark.skipif(
-    True, reason="activated by Task 3 (backup.sh)"
-)  # Task 3 deletes this marker
 def test_base_postgres_is_core_backed_up(baseline: Path) -> None:
     backup = baseline / _BACKUP
     assert backup.is_file(), (

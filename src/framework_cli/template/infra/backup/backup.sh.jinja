@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Battery-aware encrypted backup. Dumps each active durable store, encrypts each with age, writes
+# to $BACKUP_DEST, then prunes old dumps. Run via `task backup` or the systemd timer.
+# See infra/backup/README.md for setup (age key custody, $BACKUP_DEST, the timer).
+#
+# BACKUP-STORES: postgres{% if "mongodb" in batteries %} mongo{% endif %}
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+
+: "${BACKUP_DEST:=./backups}"
+: "${BACKUP_PUBKEY:?set BACKUP_PUBKEY to your age recipient public key (see infra/backup/README.md)}"
+command -v age >/dev/null || { echo "age not installed (see infra/backup/README.md)" >&2; exit 1; }
+
+mkdir -p "$BACKUP_DEST"
+ts="$(date -u +%Y%m%dT%H%M%SZ)"
+slug="{{ project_slug }}"
+
+echo "backup: postgres -> $BACKUP_DEST"
+./scripts/compose.sh exec -T postgres pg_dump -Fc -U app app \
+  | age -r "$BACKUP_PUBKEY" > "$BACKUP_DEST/${slug}-postgres-${ts}.dump.age"
+{% if "mongodb" in batteries %}
+echo "backup: mongo -> $BACKUP_DEST"
+./scripts/compose.sh exec -T mongo mongodump --archive --gzip --db app \
+  | age -r "$BACKUP_PUBKEY" > "$BACKUP_DEST/${slug}-mongo-${ts}.archive.gz.age"
+{% endif %}
+./infra/backup/prune.sh
+echo "backup complete (${ts})"
