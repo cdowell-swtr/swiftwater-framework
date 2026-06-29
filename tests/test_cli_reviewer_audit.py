@@ -290,6 +290,50 @@ def test_reviewer_audit_target_project_selects_active_agents(tmp_path, monkeypat
     assert str(captured["fixtures_root"]) == str(tmp_path / "fx")
 
 
+def test_reviewer_audit_target_project_includes_project_local_reviewer(
+    tmp_path, monkeypatch
+):
+    """FWK119: reviewer-audit --target project audits the project's OWN reviewers
+    (discovered from .framework/reviewers/) alongside the built-in project roster."""
+    import framework_cli.cli as climod
+    import framework_cli.review.audit.pipeline as pipeline_mod
+    from framework_cli.review import registry
+    from framework_cli.review.audit.changelist import Changelist
+
+    # restore the registry global after the overlay this test installs
+    orig_specs = dict(registry._SPECS)
+
+    rdir = tmp_path / ".framework" / "reviewers"
+    rdir.mkdir(parents=True)
+    (rdir / "house-style.md").write_text("Flag house-style violations.")
+    (rdir / "house-style.toml").write_text('active_when = "always"\n')
+
+    captured: dict[str, object] = {}
+
+    def spy_run_audit(targets, **kw):
+        captured["targets"] = list(targets)
+        return Changelist()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(pipeline_mod, "run_audit", spy_run_audit)
+    monkeypatch.setattr(climod, "_make_backend", lambda *a, **k: object())
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **k: type("R", (), {"backend": "subagent", "reason": ""})(),
+    )
+    try:
+        result = runner.invoke(
+            app, ["reviewer-audit", "--target", "project", "--out", str(tmp_path / "o")]
+        )
+        assert result.exit_code == 0, result.output
+        assert "house-style" in captured["targets"]
+        assert "security" in captured["targets"]  # built-in project roster still there
+    finally:
+        registry._SPECS.clear()
+        registry._SPECS.update(orig_specs)
+
+
 def test_reviewer_audit_skip_neutral_without_backend(tmp_path, monkeypatch):
     import framework_cli.cli as climod
 

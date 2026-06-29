@@ -4247,6 +4247,16 @@ def test_rendered_project_uses_in_process_review(tmp_path: Path):
     assert "gate-prepare" not in hook
 
 
+def test_rendered_audit_command_documents_byo_reviewers(tmp_path: Path):
+    """FWK119: the generated project's /reviewers:audit doc tells builders how to add
+    their OWN reviewers under .framework/reviewers/ (opt-in; rookie path untouched)."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    audit_doc = (dest / ".claude" / "commands" / "reviewers" / "audit.md").read_text()
+    assert ".framework/reviewers/" in audit_doc
+    assert "reviewer-audit --target project" in audit_doc
+
+
 def test_render_docs_battery_adds_docs_dependency_group(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": ["docs"]})

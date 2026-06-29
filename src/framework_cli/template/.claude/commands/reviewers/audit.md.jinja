@@ -28,3 +28,26 @@ cat .framework/audit/latest/audit-report.md
 ```
 
 There are no prepare/Workflow/finalize steps — the audit is a single command.
+
+## Adding (and tuning) your own reviewers — optional
+
+You don't need this to get reviewed: the bundled agents work out of the box. But if you
+want a reviewer specific to *your* codebase, drop one under `.framework/reviewers/` — no
+framework changes required:
+
+```
+.framework/reviewers/<name>.md      # the reviewer's domain prompt
+.framework/reviewers/<name>.toml    # block_threshold / active_when / model / trigger_globs / context
+.framework/reviewers/fixtures/<name>/{good,bad}/<case>/change.patch   # calibration cases
+```
+
+A reviewer named `<name>` joins the project roster automatically (it must not reuse a
+built-in agent's name). To **tune** its severity bar / scope against your own fixtures,
+run the calibration pass — it emits a preview changelist and applies nothing:
+
+```bash
+uv run framework reviewer-audit --target project \
+  --fixtures-root .framework/reviewers/fixtures
+```
+
+If you never create `.framework/reviewers/`, nothing changes — this is entirely opt-in.

@@ -546,6 +546,19 @@ def _explain_no_backend(res: object, *, command: str) -> None:
     typer.echo(f"{command}: {msg}", err=True)
 
 
+def _register_project_reviewers_or_exit() -> list[str]:
+    """Overlay the project's own reviewers (`.framework/reviewers/`) onto the registry
+    so the project-target paths resolve them (FWK119). A collision with a built-in
+    agent is a project-config error → exit 2 with a clear message."""
+    from framework_cli.review.project_reviewers import register_project_reviewers
+
+    try:
+        return register_project_reviewers(Path("."))
+    except ValueError as exc:
+        typer.echo(f"project reviewers: {exc}", err=True)
+        raise typer.Exit(2) from exc
+
+
 def _build_audit_items(
     target_arg: str,
     selected_agents: list[str],
@@ -566,6 +579,7 @@ def _build_audit_items(
     if target == "framework":
         all_agents = sorted(FRAMEWORK_AGENTS)
     else:
+        _register_project_reviewers_or_exit()  # FWK119: project's own reviewers join the roster
         all_agents = active_agents("pull_request", read_batteries(Path(".")))
 
     # Dedupe selected agents while preserving insertion order.
@@ -1539,12 +1553,19 @@ def reviewer_audit(
         raise typer.Exit(0)
 
     _backend = _make_backend(res.backend, EVAL_KEY_ENV)  # type: ignore[attr-defined]
+    project_reviewers = (
+        _register_project_reviewers_or_exit() if target == "project" else []
+    )
     if agents:
         targets = list(agents)
     elif target == "project":
         # The agents a generated project actually runs (mirrors `framework audit
-        # --target project`): the active_agents() set, batteries auto-detected from cwd.
-        targets = active_agents("pull_request", read_batteries(Path(".")))
+        # --target project`): the active_agents() set, batteries auto-detected from cwd,
+        # PLUS every custom reviewer the project added under .framework/reviewers/ (FWK119).
+        targets = sorted(
+            set(active_agents("pull_request", read_batteries(Path("."))))
+            | set(project_reviewers)
+        )
     else:
         targets = agent_names()
     out_dir = Path(out)
