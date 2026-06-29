@@ -231,6 +231,16 @@ tasks:
     desc: Apply GFS-lite retention to $BACKUP_DEST (also run automatically by `task backup`).
     cmds:
       - ./infra/backup/prune.sh
+
+  restore:
+    desc: DESTRUCTIVE — restore the latest dump into the LIVE stores (typed confirmation required).
+    cmds:
+      - ./infra/backup/restore.sh
+
+  backup:verify:
+    desc: Restore-drill — verify the latest dump restores into a throwaway instance (needs docker + the age identity).
+    cmds:
+      - ./infra/backup/restore_drill.sh
 {%- if "multitenantauth" in batteries %}
 
   db:migrate:all:

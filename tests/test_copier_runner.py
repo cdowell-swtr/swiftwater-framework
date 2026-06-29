@@ -5563,3 +5563,17 @@ def test_prune_renders_with_retention(tmp_path):
     prune = (dest / "infra/backup/prune.sh").read_text()
     assert "BACKUP_RETENTION_DAILY" in prune and "BACKUP_RETENTION_WEEKLY" in prune
     assert (dest / "Taskfile.yml").read_text().count("backup:prune") >= 1
+
+
+def test_restore_and_drill_render(tmp_path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": []})
+    restore = (dest / "infra/backup/restore.sh").read_text()
+    drill = (dest / "infra/backup/restore_drill.sh").read_text()
+    assert "age -d" in restore and "pg_restore" in restore
+    assert "yes" in restore  # explicit confirmation guard
+    assert "age -d" in drill and "alembic_version" in drill
+    task = (dest / "Taskfile.yml").read_text()
+    assert "restore:" in task and "backup:verify" in task
+    for sh in (restore, drill):
+        assert "{{" not in sh and "{%" not in sh

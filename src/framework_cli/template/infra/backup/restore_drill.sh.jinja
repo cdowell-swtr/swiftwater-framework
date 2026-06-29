@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Restore-drill: decrypt the latest postgres dump into a THROWAWAY postgres (the battery-correct
+# image, so extensions restore), assert alembic is at head, tear down. Proves the WHOLE chain incl.
+# decryption — a missing/wrong age key fails loudly here, not mid-recovery.
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+: "${BACKUP_DEST:=./backups}"
+: "${BACKUP_IDENTITY:=$HOME/.config/{{ project_slug }}/backup-identity.txt}"
+slug="{{ project_slug }}"
+
+pg="$(ls -1t "$BACKUP_DEST/${slug}-postgres-"*.age 2>/dev/null | head -1)"
+[ -n "$pg" ] || { echo "no postgres dump to drill in $BACKUP_DEST" >&2; exit 1; }
+
+# Build the same postgres image the stack uses (extension-loaded when needed), via compose.
+img="$(./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/dev.yml config --images | grep -E '(^|/)postgres' | head -1)"
+[ -n "$img" ] || img="postgres:17"
+{% set _pre = [] %}{% if "timescaledb" in batteries %}{% set _ = _pre.append("timescaledb") %}{% endif %}{% if "age" in batteries %}{% set _ = _pre.append("age") %}{% endif %}
+cmd=(postgres){% if _pre %} ; cmd+=(-c "shared_preload_libraries={{ _pre | join(',') }}"){% endif %}
+
+cid="$(docker run -d -e POSTGRES_USER=app -e POSTGRES_PASSWORD=drill -e POSTGRES_DB=drill "$img" "${cmd[@]}")"
+trap 'docker rm -f "$cid" >/dev/null 2>&1 || true; rm -f "$tmp"' EXIT
+for _ in $(seq 1 30); do docker exec "$cid" pg_isready -U app -d drill -q && break; sleep 1; done
+
+tmp="$(mktemp)"; age -d -i "$BACKUP_IDENTITY" "$pg" > "$tmp"
+{% if "age" in batteries %}docker exec -i "$cid" psql -v ON_ERROR_STOP=1 -U app -d drill -c "CREATE EXTENSION IF NOT EXISTS age; LOAD 'age';"{% endif %}
+{% if "timescaledb" in batteries %}docker exec -i "$cid" psql -v ON_ERROR_STOP=1 -U app -d drill -c "SELECT timescaledb_pre_restore();"{% endif %}
+docker exec -i "$cid" pg_restore --clean --if-exists --no-owner -U app -d drill < "$tmp"
+{% if "timescaledb" in batteries %}docker exec -i "$cid" psql -v ON_ERROR_STOP=1 -U app -d drill -c "SELECT timescaledb_post_restore();"{% endif %}
+
+n="$(docker exec "$cid" psql -tAX -U app -d drill -c "SELECT count(*) FROM alembic_version;")"
+[ "$n" = "1" ] || { echo "drill FAILED: alembic_version has $n rows (expected 1)" >&2; exit 1; }
+echo "restore-drill OK: latest postgres dump restores + alembic at head"

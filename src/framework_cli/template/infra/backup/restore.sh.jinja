@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Restore the LATEST encrypted dump into the LIVE stores. DESTRUCTIVE — requires typed confirmation.
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+: "${BACKUP_DEST:=./backups}"
+: "${BACKUP_IDENTITY:=$HOME/.config/{{ project_slug }}/backup-identity.txt}"
+slug="{{ project_slug }}"
+
+latest() { ls -1t "$BACKUP_DEST/${slug}-$1-"*.age 2>/dev/null | head -1; }
+
+pg="$(latest postgres)"; [ -n "$pg" ] || { echo "no postgres dump in $BACKUP_DEST" >&2; exit 1; }
+read -r -p "Restore $(basename "$pg") into the LIVE postgres? This OVERWRITES data. [type 'yes']: " ok
+[ "$ok" = "yes" ] || { echo "aborted"; exit 1; }
+age -d -i "$BACKUP_IDENTITY" "$pg" \
+  | ./scripts/compose.sh exec -T postgres pg_restore --clean --if-exists --no-owner -U app -d app
+{% if "mongodb" in batteries %}
+mg="$(latest mongo)"; if [ -n "$mg" ]; then
+  age -d -i "$BACKUP_IDENTITY" "$mg" \
+    | ./scripts/compose.sh exec -T mongo mongorestore --archive --gzip --drop --db app
+fi
+{% endif %}
+echo "restore complete"
