@@ -449,6 +449,14 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         "test_edge_host_script_computes_per_tier_host",
     ),
     SurfaceClass(
+        "script:scripts/edge_up.sh",
+        "scripts/edge_up.sh",
+        _EX,
+        # FWK95: ensures the shared edge net + fail-fast guards on a foreign endpoint (consumer
+        # edge) before the dev:edge up — driven against a docker shim for both branches.
+        "test_edge_up_script_ensures_net_and_guards_edge",
+    ),
+    SurfaceClass(
         "script:scripts/doctor.sh",
         "scripts/doctor.sh",
         _EX,
@@ -605,6 +613,14 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         # FWK20 (H3): the worker is brought up live and a deterministically-failing task is
         # enqueued through the real broker; on_failure writes a dead_letter_tasks row (asserted).
         "test_rendered_workers_live_broker_dlq_and_beat",
+    ),
+    SurfaceClass(
+        "service:edge.yml:app",
+        "infra/compose/edge.yml",
+        _EX,
+        # FWK95: app gains shared-edge net membership (alongside default) under the edge overlay —
+        # the resolved per-service networks are asserted in the docker-gated config test.
+        "test_compose_config_edge_network_membership",
     ),
     SurfaceClass(
         "service:edge.yml:traefik",

@@ -436,6 +436,189 @@ def test_compose_config_edge_obs_labels_and_traefik_dropped(tmp_path: Path):
     )
 
 
+def test_render_edge_overlay_network_membership(tmp_path: Path):
+    """FWK95: the dev:edge overlay puts ONLY the edge-routed services on the FROZEN
+    `swiftwater-shared-edge` external network (the master isolation control). Each routed service
+    lists `default` explicitly too — a compose `networks:` key REPLACES default membership, so
+    omitting `default` would sever app→postgres. Data stores get NO `networks:` key in edge.yml,
+    so they stay on the per-project default network exclusively (else worktree A's app reaches B's
+    Postgres + the `postgres` alias resolves ambiguously). RAW-overlay assertions (docker-free)."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    edge = yaml.safe_load((dest / "infra" / "compose" / "edge.yml").read_text())
+
+    # Top-level external network with the FROZEN name (the box edge's --providers.docker.network
+    # uses the identical string). external: true → compose never creates/removes it (dev:edge
+    # idempotently ensures it; teardown leaves it intact — no active-endpoint deadlock).
+    net = edge["networks"]["shared-edge"]
+    assert net["name"] == "swiftwater-shared-edge"
+    assert net["external"] is True
+
+    # Edge-routed set joins BOTH default and the shared edge net; stores join neither here.
+    for svc in ("app", "grafana", "prometheus", "alertmanager"):
+        nets = edge["services"][svc]["networks"]
+        assert "default" in nets, (
+            f"{svc} must keep default (networks: replaces, not adds)"
+        )
+        assert "shared-edge" in nets, f"{svc} must join the shared edge net"
+
+    # Stores are NOT redeclared in edge.yml (no networks key added) → default-only by omission.
+    assert "postgres" not in edge["services"], (
+        "stores must NOT be redeclared with networks in edge.yml — default-net-only"
+    )
+
+
+def test_render_edge_network_is_edge_gated(tmp_path: Path):
+    """FWK95 standalone-safety: shared-net membership lives ONLY in edge.yml. The shipped/default
+    render (base/dev/observability) MUST NOT reference `swiftwater-shared-edge` or declare any
+    external network — else every standalone `docker compose up` + prod/staging would break."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    for name in ("base.yml", "dev.yml", "observability.yml", "prod.yml", "staging.yml"):
+        text = (dest / "infra" / "compose" / name).read_text()
+        assert "swiftwater-shared-edge" not in text, (
+            f"shared edge net leaked into {name} (breaks standalone `docker compose up`)"
+        )
+        data = yaml.safe_load(text) or {}
+        for nname, ndef in (data.get("networks") or {}).items():
+            assert not (ndef or {}).get("external"), (
+                f"{name} declares an external network {nname!r} — not standalone-safe"
+            )
+
+
+def test_edge_up_script_ensures_net_and_guards_edge(tmp_path: Path):
+    """FWK95: scripts/edge_up.sh idempotently ensures `swiftwater-shared-edge` then fail-fast
+    guards on a CONSUMER EDGE being present. Network-existence is NOT the signal (dev:edge itself
+    ensures the net, so it exists after run #1 regardless) — the signal is a FOREIGN endpoint on
+    the shared net (a container whose compose project != ours). No foreign endpoint → exit 1 with a
+    clear off-box on-ramp message; a foreign endpoint → exit 0. Driven against a docker shim."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    script = dest / "scripts" / "edge_up.sh"
+
+    def run(attached_projects: list[str]) -> subprocess.CompletedProcess[str]:
+        # Fake `docker`: `network create` is a no-op; `ps --filter network=... --format <proj>`
+        # prints ONE compose-project line per attached container (empty label = non-compose edge),
+        # and zero lines for zero containers — faithfully separating `[]` from `[""]`.
+        shimdir = (
+            tmp_path
+            / f"shim-{'_'.join(attached_projects) or 'none'}-{len(attached_projects)}"
+        )
+        shimdir.mkdir(exist_ok=True)
+        ps_body = "".join(f"printf '%s\\n' '{p}'\n" for p in attached_projects) or ":\n"
+        (shimdir / "docker").write_text(
+            "#!/usr/bin/env bash\n"
+            'case "$1" in\n'
+            '  "network") exit 0 ;;\n'
+            f'  "ps") {ps_body}    ;;\n'
+            "  *) exit 0 ;;\n"
+            "esac\n"
+        )
+        (shimdir / "docker").chmod(0o755)
+        env = {**os.environ, "PATH": f"{shimdir}:{os.environ['PATH']}"}
+        env.pop("STACK_INSTANCE", None)
+        env.pop("COMPOSE_PROJECT_NAME", None)
+        return subprocess.run(
+            ["bash", str(script)], cwd=dest, capture_output=True, text=True, env=env
+        )
+
+    # No edge attached (no containers, or only our own project) → fail-fast.
+    r = run([])
+    assert r.returncode == 1, (
+        f"expected fail-fast with no edge; got {r.returncode}\n{r.stderr}"
+    )
+    assert "swiftwater-shared-edge" in r.stderr
+    assert "edge" in r.stderr.lower()
+
+    # Only our own stack attached (project == slug `demo`) → still no edge → fail-fast.
+    r = run(["demo"])
+    assert r.returncode == 1, (
+        f"our own containers must not count as an edge\n{r.stderr}"
+    )
+
+    # A foreign endpoint (the box edge, compose project local-reverse-proxy) → guard passes.
+    r = run(["local-reverse-proxy"])
+    assert r.returncode == 0, f"expected pass with a foreign edge endpoint\n{r.stderr}"
+
+    # A non-compose edge (empty project label line) is foreign too → passes.
+    r = run([""])
+    assert r.returncode == 0, (
+        f"a non-compose edge endpoint must count as foreign\n{r.stderr}"
+    )
+
+
+def test_render_taskfile_dev_edge_invokes_edge_up_guard(tmp_path: Path):
+    """FWK95: `task dev:edge` runs scripts/edge_up.sh (ensure net + fail-fast edge guard) BEFORE
+    the compose `up`, so a stack never comes up unreachable. The guard lives in the task layer, NOT
+    in compose.sh/edge.yml — so every compose-level test (and FWK99's edge-less conformance) stays
+    unblocked. The README-pointer note in the dev:edge desc is replaced now the guard exists."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    taskfile = (dest / "Taskfile.yml").read_text()
+
+    # edge_up.sh runs as a cmd, before the compose up-line, within dev:edge.
+    edge_block = taskfile.split("dev:edge:")[1].split("dev:edge:down:")[0]
+    up_line = "-f infra/compose/edge.yml --profile dev up"
+    assert "./scripts/edge_up.sh" in edge_block
+    assert edge_block.index("./scripts/edge_up.sh") < edge_block.index(up_line), (
+        "edge_up.sh (ensure + guard) must run before the compose up"
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_compose_config_edge_network_membership(tmp_path: Path):
+    """FWK95 resolved complement (docker-gated): the dev:edge file set resolves the edge-routed
+    services (app + obs UIs) onto BOTH the per-project `default` net AND the external
+    `swiftwater-shared-edge` net, while data stores resolve to `default` ONLY. `docker compose
+    config` is a pure YAML transform — it resolves membership without touching the daemon, so it
+    succeeds whether or not the external net exists (existence is an `up`-time check; FWK99's
+    live-up must ensure the net first). The top-level network resolves to the FROZEN name +
+    external: true."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+
+    e = {**os.environ}
+    for k in ("STACK_INSTANCE", "COMPOSE_PROJECT_NAME", "APP_ROUTE_HOST"):
+        e.pop(k, None)
+    args = ["./scripts/compose.sh"]
+    for f in (
+        "infra/compose/base.yml",
+        "infra/compose/observability.yml",
+        "infra/compose/dev.yml",
+        "infra/compose/edge.yml",
+    ):
+        args += ["-f", f]
+    args += ["--profile", "dev", "config"]
+    r = subprocess.run(args, cwd=dest, capture_output=True, text=True, env=e)
+    assert r.returncode == 0, f"compose config failed:\n{r.stderr}"
+    cfg = yaml.safe_load(r.stdout)
+
+    # The shared edge net resolves to the frozen name + external (compose won't create/remove it).
+    netdefs = cfg["networks"]
+    shared = next(
+        n for n in netdefs.values() if n.get("name") == "swiftwater-shared-edge"
+    )
+    assert shared["external"] is True
+
+    def nets(svc: str) -> set[str]:
+        # `config` emits service networks as a map keyed by the compose-internal network name.
+        return set((cfg["services"][svc].get("networks") or {}).keys())
+
+    # Edge-routed services on BOTH nets; stores on default ONLY.
+    for svc in ("app", "grafana", "prometheus", "alertmanager"):
+        assert "default" in nets(svc), (
+            f"{svc} severed from default (app→postgres would break)"
+        )
+        assert "shared-edge" in nets(svc), f"{svc} not on the shared edge net"
+    assert nets("postgres") <= {"default"}, (
+        "postgres must stay default-net-only (cross-instance isolation)"
+    )
+
+
 def test_render_env_services_and_tasks(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)

@@ -71,6 +71,7 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "scripts/docs_layout_check.sh",
     "scripts/doctor.sh",
     "scripts/edge_host.sh",
+    "scripts/edge_up.sh",
     "scripts/entrypoint.sh",
     "scripts/export-openapi.sh",
     "scripts/gen_observability.py",

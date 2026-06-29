@@ -64,7 +64,7 @@ tasks:
       - docker compose -p {{ project_slug }} down
 
   dev:edge:
-    desc: Behind-edge dev stack — app + obs labeled for a shared box edge, NO per-stack Traefik :443. Requires a consumer edge on the box (see README; the edge-presence guard lands with network membership).
+    desc: Behind-edge dev stack — app + obs labeled for a shared box edge, NO per-stack Traefik :443. Ensures the shared edge net + fail-fast if no consumer edge is present (see README).
     preconditions:
       - sh: command -v docker
         msg: "Docker is required for `task dev:edge`. Run `task doctor` to check all host tools."
@@ -89,6 +89,9 @@ tasks:
       ALERTMANAGER_ROUTE_HOST:
         sh: ./scripts/edge_host.sh alertmanager
     cmds:
+      # Ensure the shared edge net + fail-fast if no consumer edge is attached — BEFORE the up, so
+      # a behind-edge stack never comes up unreachable (FWK95).
+      - ./scripts/edge_up.sh
       - ./scripts/compose.sh -f infra/compose/base.yml -f infra/compose/observability.yml -f infra/compose/dev.yml -f infra/compose/edge.yml --profile dev up -d --wait --build
       - 'echo "Behind edge (no per-stack Traefik). Routes — app: https://$APP_ROUTE_HOST · grafana: https://$GRAFANA_ROUTE_HOST · prometheus: https://$PROMETHEUS_ROUTE_HOST · alertmanager: https://$ALERTMANAGER_ROUTE_HOST"'
 
