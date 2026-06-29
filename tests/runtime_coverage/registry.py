@@ -531,6 +531,17 @@ REGISTRY: tuple[SurfaceClass, ...] = (
         # The dev-stack serves seeded items (proves seed.py ran against live Postgres).
         "test_rendered_project_dev_stack_serves_seeded_items",
     ),
+    SurfaceClass(
+        "script:scripts/worktree.py",
+        "scripts/worktree.py",
+        _EX,
+        # FWK74 (A2): the tier-2 worktree provision/deprovision engine — instance naming
+        # (incl. the tier-3 `t-` ban), PORT_OFFSET selection/reconciliation, .env merge, and
+        # the up/down entry points — is comprehensively unit-driven; main(["up"]) is driven
+        # end-to-end through branch resolution + provisioning. Live 2-instance docker
+        # provision/deprovision is the deferred Milestone-M residual (cross-stream e2e).
+        "test_main_up_resolves_branch_and_provisions",
+    ),
     # ---- compose services ------------------------------------------------------------
     SurfaceClass(
         "service:app-host.yml:app",
