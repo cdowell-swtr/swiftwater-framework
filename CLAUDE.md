@@ -42,6 +42,14 @@ gap: `tests/test_test_tiers.py` enforces that every fast-tier `--ignore` is reco
 reason, and that the local fast tier and the CI gate never drift. See
 `docs/maintenance/test-tiers.md`. (`uv run pytest -q` / `task test` still runs everything serially.)
 
+**Per-mutation accelerator (FWK90).** For the tight inner loop, `task test:affected` runs only
+the fast-tier tests the current working-tree mutation *affects* (git diff `HEAD` + untracked →
+a path-area map). It is an **interim accelerator, NOT a commit gate** — it always **widens** to
+the full fast tier on any path it doesn't understand (it can never silently drop coverage), and
+it auto-pulls `tests/review/test_evals.py` when a touched template file is anchored by an eval
+fixture (the otherwise-invisible template→fixture drift). Always run the real `task test:fast`
+before you commit. See `docs/maintenance/per-mutation-test-selection.md`.
+
 `uv` is the package manager — run all tooling via `uv run`. If `uv` is not found, make sure its install directory is on PATH (restart the session after a fresh install).
 
 ## Critical conventions

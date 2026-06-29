@@ -2893,6 +2893,7 @@ def test_rendered_project_hybrid_section_integrity(tmp_path):
 def test_rendered_project_integrity_verifies_tamper_and_restore(tmp_path: Path):
     from framework_cli.integrity.generate import write_manifest
     from framework_cli.integrity.manifest import installed_framework_version
+    from framework_cli.source import record_portable_source
 
     dest = tmp_path / "acc"
     render_project(
@@ -2905,6 +2906,11 @@ def test_rendered_project_integrity_verifies_tamper_and_restore(tmp_path: Path):
         },
     )
     write_manifest(dest, installed_framework_version())
+    # Mirror a real `framework new` scaffold (cli.py): `render_project` here renders the
+    # template subdir as a non-VCS local path, so copier records no `_commit`. A real
+    # `gh:`-ref scaffold always bakes one via `record_portable_source`, which `restore_file`'s
+    # FWK34 version-skew guard requires. Without this the helper trips the guard (FWK70).
+    record_portable_source(dest, installed_framework_version())
 
     # Fresh project verifies clean.
     assert check(dest, ci=True) == []
