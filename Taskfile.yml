@@ -14,11 +14,18 @@ tasks:
       - uv run pytest -q -n auto --ignore=tests/acceptance/test_rendered_project.py --ignore=tests/acceptance/test_deploy_e2e.py
 
   test:full:
-    desc: "Full tier (per-merge/branch-end): fast tier + docker acceptance, bounded -n. NOTE: carries FWK70's known-failing acceptance test until FWK70 lands."
+    desc: "Full tier (per-merge/branch-end): fast tier + docker acceptance, bounded -n."
     cmds:
       # No --ignore: this is where the docker acceptance tests run. Bounded -n (not
       # auto) caps concurrent docker stacks so they don't contend on the daemon.
       - uv run pytest -q -n 4
+
+  test:affected:
+    desc: "Interim accelerator (FWK90): run only the fast-tier tests the current working-tree mutation affects. NOT a commit gate — run `task test:fast` before committing."
+    cmds:
+      # Selects tests per the changed paths (git diff HEAD + untracked); widens to the full
+      # fast tier on any unmapped path. See scripts/affected_tests.py + docs/maintenance/per-mutation-test-selection.md.
+      - uv run python scripts/affected_tests.py
 
   lint:
     desc: Lint and type-check the framework
