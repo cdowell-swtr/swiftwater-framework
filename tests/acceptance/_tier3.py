@@ -1,32 +1,28 @@
-"""Tier-3 transient test-instance contract (FWK95 / FWK88).
+"""Tier-3 transient test-instance contract (FWK95 / FWK88 / FWK129).
 
-The acceptance suite spins up short-lived `docker compose` stacks. Tier-3 of the FWK88
+The acceptance suite spins up short-lived ``docker compose`` stacks. Tier-3 of the FWK88
 instance-addressing contract governs them:
 
   * **Reserved namespace** — every transient stack's ``COMPOSE_PROJECT_NAME`` is
-    ``<slug>-t-<uuid>``. The ``<slug>-t-`` prefix is reserved for tier-3
-    (operator-pinned in FWK88, 2026-06-28); A2/FWK74's tier-2 generator MUST reject any
-    instance whose name begins with ``t-``, so tier-2 (``<slug>-<inst>``) and tier-3 are
-    *structurally* disjoint — not a slug-value coincidence.
+    ``<slug>-<inst>-t-<uuid>``, where ``<inst>`` is a per-worktree 12-char hex digest
+    (SHA-256 of the canonical worktree root path). The infix marker ``-t-`` (FWK129) is
+    reserved for tier-3 (operator-pinned in FWK88/FWK129); A2/FWK74's tier-2 generator
+    MUST reject any instance whose name **contains** ``-t-``, so tier-2
+    (``<slug>-<inst>``) and tier-3 are *structurally* disjoint — not a value coincidence.
   * **Guaranteed reaping** — there is **no** testcontainers-python / Ryuk sidecar in
-    this suite. Reaping is a docker label sweep over the reserved prefix at pytest
-    session **start AND finish**: the finish-sweep reaps this run's stacks; the
-    start-sweep reaps a prior run a SIGKILL / crashed xdist worker left behind
-    (``sessionfinish`` never ran for it). The sweep keys on the
-    ``com.docker.compose.project`` label docker auto-applies to every container,
-    volume, and network — no custom label injection (compose has no clean per-run
-    ``--label`` for all resource kinds).
+    this suite. Reaping is a docker label sweep at pytest session **start AND finish**:
+    the finish-sweep reaps THIS worktree's stacks (anchored exact-inst regex → can never
+    touch a peer's stacks); the start-sweep reaps orphans of ANY worktree (inst-agnostic
+    + grace filter), recovering stacks a deleted worktree left behind. The sweep keys on
+    the ``com.docker.compose.project`` label docker auto-applies to every container,
+    volume, and network — no custom label injection.
 
-Known boundaries (recorded, not silently absorbed — see ACTION_LOG):
-  * Two *concurrent* acceptance sessions on one box (e.g. two worktrees, both slug
-    ``demo``) share the ``demo-t-`` namespace. **Start-sweep: fixed (FWK99)** — it now
-    grace-filters (``stale_only``), reaping only stale leftovers and sparing a peer's
-    young live stack. **Finish-sweep: residual** — it must reap this run's own young
-    stacks so it cannot grace-filter, so a session finishing while a peer still runs can
-    still reap the peer's young stacks. Fully closing it needs the per-worktree-namespace
-    fix (fold ``<inst>`` into the prefix → ``<slug>-<inst>-t-…``), which touches the frozen
-    tier-2↔tier-3 disjointness contract → left as the FWK99 follow-up. Bites only when the
-    full/docker tier runs concurrently across worktrees (branch-end, not per-commit).
+Cross-session safety (FWK99 + FWK129):
+  * **Finish-sweep residual: CLOSED (FWK129)** — the per-worktree ``<inst>`` fold means
+    this worktree's finish-sweep matches only ``^<slug>-<inst>-t-[0-9a-f]+$``; a peer's
+    ``demo-<other>-t-<uuid>`` is invisible. Safety is structural, not a value coincidence.
+  * **Start-sweep: inst-agnostic** — reaps stale orphans of ANY worktree (incl. a
+    ``git worktree remove``d one whose inst never recurs), grace-filter spares young peers.
   * ``test_rendered_project._run_image_serving`` uses a bare ``docker run`` (no compose
     project label), so the prefix sweep won't catch a leaked one — it is already
     context-manager-removed on every exit path.
@@ -34,24 +30,51 @@ Known boundaries (recorded, not silently absorbed — see ACTION_LOG):
 
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 import time
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from uuid import uuid4
 
 # The acceptance render slug (DATA["project_slug"]); `test_tier3_contract.py` pins this
 # equality so the reserved prefix can't drift from what the suite renders.
 TIER3_SLUG = "demo"
-# Reserved tier-3 namespace. The trailing hyphen is load-bearing: it makes the
-# reservation structural (`demo-tango` is NOT tier-3; only `demo-t-…` is).
-TIER3_PREFIX = f"{TIER3_SLUG}-t-"
+# The infix marker that separates <inst> from <uuid> in the tier-3 namespace.
+# Lockstep with src/framework_cli/template/scripts/worktree.RESERVED_TIER3_MARKER —
+# the cross-layer coupling test (test_worktree.py::test_cross_layer_marker_identity)
+# asserts byte identity between the two.
+RESERVED_TIER3_MARKER = "-t-"
 # The label docker compose auto-applies to every container/volume/network it creates.
 COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
 
+
+def _worktree_instance(root: Path | None = None) -> str:
+    """Fixed-width 12-char lowercase hex from SHA-256 of the canonical worktree root path.
+
+    No git shell-out; deterministic per-worktree across runs; unique per worktree (two
+    worktrees can never share an absolute realpath). Fixed-width hex means no instance
+    is a string-prefix of another, and none contains the infix marker ``-t-``.
+    ``root`` is injectable for hermetic tests (default: this file's repo root).
+    """
+    if root is None:
+        root = Path(__file__).resolve().parents[2]
+    return hashlib.sha256(str(root).encode()).hexdigest()[:12]
+
+
+# Module-level constant: computed once at import from this worktree's absolute path.
+# Tests can pass explicit paths to _worktree_instance() or to list_tier3_projects(scope_inst=)
+# rather than monkeypatching this value (baked defaults would not reflect a patched value).
+_TIER3_INSTANCE: str = _worktree_instance()
+
+# Reserved tier-3 prefix for THIS worktree: <slug>-<inst>-t-.
+# Membership is an anchored exact regex, NOT startswith — see is_tier3_project().
+TIER3_PREFIX: str = f"{TIER3_SLUG}-{_TIER3_INSTANCE}-t-"
+
 # FWK99 start-sweep grace period. A tier-3 stack lives only for ONE test (brought up,
-# asserted, context-manager-torn-down — minutes). A `<slug>-t-…` stack whose newest container
+# asserted, context-manager-torn-down — minutes). A `<slug>-<inst>-t-…` stack whose newest container
 # is older than this is almost certainly a crashed-run leftover, not a concurrent peer session's
 # still-live stack in the shared namespace. The start-sweep reaps only those (so two worktrees
 # both running `task test:full` don't reap each other mid-run). The threshold is a *fixed* age,
@@ -65,25 +88,59 @@ Clock = Callable[[], float]
 
 
 def tier3_project_name() -> str:
-    """A fresh tier-3 transient ``COMPOSE_PROJECT_NAME`` of the pinned ``<slug>-t-<uuid>``
-    form. The uuid hex is all-lowercase ``[0-9a-f]`` so the whole name satisfies both the
-    compose project-name charset and the FWK88 ``^[a-z0-9-]+$`` instance rule."""
+    """A fresh tier-3 transient ``COMPOSE_PROJECT_NAME`` of the form
+    ``<slug>-<inst>-t-<uuid>``. The uuid hex is all-lowercase ``[0-9a-f]`` so the whole
+    name satisfies both the compose project-name charset and the FWK88
+    ``^[a-z0-9-]+$`` instance rule."""
     return f"{TIER3_PREFIX}{uuid4().hex}"
 
 
 def is_tier3_project(name: str) -> bool:
-    """True iff ``name`` is in the reserved tier-3 namespace (``<slug>-t-…``)."""
-    return name.startswith(TIER3_PREFIX)
+    """True iff ``name`` is in THIS worktree's tier-3 namespace.
+
+    Uses an anchored exact regex ``^<slug>-<inst>-t-[0-9a-f]+$`` — NOT a bare
+    ``startswith``. The hex-only uuid tail and the fixed-width inst are the structural
+    guarantees: a peer worktree's ``demo-<other>-t-<uuid>`` and any prefix-extension
+    both fail the match.
+    """
+    return bool(
+        re.fullmatch(
+            rf"{re.escape(TIER3_SLUG)}-{re.escape(_TIER3_INSTANCE)}-t-[0-9a-f]+",
+            name,
+        )
+    )
 
 
 def _run(args: list[str]) -> str:
     return subprocess.run(args, capture_output=True, text=True).stdout
 
 
-def list_tier3_projects(run: Runner = _run) -> set[str]:
-    """The set of tier-3 compose project names currently present in docker — discovered
-    across containers (incl. stopped), volumes, and networks via the auto-applied
-    project label, then filtered to the reserved ``<slug>-t-`` prefix."""
+def list_tier3_projects(
+    run: Runner = _run,
+    *,
+    scope_inst: str | None = _TIER3_INSTANCE,
+) -> set[str]:
+    """The set of tier-3 compose project names currently present in docker.
+
+    Discovered across containers (incl. stopped), volumes, and networks via the
+    auto-applied project label, then filtered by scope:
+
+    ``scope_inst=<inst>`` (default: this worktree's inst) — **exact-inst** scope:
+        ``^<slug>-<inst>-t-[0-9a-f]+$``. The finish-sweep uses this so it can never
+        list a peer worktree's stacks.
+
+    ``scope_inst=None`` — **inst-agnostic** scope:
+        ``^<slug>-[0-9a-f]+-t-[0-9a-f]+$``. The start-sweep uses this so it can
+        reap orphans of a deleted worktree (whose inst never recurs). Still tier-2-disjoint
+        because a tier-2 name ``<slug>-<inst2>`` would need ``<inst2>`` to contain ``-t-``,
+        which the FWK129 ban forbids.
+    """
+    if scope_inst is None:
+        pattern = re.compile(rf"^{re.escape(TIER3_SLUG)}-[0-9a-f]+-t-[0-9a-f]+$")
+    else:
+        pattern = re.compile(
+            rf"^{re.escape(TIER3_SLUG)}-{re.escape(scope_inst)}-t-[0-9a-f]+$"
+        )
     fmt = f'--format={{{{.Label "{COMPOSE_PROJECT_LABEL}"}}}}'
     label = f"--filter=label={COMPOSE_PROJECT_LABEL}"
     discovery = (
@@ -95,7 +152,7 @@ def list_tier3_projects(run: Runner = _run) -> set[str]:
     for cmd in discovery:
         for line in run(cmd).splitlines():
             name = line.strip()
-            if name and is_tier3_project(name):
+            if name and pattern.fullmatch(name):
                 names.add(name)
     return names
 
@@ -167,14 +224,19 @@ def sweep_tier3_stacks(
 ) -> set[str]:
     """Reap tier-3 transient stacks present in docker; returns the projects reaped.
 
-    ``stale_only`` (the **start**-sweep, FWK99): reap only stacks whose newest container is older
-    than ``TIER3_STALE_AGE_SECONDS`` — crashed-run leftovers — and SPARE a young stack (a
-    concurrent peer session's still-live run in the shared ``<slug>-t-`` namespace). A project
-    with no containers is never a live stack → reaped. Default (the **finish**-sweep) reaps every
-    tier-3 stack: it must tear down this run's own young stacks, so it cannot grace-filter (the
-    residual cross-session hazard it leaves at finish is closed only by the per-worktree-namespace
-    follow-up, not this start-side fix)."""
-    projects = list_tier3_projects(run)
+    **start-sweep** (``stale_only=True``): inst-agnostic scope (any worktree's hex inst),
+    reap only stacks whose newest container is older than ``TIER3_STALE_AGE_SECONDS`` —
+    crashed-run leftovers — and SPARE young stacks (concurrent peer sessions). A project
+    with no containers is never a live stack → reaped. Inst-agnostic so it also reaps
+    orphans left by a ``git worktree remove``d worktree.
+
+    **finish-sweep** (default, ``stale_only=False``): exact this-worktree-inst scope
+    (``^<slug>-<inst>-t-[0-9a-f]+$``) — can never list or reap a peer worktree's stacks.
+    The FWK99 finish-side residual hazard is now STRUCTURALLY CLOSED (FWK129): a peer's
+    ``demo-<other>-t-<uuid>`` is invisible to this worktree's finish-sweep by construction.
+    """
+    scope_inst: str | None = None if stale_only else _TIER3_INSTANCE
+    projects = list_tier3_projects(run, scope_inst=scope_inst)
     reaped: set[str] = set()
     for project in projects:
         if stale_only:

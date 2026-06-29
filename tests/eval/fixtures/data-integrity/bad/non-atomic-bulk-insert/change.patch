@@ -2,20 +2,34 @@ diff --git a/src/demo/db/repository.py b/src/demo/db/repository.py
 index 862bafd..6d5cf68 100644
 --- a/src/demo/db/repository.py
 +++ b/src/demo/db/repository.py
-@@ -28,3 +28,16 @@ def create_item(session: Session, name: str) -> Item:
+@@ -28,3 +28,30 @@ def create_item(session: Session, name: str) -> Item:
      session.commit()
      session.refresh(item)
      return item
 +
 +
 +def bulk_create_items(session: Session, names: list[str]) -> list[Item]:
-+    """Insert multiple items — but each is committed separately, risking partial writes."""
-+    created = []
++    """Insert multiple items, validating and de-duplicating the batch.
++
++    Each name is stripped and validated (non-empty, within the 255-char column);
++    the batch is de-duplicated (order preserved) and capped to avoid an unbounded
++    insert.
++    """
++    seen: set[str] = set()
++    cleaned: list[str] = []
 +    for name in names:
++        stripped = name.strip()
++        if not stripped or len(stripped) > 255:
++            raise ValueError(f"invalid item name: {name!r}")
++        if stripped not in seen:
++            seen.add(stripped)
++            cleaned.append(stripped)
++    if len(cleaned) > 1000:  # bound the batch to avoid an unbounded insert
++        raise ValueError(f"bulk insert of {len(cleaned)} exceeds the 1000-row limit")
++    created = []
++    for name in cleaned:
 +        item = Item(name=name)
 +        session.add(item)
-+        # Bug: commits inside the loop — no atomicity across the batch.
 +        session.commit()
-+        session.refresh(item)
 +        created.append(item)
 +    return created

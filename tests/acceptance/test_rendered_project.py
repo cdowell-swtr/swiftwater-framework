@@ -211,10 +211,10 @@ def _isolate_compose_project(request, monkeypatch):
     `os.environ`) and by the bare `down` calls (inherited env) alike — so each test's
     stack lives in its own namespace and `down -v` is scoped to that test only.
 
-    FWK95 / FWK88 tier-3: the namespace is the pinned **`<slug>-t-<uuid>`** transient
-    marker (`demo-t-…`). The `<slug>-t-` prefix is reserved for tier-3 and is swept-reaped
-    at session start/finish (see `_tier3` + the conftest hooks); A2/FWK74's tier-2
-    generator rejects any `<inst>` beginning with `t-`, so the two tiers are structurally
+    FWK129 / FWK88 tier-3: the namespace is the per-worktree **`<slug>-<inst>-t-<uuid>`**
+    transient marker (`demo-<inst>-t-…`). The `-t-` infix is reserved for tier-3 and is
+    swept-reaped at session start/finish (see `_tier3` + the conftest hooks); A2/FWK74's
+    tier-2 generator rejects any `<inst>` containing `-t-`, so the two tiers are structurally
     disjoint. FWK31 (per-slug project name + parameterized host ports) lets two generated
     projects co-run on one host; this fixture additionally binds every published host port
     to an ephemeral port (below) so a test stack never collides with a live UAT stack or
@@ -246,11 +246,12 @@ def _isolate_compose_project(request, monkeypatch):
 
 
 def test_isolate_compose_project_uses_tier3_reserved_marker():
-    """The autouse isolation fixture namespaces this test's stack with the pinned
-    FWK88/FWK95 tier-3 marker `<slug>-t-<uuid>` (no docker needed — just the env it set)."""
+    """The autouse isolation fixture namespaces this test's stack with the per-worktree
+    FWK88/FWK129 tier-3 marker `<slug>-<inst>-t-<uuid>` (no docker needed — just the env it
+    set)."""
     name = os.environ["COMPOSE_PROJECT_NAME"]
     assert _tier3.is_tier3_project(name), name
-    assert name.startswith(f"{DATA['project_slug']}-t-")
+    assert name.startswith(_tier3.TIER3_PREFIX)
 
 
 @pytest.mark.skipif(
@@ -261,7 +262,7 @@ def test_tier3_reaper_removes_a_real_labelled_stack():
     invocations the unit tests can only mock (an injected runner can't catch a malformed
     `--format`/`--filter`, and the sweep swallows errors, so a broken command would leak
     silently). Image-free (network+volume) so it needs no pull; the container reap path is
-    additionally exercised by the co-run test's `<slug>-t-<uuid>` stacks under the finish
+    additionally exercised by the co-run test's `<slug>-<inst>-t-<uuid>` stacks under the finish
     sweep. Asserts the labelled resources are gone and the project drops out of discovery.
     """
     project = _tier3.tier3_project_name()
@@ -3978,8 +3979,8 @@ def test_two_dev_lite_stacks_corun_without_collision(tmp_path: Path):
                 time.sleep(2)
         return False
 
-    # FWK95: both stacks are tier-3 transient `<slug>-t-<uuid>` projects (swept-reaped at
-    # session start/finish like every other transient stack).
+    # FWK129: both stacks are tier-3 transient `<slug>-<inst>-t-<uuid>` projects (swept-reaped
+    # at session start/finish like every other transient stack).
     proj_a = _tier3.tier3_project_name()
     proj_b = _tier3.tier3_project_name()
     # Both stacks are ALWAYS torn down (once each) on every exit path. `down -v` on an

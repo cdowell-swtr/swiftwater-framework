@@ -3,6 +3,7 @@ script via importlib and exercises the pure functions in the framework venv (no
 render), mirroring tests/test_check_migrations.py."""
 
 import importlib.util
+import re
 import subprocess
 from pathlib import Path
 
@@ -65,37 +66,74 @@ def test_build_stack_instance_happy():
 
 def test_build_stack_instance_tier3_reserved_raises():
     mod = _load()
-    # An instance beginning with "t-" would enter B's reserved tier-3 prefix
-    # <slug>-t-<uuid> (carving spec, "Tier-2 ↔ tier-3 name disjointness", PINNED
-    # 2026-06-28) — A2 must never emit it.
+    # FWK129: the infix -t- marker is now the ban: any inst containing -t- is in the
+    # reserved tier-3 namespace (<slug>-<inst>-t-<uuid>); A2 must never emit such an inst.
     with pytest.raises(mod.Tier3NamespaceError):
-        mod.build_stack_instance("acme", "t-1234")
+        mod.build_stack_instance("acme", "foo-t-bar")  # contains -t- → banned
 
 
-def test_build_stack_instance_tier3_ban_is_t_dash_prefix_not_bare_t():
-    # The pinned ban reserves the "t-" PREFIX, not the bare letter "t": the trailing
-    # hyphen is load-bearing. "demo-tango" is fine (t not followed by "-"); "demo-t-foo"
-    # is not (inside tier-3's reserved "demo-t-" prefix); "demo-t" is fine (structurally
-    # disjoint from every "demo-t-<uuid>").
+def test_build_stack_instance_tier3_infix_ban_structural():
+    """FWK129 RED TEST: the infix -t- ban — both rejection and inversion (t-foo now allowed)."""
+    mod = _load()
+    # foo-t-bar sanitizes to foo-t-bar — contains -t- → must raise
+    with pytest.raises(mod.Tier3NamespaceError):
+        mod.build_stack_instance("demo", "foo-t-bar")
+    # a-t-b contains -t- → must raise
+    with pytest.raises(mod.Tier3NamespaceError):
+        mod.build_stack_instance("demo", "a-t-b")
+    # t-foo sanitizes to t-foo — does NOT contain -t- (no leading hyphen) → allowed
+    assert mod.build_stack_instance("demo", "t-foo") == "demo-t-foo"
+
+
+def test_build_stack_instance_tier3_ban_is_infix_not_prefix():
+    # FWK129: the ban inverted from the old t- PREFIX to the -t- INFIX marker. Now:
+    # "t-foo" → inst "t-foo" — does NOT contain "-t-" (no leading hyphen) → ALLOWED;
+    # "foo-t-bar" → inst "foo-t-bar" — CONTAINS "-t-" → REJECTED;
+    # branches with no -t- infix are unaffected.
     mod = _load()
     assert mod.build_stack_instance("demo", "tango") == "demo-tango"
     assert mod.build_stack_instance("demo", "test-branch") == "demo-test-branch"
-    assert mod.build_stack_instance("demo", "t") == "demo-t"  # bare t allowed
+    assert mod.build_stack_instance("demo", "t") == "demo-t"  # bare t still allowed
+    assert (
+        mod.build_stack_instance("demo", "t-foo") == "demo-t-foo"
+    )  # allowed (no infix)
     with pytest.raises(mod.Tier3NamespaceError):
-        mod.build_stack_instance("demo", "t-foo")
+        mod.build_stack_instance("demo", "foo-t-bar")  # contains -t- → banned
+    with pytest.raises(mod.Tier3NamespaceError):
+        mod.build_stack_instance("demo", "a-t-b")  # contains -t- → banned
 
 
-def test_tier2_name_never_enters_tier3_reserved_prefix():
-    # Structural disjointness, not coincidental: for any accepted instance, <slug>-<inst>
-    # never begins with the tier-3 reserved prefix <slug>-t-; and any t-* instance is refused.
+def test_tier2_name_never_collides_with_tier3_infix():
+    # FWK129 structural disjointness: a tier-2 name <slug>-<inst2> can only equal a
+    # tier-3 name <slug>-<inst3>-t-<uuid> if <inst2> = <inst3>-t-<uuid>, i.e. <inst2>
+    # contains -t-. The ban prevents exactly this: any sanitized inst containing -t- is
+    # rejected. The INST must not contain -t-; the full STACK_INSTANCE (<slug>-<inst>)
+    # MAY contain -t- at the slug/inst boundary — that's harmless because tier-3 anchored
+    # regex requires a 12-char hex inst before the marker, not a 1-char slug suffix.
     mod = _load()
     slug = "demo"
-    reserved = f"{slug}-{mod.RESERVED_TIER3_PREFIX}"  # "demo-t-"
-    for branch in ("tango", "test-branch", "t", "feature/foo", "wt-blue", "main"):
-        assert not mod.build_stack_instance(slug, branch).startswith(reserved)
-    for banned in ("t-1234", "t/abc", "t--x"):
+    marker = mod.RESERVED_TIER3_MARKER  # "-t-"
+    # All these sanitize to insts that do NOT contain -t- → allowed
+    for branch in (
+        "tango",
+        "test-branch",
+        "t",
+        "feature/foo",
+        "wt-blue",
+        "main",
+        "t-1234",
+        "t/abc",
+        "t--x",
+    ):
+        inst = mod.sanitize_instance(branch)
+        assert marker not in inst, (
+            f"{branch!r} → inst {inst!r} unexpectedly contains {marker!r}"
+        )
+        mod.build_stack_instance(slug, branch)  # must not raise
+    # Insts containing -t- are banned (the structural collision guard)
+    for branch in ("foo-t-bar", "a-t-b"):
         with pytest.raises(mod.Tier3NamespaceError):
-            mod.build_stack_instance(slug, banned)
+            mod.build_stack_instance(slug, branch)
 
 
 # --- read_slug -----------------------------------------------------------
@@ -514,12 +552,15 @@ def test_main_up_instance_override(tmp_path, monkeypatch):
 
 
 def test_main_up_tier3_branch_errors_with_instance_hint(tmp_path, monkeypatch, capsys):
-    # A branch sanitizing into B's reserved t-* namespace fails loud with a --instance hint.
+    # FWK129: a branch whose sanitized inst contains -t- (the infix marker) fails loud
+    # with a --instance hint. "foo-t-bar" sanitizes to "foo-t-bar" which contains -t-.
     mod = _load()
     base = tmp_path / "infra" / "compose" / "base.yml"
     base.parent.mkdir(parents=True)
     base.write_text("name: acme-store\n")
-    subprocess.run(["git", "init", "-q", "-b", "t/1234", "."], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "init", "-q", "-b", "foo-t-bar", "."], cwd=tmp_path, check=True
+    )
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
         mod.main(["up"], run=lambda *a, **k: None)
@@ -663,3 +704,30 @@ def test_main_down_no_instance_errors_friendly(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit):
         mod.main(["down"], run=lambda *a, **k: None)
     assert "provisioned" in capsys.readouterr().err
+
+
+# --- FWK129 cross-layer coupling test ------------------------------------
+
+
+def test_cross_layer_marker_identity():
+    """The -t- infix marker is byte-identical in _tier3.py (framework test code) and
+    worktree.py (template payload). These live in different layers with no shared import
+    path; this test is the only guard against the literal drifting silently.
+
+    Asserts:
+    (i)  _tier3.RESERVED_TIER3_MARKER == worktree.RESERVED_TIER3_MARKER (byte identity).
+    (ii) The tier-2 generator rejects EVERY inst containing that marker (structural ban).
+    """
+    from tests.acceptance import _tier3
+
+    mod = _load()
+    # (i) byte-identical marker
+    assert _tier3.RESERVED_TIER3_MARKER == mod.RESERVED_TIER3_MARKER, (
+        f"marker drift: _tier3 has {_tier3.RESERVED_TIER3_MARKER!r}, "
+        f"worktree has {mod.RESERVED_TIER3_MARKER!r}"
+    )
+    marker = mod.RESERVED_TIER3_MARKER  # "-t-"
+    # (ii) the tier-2 generator rejects every inst containing the marker
+    for branch in (f"foo{marker}bar", f"a{marker}b"):
+        with pytest.raises(mod.Tier3NamespaceError, match=re.escape(marker)):
+            mod.build_stack_instance("demo", branch)

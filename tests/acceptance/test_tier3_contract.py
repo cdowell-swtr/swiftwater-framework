@@ -4,8 +4,8 @@ Docker-FREE guard for the tier-3 leg of the FWK88 instance-addressing contract, 
 it runs in the fast tier (it is not a documented docker exception in
 `test_test_tiers.py`). It pins, statically:
 
-  * the **reserved namespace** `<slug>-t-<uuid>` (operator-pinned in FWK88) and the
-    structural tier-2↔tier-3 disjointness it buys;
+  * the **per-worktree reserved namespace** `<slug>-<inst>-t-<uuid>` (FWK129, completing the
+    FWK88 operator-pinned `-t-` reservation) and the structural tier-2↔tier-3 disjointness it buys;
   * the **reaping** sweep logic (with an injected runner — no real docker here);
   * the **isolation guards**: no transient stack joins an external/shared edge net,
     and the default `lite` transient stack mounts no host docker socket.
@@ -32,7 +32,7 @@ DATA = {
 }
 
 
-# --- reserved namespace + tier-2↔tier-3 disjointness (FWK88, operator-pinned) ---
+# --- reserved namespace + tier-2↔tier-3 disjointness (FWK88 + FWK129) ---
 
 
 def test_tier3_slug_matches_render_data():
@@ -41,13 +41,34 @@ def test_tier3_slug_matches_render_data():
     assert _tier3.TIER3_SLUG == DATA["project_slug"]
 
 
-def test_tier3_prefix_is_slug_dash_t_dash():
-    assert _tier3.TIER3_PREFIX == f"{DATA['project_slug']}-t-"
+def test_tier3_inst_format():
+    """FWK129: _TIER3_INSTANCE is a fixed-width 12-char lowercase hex string (sha256[:12])."""
+    assert re.fullmatch(r"[0-9a-f]{12}", _tier3._TIER3_INSTANCE), _tier3._TIER3_INSTANCE
+
+
+def test_tier3_instance_unique_per_path():
+    """FWK129: two different root paths produce two different 12-char hex instances
+    (structural uniqueness — no two worktrees share an absolute realpath)."""
+    from pathlib import Path
+
+    inst_a = _tier3._worktree_instance(Path("/some/path/a"))
+    inst_b = _tier3._worktree_instance(Path("/some/path/b"))
+    assert inst_a != inst_b
+    assert re.fullmatch(r"[0-9a-f]{12}", inst_a)
+    assert re.fullmatch(r"[0-9a-f]{12}", inst_b)
+
+
+def test_tier3_prefix_is_slug_dash_inst_dash_t_dash():
+    """FWK129: TIER3_PREFIX is per-worktree: <slug>-<inst>-t- (12-char hex inst)."""
+    inst = _tier3._TIER3_INSTANCE
+    assert _tier3.TIER3_PREFIX == f"{DATA['project_slug']}-{inst}-t-"
 
 
 def test_tier3_project_name_matches_pinned_form():
+    inst = _tier3._TIER3_INSTANCE
+    slug = DATA["project_slug"]
     name = _tier3.tier3_project_name()
-    assert re.fullmatch(rf"{re.escape(DATA['project_slug'])}-t-[0-9a-f]+", name), name
+    assert re.fullmatch(rf"{re.escape(slug)}-{re.escape(inst)}-t-[0-9a-f]+", name), name
     assert _tier3.is_tier3_project(name)
 
 
@@ -56,27 +77,69 @@ def test_tier3_project_names_are_unique_per_call():
 
 
 def test_tier3_reservation_is_structural_not_a_value_coincidence():
-    """A2/FWK74's tier-2 names are `<slug>-<inst>`; the `t-`-prefix ban makes them
-    disjoint from tier-3 *structurally*. A tier-2-style name that merely *starts with*
-    the letter t (`demo-tango`) is NOT tier-3 — only the exact `<slug>-t-` prefix is."""
-    assert _tier3.is_tier3_project("demo-t-deadbeef")
-    assert not _tier3.is_tier3_project(
-        "demo-tango-1"
-    )  # starts with 'demo-t' but not 'demo-t-'
+    """FWK129: tier-3 membership is an anchored exact-inst regex, not a bare startswith.
+    A peer's `demo-<other>-t-<uuid>` and any prefix-extension are excluded by the regex."""
+    inst = _tier3._TIER3_INSTANCE
+    slug = DATA["project_slug"]
+    # a valid tier-3 name for THIS worktree
+    own_name = f"{slug}-{inst}-t-{'a' * 32}"
+    assert _tier3.is_tier3_project(own_name)
+    # different inst (peer worktree) → excluded
+    other_inst = ("a" * 12) if inst != ("a" * 12) else ("b" * 12)
+    assert not _tier3.is_tier3_project(f"{slug}-{other_inst}-t-{'a' * 32}")
+    # old bare prefix format → excluded (no inst in the name)
+    assert not _tier3.is_tier3_project(f"{slug}-t-deadbeef")
+    # unrelated names
     assert not _tier3.is_tier3_project("demo")
     assert not _tier3.is_tier3_project("demo-prod")
-    assert not _tier3.is_tier3_project("other-t-1")
+    assert not _tier3.is_tier3_project(f"other-{inst}-t-1")
+    # prefix-extension → excluded (non-hex character after -t-)
+    assert not _tier3.is_tier3_project(f"{slug}-{inst}-t-{'a' * 32}-extra")
 
 
 # --- reaping sweep logic (injected runner; no real docker) ---
 
 
-def test_list_tier3_projects_filters_to_reserved_prefix_and_dedups():
-    def fake_run(cmd):
-        # every discovery command returns the same project-label dump
-        return "demo-t-aaa\ndemo\nother-t-bbb\ndemo-t-aaa\ndemo-t-ccc\n"
+def test_list_tier3_projects_filters_to_exact_inst_and_dedups():
+    """FWK129: list_tier3_projects with the default exact-inst scope (finish-sweep)
+    filters to THIS worktree's inst, deduplicates, and ignores non-matching names."""
+    inst = _tier3._TIER3_INSTANCE
+    slug = DATA["project_slug"]
+    other_inst = ("a" * 12) if inst != ("a" * 12) else ("b" * 12)
 
-    assert _tier3.list_tier3_projects(run=fake_run) == {"demo-t-aaa", "demo-t-ccc"}
+    def fake_run(cmd):
+        return (
+            f"{slug}-{inst}-t-aaa\n"
+            f"{slug}\n"
+            f"other-{inst}-t-bbb\n"
+            f"{slug}-{inst}-t-aaa\n"  # duplicate
+            f"{slug}-{inst}-t-ccc\n"
+            f"{slug}-{other_inst}-t-ddd\n"  # peer worktree → excluded
+        )
+
+    result = _tier3.list_tier3_projects(run=fake_run)
+    assert result == {f"{slug}-{inst}-t-aaa", f"{slug}-{inst}-t-ccc"}
+
+
+def test_list_tier3_projects_inst_agnostic_includes_all_worktrees():
+    """FWK129: scope_inst=None (start-sweep) collects names from ANY worktree's inst."""
+    inst_a = "aaaaaaaaaaaa"
+    inst_b = "bbbbbbbbbbbb"
+    slug = DATA["project_slug"]
+
+    def fake_run(cmd):
+        return (
+            f"{slug}-{inst_a}-t-{'0' * 32}\n"
+            f"{slug}-{inst_b}-t-{'1' * 32}\n"
+            f"{slug}-t-oldformat\n"  # old bare-prefix format → excluded (not pure hex inst)
+            "demo\n"
+        )
+
+    result = _tier3.list_tier3_projects(run=fake_run, scope_inst=None)
+    assert result == {
+        f"{slug}-{inst_a}-t-{'0' * 32}",
+        f"{slug}-{inst_b}-t-{'1' * 32}",
+    }
 
 
 def test_reap_project_removes_containers_volumes_and_networks():
@@ -114,40 +177,44 @@ def test_reap_project_is_a_noop_when_nothing_matches():
 
 
 def test_sweep_lists_then_reaps_each(monkeypatch):
+    inst = _tier3._TIER3_INSTANCE
+    projects = {f"demo-{inst}-t-1", f"demo-{inst}-t-2"}
     monkeypatch.setattr(
-        _tier3, "list_tier3_projects", lambda run=None: {"demo-t-1", "demo-t-2"}
+        _tier3, "list_tier3_projects", lambda run=None, *, scope_inst=None: projects
     )
     reaped = []
     monkeypatch.setattr(_tier3, "reap_project", lambda p, run=None: reaped.append(p))
     out = _tier3.sweep_tier3_stacks(run=lambda cmd: "")
-    assert set(reaped) == {"demo-t-1", "demo-t-2"}
-    assert out == {"demo-t-1", "demo-t-2"}
+    assert set(reaped) == projects
+    assert out == projects
 
 
-# --- FWK99: start-sweep grace filter (cross-session safety in the shared <slug>-t- namespace) ---
+# --- FWK99 + FWK129: start-sweep grace filter + per-worktree finish-sweep isolation ---
 
 
 def test_start_sweep_spares_young_peer_and_reaps_stale_and_orphan(monkeypatch):
-    """The start-sweep (`stale_only=True`) reaps only stacks whose newest container is older
-    than the grace period — a crashed-run leftover — and SPARES a young stack (a concurrent
-    peer session's still-live run in the shared `demo-t-` namespace). A project with no
-    containers (an orphan volume/network remnant) is never a live stack → reaped.
+    """The start-sweep (`stale_only=True`, inst-agnostic) reaps only stacks whose newest
+    container is older than the grace period — and SPARES young stacks (concurrent peers,
+    any worktree). A project with no containers (an orphan remnant) is never a live stack
+    → reaped regardless of age.
 
-    The discriminator is a *fixed* age threshold, NOT "older than this session's start": every
-    stack visible to a start-sweep predates the sweep, so a session-start threshold is a no-op
-    (it would reap everything, i.e. current behavior). A healthy tier-3 stack lives only minutes,
-    so a fixed grace separates leftovers (old) from a peer mid-test (young)."""
+    Fixed age threshold, NOT "older than this session's start": every stack visible to a
+    start-sweep predates the sweep, so a session-start threshold is a no-op. A healthy
+    tier-3 stack lives only minutes; a fixed grace separates leftovers (old) from peers."""
+    inst = _tier3._TIER3_INSTANCE
+    young = f"demo-{inst}-t-young"
+    stale = f"demo-{inst}-t-stale"
+    orphan = f"demo-{inst}-t-orphan"
     monkeypatch.setattr(
         _tier3,
         "list_tier3_projects",
-        lambda run=None: {"demo-t-young", "demo-t-stale", "demo-t-orphan"},
+        lambda run=None, *, scope_inst=None: {young, stale, orphan},
     )
     now = 1_000_000.0
     ages = {
-        "demo-t-young": now - 30.0,  # 30s old → a peer mid-test, spare it
-        "demo-t-stale": now
-        - (_tier3.TIER3_STALE_AGE_SECONDS + 60.0),  # older than grace
-        "demo-t-orphan": None,  # no containers → not a live stack
+        young: now - 30.0,  # 30s old → a peer mid-test, spare it
+        stale: now - (_tier3.TIER3_STALE_AGE_SECONDS + 60.0),  # older than grace
+        orphan: None,  # no containers → not a live stack
     }
     monkeypatch.setattr(_tier3, "project_created_at", lambda p, run=None: ages[p])
     reaped: list[str] = []
@@ -155,25 +222,29 @@ def test_start_sweep_spares_young_peer_and_reaps_stale_and_orphan(monkeypatch):
     out = _tier3.sweep_tier3_stacks(
         run=lambda cmd: "", stale_only=True, now=lambda: now
     )
-    assert set(reaped) == {"demo-t-stale", "demo-t-orphan"}
-    assert "demo-t-young" not in reaped
-    assert out == {"demo-t-stale", "demo-t-orphan"}
+    assert set(reaped) == {stale, orphan}
+    assert young not in reaped
+    assert out == {stale, orphan}
 
 
 def test_finish_sweep_reaps_all_including_young(monkeypatch):
-    """The finish-sweep (default, no `stale_only`) reaps EVERY tier-3 stack — it must tear down
-    this run's own young stacks, so it cannot grace-filter. (The residual cross-session hazard it
-    carries at finish — A finishes while peer B runs → A reaps B's young stacks — is closed only by
-    the per-worktree-namespace follow-up, not this start-side fix.)"""
+    """FWK129: finish-sweep (default) reaps ALL stacks in THIS worktree's exact-inst scope.
+    The FWK99 residual cross-session hazard is CLOSED: a peer's stacks are structurally
+    invisible to the finish-sweep (different inst, anchored regex)."""
+    inst = _tier3._TIER3_INSTANCE
+    young = f"demo-{inst}-t-young"
+    stale = f"demo-{inst}-t-stale"
     monkeypatch.setattr(
-        _tier3, "list_tier3_projects", lambda run=None: {"demo-t-young", "demo-t-stale"}
+        _tier3,
+        "list_tier3_projects",
+        lambda run=None, *, scope_inst=None: {young, stale},
     )
     monkeypatch.setattr(_tier3, "project_created_at", lambda p, run=None: 1_000_000.0)
     reaped: list[str] = []
     monkeypatch.setattr(_tier3, "reap_project", lambda p, run=None: reaped.append(p))
     out = _tier3.sweep_tier3_stacks(run=lambda cmd: "", now=lambda: 1_000_000.0)
-    assert set(reaped) == {"demo-t-young", "demo-t-stale"}
-    assert out == {"demo-t-young", "demo-t-stale"}
+    assert set(reaped) == {young, stale}
+    assert out == {young, stale}
 
 
 def test_project_created_at_returns_newest_container_time():

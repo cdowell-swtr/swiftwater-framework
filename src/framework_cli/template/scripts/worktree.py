@@ -19,14 +19,13 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
-# Stream B's transient COMPOSE_PROJECT_NAME namespace is <slug>-t-<uuid>; the
-# <slug>-t- PREFIX is reserved for tier-3 (carving spec, "Tier-2 ↔ tier-3 name
-# disjointness", PINNED 2026-06-28 by operator). A2's tier-2 generator (<slug>-<inst>)
-# must reject any <inst> beginning with "t-" so the two never collide on
-# COMPOSE_PROJECT_NAME. The trailing hyphen is load-bearing: "tango" is fine
-# (-> <slug>-tango), "t-foo" is not (-> <slug>-t-foo, inside the reserved prefix);
-# a bare "t" (-> <slug>-t) is structurally disjoint from every <slug>-t-<uuid>.
-RESERVED_TIER3_PREFIX = "t-"
+# Stream B's transient COMPOSE_PROJECT_NAME namespace is <slug>-<inst>-t-<uuid>; the
+# infix marker "-t-" is reserved for tier-3 (FWK129 / carving spec, PINNED 2026-06-28 by
+# operator; lockstep with tests/acceptance/_tier3.RESERVED_TIER3_MARKER). A2's tier-2
+# generator (<slug>-<inst>) must reject any <inst> that CONTAINS "-t-" so tier-2 names
+# never collide with tier-3 on COMPOSE_PROJECT_NAME. The infix semantics invert the old
+# prefix ban: "t-foo" is now fine (no "-t-" infix); "foo-t-bar" is not (infix present).
+RESERVED_TIER3_MARKER = "-t-"
 
 _NON_LABEL = re.compile(r"[^a-z0-9]+")
 
@@ -49,10 +48,10 @@ def sanitize_instance(raw: str) -> str:
 def build_stack_instance(slug: str, branch: str) -> str:
     """Return STACK_INSTANCE=<slug>-<sanitized-branch>, guarding B's reserved namespace."""
     inst = sanitize_instance(branch)
-    if inst.startswith(RESERVED_TIER3_PREFIX):
+    if RESERVED_TIER3_MARKER in inst:
         raise Tier3NamespaceError(
             f"instance {inst!r} is in the reserved tier-3 namespace "
-            f"(the {RESERVED_TIER3_PREFIX!r} prefix); rename the branch or pass an "
+            f"(contains the {RESERVED_TIER3_MARKER!r} infix marker); rename the branch or pass an "
             "explicit instance name (--instance, FWK94)"
         )
     return f"{slug}-{inst}"

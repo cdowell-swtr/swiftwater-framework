@@ -25,31 +25,33 @@ def _is_xdist_worker(session) -> bool:
 
 def _should_sweep(session) -> bool:
     """Sweep only on the controller (or a plain non-xdist run) and only when docker is on
-    PATH. Under `-n`, every worker runs these hooks; a worker's *finish*-sweep would reap
-    a peer worker's still-live `<slug>-t-…` stack. The controller's sessionstart fires
+    PATH. Under `-n`, every worker shares this worktree's inst, so a worker's *finish*-sweep
+    would reap a peer worker's still-live `<slug>-<inst>-t-…` stack. The controller's sessionstart fires
     before any worker starts and its sessionfinish after all workers are done, so scoping
     the sweep to the controller gives the right reaping windows with no mid-run races."""
     return not _is_xdist_worker(session) and _docker_present()
 
 
 def pytest_sessionstart(session):
-    """FWK95 tier-3 reaping (start-sweep): reap any transient `<slug>-t-*` stack a prior
+    """FWK95/FWK129 tier-3 reaping (start-sweep): reap any transient stacks a prior
     run left behind — a SIGKILL'd / crashed worker means `sessionfinish` never ran for
     it. Guarded so the fast (non-docker) tier never shells out and workers never sweep.
 
-    `stale_only=True` (FWK99): reap only STALE leftovers (newest container older than the
-    grace period), so a *concurrent* peer session's still-live `<slug>-t-…` stack (two
-    worktrees both running `task test:full` against the shared `demo-t-` namespace) is spared
-    rather than torn down mid-run. The finish-sweep below still reaps everything (it must reap
-    this run's own young stacks); its residual cross-session hazard is the FWK99 namespace
-    follow-up's to close, not this start-side filter's."""
+    `stale_only=True` (FWK99): inst-agnostic scope — reaps stale orphans of ANY worktree
+    (incl. a `git worktree remove`d one whose inst never recurs), grace-filters young
+    stacks (concurrent peers). Stays tier-2-disjoint under the FWK129 `-t-` infix ban."""
     if _should_sweep(session):
         _tier3.sweep_tier3_stacks(stale_only=True)
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """FWK95 tier-3 reaping (finish-sweep): tear down every transient stack this run
-    created (guaranteed reaping with no testcontainers / Ryuk sidecar)."""
+    """FWK95/FWK129 tier-3 reaping (finish-sweep): tear down every transient stack this
+    worktree created (guaranteed reaping with no testcontainers / Ryuk sidecar).
+
+    Uses the exact this-worktree-inst scope (default `stale_only=False`): matches only
+    ``^<slug>-<inst>-t-[0-9a-f]+$``. The FWK99 finish-side residual hazard is STRUCTURALLY
+    CLOSED (FWK129): a peer worktree's ``demo-<other>-t-<uuid>`` is invisible to this
+    worktree's finish-sweep by construction — not a grace-filter, a namespace disjointness."""
     if _should_sweep(session):
         _tier3.sweep_tier3_stacks()
 

@@ -18,9 +18,7 @@ Architecture owns module boundaries and the handler/worker seam. Do **NOT** flag
 dead code, unused names, naming, or style — **code-quality owns those**. Correctness/edge-cases →
 application-logic; query cost → performance. Cross-reference, do not re-flag.
 
-Domain note on secondary-finding folding: report **one root layering defect ONCE, at high.** Fold
-its in-domain secondary symptoms (the extra import it pulled in, the second call site of the same
-violation) **into that one finding** — do NOT emit them as independent blockers.
+Domain note on secondary-finding folding: report **one root layering defect ONCE, at high.** Fold its in-domain secondary symptoms — the extra/unused import it pulled in, the second call site of the same violation, and any **commit()/refresh()/session handling the route now drives because it chose the wrong data layer** (a layer-PLACEMENT symptom) — **into that one finding at the same high severity**; do NOT emit them as independent or differently-severitied blockers. Never emit a **standalone import-hygiene / unused-name finding** — code-quality owns those; mention an import only inside the root finding. Transaction/session-state **correctness** itself (atomicity, a genuinely missing commit) is **data-integrity's** — cross-reference, do not re-flag.
 
 Do **NOT** flag **lightweight** inline handlers — a quick structured log, a single small insert — or
 additive backwards-compatible changes. Only genuinely heavy/blocking work is a finding.

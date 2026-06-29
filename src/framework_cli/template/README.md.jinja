@@ -60,6 +60,27 @@ PORT_OFFSET=100 task dev:lite  # lite variant with the same offset
 Alternatively, set individual `*_HOST_PORT` variables in your `.env`. See `.env.example` for the
 full list of overridable port variables.
 
+### Multiple stacks behind a shared edge (`task dev:edge`)
+
+`PORT_OFFSET` suits a handful of stacks. To run **many** (e.g. one per git worktree) without port
+or `:443` collisions, bring the stack up **behind a shared reverse-proxy edge** instead:
+
+```bash
+STACK_INSTANCE={{ project_slug }}-wt1 task dev:edge   # up WITHOUT binding :443; a shared edge routes to it
+task dev:edge:down                                    # tear this instance's stack down
+```
+
+In edge mode the stack keeps its Traefik **discovery labels** but runs no edge of its own; a single
+box-wide edge discovers its containers over the `swiftwater-shared-edge` Docker network and routes
+`https://<svc>-{{ project_slug }}-wt1.localhost` to them — so any number of stacks coexist behind one
+edge under one wildcard `*.localhost` cert. Give each stack a distinct `STACK_INSTANCE` so its routes,
+containers, and volumes never collide.
+
+> **Prerequisite (you supply):** a conformant shared edge must already be running on the box — one that
+> discovers the instance labels over `swiftwater-shared-edge` and terminates TLS with a `*.localhost`
+> cert. `task dev:edge` fails fast with a clear message if none is present. This replaces the older
+> hand-rolled "exclude Traefik + `PORT_OFFSET`" workaround.
+
 ### Upgrading from an earlier release
 
 This release sets a per-project compose `name:` in `infra/compose/base.yml`, so an existing
