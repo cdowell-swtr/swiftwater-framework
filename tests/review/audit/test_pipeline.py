@@ -420,6 +420,67 @@ def test_run_audit_resume_warns_when_provenance_absent(tmp_path: Path):
     assert any("provenance" in m.lower() for m in logged)
 
 
+# ---------------------------------------------------------------------------
+# FWK118 — target-aware audit core (fixtures_root threading)
+# ---------------------------------------------------------------------------
+
+
+def test_run_audit_reads_fixtures_from_fixtures_root(tmp_path: Path):
+    """run_audit audits against the fixtures under the given fixtures_root, not the
+    framework's own tests/eval/fixtures — the seam both combo halves need (FWK118)."""
+    froot = tmp_path / "projfx"
+    case = froot / "security" / "good" / "mycase"
+    case.mkdir(parents=True)
+    (case / "change.patch").write_text("ZZMARKER_PROJECT_FIXTURE diff body\n")
+
+    backend = StubBackend(_noop_scripted)
+    run_audit(
+        ["security"],
+        backend=backend,
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=tmp_path / "out",
+        skeptics=1,
+        fixtures_root=froot,
+    )
+    auditor = next(
+        c
+        for c in backend.messages.calls
+        if "AUDITOR" in " ".join(b.get("text", "") for b in c["system"])
+    )
+    sys_text = " ".join(b.get("text", "") for b in auditor["system"])
+    assert "ZZMARKER_PROJECT_FIXTURE" in sys_text
+
+
+def test_run_audit_resume_refuses_when_fixtures_root_changed(tmp_path: Path):
+    out = tmp_path / "out"
+    fx1 = tmp_path / "fx1"
+    fx1.mkdir()
+    fx2 = tmp_path / "fx2"
+    fx2.mkdir()
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+        fixtures_root=fx1,
+    )
+    with pytest.raises(CheckpointProvenanceError) as exc:
+        run_audit(
+            ["security"],
+            backend=StubBackend(_noop_scripted),
+            root=Path.cwd(),
+            baseline_dir=None,
+            out_dir=out,
+            skeptics=1,
+            fixtures_root=fx2,
+            resume=True,
+        )
+    assert "fixtures" in exc.value.changed
+
+
 def test_run_audit_produces_vetted_changelist(tmp_path: Path):
     backend = StubBackend(_scripted)
     cl = run_audit(

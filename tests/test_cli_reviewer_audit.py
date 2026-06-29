@@ -249,6 +249,47 @@ def test_reviewer_audit_resume_refuses_stale_checkpoint(tmp_path, monkeypatch):
     assert "skeptics" in stale.output
 
 
+def test_reviewer_audit_target_project_selects_active_agents(tmp_path, monkeypatch):
+    """FWK118: --target project audits the active_agents() project roster (the agents
+    a generated project actually runs), excluding framework_only agents."""
+    import framework_cli.cli as climod
+    import framework_cli.review.audit.pipeline as pipeline_mod
+    from framework_cli.review.audit.changelist import Changelist
+
+    captured: dict[str, object] = {}
+
+    def spy_run_audit(targets, **kw):
+        captured["targets"] = list(targets)
+        captured["fixtures_root"] = kw.get("fixtures_root")
+        return Changelist()
+
+    monkeypatch.setattr(pipeline_mod, "run_audit", spy_run_audit)
+    monkeypatch.setattr(climod, "_make_backend", lambda *a, **k: object())
+    monkeypatch.setattr(
+        climod,
+        "_resolve_review_backend",
+        lambda **k: type("R", (), {"backend": "subagent", "reason": ""})(),
+    )
+
+    out = tmp_path / "o"
+    result = runner.invoke(
+        app,
+        [
+            "reviewer-audit",
+            "--target",
+            "project",
+            "--fixtures-root",
+            str(tmp_path / "fx"),
+            "--out",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "security" in captured["targets"]  # an always-on, non-framework_only agent
+    assert "coverage-gap" not in captured["targets"]  # framework_only → excluded
+    assert str(captured["fixtures_root"]) == str(tmp_path / "fx")
+
+
 def test_reviewer_audit_skip_neutral_without_backend(tmp_path, monkeypatch):
     import framework_cli.cli as climod
 

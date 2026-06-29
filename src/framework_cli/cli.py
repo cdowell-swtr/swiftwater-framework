@@ -1504,6 +1504,18 @@ def reviewer_audit(
         help="Parallel audit/refute calls (1 = serial). The free subagent backend has no "
         "backoff, so keep this modest on one subscription.",
     ),
+    target: str = typer.Option(
+        "framework",
+        "--target",
+        help="'framework' (all registered agents; default) or 'project' (the active_agents() "
+        "set a generated project actually runs — excludes framework_only agents).",
+    ),
+    fixtures_root: str = typer.Option(
+        "",
+        "--fixtures-root",
+        help="Dir of fixtures to audit against (default: the target's tests/eval/fixtures). "
+        "Point at project-context fixtures to calibrate the agents as applied to a render.",
+    ),
 ) -> None:
     """Audit reviewer prompts (rubric consistency, severity bar, scope, fixtures) and emit a
     vetted changelist + a dry-run apply-preview patch. No edits are applied (FWK4)."""
@@ -1512,6 +1524,12 @@ def reviewer_audit(
         run_audit,
     )
     from framework_cli.review.audit.preview import render_patch
+    from framework_cli.source import read_batteries
+
+    if target not in ("framework", "project"):
+        raise typer.BadParameter(
+            f"--target must be 'framework' or 'project' (got '{target}')"
+        )
 
     res = _resolve_review_backend(flag=backend or None, key_env=EVAL_KEY_ENV)
     if res.backend is None:  # type: ignore[attr-defined]
@@ -1521,7 +1539,14 @@ def reviewer_audit(
         raise typer.Exit(0)
 
     _backend = _make_backend(res.backend, EVAL_KEY_ENV)  # type: ignore[attr-defined]
-    targets = list(agents) if agents else agent_names()
+    if agents:
+        targets = list(agents)
+    elif target == "project":
+        # The agents a generated project actually runs (mirrors `framework audit
+        # --target project`): the active_agents() set, batteries auto-detected from cwd.
+        targets = active_agents("pull_request", read_batteries(Path(".")))
+    else:
+        targets = agent_names()
     out_dir = Path(out)
     # Progress → stdout: this is an all-human-facing maintainer command (its real outputs
     # are files), so there is no machine-data on stdout to keep clean, and progress is most
@@ -1536,6 +1561,7 @@ def reviewer_audit(
             out_dir=out_dir,
             skeptics=skeptics,
             resume=resume,
+            fixtures_root=Path(fixtures_root) if fixtures_root else None,
             log=log,
             concurrency=concurrency,
         )

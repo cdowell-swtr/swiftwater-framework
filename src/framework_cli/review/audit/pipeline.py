@@ -54,11 +54,15 @@ def _baseline_digest(baseline_dir: Path | None) -> str:
 
 
 def _audit_provenance(
-    root: Path, targets: list[str], baseline_dir: Path | None, skeptics: int
+    root: Path,
+    targets: list[str],
+    baseline_dir: Path | None,
+    skeptics: int,
+    fixtures_root: Path | None = None,
 ) -> dict[str, str]:
     """The fingerprint a resume must match. tree_signature(root) captures code +
-    agent prompts + roster (all tracked); targets/skeptics/baseline are the
-    runtime inputs not reflected in the tree."""
+    agent prompts + roster (all tracked); targets/skeptics/baseline/fixtures_root are
+    the runtime inputs not reflected in the tree (FWK47; fixtures_root added FWK118)."""
     sha, dirty = tree_signature(root)
     parts = {
         "git_sha": sha,
@@ -66,6 +70,7 @@ def _audit_provenance(
         "targets": ",".join(sorted(targets)),
         "skeptics": str(skeptics),
         "baseline": _baseline_digest(baseline_dir),
+        "fixtures_root": str(fixtures_root) if fixtures_root else "",
     }
     digest = hashlib.sha256(
         json.dumps(parts, sort_keys=True).encode("utf-8")
@@ -75,16 +80,21 @@ def _audit_provenance(
 
 def _provenance_drift(prior: dict[str, str], current: dict[str, str]) -> list[str]:
     """Human-readable names of the input fields that changed (git_sha+dirty_hash
-    collapse to 'code')."""
+    collapse to 'code'; fixtures_root reports as 'fixtures')."""
     changed = []
     if (prior.get("git_sha"), prior.get("dirty_hash")) != (
         current.get("git_sha"),
         current.get("dirty_hash"),
     ):
         changed.append("code")
-    for field in ("targets", "skeptics", "baseline"):
+    for field, label in (
+        ("targets", "targets"),
+        ("skeptics", "skeptics"),
+        ("baseline", "baseline"),
+        ("fixtures_root", "fixtures"),
+    ):
         if prior.get(field) != current.get(field):
-            changed.append(field)
+            changed.append(label)
     return changed
 
 
@@ -99,6 +109,7 @@ def run_audit(
     resume: bool = False,
     log: Callable[[str], None] = lambda _msg: None,
     concurrency: int = 1,
+    fixtures_root: Path | None = None,
 ) -> Changelist:
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -106,7 +117,7 @@ def run_audit(
     # against; on resume, refuse a checkpoint whose inputs no longer match (a stale
     # checkpoint silently binding to the wrong inputs is the failure class here).
     prov_path = out_dir / _PROVENANCE
-    current = _audit_provenance(root, targets, baseline_dir, skeptics)
+    current = _audit_provenance(root, targets, baseline_dir, skeptics, fixtures_root)
     if resume and prov_path.exists():
         prior = json.loads(prov_path.read_text())
         if prior.get("fingerprint") != current["fingerprint"]:
@@ -126,7 +137,9 @@ def run_audit(
     log(f"Stage 1: auditing {len(targets)} agent(s)")
 
     def _audit(target: str) -> dict[str, Any]:
-        brief = build_audit_brief(target, root=root, baseline_dir=baseline_dir)
+        brief = build_audit_brief(
+            target, root=root, baseline_dir=baseline_dir, fixtures_root=fixtures_root
+        )
         return audit_agent(brief, backend)
 
     reports = run_stage(
