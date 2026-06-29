@@ -20,8 +20,9 @@ instance-addressing contract governs them:
 Known boundaries (recorded, not silently absorbed — see ACTION_LOG):
   * Two *concurrent* acceptance sessions on one box (e.g. two worktrees, both slug
     ``demo``) share the ``demo-t-`` namespace, so one session's start-sweep would reap
-    the other's live stacks. Out of B3's scope; the escape hatch (age-filter the
-    start-sweep) is YAGNI today.
+    the other's live stacks. Out of B3's scope; tracked as FWK99 (age-filter the
+    start-sweep is the cheap fix). Bites only when the full/docker tier is run
+    concurrently across worktrees (branch-end, not per-commit).
   * ``test_rendered_project._run_image_serving`` uses a bare ``docker run`` (no compose
     project label), so the prefix sweep won't catch a leaked one — it is already
     context-manager-removed on every exit path.
