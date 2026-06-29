@@ -371,6 +371,90 @@ def test_run_audit_resume_refuses_when_targets_changed(tmp_path: Path):
     assert "targets" in exc.value.changed
 
 
+def test_run_audit_resume_refuses_on_in_place_fixture_edit(tmp_path: Path):
+    """FWK121: an IN-PLACE edit to a fixture under fixtures_root (same path, new
+    content) must invalidate a resume — the FWK47 failure class for BYO fixtures,
+    which a path-only fingerprint missed."""
+    out = tmp_path / "out"
+    froot = tmp_path / "fx"
+    case = froot / "security" / "good" / "c"
+    case.mkdir(parents=True)
+    patch = case / "change.patch"
+    patch.write_text("ORIGINAL fixture body\n")
+    run_audit(
+        ["security"],
+        backend=StubBackend(_noop_scripted),
+        root=Path.cwd(),
+        baseline_dir=None,
+        out_dir=out,
+        skeptics=1,
+        fixtures_root=froot,
+    )
+    patch.write_text("EDITED IN PLACE — different body\n")  # same path, new content
+    with pytest.raises(CheckpointProvenanceError) as exc:
+        run_audit(
+            ["security"],
+            backend=StubBackend(_noop_scripted),
+            root=Path.cwd(),
+            baseline_dir=None,
+            out_dir=out,
+            skeptics=1,
+            fixtures_root=froot,
+            resume=True,
+        )
+    assert "fixtures" in exc.value.changed
+
+
+def test_run_audit_resume_refuses_on_changed_project_reviewer_prompt(tmp_path: Path):
+    """FWK121: an untracked project-reviewer prompt change must invalidate a resume.
+    Simulated as two separate invocations by mutating the registry overlay between runs."""
+    from framework_cli.review import registry
+    from framework_cli.review.registry import AgentSpec, ContextPolicy
+
+    orig = dict(registry._SPECS)
+    try:
+        registry._SPECS["proj-rev"] = AgentSpec(
+            name="proj-rev",
+            prompt="VERSION A — flag X",
+            block_threshold=None,
+            active_when="always",
+            model="claude-sonnet-4-6",
+            context=ContextPolicy("diff"),
+        )
+        out = tmp_path / "out"
+        run_audit(
+            ["proj-rev"],
+            backend=StubBackend(_noop_scripted),
+            root=tmp_path,
+            baseline_dir=None,
+            out_dir=out,
+            skeptics=1,
+        )
+        # the untracked prompt is edited (a fresh process re-registers the new content)
+        registry._SPECS["proj-rev"] = AgentSpec(
+            name="proj-rev",
+            prompt="VERSION B — flag X and Y",
+            block_threshold=None,
+            active_when="always",
+            model="claude-sonnet-4-6",
+            context=ContextPolicy("diff"),
+        )
+        with pytest.raises(CheckpointProvenanceError) as exc:
+            run_audit(
+                ["proj-rev"],
+                backend=StubBackend(_noop_scripted),
+                root=tmp_path,
+                baseline_dir=None,
+                out_dir=out,
+                skeptics=1,
+                resume=True,
+            )
+        assert "prompts" in exc.value.changed
+    finally:
+        registry._SPECS.clear()
+        registry._SPECS.update(orig)
+
+
 def test_run_audit_resume_proceeds_when_inputs_match(tmp_path: Path):
     out = tmp_path / "out"
     run_audit(

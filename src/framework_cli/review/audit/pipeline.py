@@ -53,6 +53,26 @@ def _baseline_digest(baseline_dir: Path | None) -> str:
     return h.hexdigest()
 
 
+def _targets_digest(targets: list[str]) -> str:
+    """A content hash of each audited agent's resolved spec (prompt + bar + activation).
+    Built-in agent prompts are tracked (caught by tree_signature), but a project-local
+    reviewer's prompt is UNTRACKED — hashing the resolved spec closes that FWK47 gap
+    for the FWK48 BYO path regardless of git-tracking (FWK121)."""
+    h = hashlib.sha256()
+    for name in sorted(targets):
+        h.update(name.encode("utf-8", "replace"))
+        h.update(b"\0")
+        try:
+            spec = get_agent(name)
+        except KeyError:
+            h.update(b"?\0")
+            continue
+        h.update(spec.prompt.encode("utf-8", "replace"))
+        h.update(b"\0")
+        h.update(f"{spec.block_threshold}\0{spec.active_when}\0".encode())
+    return h.hexdigest()
+
+
 def _audit_provenance(
     root: Path,
     targets: list[str],
@@ -60,9 +80,11 @@ def _audit_provenance(
     skeptics: int,
     fixtures_root: Path | None = None,
 ) -> dict[str, str]:
-    """The fingerprint a resume must match. tree_signature(root) captures code +
-    agent prompts + roster (all tracked); targets/skeptics/baseline/fixtures_root are
-    the runtime inputs not reflected in the tree (FWK47; fixtures_root added FWK118)."""
+    """The fingerprint a resume must match. tree_signature(root) captures committed/
+    tracked code; the rest captures the runtime inputs the tree doesn't reflect:
+    targets, skeptics, the baseline content, the fixtures dir (path AND content, so an
+    in-place edit to a same-path fixture is caught), and the resolved agent specs (so an
+    untracked project-reviewer prompt change is caught) — FWK47/118/121."""
     sha, dirty = tree_signature(root)
     parts = {
         "git_sha": sha,
@@ -71,6 +93,8 @@ def _audit_provenance(
         "skeptics": str(skeptics),
         "baseline": _baseline_digest(baseline_dir),
         "fixtures_root": str(fixtures_root) if fixtures_root else "",
+        "fixtures_content": _baseline_digest(fixtures_root),
+        "agent_specs": _targets_digest(targets),
     }
     digest = hashlib.sha256(
         json.dumps(parts, sort_keys=True).encode("utf-8")
@@ -80,7 +104,8 @@ def _audit_provenance(
 
 def _provenance_drift(prior: dict[str, str], current: dict[str, str]) -> list[str]:
     """Human-readable names of the input fields that changed (git_sha+dirty_hash
-    collapse to 'code'; fixtures_root reports as 'fixtures')."""
+    collapse to 'code'; the two fixtures fields collapse to 'fixtures'; agent_specs
+    reports as 'prompts')."""
     changed = []
     if (prior.get("git_sha"), prior.get("dirty_hash")) != (
         current.get("git_sha"),
@@ -92,8 +117,10 @@ def _provenance_drift(prior: dict[str, str], current: dict[str, str]) -> list[st
         ("skeptics", "skeptics"),
         ("baseline", "baseline"),
         ("fixtures_root", "fixtures"),
+        ("fixtures_content", "fixtures"),
+        ("agent_specs", "prompts"),
     ):
-        if prior.get(field) != current.get(field):
+        if prior.get(field) != current.get(field) and label not in changed:
             changed.append(label)
     return changed
 
