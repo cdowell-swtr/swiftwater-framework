@@ -7,11 +7,11 @@
 
 ## Status
 
-**`in-migration`** — generalized and shipped in the absorber (v0.4.0 + v0.4.1); the generator (Meridian) is adopting it. **Not `adopted`:** Meridian has not yet deleted its local auth fork. The flip to `adopted` happens only when Meridian registers its seal-walk (EDR-0004) **through** the battery's `register_authz_resolver_factory` seam and **deletes its fork**, with the conformance suite (below) green.
+**`adopted` (2026-06-29).** Generalized and shipped in the absorber (v0.4.0 + v0.4.1); the generator (Meridian) has **adopted the battery and deleted its local auth fork**. Confirmed 2026-06-29 by direct read of Meridian on `_commit: v0.4.5`: the generic identity/session/authz chain (`current_user`/`active_tenant`/`guard`/`control_session`) is consumed from the battery, Meridian registers its seal-walk **through** the `register_authz_resolver_factory` seam (`meridian/src/meridian/main.py:99`), and only the carved-out kept-local code (`auth/deps.py::tenant_db` physical-routing seam + `product_access` RBAC/EDR compartmentalization) survives — no generic copy stands. Conformance suite (below) green at release.
 
-Lifecycle: `proposed → in-migration → adopted → downstream-copy-deleted`. We are at **`in-migration`**.
+Lifecycle: `proposed → in-migration → adopted → downstream-copy-deleted`. We are at **`adopted`** (downstream copy verified deleted).
 
-> **Anti-pattern guard (load-bearing):** the convention's failure test is *"both copies exist + the PUR says `adopted` = the promote-up failed."* This PUR must NOT be moved to `adopted` while Meridian's fork still stands. Re-confirm Meridian's copy-deletion before flipping it.
+> **Anti-pattern guard (load-bearing):** the convention's failure test is *"both copies exist + the PUR says `adopted` = the promote-up failed."* **Cleared 2026-06-29** — Meridian's generic auth/routing/ops/lifecycle fork is verified deleted (the surviving `auth/deps.py` is documented kept-local code, not the generalized mechanism; `db/control/models/*` are the integrity-LOCKED battery render, not a hand-written copy). The flip to `adopted` is therefore correct, not a guard violation.
 
 ## Source / generator
 
@@ -44,8 +44,8 @@ What became configurable/injected, what was dropped, what stays — as shipped:
 1. **Generalized in the absorber first** — FWK58 Phase 1 build (22 tasks across 8 phases); spec `docs/superpowers/specs/2026-06-23-fwk58-multitenantauth-defork-spine-design.md`, plan `docs/superpowers/plans/2026-06-23-fwk58-multitenantauth-defork-spine.md`.
 2. **Conformance suite seeded from the generator's behavior** — see below.
 3. **Shipped tagged:** `--with multitenantauth` in **v0.4.0** (PR #79 → master `4317c03`); the DV-5 resolver seam + upgrade-path fixes in **v0.4.1** (FWK62 → master `958522e`).
-4. **Generator adopts + deletes its copy** — **PENDING.** Meridian registers its seal-walk through the seam and deletes its fork, gated on the conformance suite. *(This is the open step; tracked as the next Meridian action.)*
-5. **Mark this PUR `adopted`** — only after step 4 is confirmed.
+4. **Generator adopts + deletes its copy** — **DONE (confirmed 2026-06-29).** Meridian (on `_commit: v0.4.5`) consumes the battery, registers its seal-walk through the `register_authz_resolver_factory` seam (`main.py:99`), and deleted its auth/routing/ops/lifecycle fork; only carved-out kept-local code remains.
+5. **Mark this PUR `adopted`** — **DONE (2026-06-29).** Step 4 confirmed by direct read of Meridian's repo; tracking row FWK64 closed.
 
 Never the reverse: the generator's copy is not lifted into the absorber with both left standing.
 

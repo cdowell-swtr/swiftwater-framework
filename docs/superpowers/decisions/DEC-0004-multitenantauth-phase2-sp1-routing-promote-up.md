@@ -10,12 +10,12 @@
 
 ## Status
 
-**`in-migration` — absorber SHIPPED v0.4.2 (FWK61; spec approved 2026-06-25, build complete).** The generalization
-decisions below are settled and the absorber's implementation (subagent-driven, TDD) shipped. This sub-record advances the
-parent DEC-0003 promote-up (still `in-migration`) toward Phase-2 completion — it does **not** change the
-parent's status, and it does **not** move anything to `adopted`. **Meridian's async confirmation is requested
-against this record** (see *Generator confirmation* below); the absorber proceeded by reading Meridian's code
-directly this round, with MD busy, but this PUR is the durable artifact future coordination uses.
+**`adopted` (2026-06-29).** Absorber shipped v0.4.2 (FWK61); Meridian (on `_commit: v0.4.5`) adopted the routing
+core and **deleted its routing fork** — `db/engine_registry.py` / local `tenancy/*` / the `auth/deps.py` routing are
+gone; the engine registry now lives battery-side (`multitenantauth/tenancy/engine_registry.py`) and the surviving
+`auth/deps.py::tenant_db` routes through `multitenantauth.tenancy.session.tenant_session` (the carved-out kept-local
+opaque-id seam). Generator **CONCUR received** (2026-06-29, below). With SP1's fork deleted alongside
+auth/ops/lifecycle, the **parent DEC-0003 is rolled to `adopted`**.
 
 ## Source / generator
 
@@ -43,7 +43,7 @@ directly this round, with MD busy, but this PUR is the durable artifact future c
 2. **Conformance suite (drift-aware) seeded from intended behavior + the validated read-path** — see below.
 3. **Ship tagged** — SP1 lands in a Phase-2 release (with SP2/SP3 or incrementally; TBD at build time).
 4. **Generator adopts + deletes its routing fork** — Meridian re-points routing at the battery, registers its EDR seed through `provision_hook`, deletes `db/engine_registry.py`/`tenancy/*`/`auth/deps.py` routing, gated on the conformance suite.
-5. **Roll the parent DEC-0003 toward `adopted`** — only once Meridian's fork (auth + routing) is fully deleted.
+5. **Roll the parent DEC-0003 toward `adopted`** — **DONE (2026-06-29):** Meridian's fork (auth + routing + ops + lifecycle) verified fully deleted; parent flipped to `adopted`.
 
 ## Conformance contract (drift-aware)
 
