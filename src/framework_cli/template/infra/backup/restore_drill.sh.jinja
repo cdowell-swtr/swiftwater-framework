@@ -11,7 +11,10 @@ slug="{{ project_slug }}"
 pg="$(ls -1t "$BACKUP_DEST/${slug}-postgres-"*.age 2>/dev/null | head -1)"
 [ -n "$pg" ] || { echo "no postgres dump to drill in $BACKUP_DEST" >&2; exit 1; }
 
-files="-f infra/compose/base.yml -f infra/compose/dev.yml"
+# Scope to the `lite` profile so config/build see only app+postgres(+mongo/redis), NOT the
+# profile-gated, image-less overrides (e.g. grafana, whose image comes from observability.yml) —
+# resolving those without their overlay makes `config` error out.
+files="-f infra/compose/base.yml -f infra/compose/dev.yml --profile lite"
 # Build the stack's postgres image so extension-loaded builds exist + are tagged.
 ./scripts/compose.sh $files build postgres >/dev/null
 # Resolve the postgres SERVICE image compose computed (e.g. demo-postgres for an extension build,
@@ -28,8 +31,11 @@ for _ in $(seq 1 30); do docker exec "$cid" pg_isready -U app -d drill -q && bre
 
 tmp="$(mktemp)"; age -d -i "$BACKUP_IDENTITY" "$pg" > "$tmp"
 {% if "age" in batteries %}docker exec -i "$cid" psql -v ON_ERROR_STOP=1 -U app -d drill -c "CREATE EXTENSION IF NOT EXISTS age; LOAD 'age';"{% endif %}
-{% if "timescaledb" in batteries %}docker exec -i "$cid" psql -v ON_ERROR_STOP=1 -U app -d drill -c "SELECT timescaledb_pre_restore();"{% endif %}
-docker exec -i "$cid" pg_restore --clean --if-exists --no-owner --exit-on-error -U app -d drill < "$tmp"
+{% if "timescaledb" in batteries %}docker exec -i "$cid" psql -v ON_ERROR_STOP=1 -U app -d drill -c "CREATE EXTENSION IF NOT EXISTS timescaledb; SELECT timescaledb_pre_restore();"{% endif %}
+# --exit-on-error is strict for the base/pgvector cases (catches a missing extension). For age /
+# timescaledb we pre-create the extension above, so the dump's own CREATE EXTENSION harmlessly
+# re-errors — tolerate it there (the alembic_version check below still proves the restore landed).
+docker exec -i "$cid" pg_restore --clean --if-exists --no-owner{% if not ("age" in batteries or "timescaledb" in batteries) %} --exit-on-error{% endif %} -U app -d drill < "$tmp"
 {% if "timescaledb" in batteries %}docker exec -i "$cid" psql -v ON_ERROR_STOP=1 -U app -d drill -c "SELECT timescaledb_post_restore();"{% endif %}
 
 n="$(docker exec "$cid" psql -tAX -U app -d drill -c "SELECT count(*) FROM alembic_version;")"

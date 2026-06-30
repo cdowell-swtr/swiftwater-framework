@@ -34,7 +34,7 @@ def test_resolve_includes_dependency_closure():
     from framework_cli import batteries
 
     batteries._BATTERIES["_child"] = batteries.BatterySpec(
-        "_child", "x", requires=("websockets",), obs="rides-existing"
+        "_child", "x", requires=("websockets",), obs="rides-existing", data="none"
     )
     try:
         assert batteries.resolve(["_child"]) == ["_child", "websockets"]

@@ -120,10 +120,14 @@ def test_active_agents_adds_gated_agent_when_battery_present(monkeypatch):
     from framework_cli.review import registry
 
     bat._BATTERIES["_demo"] = bat.BatterySpec(
-        "_demo", "x", gates_agents=("_demo-agent",), obs="rides-existing"
+        "_demo", "x", gates_agents=("_demo-agent",), obs="rides-existing", data="none"
     )
     bat._BATTERIES["_demo2"] = bat.BatterySpec(
-        "_demo2", "x", gates_agents=("_demo-push-agent",), obs="rides-existing"
+        "_demo2",
+        "x",
+        gates_agents=("_demo-push-agent",),
+        obs="rides-existing",
+        data="none",
     )
     registry._SPECS["_demo-agent"] = registry.AgentSpec(
         "review-demo", "p", "high", "battery", registry.DEFAULT_MODEL
@@ -176,6 +180,7 @@ def test_active_agents_battery_can_gate_multiple(monkeypatch):
             "x",
             gates_agents=("api-design", "documentation"),
             obs="rides-existing",
+            data="none",
         ),
     )
     out = active_agents("pull_request", ["_multi"])

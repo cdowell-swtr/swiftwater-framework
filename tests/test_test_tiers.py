@@ -68,6 +68,11 @@ ACCEPTANCE_DOCKER_EXCEPTIONS = {
         "docker/dind compose-over-SSH deploy e2e (multi-container harness). Full tier "
         "only — same rationale as test_rendered_project.py."
     ),
+    "tests/acceptance/test_backup_drill.py": (
+        "docker + age round-trip of the FWK133 encrypted backup + restore-drill (builds the "
+        "battery-correct postgres image, decrypts, restores into a throwaway DB). Full tier "
+        "only — same rationale as test_rendered_project.py."
+    ),
 }
 
 

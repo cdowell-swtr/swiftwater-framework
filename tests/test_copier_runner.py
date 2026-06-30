@@ -5582,8 +5582,11 @@ def test_restore_and_drill_render(tmp_path):
 def test_systemd_units_and_runbook_render(tmp_path):
     dest = tmp_path / "demo"
     render_project(dest, {**DATA, "batteries": []})
-    svc = dest / "infra/backup/demo-backup.service"
-    tmr = dest / "infra/backup/demo-backup.timer"
+    # Units ship under fixed names (operator installs them as <slug>-backup.* — see README).
+    # Fixed repo names keep them inside the integrity-checksummed surface (no {project_slug}
+    # token exists there); on-box coexistence comes from the slug-named *install*, not the file.
+    svc = dest / "infra/backup/backup.service"
+    tmr = dest / "infra/backup/backup.timer"
     readme = dest / "infra/backup/README.md"
     assert svc.is_file() and tmr.is_file() and readme.is_file()
     svc_text = svc.read_text()

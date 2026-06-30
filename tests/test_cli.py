@@ -1425,7 +1425,7 @@ def test_upskill_with_unions_batteries(tmp_path, monkeypatch):
 
     from framework_cli import batteries as bat
 
-    bat._BATTERIES["_x"] = bat.BatterySpec("_x", "x", obs="rides-existing")
+    bat._BATTERIES["_x"] = bat.BatterySpec("_x", "x", obs="rides-existing", data="none")
     try:
         result = runner.invoke(app, ["upskill", str(project), "--with", "_x"])
     finally:

@@ -17,9 +17,13 @@ extension-correctly by the drill. Redis + observability stores are rebuildable a
    into a throwaway DB; if your key is wrong it fails *here*, not during a real recovery.
 
 ## Schedule it (operator-wired, disabled by default)
+The framework ships the units under fixed names; install them under a `<slug>-` name so several
+projects' timers coexist on one box (systemd activates `<slug>-backup.service` from the same-named
+timer):
 ```bash
 mkdir -p ~/.config/systemd/user
-cp infra/backup/{{ project_slug }}-backup.{service,timer} ~/.config/systemd/user/
+cp infra/backup/backup.service ~/.config/systemd/user/{{ project_slug }}-backup.service
+cp infra/backup/backup.timer   ~/.config/systemd/user/{{ project_slug }}-backup.timer
 systemctl --user daemon-reload
 systemctl --user enable --now {{ project_slug }}-backup.timer   # nightly 02:00
 ```

@@ -41,6 +41,16 @@ LOCKED_TRACKED: tuple[str, ...] = (
     "infra/deploy/alert_smoke.sh",
     "infra/deploy/check_alert_secrets.sh",
     "infra/deploy/README.md",
+    # FWK133: core backup capability — framework mechanism a builder must never edit. Always
+    # rendered (Postgres is base). The systemd units ship under fixed names (operators install
+    # them as <slug>-backup.* — README) so they stay inside this checksummed surface.
+    "infra/backup/backup.sh",
+    "infra/backup/prune.sh",
+    "infra/backup/restore.sh",
+    "infra/backup/restore_drill.sh",
+    "infra/backup/backup.service",
+    "infra/backup/backup.timer",
+    "infra/backup/README.md",
     "infra/docker/Dockerfile",
     "infra/traefik/dynamic/tls.yml",
     "infra/tls/ca/.gitkeep",
