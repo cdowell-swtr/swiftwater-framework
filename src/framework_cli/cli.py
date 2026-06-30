@@ -28,10 +28,8 @@ from framework_cli.review.diff import (
 from framework_cli.review.registry import active_agents, agent_names, get_agent
 from framework_cli.review.runner import EVAL_KEY_ENV, RUNTIME_KEY_ENV
 from framework_cli.source import (
-    REPO_URL,
     latest_release,
     record_portable_source,
-    version_tag,
 )
 from framework_cli.dispatch import dispatch
 from framework_cli.downskill import DownskillError, downskill_project
@@ -488,20 +486,12 @@ def upgrade(
 
 @app.command()
 def check() -> None:
-    """Report whether a newer framework release is available."""
-    current_tag = version_tag(installed_framework_version())
-    latest = latest_release()
-    if latest is None:
-        typer.echo("framework check: no releases found (or the remote is unreachable).")
-        raise typer.Exit(0)
-    if latest == current_tag:
-        typer.echo(f"framework check: up to date ({current_tag}).")
-    else:
-        typer.echo(
-            f"framework check: installed {current_tag}, latest {latest}. "
-            f"Upgrade the CLI with `uv tool install git+{REPO_URL}@{latest}`, "
-            f"then run `framework upgrade <project>`."
-        )
+    """Deprecated — use `framework upgrade --dry-run <project>`."""
+    typer.echo(
+        "framework check is deprecated: it reported the CLI version, not the project's. "
+        "Use `framework upgrade --dry-run <project>` to see if a project is behind the "
+        "latest release."
+    )
 
 
 # Module-level seams so tests can monkeypatch the I/O without the SDK.
