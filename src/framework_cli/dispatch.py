@@ -76,6 +76,12 @@ def resolve_project_commit(kind: str, positionals: list[str]) -> str | None:
 
     `cwd_project` commands act on the current directory; `arg_project` commands
     take the project path as their first positional. Any other kind has no project.
+
+    Known limitation: `_split_argv` can't tell an option's value from a positional
+    without the command's option schema, so a value-taking option placed *before*
+    the path (`upskill --with X /proj`) shifts `positionals[0]` off the path and
+    dispatch reads no pin → it runs self (a missed dispatch, never a wrong-version
+    exec). The documented path-first form (`upskill /proj --with X`) is unaffected.
     """
     if kind == "cwd_project":
         return read_commit(Path.cwd())
@@ -119,11 +125,12 @@ def _split_argv(argv: list[str]) -> tuple[str | None, list[str]]:
 
 
 def _target_tag(argv: list[str]) -> str | None:
-    """The advancing target: an explicit `--to <tag>`, else the latest release."""
-    if "--to" in argv:
-        idx = argv.index("--to")
-        if idx + 1 < len(argv):
-            return argv[idx + 1]
+    """The advancing target: an explicit `--to` (either form), else latest release."""
+    for i, tok in enumerate(argv):
+        if tok == "--to" and i + 1 < len(argv):
+            return argv[i + 1]
+        if tok.startswith("--to="):
+            return tok[len("--to=") :]
     return latest_release()
 
 
