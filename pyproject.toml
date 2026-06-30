@@ -33,7 +33,7 @@ docs = [
 ]
 
 [project.scripts]
-framework = "framework_cli.cli:app"
+framework = "framework_cli.cli:main"
 
 [build-system]
 requires = ["hatchling"]

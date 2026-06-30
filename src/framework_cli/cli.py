@@ -33,6 +33,7 @@ from framework_cli.source import (
     record_portable_source,
     version_tag,
 )
+from framework_cli.dispatch import dispatch
 from framework_cli.downskill import DownskillError, downskill_project
 from framework_cli.upskill import UpskillError, upskill_project
 from framework_cli.self_bump import BumpRefused, maybe_self_bump
@@ -2264,3 +2265,9 @@ def review_config_clear() -> None:
 
     clear_backend_choice(Path.cwd())
     typer.echo("review backend cleared → AI review is skip-neutral until re-enabled")
+
+
+def main() -> None:
+    """Console entry: self-dispatch to the project-pinned CLI, then run Typer."""
+    dispatch(sys.argv[1:])
+    app()

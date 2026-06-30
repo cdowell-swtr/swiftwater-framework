@@ -130,3 +130,16 @@ def test_dispatch_advancing_honors_explicit_to(monkeypatch, tmp_path, to_args):
     monkeypatch.setattr(disp, "reexec", lambda ref, argv: captured.update(ref=ref))
     disp.dispatch(["upgrade", "someproj", *to_args])
     assert captured["ref"] == "v0.4.9"
+
+
+def test_main_dispatches_then_runs_app(monkeypatch):
+    import framework_cli.cli as climod
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        climod, "dispatch", lambda argv: calls.append(("dispatch", argv))
+    )
+    monkeypatch.setattr(climod, "app", lambda: calls.append(("app",)))
+    monkeypatch.setattr(climod.sys, "argv", ["framework", "integrity"])
+    climod.main()
+    assert calls == [("dispatch", ["integrity"]), ("app",)]
