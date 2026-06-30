@@ -2,10 +2,17 @@
 # Restore the LATEST encrypted dump into the LIVE stores. DESTRUCTIVE — requires typed confirmation.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# Load the project .env so a direct `task restore` sees BACKUP_DEST/BACKUP_IDENTITY (read by bash
+# here, not by compose). No-op until the operator configures .env. See backup.sh for the rationale.
+# shellcheck source=/dev/null
+[ -f .env ] && { set -a; . ./.env; set +a; }
 : "${BACKUP_DEST:=./backups}"
 : "${BACKUP_IDENTITY:=$HOME/.config/{{ project_slug }}/backup-identity.txt}"
 slug="{{ project_slug }}"
 
+# ls -1t (newest-first by mtime) is exactly what we want here; the names are our own controlled
+# timestamped dumps, so SC2012's non-alphanumeric-filename concern doesn't apply.
+# shellcheck disable=SC2012
 latest() { ls -1t "$BACKUP_DEST/${slug}-$1-"*.age 2>/dev/null | head -1; }
 
 pg="$(latest postgres)"; [ -n "$pg" ] || { echo "no postgres dump in $BACKUP_DEST" >&2; exit 1; }

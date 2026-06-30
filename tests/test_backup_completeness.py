@@ -98,6 +98,12 @@ def test_battery_data_matches_rendered_volumes(
             f"{name}: a 'postgres-extension' battery must build the extension postgres image "
             "(so restore is extension-correct)"
         )
+    else:
+        # A future 5th DataSurface literal that matches no branch above would otherwise pass with
+        # zero assertions — silently letting a new data battery ship unbacked. Fail loudly instead.
+        pytest.fail(
+            f"{name}: unhandled data disposition {data!r} — classify it in this gate"
+        )
 
 
 def test_no_unclassified_volume_in_baseline(baseline: Path) -> None:

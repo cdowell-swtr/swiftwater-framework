@@ -2,6 +2,10 @@
 # GFS-lite retention for $BACKUP_DEST: keep the newest $BACKUP_RETENTION_DAILY dumps per store,
 # plus one per ISO-week for the last $BACKUP_RETENTION_WEEKLY weeks; delete the rest.
 set -euo pipefail
+# Load .env for a standalone `task backup:prune` (BACKUP_DEST/RETENTION are read by bash). When
+# invoked from backup.sh the values are already exported; re-sourcing is harmless. No-op without .env.
+# shellcheck source=/dev/null
+[ -f .env ] && { set -a; . ./.env; set +a; }
 : "${BACKUP_DEST:=./backups}"
 : "${BACKUP_RETENTION_DAILY:=7}"
 : "${BACKUP_RETENTION_WEEKLY:=4}"

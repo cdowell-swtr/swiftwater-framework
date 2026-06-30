@@ -4,22 +4,28 @@
 # decryption — a missing/wrong age key fails loudly here, not mid-recovery.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# Load .env so a direct `task backup:verify` sees BACKUP_DEST/BACKUP_IDENTITY. No-op until the
+# operator configures .env. See backup.sh for the rationale.
+# shellcheck source=/dev/null
+[ -f .env ] && { set -a; . ./.env; set +a; }
 : "${BACKUP_DEST:=./backups}"
 : "${BACKUP_IDENTITY:=$HOME/.config/{{ project_slug }}/backup-identity.txt}"
 slug="{{ project_slug }}"
 
+# ls -1t (newest by mtime) over our own timestamped dump names — SC2012 doesn't apply.
+# shellcheck disable=SC2012
 pg="$(ls -1t "$BACKUP_DEST/${slug}-postgres-"*.age 2>/dev/null | head -1)"
 [ -n "$pg" ] || { echo "no postgres dump to drill in $BACKUP_DEST" >&2; exit 1; }
 
 # Scope to the `lite` profile so config/build see only app+postgres(+mongo/redis), NOT the
 # profile-gated, image-less overrides (e.g. grafana, whose image comes from observability.yml) —
 # resolving those without their overlay makes `config` error out.
-files="-f infra/compose/base.yml -f infra/compose/dev.yml --profile lite"
+files=(-f infra/compose/base.yml -f infra/compose/dev.yml --profile lite)
 # Build the stack's postgres image so extension-loaded builds exist + are tagged.
-./scripts/compose.sh $files build postgres >/dev/null
+./scripts/compose.sh "${files[@]}" build postgres >/dev/null
 # Resolve the postgres SERVICE image compose computed (e.g. demo-postgres for an extension build,
 # postgres:17 for vanilla). Exclude the postgres-exporter image name defensively.
-img="$(./scripts/compose.sh $files config --images | grep -i postgres | grep -vi exporter | head -1)"
+img="$(./scripts/compose.sh "${files[@]}" config --images | grep -i postgres | grep -vi exporter | head -1)"
 [ -n "$img" ] || img="postgres:17"
 {% set _pre = [] %}{% if "timescaledb" in batteries %}{% set _ = _pre.append("timescaledb") %}{% endif %}{% if "age" in batteries %}{% set _ = _pre.append("age") %}{% endif %}
 cmd=(postgres){% if _pre %} ; cmd+=(-c "shared_preload_libraries={{ _pre | join(',') }}"){% endif %}
@@ -40,4 +46,15 @@ docker exec -i "$cid" pg_restore --clean --if-exists --no-owner{% if not ("age" 
 
 n="$(docker exec "$cid" psql -tAX -U app -d drill -c "SELECT count(*) FROM alembic_version;")"
 [ "$n" = "1" ] || { echo "drill FAILED: alembic_version has $n rows (expected 1)" >&2; exit 1; }
+{% set _exts = [] %}{% if "age" in batteries %}{% set _ = _exts.append("age") %}{% endif %}{% if "timescaledb" in batteries %}{% set _ = _exts.append("timescaledb") %}{% endif %}{% if "pgvector" in batteries %}{% set _ = _exts.append("vector") %}{% endif %}
+{%- if _exts %}
+# Behavioral extension gate: each declared postgres-extension must be PRESENT after restore. With
+# --exit-on-error off (age/timescaledb pre-create), a missing extension would otherwise be tolerated
+# — its objects error but alembic_version still lands, false-greening the drill (e.g. pgvector against
+# a vanilla image). Asserting pg_extension makes that go RED.
+for ext in {{ _exts | join(' ') }}; do
+  have="$(docker exec "$cid" psql -tAX -U app -d drill -c "SELECT count(*) FROM pg_extension WHERE extname='$ext';")"
+  [ "$have" = "1" ] || { echo "drill FAILED: extension '$ext' absent after restore (battery-correct image missing it?)" >&2; exit 1; }
+done
+{%- endif %}
 echo "restore-drill OK: latest postgres dump restores + alembic at head"

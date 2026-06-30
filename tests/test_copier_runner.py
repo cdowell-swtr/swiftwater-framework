@@ -5639,3 +5639,7 @@ def test_extension_drill_builds_battery_correct_image(tmp_path):
     assert (
         "--exit-on-error" in drill
     )  # a failed extension restore goes RED, not silent-OK
+    # Behavioral gate: the drill must assert the vector extension SURVIVES the restore. In the
+    # all-batteries drill --exit-on-error is off (age/timescaledb pre-create), so without this a
+    # missing `vector` would false-green pgvector. (See restore_drill.sh pg_extension loop.)
+    assert "for ext in vector" in drill and "pg_extension" in drill
