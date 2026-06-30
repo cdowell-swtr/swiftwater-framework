@@ -151,7 +151,7 @@ This merges the battery's files into the existing project non-destructively. Con
 ## Checking for framework updates
 
 ```bash
-framework check
+framework upgrade my-app --dry-run
 ```
 
-If a newer version is available, this prints the exact `uv tool install` command to upgrade the CLI, then run `framework upgrade <project>` to apply the updated template.
+This reports whether `my-app`'s pinned version is behind the latest release, without applying anything. To apply it, run `framework upgrade my-app` — it re-execs the target release automatically (self-dispatch), moving the CLI and the template together in one step.
