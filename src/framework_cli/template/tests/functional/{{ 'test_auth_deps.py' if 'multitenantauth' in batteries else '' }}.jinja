@@ -697,6 +697,61 @@ def test_registered_factory_grants_a_resource_leaf_through_the_guard(  # type: i
     assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 200
 
 
+def test_async_registered_factory_grants_a_resource_leaf_through_the_guard(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """An async resource_grant resolver is a first-class resolver shape. The guard must await the
+    resolver result before coercing it to bool."""
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "async-factory-grant@x.com")
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 403
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        async def grant(name, resource_id):  # type: ignore[no-untyped-def]
+            return name == "resource:view" and resource_id == "widget-1"
+
+        return {"resource_grant": grant}
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 200
+
+
+def test_async_registered_factory_false_fails_closed_403(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """An async resolver returning False must DENY. A coroutine object is truthy, so this pins the
+    FWK136 fail-open: the guard must await before bool() or the request grants incorrectly."""
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "async-factory-deny@x.com", resource_role=True)
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        async def deny(name, resource_id):  # type: ignore[no-untyped-def]
+            return False
+
+        return {"resource_grant": deny}
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 403
+
+
+def test_async_resolver_exception_fails_closed_403_not_500(  # type: ignore[no-untyped-def]
+    probe_app, control_engine
+):
+    """An async resolver that raises denies (403), never grants by returning an unawaited coroutine
+    object and never leaks a 500."""
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "async-boom-resolver@x.com", resource_role=True)
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        async def boom(name, resource_id):  # type: ignore[no-untyped-def]
+            raise RuntimeError("async resolver blew up")
+
+        return {"resource_grant": boom}
+
+    register_authz_resolver_factory(factory)
+    assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 403
+
+
 def test_factory_receives_resolved_membership_gated_tenant(  # type: ignore[no-untyped-def]
     probe_app, control_engine
 ):

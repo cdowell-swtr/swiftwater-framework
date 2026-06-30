@@ -22,10 +22,11 @@ There is intentionally NO ``require`` here — the FastAPI route-guard builder (
 
 from __future__ import annotations
 
+import inspect
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 _PARAM = re.compile(r"\{(\w+)\}")
 
@@ -91,6 +92,12 @@ class ANY:
 
 
 Expr = Perm | ALL | ANY
+
+
+async def _await_bool(value: object) -> bool:
+    if inspect.isawaitable(value):
+        value = await cast(Awaitable[object], value)
+    return bool(value)
 
 
 def bind_resource(pattern: str, path: dict[str, Any]) -> str | None:
@@ -163,6 +170,43 @@ def evaluate(node: Expr, ctx: dict[str, Any]) -> bool:
     raise TypeError(f"not an Expr node: {node!r}")
 
 
+async def evaluate_async(node: Expr, ctx: dict[str, Any]) -> bool:
+    """Async-capable evaluator used by FastAPI route guards.
+
+    Mirrors ``evaluate`` but awaits ctx resolvers that return awaitables before boolean coercion.
+    This keeps sync resolvers working while allowing resource grants to perform async I/O.
+    """
+    if isinstance(node, Perm):
+        if node.on == "platform":
+            return node.name in ctx["platform_perms"]
+        is_wildcard = _is_wildcard(node.on)
+        resource = bind_resource(node.on, ctx["path"])
+        if resource is None:
+            return False
+        if is_wildcard:
+            subtree_exists: Callable[[str, str], object] = ctx["subtree_exists"]
+            return await _await_bool(subtree_exists(node.name, resource))
+        if _is_resource_scoped(node.on):
+            resource_grant: Callable[[str, dict[str, Any]], object] = ctx[
+                "resource_grant"
+            ]
+            return await _await_bool(resource_grant(node.name, ctx["path"]))
+        return node.name in ctx["tenant_perms"]
+    if isinstance(node, ALL):
+        if not node.children:
+            return False
+        for child in node.children:
+            if not await evaluate_async(child, ctx):
+                return False
+        return True
+    if isinstance(node, ANY):
+        for child in node.children:
+            if await evaluate_async(child, ctx):
+                return True
+        return False
+    raise TypeError(f"not an Expr node: {node!r}")
+
+
 class Authorized:
     """Wraps an expression for use as a route guard. Carries `expr` for the T1–T4 fitness tests; it is
     NEVER serialized to a client (enforced structurally by T3). `multitenantauth/deps.py:guard` builds
@@ -179,3 +223,6 @@ class Authorized:
 
     def satisfied(self, ctx: dict[str, Any]) -> bool:
         return evaluate(self.expr, ctx)
+
+    async def satisfied_async(self, ctx: dict[str, Any]) -> bool:
+        return await evaluate_async(self.expr, ctx)

@@ -19,9 +19,11 @@ the single-pass request efficiency are co-located here on purpose. Keep them tog
 
 from __future__ import annotations
 
+import inspect
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from datetime import datetime, timezone
+from typing import cast
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
@@ -52,7 +54,7 @@ logger = logging.getLogger(__name__)
 #       factory(control_session, app_user, active_tenant_id) -> {"resource_grant": resolver}
 #
 # The battery honors the resource_grant key only. The per-call resolver is TENANT-FREE:
-#       resource_grant(perm_name, resource_id) -> bool
+#       resource_grant(perm_name, resource_id) -> bool | Awaitable[bool]
 # resource_id is the BARE id the battery extracts from the route (it owns the resource:{id}
 # convention); the active tenant binds ONCE, in the factory closure (active_tenant_id), never per
 # call — so a resolver can never trust a raw path tenant. The wildcard-subtree resolver is NOT
@@ -100,8 +102,8 @@ logger = logging.getLogger(__name__)
 #   # Call from your OWN (unlocked) startup — e.g. create_app() — NOT this locked file:
 #   register_authz_resolver_factory(_resource_grant_factory)
 #
-# A mapping whose resource_grant value is a (perm_name, resource_id) -> bool resolver.
-ResourceResolvers = dict[str, Callable[..., bool]]
+# A mapping whose resource_grant value is a sync or async (perm_name, resource_id) resolver.
+ResourceResolvers = dict[str, Callable[..., object]]
 AuthzResolverFactory = Callable[[Session, m.AppUser, str], ResourceResolvers]
 
 _resolver_factory: AuthzResolverFactory | None = None
@@ -113,10 +115,11 @@ def register_authz_resolver_factory(factory: AuthzResolverFactory | None) -> Non
     The battery's ``guard`` calls ``factory(control_session, user, active_tenant_id)`` once per
     request — only after the membership-404 precondition passes, so ``active_tenant_id`` is the
     resolved, membership-gated tenant, never a raw request value — and uses the returned
-    ``resource_grant`` resolver (``(perm_name, resource_id) -> bool``, tenant-free) in place of the
-    flat default for resource-scoped leaves. A registered factory OWNS resource grants: if it omits
-    the key, raises, or returns a non-mapping, every resource leaf DENIES (fail-closed) — it does
-    NOT fall back to the flat default. Call this from your own (unlocked) startup, e.g.
+    ``resource_grant`` resolver (``(perm_name, resource_id) -> bool | Awaitable[bool]``,
+    tenant-free) in place of the flat default for resource-scoped leaves. A registered factory OWNS
+    resource grants: if it omits the key, raises, or returns a non-mapping, every resource leaf
+    DENIES (fail-closed) — it does NOT fall back to the flat default. Call this from your own
+    (unlocked) startup, e.g.
     ``create_app()``. See the module note above for the full security contract.
     """
     global _resolver_factory
@@ -128,7 +131,11 @@ def _deny(*_args: object, **_kwargs: object) -> bool:
     return False
 
 
-def _adapt_resource_grant(resolver: Callable[..., bool]) -> Callable[..., bool]:
+def _is_awaitable(value: object) -> bool:
+    return inspect.isawaitable(value)
+
+
+def _adapt_resource_grant(resolver: Callable[..., object]) -> Callable[..., object]:
     """Adapt a consumer resolver — ``resource_grant(perm_name, resource_id) -> bool`` — to the
     evaluator's ctx call ``(name, path)``. The battery owns the ``resource:{resource_id}`` route
     convention, so it extracts the BARE resource id HERE and hands the consumer only
@@ -136,12 +143,15 @@ def _adapt_resource_grant(resolver: Callable[..., bool]) -> Callable[..., bool]:
     active tenant binds ONCE, in the factory closure. Fails CLOSED: any error (or a missing
     resource id) DENIES — logs, never 500s, never allows."""
 
-    def _ctx_resource_grant(name: str, path: dict[str, str]) -> bool:
+    async def _ctx_resource_grant(name: str, path: dict[str, str]) -> bool:
         resource_id = path.get("resource_id")
         if resource_id is None:
             return False
         try:
-            return bool(resolver(name, resource_id))
+            result = resolver(name, resource_id)
+            if _is_awaitable(result):
+                result = await cast(Awaitable[object], result)
+            return bool(result)
         except Exception:
             logger.warning(
                 "authz resource_grant resolver raised; denying (fail-closed)",
@@ -236,7 +246,7 @@ def guard(expr: Expr):
     authorized = Authorized(expr)
     needs_tenant = "tenant_id" in authorized.resource_params()
 
-    def _dep(
+    async def _dep(
         request: Request,
         user: m.AppUser = Depends(current_user),
         cs: Session = Depends(control_session),
@@ -299,7 +309,7 @@ def guard(expr: Expr):
         platform_perms = platform_permissions(cs, user.id)
 
         # Default = today's flat resolver (unchanged when no factory is registered).
-        resource_grant: Callable[..., bool] = _resource_grant
+        resource_grant: Callable[..., object] = _resource_grant
         factory = _resolver_factory
         if factory is not None and active_tenant_id is not None:
             # A registered factory OWNS resource grants. It runs ONLY here — after the
@@ -331,7 +341,7 @@ def guard(expr: Expr):
             "resource_grant": resource_grant,
         }
         _authz_domain = "tenant" if needs_tenant else "platform"
-        if not authorized.satisfied(ctx):
+        if not await authorized.satisfied_async(ctx):
             auth_metrics.record_authz("deny", _authz_domain)
             raise HTTPException(status_code=403, detail=AUTHZ_FORBIDDEN_DETAIL)
         auth_metrics.record_authz("allow", _authz_domain)
