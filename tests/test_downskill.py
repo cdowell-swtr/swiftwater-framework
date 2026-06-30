@@ -33,10 +33,10 @@ def test_blocking_dependents_flags_a_requirer():
     from framework_cli.downskill import blocking_dependents
 
     bat._BATTERIES["_pgvector"] = bat.BatterySpec(
-        "_pgvector", "x", requires=("_postgres",), obs="rides-existing"
+        "_pgvector", "x", requires=("_postgres",), obs="rides-existing", data="none"
     )
     bat._BATTERIES["_postgres"] = bat.BatterySpec(
-        "_postgres", "x", obs="rides-existing"
+        "_postgres", "x", obs="rides-existing", data="none"
     )
     try:
         assert blocking_dependents(["_pgvector", "_postgres"], "_postgres") == [

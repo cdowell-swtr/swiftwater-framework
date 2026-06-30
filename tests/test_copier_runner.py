@@ -5538,3 +5538,108 @@ def test_data_stores_never_on_shared_edge_net(tmp_path: Path):
     )
     # Non-vacuous: the render must actually contain stores, or the guard checks nothing.
     assert found == stores, f"expected stores {stores} rendered, found {found}"
+
+
+def test_backup_core_renders_in_baseline(tmp_path):
+    dest = tmp_path / "demo"
+    render_project(
+        dest, {**DATA, "batteries": []}
+    )  # DATA = the module's canonical answers
+    backup = dest / "infra/backup/backup.sh"
+    assert backup.is_file(), "core backup.sh must render with no batteries"
+    text = backup.read_text()
+    assert "# BACKUP-STORES: postgres" in text
+    assert "pg_dump" in text and "age -r" in text
+    assert "{{" not in text and "{%" not in text, "backup.sh has unrendered Jinja"
+    env = (dest / ".env.example").read_text()
+    assert "BACKUP_DEST=" in env and "BACKUP_PUBKEY=" in env
+    task = (dest / "Taskfile.yml").read_text()
+    assert "backup:" in task
+
+
+def test_prune_renders_with_retention(tmp_path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": []})
+    prune = (dest / "infra/backup/prune.sh").read_text()
+    assert "BACKUP_RETENTION_DAILY" in prune and "BACKUP_RETENTION_WEEKLY" in prune
+    assert (dest / "Taskfile.yml").read_text().count("backup:prune") >= 1
+
+
+def test_restore_and_drill_render(tmp_path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": []})
+    restore = (dest / "infra/backup/restore.sh").read_text()
+    drill = (dest / "infra/backup/restore_drill.sh").read_text()
+    assert "age -d" in restore and "pg_restore" in restore
+    assert "yes" in restore  # explicit confirmation guard
+    assert "age -d" in drill and "alembic_version" in drill
+    task = (dest / "Taskfile.yml").read_text()
+    assert "restore:" in task and "backup:verify" in task
+    for sh in (restore, drill):
+        assert "{{" not in sh and "{%" not in sh
+
+
+def test_systemd_units_and_runbook_render(tmp_path):
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": []})
+    # Units ship under fixed names (operator installs them as <slug>-backup.* — see README).
+    # Fixed repo names keep them inside the integrity-checksummed surface (no {project_slug}
+    # token exists there); on-box coexistence comes from the slug-named *install*, not the file.
+    svc = dest / "infra/backup/backup.service"
+    tmr = dest / "infra/backup/backup.timer"
+    readme = dest / "infra/backup/README.md"
+    assert svc.is_file() and tmr.is_file() and readme.is_file()
+    svc_text = svc.read_text()
+    assert "ExecStart=" in svc_text
+    assert "Type=oneshot" in svc_text  # no lingering process
+    tmr_text = tmr.read_text()
+    assert "OnCalendar=" in tmr_text
+    assert "Persistent=true" in tmr_text  # catch up a missed run after the box was off
+    r = readme.read_text()
+    for token in ("BACKUP_DEST", "age", "RPO", "RTO", "systemctl"):
+        assert token in r, f"runbook missing {token}"
+    assert "backups/" in (dest / ".gitignore").read_text()
+
+
+def test_mongo_store_is_in_backup_when_present(tmp_path):
+    # FWK133 Task 7: a `store` battery (mongodb) must be dumped + restorable, not silently skipped.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["mongodb"]})
+    backup = (dest / "infra/backup/backup.sh").read_text()
+    assert "# BACKUP-STORES: postgres mongo" in backup
+    assert "mongodump" in backup
+    assert "mongorestore" in (dest / "infra/backup/restore.sh").read_text()
+
+
+@pytest.mark.parametrize(
+    "battery,needle",
+    [
+        ("age", "CREATE EXTENSION IF NOT EXISTS age"),
+        ("timescaledb", "timescaledb_pre_restore()"),
+        ("timescaledb", "timescaledb_post_restore()"),
+    ],
+)
+def test_extension_drill_has_correct_dance(tmp_path, battery, needle):
+    # FWK133 Task 8: the restore-drill must restore postgres-extension data correctly — AGE loads
+    # its extension before data; TimescaleDB wraps the restore in pre/post-restore hooks.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": [battery]})
+    drill = (dest / "infra/backup/restore_drill.sh").read_text()
+    assert needle in drill, f"{battery} drill missing {needle!r}"
+
+
+def test_extension_drill_builds_battery_correct_image(tmp_path):
+    # FWK133 Task 8: extension stacks must drill against the BUILT extension image, never vanilla
+    # postgres (which would false-green pgvector / always-fail timescale+age). pgvector needs no SQL
+    # dance — only the extension-loaded image, which the drill builds.
+    dest = tmp_path / "demo"
+    render_project(dest, {**DATA, "batteries": ["pgvector"]})
+    drill = (dest / "infra/backup/restore_drill.sh").read_text()
+    assert "build postgres" in drill
+    assert (
+        "--exit-on-error" in drill
+    )  # a failed extension restore goes RED, not silent-OK
+    # Behavioral gate: the drill must assert the vector extension SURVIVES the restore. In the
+    # all-batteries drill --exit-on-error is off (age/timescaledb pre-create), so without this a
+    # missing `vector` would false-green pgvector. (See restore_drill.sh pg_extension loop.)
+    assert "for ext in vector" in drill and "pg_extension" in drill

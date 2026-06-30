@@ -221,6 +221,26 @@ tasks:
     desc: Load seed data (idempotent — skips if data already exists).
     cmds:
       - uv run python scripts/seed.py
+
+  backup:
+    desc: Encrypted backup of every active durable store to $BACKUP_DEST (see infra/backup/README.md).
+    cmds:
+      - ./infra/backup/backup.sh
+
+  backup:prune:
+    desc: Apply GFS-lite retention to $BACKUP_DEST (also run automatically by `task backup`).
+    cmds:
+      - ./infra/backup/prune.sh
+
+  restore:
+    desc: DESTRUCTIVE — restore the latest dump into the LIVE stores (typed confirmation required).
+    cmds:
+      - ./infra/backup/restore.sh
+
+  backup:verify:
+    desc: Restore-drill — verify the latest dump restores into a throwaway instance (needs docker + the age identity).
+    cmds:
+      - ./infra/backup/restore_drill.sh
 {%- if "multitenantauth" in batteries %}
 
   db:migrate:all:

@@ -152,7 +152,7 @@ def test_active_agents_excludes_battery_gated_framework_only_agent(monkeypatch):
     from framework_cli.review import registry
 
     bat._BATTERIES["_fwbat"] = bat.BatterySpec(
-        "_fwbat", "x", gates_agents=("_fwbat-agent",), obs="rides-existing"
+        "_fwbat", "x", gates_agents=("_fwbat-agent",), obs="rides-existing", data="none"
     )
     registry._SPECS["_fwbat-agent"] = registry.AgentSpec(
         "review-fwbat",
