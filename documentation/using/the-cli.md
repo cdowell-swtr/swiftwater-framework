@@ -2,13 +2,15 @@
 
 The `framework` CLI is a thin shell over [Copier](https://copier.readthedocs.io/). Copier is the template engine that does the actual rendering and merging; the CLI's job is to give you a small, task-shaped set of commands over it — deriving names, resolving batteries, recording the framework version and battery/alert sets, and running the project's tests after a change. Logic stays minimal and focused so the CLI stays a predictable front-door rather than a place where surprising behavior accumulates.
 
+**Version lockstep (self-dispatch).** You install one global `framework` CLI, but you never have to keep it matched to each project. Project-scoped commands (`integrity`, `restore`, `upskill`, `downskill`) automatically re-exec the exact version a project was generated at (its `.copier-answers.yml` `_commit` pin), while `new` and `upgrade` run the latest release. So the CLI and a project's template can never silently drift, and `upgrade` advances both together. This happens transparently via a cached `uvx` launch; when the installed CLI already matches, there is no overhead.
+
 ## What the commands are for
 
 The commands fall into a few groups:
 
 - **Scaffold a project** — `new` renders a fresh project from the template. Covered in [New project & batteries](new-and-batteries.md).
 - **Change a project's batteries** — `upskill` adds batteries (and can reconfigure alert channels); `downskill` removes a battery. Covered in [Add/remove batteries](batteries-add-remove.md).
-- **Stay current with the framework** — `check` reports whether a newer framework release exists and prints the command to upgrade. Bringing a project forward onto a newer release is covered in [Upgrading](upgrading.md).
+- **Stay current with the framework** — `upgrade <project> --dry-run` reports whether a project is behind the latest release; `upgrade <project>` moves it forward, automatically running the target CLI (self-dispatch) so the CLI and template advance together. Bringing a project forward onto a newer release is covered in [Upgrading](upgrading.md).
 - **Keep scaffolding intact** — `integrity` verifies that the framework-managed files in a project have not been moved, deleted, or altered, and `restore` re-fetches a canonical framework file, discarding local edits to it.
 
 There are additional commands used by the framework's own development and CI (template rendering, the review/audit gate, eval scoring, and matrix dogfooding) — you generally will not run those by hand when *using* the framework.

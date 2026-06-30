@@ -9,10 +9,14 @@ without changing the framework version).
 ## The command
 
 ```bash
-framework check                          # is there a newer release? prints the upgrade command
+framework upgrade my-app --dry-run       # is my-app behind the latest release? (reports, applies nothing)
 framework upgrade my-app                 # move my-app onto the latest release
 framework upgrade my-app --to v0.3.0    # …or onto a specific release
 ```
+
+You do **not** need to upgrade your global CLI first. `framework upgrade` re-execs the target
+release automatically (self-dispatch), so a single command moves the CLI *and* the template
+together — there is no separate CLI bump.
 
 `framework upgrade` requires a **clean git working tree** (commit or stash first) — that
 is what makes the upgrade one reviewable, reversible diff. It re-renders the template at
@@ -81,13 +85,14 @@ To move the framework version, use `framework upgrade <project>`.
 
 ## Checking for updates
 
-`framework check` compares the installed CLI version against the latest published release
-and reports what to do:
+`framework upgrade <project> --dry-run` compares the project's **recorded** version (its
+`.copier-answers.yml` pin) against the latest published release and reports the gap without
+applying anything:
 
 ```
-framework check: installed v0.2.2, latest v0.3.0. Upgrade the CLI with
-`uv tool install git+https://github.com/cdowell-swtr/swiftwater-framework@v0.3.0`,
-then run `framework upgrade <project>`.
+This project is pinned v0.2.2 — v0.3.0 available. Run `framework upgrade <project>` to move CLI + template together.
 ```
 
-Update the CLI first (so it ships the new template), then upgrade your projects.
+There is no separate "upgrade the CLI first" step: `framework upgrade` self-dispatches to the
+target release, so the one command moves both. (`framework check` is deprecated — it reported
+the *CLI's* version, not the project's, which was the wrong question.)

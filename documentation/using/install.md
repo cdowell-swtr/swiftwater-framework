@@ -40,10 +40,10 @@ You should see the top-level help, which lists the available commands (`new`, `u
 
 ## Upgrading the CLI itself
 
-To pull the CLI onto a newer release later, re-run the install command with the new tag (uv replaces the existing tool), or use uv's upgrade flow:
+Project-scoped commands (`integrity`, `restore`, `upskill`, `downskill`) automatically run the version each project was generated at, and `new`/`upgrade` run the latest — so the global CLI is a launcher and **does not need to match any particular project**. To pull the launcher itself onto a newer release, re-run the install command with the new tag (uv replaces the existing tool), or use uv's upgrade flow:
 
 ```bash
 uv tool upgrade framework-cli
 ```
 
-`framework check` will tell you whether a newer release exists and print the exact install command to run — see [The CLI](the-cli.md) and [Upgrading](upgrading.md).
+`framework upgrade <project> --dry-run` will tell you whether a project is behind the latest release; `framework upgrade <project>` then moves the CLI and template together — see [The CLI](the-cli.md) and [Upgrading](upgrading.md).

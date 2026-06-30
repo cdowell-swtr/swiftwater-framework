@@ -28,7 +28,9 @@ concurrency:
 jobs:
   # Step 0: framework integrity — verify the framework scaffolding is intact before anything
   # else. Installs the framework CLI pinned to the version this project was generated from
-  # (recorded in .copier-answers.yml `_commit`), then runs the check.
+  # (recorded in .copier-answers.yml `_commit`), then runs integrity. Pinning explicitly here
+  # is the deliberate CI equivalent of the CLI's self-dispatch (locally, project-scoped commands
+  # re-exec the pinned version automatically) — a fresh runner has no global CLI to dispatch from.
   integrity:
     runs-on: ubuntu-latest
     steps:

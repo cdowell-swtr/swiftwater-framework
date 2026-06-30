@@ -245,65 +245,85 @@ def test_upgrade_defaults_to_latest_release(tmp_path: Path, monkeypatch):
     assert "_commit: v2" in (proj / ".copier-answers.yml").read_text()
 
 
-def test_upgrade_bumps_cli_then_reexecs_when_target_newer(monkeypatch, tmp_path):
+def test_upgrade_dry_run_reports_gap(monkeypatch, tmp_path):
     from typer.testing import CliRunner
 
     import framework_cli.cli as cli
-    import framework_cli.self_bump as sb
-    import framework_cli.version_sync as vs
     from framework_cli.cli import app
 
-    project = tmp_path / "proj"
-    project.mkdir()
-    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.8")
-    monkeypatch.setattr(cli, "latest_release", lambda: "v0.2.11")
-    monkeypatch.setattr(sb, "is_uv_tool_install", lambda: True)
-    monkeypatch.setattr(sb, "_interactive", lambda: True)
-    monkeypatch.setattr(sb, "_confirm", lambda msg: True)
-
-    installed, reexeced = [], []
-    monkeypatch.setattr(sb, "run_uv_tool_install", lambda tag: installed.append(tag))
-    monkeypatch.setattr(sb, "reexec", lambda argv: reexeced.append(argv))
-    # upgrade_project must NOT run in this process (the re-exec'd one does it)
+    (tmp_path / ".copier-answers.yml").write_text("_commit: v0.4.2\n")
+    monkeypatch.setattr(cli, "latest_release", lambda: "v0.4.5")
+    called = {"upgrade": False}
     monkeypatch.setattr(
-        cli, "upgrade_project", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+        cli, "upgrade_project", lambda *a, **k: called.update(upgrade=True)
     )
 
-    CliRunner().invoke(app, ["upgrade", str(project)])
-    assert installed == ["v0.2.11"]
-    assert reexeced and reexeced[0][1:3] == ["upgrade", str(project)]
+    result = CliRunner().invoke(app, ["upgrade", str(tmp_path), "--dry-run"])
+    assert result.exit_code == 0
+    assert "v0.4.2" in result.output and "v0.4.5" in result.output
+    assert called["upgrade"] is False  # dry-run applies nothing
 
 
-def test_upgrade_refuses_when_non_uv_tool(monkeypatch, tmp_path):
+def test_upgrade_dry_run_already_current(monkeypatch, tmp_path):
     from typer.testing import CliRunner
 
     import framework_cli.cli as cli
-    import framework_cli.self_bump as sb
-    import framework_cli.version_sync as vs
     from framework_cli.cli import app
 
-    project = tmp_path / "proj"
-    project.mkdir()
-    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.8")
-    monkeypatch.setattr(cli, "latest_release", lambda: "v0.2.11")
-    monkeypatch.setattr(sb, "is_uv_tool_install", lambda: False)
+    (tmp_path / ".copier-answers.yml").write_text("_commit: v0.4.5\n")
+    monkeypatch.setattr(cli, "latest_release", lambda: "v0.4.5")
+    result = CliRunner().invoke(app, ["upgrade", str(tmp_path), "--dry-run"])
+    assert result.exit_code == 0
+    assert "current" in result.output.lower()
 
-    result = CliRunner().invoke(app, ["upgrade", str(project)])
-    assert result.exit_code == 1
-    assert "uv tool install" in result.output and "@v0.2.11" in result.output
+
+def test_upgrade_dry_run_no_pin(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    from framework_cli.cli import app
+
+    # No .copier-answers.yml → read_commit returns None (project has no pin at all).
+    monkeypatch.setattr(cli, "latest_release", lambda: "v0.4.5")
+    result = CliRunner().invoke(app, ["upgrade", str(tmp_path), "--dry-run"])
+    assert result.exit_code == 0
+    assert "cannot determine staleness" in result.output.lower()
+
+
+def test_upgrade_dry_run_sha_pin(monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    import framework_cli.cli as cli
+    from framework_cli.cli import app
+
+    # A non-release (SHA) pin must NOT be reported as "behind" — there is no
+    # version to compare against (spec: "non-release pin, cannot compare").
+    (tmp_path / ".copier-answers.yml").write_text("_commit: a1b2c3d4e5\n")
+    monkeypatch.setattr(cli, "latest_release", lambda: "v0.4.5")
+    result = CliRunner().invoke(app, ["upgrade", str(tmp_path), "--dry-run"])
+    assert result.exit_code == 0
+    assert "cannot determine staleness" in result.output.lower()
+    assert "available" not in result.output.lower()  # not the behind-pin wording
+
+
+def test_upgrade_has_no_bump_cli_option():
+    from typer.testing import CliRunner
+
+    from framework_cli.cli import app
+
+    result = CliRunner().invoke(app, ["upgrade", "--help"])
+    assert "--bump-cli" not in result.output
 
 
 def test_upgrade_proceeds_when_target_not_newer(monkeypatch, tmp_path):
     from typer.testing import CliRunner
 
     import framework_cli.cli as cli
-    import framework_cli.version_sync as vs
     from framework_cli.cli import app
     from framework_cli.upgrade import UpgradeOutcome
 
     project = tmp_path / "proj"
     project.mkdir()
-    monkeypatch.setattr(vs, "installed_framework_version", lambda: "0.2.11")
     monkeypatch.setattr(cli, "latest_release", lambda: "v0.2.11")
     called = []
     monkeypatch.setattr(

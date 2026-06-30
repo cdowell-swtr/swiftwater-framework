@@ -28,14 +28,12 @@ from framework_cli.review.diff import (
 from framework_cli.review.registry import active_agents, agent_names, get_agent
 from framework_cli.review.runner import EVAL_KEY_ENV, RUNTIME_KEY_ENV
 from framework_cli.source import (
-    REPO_URL,
     latest_release,
     record_portable_source,
-    version_tag,
 )
+from framework_cli.dispatch import dispatch
 from framework_cli.downskill import DownskillError, downskill_project
 from framework_cli.upskill import UpskillError, upskill_project
-from framework_cli.self_bump import BumpRefused, maybe_self_bump
 from framework_cli.upgrade import UpgradeError, upgrade_project
 from framework_cli.version_sync import VersionSkewError
 
@@ -145,10 +143,13 @@ def integrity(
         typer.echo(f"Recorded intentional drift: {', '.join(allow_drift)}")
         raise typer.Exit(0)
 
-    # FWK34: integrity renders the canonical from the bundled (installed-CLI) template, so a
-    # CLI/_commit skew makes drift unreliable. This command runs from generated-project
-    # Taskfile preconditions with the dev's GLOBAL CLI (CI pins it via --ci), so do NOT
-    # hard-fail on skew — warn and exit 0 so `task dev` is never blocked on benign skew.
+    # FWK146 (FWK140 T6): integrity renders the canonical from the bundled (installed-CLI)
+    # template, so a CLI/_commit skew makes drift unreliable. Skew is normally impossible: the
+    # self-dispatch front-end (dispatch.py) re-execs the project-pinned CLI, so by the time
+    # integrity runs the installed CLI == `_commit`. This branch is the fail-loud FLOOR for a
+    # bypass (FRAMEWORK_NO_DISPATCH, or `uvx` unavailable): exit non-zero so a CI / pre-commit
+    # gate distinguishes "verified OK" from "could not verify" — a gate must never pass green
+    # while verifying nothing.
     from framework_cli.version_sync import (
         VersionSkew,
         project_version_skew,
@@ -162,12 +163,13 @@ def integrity(
         raise typer.Exit(1) from exc
     if skew is not VersionSkew.IN_SYNC:
         typer.echo(
-            f"framework integrity: skipped — your framework CLI is {installed_tag} but this "
-            f"project is pinned {commit_tag}, so integrity cannot verify against the matching "
-            f"template version (and `framework restore` is disabled until they match). "
-            + skew_remedy(skew, installed_tag, commit_tag)
+            f"framework integrity: could not verify — your framework CLI is {installed_tag} "
+            f"but this project is pinned {commit_tag} (self-dispatch was bypassed), so integrity "
+            f"cannot verify against the matching template version. "
+            + skew_remedy(skew, installed_tag, commit_tag),
+            err=True,
         )
-        raise typer.Exit(0)
+        raise typer.Exit(1)
 
     findings = check_integrity(project, ci=ci)
     for f in findings:
@@ -401,13 +403,17 @@ def upgrade(
     to: str = typer.Option(
         None, "--to", help="Target release tag (default: the latest release)."
     ),
-    bump_cli: bool = typer.Option(
+    dry_run: bool = typer.Option(
         False,
-        "--bump-cli",
-        help="Bump the framework CLI to the target non-interactively before upgrading.",
+        "--dry-run",
+        help="Report whether the project is behind the latest release; apply nothing.",
     ),
 ) -> None:
-    """Move a project onto a newer framework release, then run its tests."""
+    """Move a project onto a newer framework release, then run its tests.
+
+    The CLI version that runs this command is the target version (the self-dispatch
+    front-end re-execs it), so no separate CLI bump is needed.
+    """
     project = Path(name)
     if not project.is_dir():
         typer.echo(f"Error: {name} is not a directory", err=True)
@@ -417,21 +423,39 @@ def upgrade(
     if target is None:
         typer.echo(
             "Error: no framework release found (or the remote is unreachable); "
-            "cannot upgrade.",
+            "cannot determine the target.",
             err=True,
         )
         raise typer.Exit(1)
 
-    # FWK34: restore/integrity render from the installed CLI, so it must be at least the
-    # target. Offer to self-bump (uv tool + TTY) and re-exec; otherwise refuse with guidance.
-    reexec_argv = [sys.argv[0], "upgrade", name]
-    if to is not None:
-        reexec_argv += ["--to", to]
-    try:
-        maybe_self_bump(target_tag=target, bump_flag=bump_cli, argv=reexec_argv)
-    except BumpRefused as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
+    if dry_run:
+        from framework_cli.source import read_commit
+        from framework_cli.version_sync import parse_version
+
+        pin = read_commit(project)
+        if pin == target:
+            typer.echo(f"This project is current ({target}).")
+        elif pin is None:
+            typer.echo(
+                f"Cannot determine staleness: this project has no release-tag pin "
+                f"(latest is {target})."
+            )
+        else:
+            # A non-release (SHA / vendoring) pin has no version to compare against —
+            # report "cannot determine", never a false "behind" (spec §2.5).
+            try:
+                parse_version(pin)
+            except ValueError:
+                typer.echo(
+                    f"Cannot determine staleness: this project is pinned to a "
+                    f"non-release ref ({pin}) (latest is {target})."
+                )
+                return
+            typer.echo(
+                f"This project is pinned {pin} — {target} available. "
+                f"Run `framework upgrade {name}` to move CLI + template together."
+            )
+        return
 
     try:
         outcome = upgrade_project(project, to=target)
@@ -462,20 +486,12 @@ def upgrade(
 
 @app.command()
 def check() -> None:
-    """Report whether a newer framework release is available."""
-    current_tag = version_tag(installed_framework_version())
-    latest = latest_release()
-    if latest is None:
-        typer.echo("framework check: no releases found (or the remote is unreachable).")
-        raise typer.Exit(0)
-    if latest == current_tag:
-        typer.echo(f"framework check: up to date ({current_tag}).")
-    else:
-        typer.echo(
-            f"framework check: installed {current_tag}, latest {latest}. "
-            f"Upgrade the CLI with `uv tool install git+{REPO_URL}@{latest}`, "
-            f"then run `framework upgrade <project>`."
-        )
+    """Deprecated — use `framework upgrade --dry-run <project>`."""
+    typer.echo(
+        "framework check is deprecated: it reported the CLI version, not the project's. "
+        "Use `framework upgrade --dry-run <project>` to see if a project is behind the "
+        "latest release."
+    )
 
 
 # Module-level seams so tests can monkeypatch the I/O without the SDK.
@@ -2264,3 +2280,9 @@ def review_config_clear() -> None:
 
     clear_backend_choice(Path.cwd())
     typer.echo("review backend cleared → AI review is skip-neutral until re-enabled")
+
+
+def main() -> None:
+    """Console entry: self-dispatch to the project-pinned CLI, then run Typer."""
+    dispatch(sys.argv[1:])
+    app()

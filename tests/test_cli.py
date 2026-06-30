@@ -102,12 +102,14 @@ def test_new_records_portable_source(tmp_path: Path, monkeypatch):
     assert "/src/framework_cli/template" not in answers
 
 
-def test_check_runs_and_reports():
-    # In the test env the default remote is unreachable, so latest_release returns None;
-    # the command must still exit 0 with a message (no crash).
+def test_check_is_deprecated_and_points_to_upgrade_dry_run():
+    # FWK147: `check` reported the installed CLI version (not the project's), which
+    # BRG42 #2 flagged as misleading. It is now a deprecation pointer to
+    # `upgrade --dry-run` and does no version/network I/O.
     result = runner.invoke(app, ["check"])
     assert result.exit_code == 0
-    assert "framework check" in result.output
+    assert "deprecat" in result.output.lower()
+    assert "upgrade --dry-run" in result.output
 
 
 def test_upskill_command_rejects_non_directory(tmp_path: Path, monkeypatch):
@@ -269,18 +271,6 @@ def test_upgrade_red_exits_nonzero(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli.app, ["upgrade", str(tmp_path / "x")])
     assert result.exit_code != 0
     assert "task test" in result.output or "failed" in result.output
-
-
-def test_check_points_at_upgrade(monkeypatch):
-    from typer.testing import CliRunner
-
-    import framework_cli.cli as cli
-
-    monkeypatch.setattr(cli, "installed_framework_version", lambda: "0.2.0")
-    monkeypatch.setattr(cli, "latest_release", lambda: "v0.3.0")
-    result = CliRunner().invoke(cli.app, ["check"])
-    assert "framework upgrade" in result.output
-    assert "framework upskill" not in result.output
 
 
 def test_review_dependency_runs_when_dep_file_changed(monkeypatch):
@@ -3511,7 +3501,10 @@ def test_version_flag_prints_installed_version():
     assert installed_framework_version() in result.stdout
 
 
-def test_integrity_warns_non_fatally_on_skew(monkeypatch, tmp_path):
+def test_integrity_fails_loud_on_skew(monkeypatch, tmp_path):
+    # FWK146 (FWK140 T6): skew is normally impossible (the self-dispatch front-end re-execs
+    # the pinned CLI). When dispatch is bypassed, integrity must FAIL LOUD (non-zero) rather
+    # than the old silent `Exit(0)` skip — a verification gate must never pass verifying nothing.
     from typer.testing import CliRunner
 
     import framework_cli.cli as cli
@@ -3528,9 +3521,12 @@ def test_integrity_warns_non_fatally_on_skew(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "check_integrity", _boom)
 
     result = CliRunner().invoke(app, ["integrity"])
-    assert result.exit_code == 0  # non-fatal: never blocks `task dev`
-    assert "0.2.8" in result.stdout and "v0.2.11" in result.stdout
-    assert "uv tool install" in result.stdout
+    assert (
+        result.exit_code != 0
+    )  # fail-loud floor: a gate must not pass while verifying nothing
+    assert "could not verify" in result.output.lower()
+    assert "0.2.8" in result.output and "v0.2.11" in result.output
+    assert "uv tool install" in result.output
 
 
 def test_integrity_runs_normally_when_in_sync(monkeypatch, tmp_path):
@@ -3572,7 +3568,9 @@ def test_integrity_errors_cleanly_on_non_tag_commit(monkeypatch, tmp_path):
     )  # clean message, not a traceback
 
 
-def test_integrity_warns_on_cli_ahead_skew(monkeypatch, tmp_path):
+def test_integrity_fails_loud_on_cli_ahead_skew(monkeypatch, tmp_path):
+    # FWK146: the CLI_AHEAD direction (the common bypass — a shared global CLI leading the pin)
+    # must also fail loud, and still surface the directional remedy.
     from typer.testing import CliRunner
 
     import framework_cli.version_sync as vs
@@ -3583,5 +3581,6 @@ def test_integrity_warns_on_cli_ahead_skew(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
     result = CliRunner().invoke(app, ["integrity"])
-    assert result.exit_code == 0  # non-fatal in both directions
+    assert result.exit_code != 0  # fail-loud in both directions
+    assert "could not verify" in result.output.lower()
     assert "framework upgrade" in result.output  # CLI_AHEAD remedy
