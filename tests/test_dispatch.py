@@ -65,3 +65,56 @@ def test_advancing_to_installed_runs_self():
 
 def test_sha_pin_differs_reexecs():
     assert D(project_commit="abc1234") == Dispatch("reexec", "abc1234")
+
+
+import framework_cli.dispatch as disp
+
+
+def test_dispatch_reexecs_pin_for_cwd_project(monkeypatch, tmp_path):
+    (tmp_path / ".copier-answers.yml").write_text("_commit: v0.4.2\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(disp, "installed_version_tag", lambda: "v0.4.5")
+    monkeypatch.setattr(disp, "_uvx_available", lambda: True)
+    captured = {}
+    monkeypatch.setattr(
+        disp, "reexec", lambda ref, argv: captured.update(ref=ref, argv=argv)
+    )
+    disp.dispatch(["integrity", "--ci"])
+    assert captured == {"ref": "v0.4.2", "argv": ["integrity", "--ci"]}
+
+
+def test_dispatch_self_when_in_sync(monkeypatch, tmp_path):
+    (tmp_path / ".copier-answers.yml").write_text("_commit: v0.4.5\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(disp, "installed_version_tag", lambda: "v0.4.5")
+    called = {"reexec": False}
+    monkeypatch.setattr(disp, "reexec", lambda *a: called.update(reexec=True))
+    disp.dispatch(["integrity"])
+    assert called["reexec"] is False
+
+
+def test_dispatch_noop_when_reexecuted(monkeypatch):
+    monkeypatch.setenv("FRAMEWORK_PINNED_EXEC", "1")
+    monkeypatch.setattr(disp, "reexec", lambda *a: pytest.fail("must not re-exec"))
+    disp.dispatch(["integrity"])  # returns cleanly
+
+
+def test_dispatch_fail_loud_when_uvx_missing(monkeypatch, tmp_path):
+    (tmp_path / ".copier-answers.yml").write_text("_commit: v0.4.2\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(disp, "installed_version_tag", lambda: "v0.4.5")
+    monkeypatch.setattr(disp, "_uvx_available", lambda: False)
+    with pytest.raises(SystemExit) as exc:
+        disp.dispatch(["integrity"])
+    assert exc.value.code != 0
+
+
+def test_dispatch_advancing_reexecs_latest(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)  # no project
+    monkeypatch.setattr(disp, "installed_version_tag", lambda: "v0.4.5")
+    monkeypatch.setattr(disp, "latest_release", lambda: "v0.5.0")
+    monkeypatch.setattr(disp, "_uvx_available", lambda: True)
+    captured = {}
+    monkeypatch.setattr(disp, "reexec", lambda ref, argv: captured.update(ref=ref))
+    disp.dispatch(["upgrade", "someproj"])
+    assert captured["ref"] == "v0.5.0"
