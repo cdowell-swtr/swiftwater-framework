@@ -4565,3 +4565,7 @@ Converted the FWK140 spec into a task-by-task TDD plan: `docs/superpowers/plans/
 Carved the 10 plan tasks into FWK PLAN rows (one per task) for task-by-task execution with `/clear` at each boundary. Local merge-DAG: FWK141→142→143→144 sequential (classify → decide_dispatch → resolve+reexec+dispatch → main() entry); FWK145·146·147 independent after 144 (upgrade --dry-run · integrity fail-loud floor · deprecate check); FWK148 after 145 (retire self_bump, whose only caller 145 removes); FWK149 after 148 (template/docs); FWK150 last (branch-end gate + render-readiness + release, stop-before-tag). Each row TDD + per-task review per [[subagent-review-model-pattern]] (implementers Sonnet/Haiku; code-quality Opus). PLAN-only.
 (FWK140 carved → FWK141–150; merge-DAG recorded; execute task-by-task)
 
+
+#### #0424 · completed · FWK141 — dispatch classify() (FWK140 T1) · 2026-06-29
+Created `src/framework_cli/dispatch.py` with the pure `classify(command) -> str` subcommand→kind map (`new`/`upgrade`→advancing; `integrity`/`restore`→cwd_project; `upskill`/`downskill`→arg_project; None/unknown→self) and `tests/test_dispatch.py` with the 11-case parametrized matrix. TDD: red on `ModuleNotFoundError: framework_cli.dispatch`, green after the minimal impl (11 passed). ruff check / ruff format --check / mypy all clean. No deps; head of the FWK140 local merge-DAG (141→142→143→144). Module-add only, no template/CLI change → no release.
+(FWK141 done; next FWK142 decide_dispatch())
