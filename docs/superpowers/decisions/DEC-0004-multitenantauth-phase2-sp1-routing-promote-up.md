@@ -82,6 +82,14 @@ match+seam secrets line and the skippable-physical-create topology are acceptabl
 drift finding is acknowledged and the broken module will be deleted on adoption (not patched-then-kept). No
 operator gate is open; this is a single-confirmation ask, not a Negotiation Thread.
 
+**RECEIVED — CONCUR (2026-06-29).** Meridian delivered a draft CONCUR in its v0.4.5 upstream-asks doc
+(`docs/superpowers/assessments/2026-06-29-meridian-to-framework-v045-upstream-asks.md`), operator-gated on
+that PR's merge (FWK PR #109, merged 2026-06-29) per `cross-repo-convention.md` v4. Basis: Meridian runs on
+v0.4.5 today; MDN63 de-fork conformance green. Two SP1 hardening residuals are attached and accepted by the
+absorber as framework follow-ups (tracked under FWK137), **not** blockers: A-4 (DSN-cache write-back not
+epoch-guarded — dormant today, arms when a DSN-rotation path ships) and A-5 (engine-registry validates under
+the lock + no `connect_timeout` — availability, topology-dependent).
+
 ## References
 
 - SP1 design: `docs/superpowers/specs/2026-06-25-fwk61-sp1-physical-routing-core-design.md`
