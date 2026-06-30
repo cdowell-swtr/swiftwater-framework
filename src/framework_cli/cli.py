@@ -36,7 +36,6 @@ from framework_cli.source import (
 from framework_cli.dispatch import dispatch
 from framework_cli.downskill import DownskillError, downskill_project
 from framework_cli.upskill import UpskillError, upskill_project
-from framework_cli.self_bump import BumpRefused, maybe_self_bump
 from framework_cli.upgrade import UpgradeError, upgrade_project
 from framework_cli.version_sync import VersionSkewError
 
@@ -402,13 +401,17 @@ def upgrade(
     to: str = typer.Option(
         None, "--to", help="Target release tag (default: the latest release)."
     ),
-    bump_cli: bool = typer.Option(
+    dry_run: bool = typer.Option(
         False,
-        "--bump-cli",
-        help="Bump the framework CLI to the target non-interactively before upgrading.",
+        "--dry-run",
+        help="Report whether the project is behind the latest release; apply nothing.",
     ),
 ) -> None:
-    """Move a project onto a newer framework release, then run its tests."""
+    """Move a project onto a newer framework release, then run its tests.
+
+    The CLI version that runs this command is the target version (the self-dispatch
+    front-end re-execs it), so no separate CLI bump is needed.
+    """
     project = Path(name)
     if not project.is_dir():
         typer.echo(f"Error: {name} is not a directory", err=True)
@@ -418,21 +421,39 @@ def upgrade(
     if target is None:
         typer.echo(
             "Error: no framework release found (or the remote is unreachable); "
-            "cannot upgrade.",
+            "cannot determine the target.",
             err=True,
         )
         raise typer.Exit(1)
 
-    # FWK34: restore/integrity render from the installed CLI, so it must be at least the
-    # target. Offer to self-bump (uv tool + TTY) and re-exec; otherwise refuse with guidance.
-    reexec_argv = [sys.argv[0], "upgrade", name]
-    if to is not None:
-        reexec_argv += ["--to", to]
-    try:
-        maybe_self_bump(target_tag=target, bump_flag=bump_cli, argv=reexec_argv)
-    except BumpRefused as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
+    if dry_run:
+        from framework_cli.source import read_commit
+        from framework_cli.version_sync import parse_version
+
+        pin = read_commit(project)
+        if pin == target:
+            typer.echo(f"This project is current ({target}).")
+        elif pin is None:
+            typer.echo(
+                f"Cannot determine staleness: this project has no release-tag pin "
+                f"(latest is {target})."
+            )
+        else:
+            # A non-release (SHA / vendoring) pin has no version to compare against —
+            # report "cannot determine", never a false "behind" (spec §2.5).
+            try:
+                parse_version(pin)
+            except ValueError:
+                typer.echo(
+                    f"Cannot determine staleness: this project is pinned to a "
+                    f"non-release ref ({pin}) (latest is {target})."
+                )
+                return
+            typer.echo(
+                f"This project is pinned {pin} — {target} available. "
+                f"Run `framework upgrade {name}` to move CLI + template together."
+            )
+        return
 
     try:
         outcome = upgrade_project(project, to=target)
