@@ -12,17 +12,19 @@
 
 ## Status
 
-**`in-migration` — absorber SHIPPED v0.4.3 (FWK67, combined SP2+SP3 release; build complete + security gate PASSED 2026-06-27).** The
+**`adopted` (2026-06-29) — absorber SHIPPED v0.4.3 (FWK67, combined SP2+SP3 release; build complete + security gate PASSED 2026-06-27).** The
 generalization decisions below are settled, and the absorber's implementation (subagent-driven, TDD; 14 tasks across
 5 phases) is done and green on a `--with multitenantauth` render. The **security gate is passed**: the branch-end
 all-Opus whole-branch review (0 Critical/0 Important; the one actioned Minor, M1, shipped at `c42f3bd`) and the
 **Phase-2 Layer-2 all-Opus stance×focus adversarial matrix** (`docs/superpowers/eval-scorecards/2026-06-27-fwk67-sp3-layer2-security-matrix.md`
 — **GREEN, 0 confirmed Critical/High**; the two confirmed Low audit-completeness TOCTOUs P4/P5 fixed in-branch at
 `0ba950c`, taking I-AUDIT-COMPLETE to HOLDS-AFTER-FIX). The **combined SP2+SP3 tagged release** shipped as v0.4.3
-(closing FWK66's deferred tail). This sub-record advances the parent DEC-0003
-promote-up (still `in-migration`) toward Phase-2 completion — it does **not** change the parent's status, and it
-does **not** move anything to `adopted`. **Flips to `adopted` only when Meridian deletes its lifecycle/authz fork**
-gated on the conformance contract below.
+(closing FWK66's deferred tail). Meridian (on `_commit: v0.4.5`) adopted the lifecycle/authz surface and
+**deleted its lifecycle/authz fork** — the lifecycle routes (`multitenantauth/routes/tenants.py`, `roles.py`) and the
+audit models (`AuthzEvent`, `TenantLifecycleEvent`) are the adopted, integrity-LOCKED battery render
+(`db/control/models/authz.py` / `tenant.py` ∈ `BATTERY_LOCKED_SRC`), not a hand-written copy. Generator **CONCUR
+received** (2026-06-29, below). With SP3's fork deleted alongside auth/routing/ops, the **parent DEC-0003 is rolled
+to `adopted`** (confirmed 2026-06-29 by direct read of Meridian's repo).
 
 ## Source / generator
 
@@ -94,8 +96,8 @@ gated on the conformance contract below.
 3. **Ship tagged** — the **combined SP2+SP3** Phase-2 release (closes FWK66's deferred, untagged tail).
 4. **Generator adopts + deletes its fork** — Meridian re-points lifecycle/authz at the battery, gated on the
    conformance suite; arms `subtree_exists`/seal-walk in its own later slice.
-5. **Roll the parent DEC-0003 toward `adopted`** — only once Meridian's fork (auth + routing + ops + lifecycle) is
-   fully deleted.
+5. **Roll the parent DEC-0003 toward `adopted`** — **DONE (2026-06-29):** Meridian's fork (auth + routing + ops +
+   lifecycle) verified fully deleted; parent flipped to `adopted`.
 
 ## Conformance contract (gates Meridian's lifecycle/authz fork-deletion)
 

@@ -11,12 +11,13 @@
 
 ## Status
 
-**`in-migration` — absorber SHIPPED v0.4.3 (FWK66, combined SP2+SP3 release; spec approved 2026-06-25, build complete).** The generalization decisions below are settled and the
-absorber's implementation (subagent-driven, TDD) shipped. This sub-record advances the parent
-DEC-0003 promote-up (still `in-migration`) toward Phase-2 completion — it does **not** change the parent's status,
-and it does **not** move anything to `adopted`. Meridian's async confirmation is requested against this record (see
-*Generator confirmation*); the absorber proceeded by reading Meridian's code directly this round (MD busy), but this
-PUR is the durable artifact future coordination uses.
+**`adopted` (2026-06-29).** Absorber shipped v0.4.3 (FWK66, combined SP2+SP3 release); Meridian (on
+`_commit: v0.4.5`) adopted the plane-aware migrate/boot core and **deleted its migrate/deploy fork** —
+`db/tenancy/migrate_all.py` / `db/tenancy/provision.py` / `scripts/entrypoint_tenancy.sh` are gone; the fan-out now
+runs battery-side (`multitenantauth/tenancy/migrate.py`, `provision.py`). Confirmed 2026-06-29 by direct read of
+Meridian's repo (the v0.4.5 adoption exercises the migrate fan-out in anger). A separate written SP2 CONCUR was not
+filed — adoption is evidenced by the verified fork-deletion + live battery use. With SP2's fork deleted alongside
+auth/routing/lifecycle, the **parent DEC-0003 is rolled to `adopted`**.
 
 ## Source / generator
 
@@ -74,8 +75,8 @@ PUR is the durable artifact future coordination uses.
 3. **Ship tagged** — SP2 lands in a Phase-2 release (with SP3 or incrementally; TBD at build time).
 4. **Generator adopts + deletes its fork** — Meridian re-points migrate/boot at the battery, adopts the image-only
    plane-aware rollback (closing its own MDN46), gated on the conformance suite.
-5. **Roll the parent DEC-0003 toward `adopted`** — only once Meridian's fork (auth + routing + ops) is fully
-   deleted.
+5. **Roll the parent DEC-0003 toward `adopted`** — **DONE (2026-06-29):** Meridian's fork (auth + routing + ops +
+   lifecycle) verified fully deleted; parent flipped to `adopted`.
 
 ## Conformance contract (drift-aware)
 
