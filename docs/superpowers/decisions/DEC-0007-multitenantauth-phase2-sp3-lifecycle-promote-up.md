@@ -119,6 +119,16 @@ Route B bootstrap `ANY`, lazy-delete cooling) are acceptable for its adoption; (
 deferral is acknowledged as Meridian-owned for a later slice. No operator gate is open; a single-confirmation ask,
 not a Negotiation Thread.
 
+**RECEIVED — CONCUR (2026-06-29).** Meridian delivered a draft CONCUR in its v0.4.5 upstream-asks doc
+(`docs/superpowers/assessments/2026-06-29-meridian-to-framework-v045-upstream-asks.md`), operator-gated on
+that PR's merge (FWK PR #109, merged 2026-06-29) per `cross-repo-convention.md` v4. Basis: MDN70 ("ban
+generic resource grants") was built end-to-end against the v0.4.5 resource-grant vocabulary with `task ci`
+green — exercising the SP3 lifecycle surface in anger. Two SP3 hardening residuals are attached and accepted
+by the absorber as framework follow-ups (tracked under FWK137), framed **against** SP3's deliberate
+bootstrap-`ANY` design (not as oversights), **not** blockers: A-2 (resource-grant route accepts an arbitrary
+`resource_id` — no existence/visibility check) and A-3 (`seed_authz` is upsert-only — no reap path for
+catalog-removed vocabulary).
+
 ## References
 
 - SP3 design: `docs/superpowers/specs/2026-06-27-fwk67-sp3-authz-retouch-lifecycle-hardening-design.md`
