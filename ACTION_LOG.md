@@ -4660,3 +4660,9 @@ Closed the React battery Vite/Vitest major audit cleanup. Updated declared dev d
 
 #### #0451 · review-fix · FWK156 / PR #119 render-matrix · 2026-07-01
 PR #119 render-matrix failed only on multitenantauth-bearing renders during generated-project `task ci`: `mypy src` reported `authz/seed.py` calling `.update()` on a SQLAlchemy `FromClause` at the two deactivate-absent statements. Root cause: the framework source mypy excludes template payload, while generated-project mypy type-checks rendered template code and SQLAlchemy's table object is typed too broadly. Fix: use the typed SQLAlchemy `update(m.Permission)` / `update(m.Role)` construct in the template seed path instead of `m.Permission.__table__.update()` / `m.Role.__table__.update()`. RED reproduced locally with a fresh `--with multitenantauth` render (`uv run mypy src` failed on the same two lines); GREEN fresh render passed generated `uv run mypy src` across 64 source files.
+
+#### #0452 · note · PI cleanup after PR #119 merge · 2026-07-01
+Moved the completed FWK136/FWK137/FWK152-FWK160 rows out of `PLAN.md` `## Next` and into `## Done`, per the PI lifecycle. No archive move: these are recent completed items, not rolled-off/superseded/discarded items.
+
+#### #0453 · note · PI cleanup completion · 2026-07-01
+Finished the broader PI cleanup pass: moved the remaining completed rows still sitting in `PLAN.md` `## Next` (FWK64 and FWK143-FWK149) into `## Done`, then rolled older `Done` rows FWK70 through FWK58 out of hot `PLAN.md` into `_archive/ARCHIVED_PLAN.md`. ACTION_LOG remains append-only.
