@@ -6,7 +6,13 @@ a consumer's opaque resource_id (e.g. containing "tenant:" or "/resource:") from
 by a re-parsing resolver."""
 
 import pytest
-from {{ package_name }}.multitenantauth.authz.expr import ALL, Perm, evaluate
+from anyio import run
+from {{ package_name }}.multitenantauth.authz.expr import (
+    ALL,
+    Perm,
+    evaluate,
+    evaluate_async,
+)
 
 
 def _ctx(resource_grant, path):
@@ -39,6 +45,81 @@ def test_resource_leaf_calls_resource_grant_with_discrete_path():
 def test_resource_leaf_denies_when_resolver_false():
     node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
     ctx = _ctx(lambda n, p: False, {"tenant_id": "acme", "resource_id": "widget-42"})
+    assert evaluate(node, ctx) is False
+
+
+def test_sync_evaluator_fails_closed_on_async_resource_resolver():
+    """The public sync evaluator must not treat an awaitable resolver result as truthy."""
+    node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
+
+    async def grant(_name, _path):
+        return True
+
+    ctx = _ctx(grant, {"tenant_id": "acme", "resource_id": "widget-42"})
+    assert evaluate(node, ctx) is False
+
+
+def test_async_evaluator_fails_closed_on_nested_awaitable_false():
+    node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
+
+    async def inner_false():
+        return False
+
+    async def grant(_name, _path):
+        return inner_false()
+
+    ctx = _ctx(grant, {"tenant_id": "acme", "resource_id": "widget-42"})
+    assert run(evaluate_async, node, ctx) is False
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        object(),
+        "false",
+        ["not-a-bool"],
+        {"allowed": False},
+    ],
+)
+def test_sync_evaluator_fails_closed_on_truthy_non_bool_resource_result(malformed):
+    node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
+    ctx = _ctx(
+        lambda _name, _path: malformed,
+        {"tenant_id": "acme", "resource_id": "widget-42"},
+    )
+    assert evaluate(node, ctx) is False
+
+
+def test_async_evaluator_fails_closed_on_async_generator_resource_result():
+    node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
+
+    async def gen():
+        yield False
+
+    ctx = _ctx(
+        lambda _name, _path: gen(),
+        {"tenant_id": "acme", "resource_id": "widget-42"},
+    )
+    assert run(evaluate_async, node, ctx) is False
+
+
+def test_sync_evaluator_fails_closed_when_closing_awaitable_raises():
+    node = Perm("resource:view", on="tenant:{tenant_id}/resource:{resource_id}")
+
+    class BadClose:
+        def __await__(self):
+            async def _value():
+                return True
+
+            return _value().__await__()
+
+        def close(self):
+            raise RuntimeError("close should not escape")
+
+    ctx = _ctx(
+        lambda _name, _path: BadClose(),
+        {"tenant_id": "acme", "resource_id": "widget-42"},
+    )
     assert evaluate(node, ctx) is False
 
 
