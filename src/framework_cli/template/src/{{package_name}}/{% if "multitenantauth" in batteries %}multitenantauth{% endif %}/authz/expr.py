@@ -94,10 +94,30 @@ class ANY:
 Expr = Perm | ALL | ANY
 
 
+def _sync_bool(value: object) -> bool:
+    if inspect.isawaitable(value):
+        close = getattr(value, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
+        return False
+    return value if isinstance(value, bool) else False
+
+
 async def _await_bool(value: object) -> bool:
     if inspect.isawaitable(value):
         value = await cast(Awaitable[object], value)
-    return bool(value)
+        if inspect.isawaitable(value):
+            close = getattr(value, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
+            return False
+    return value if isinstance(value, bool) else False
 
 
 def bind_resource(pattern: str, path: dict[str, Any]) -> str | None:
@@ -150,16 +170,16 @@ def evaluate(node: Expr, ctx: dict[str, Any]) -> bool:
         if resource is None:
             return False  # missing path param → deny (never a 500)
         if is_wildcard:
-            subtree_exists: Callable[[str, str], bool] = ctx["subtree_exists"]
-            return subtree_exists(node.name, resource)
+            subtree_exists: Callable[[str, str], object] = ctx["subtree_exists"]
+            return _sync_bool(subtree_exists(node.name, resource))
         if _is_resource_scoped(node.on):
             # A-F1: pass the discrete path dict, not the bound string — a consumer's
             # opaque resource_id containing "tenant:" or "/resource:" would mis-slice
             # if the resolver had to re-parse the concatenated value.
-            resource_grant: Callable[[str, dict[str, Any]], bool] = ctx[
+            resource_grant: Callable[[str, dict[str, Any]], object] = ctx[
                 "resource_grant"
             ]
-            return resource_grant(node.name, ctx["path"])
+            return _sync_bool(resource_grant(node.name, ctx["path"]))
         return node.name in ctx["tenant_perms"]
     if isinstance(node, ALL):
         # `bool(node.children)` backstops an empty-children ALL (only constructable by bypassing

@@ -28,6 +28,7 @@ from typing import cast
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ..config.settings import get_settings
 from ..db.control import engine as ctrl_engine
@@ -135,6 +136,15 @@ def _is_awaitable(value: object) -> bool:
     return inspect.isawaitable(value)
 
 
+def _close_awaitable(value: object) -> None:
+    close = getattr(value, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:
+            pass
+
+
 def _adapt_resource_grant(resolver: Callable[..., object]) -> Callable[..., object]:
     """Adapt a consumer resolver — ``resource_grant(perm_name, resource_id) -> bool`` — to the
     evaluator's ctx call ``(name, path)``. The battery owns the ``resource:{resource_id}`` route
@@ -148,14 +158,16 @@ def _adapt_resource_grant(resolver: Callable[..., object]) -> Callable[..., obje
         if resource_id is None:
             return False
         try:
-            result = resolver(name, resource_id)
+            result = await run_in_threadpool(resolver, name, resource_id)
             if _is_awaitable(result):
                 result = await cast(Awaitable[object], result)
-            return bool(result)
+                if _is_awaitable(result):
+                    _close_awaitable(result)
+                    return False
+            return result if isinstance(result, bool) else False
         except Exception:
             logger.warning(
-                "authz resource_grant resolver raised; denying (fail-closed)",
-                exc_info=True,
+                "authz resource_grant resolver raised; denying (fail-closed)"
             )
             return False
 
@@ -257,21 +269,27 @@ def guard(expr: Expr):
         active_tenant_id: str | None = None
         if needs_tenant:
             tenant_id = path.get("tenant_id")
-            tenant = cs.get(m.Tenant, tenant_id) if tenant_id is not None else None
+            tenant = (
+                await run_in_threadpool(cs.get, m.Tenant, tenant_id)
+                if tenant_id is not None
+                else None
+            )
             if (
                 tenant_id is None
                 or tenant is None
                 or tenant.status != "active"
-                or not has_membership(cs, user.id, tenant_id)
+                or not await run_in_threadpool(has_membership, cs, user.id, tenant_id)
             ):
                 raise HTTPException(
                     status_code=404, detail="Not found"
                 )  # 404 before 403 (A-F8)
-            tenant_perms = tenant_permissions(cs, user.id, tenant_id)
+            tenant_perms = await run_in_threadpool(
+                tenant_permissions, cs, user.id, tenant_id
+            )
             # resolved + membership-gated (never a raw value)
             active_tenant_id = tenant_id
 
-        def _resource_grant(name: str, path: dict[str, str]) -> bool:
+        def _resource_grant_sync(name: str, path: dict[str, str]) -> bool:
             # Flat, control-DB only: does the user (via their (user, tenant) membership) hold a
             # resource-role granting `name` on this exact resource_id? tenant_id/resource_id come
             # straight from the bound path params — never parsed out of a concatenated resource
@@ -303,10 +321,13 @@ def guard(expr: Expr):
             )
             return hit is not None
 
+        async def _resource_grant(name: str, path: dict[str, str]) -> bool:
+            return await run_in_threadpool(_resource_grant_sync, name, path)
+
         # DV-5 t4: compute platform_perms BEFORE the resolver-factory call below, so a registered
         # factory can never sit upstream of (and thus influence) the platform-perm computation.
         # Pure control-DB read — behaviour-preserving.
-        platform_perms = platform_permissions(cs, user.id)
+        platform_perms = await run_in_threadpool(platform_permissions, cs, user.id)
 
         # Default = today's flat resolver (unchanged when no factory is registered).
         resource_grant: Callable[..., object] = _resource_grant
@@ -319,13 +340,15 @@ def guard(expr: Expr):
             # default (registration is strictly opt-in).
             resource_grant = _deny
             try:
-                overrides = factory(cs, user, active_tenant_id)
+                overrides = await run_in_threadpool(factory, cs, user, active_tenant_id)
+                if _is_awaitable(overrides):
+                    _close_awaitable(overrides)
+                    raise TypeError("authz resolver factory must be synchronous")
                 consumer_grant = overrides.get("resource_grant")
             except Exception:
                 logger.warning(
                     "authz resolver factory failed (raised or returned a non-mapping); "
-                    "denying all resource leaves (fail-closed)",
-                    exc_info=True,
+                    "denying all resource leaves (fail-closed)"
                 )
             else:
                 if consumer_grant is not None:
