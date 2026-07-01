@@ -8,7 +8,13 @@ def _clean_control(truncate_control):  # type: ignore[no-untyped-def]
     """Truncate control tables after each test so the reused `acme` slug never persists
     across cases (this module deliberately reuses one slug). Tenant DBs are dropped per-test
     by each test's own `finally` via the shared `drop_tenant_db` fixture."""
+    from {{ package_name }}.multitenantauth.tenancy.registry import (
+        register_reserved_tenant_slugs,
+    )
+
+    register_reserved_tenant_slugs(None)
     yield
+    register_reserved_tenant_slugs(None)
     truncate_control()
 
 
@@ -107,6 +113,26 @@ def test_provision_resumes_a_partial_provisioning_row(
             assert repo.get_tenant(cs, partial_id).status == "active"
     finally:
         drop_tenant_db(dbname)
+
+
+def test_provision_rejects_configured_reserved_slug_before_physical_work(
+    ctrl_engine, monkeypatch
+):
+    from {{ package_name }}.multitenantauth.tenancy import provision as P
+    from {{ package_name }}.multitenantauth.tenancy.registry import (
+        register_reserved_tenant_slugs,
+    )
+
+    def should_not_run(*args, **kwargs):
+        raise AssertionError("reserved slug should fail before physical tenant work")
+
+    monkeypatch.setattr(P, "create_database", should_not_run)
+    monkeypatch.setattr(P, "migrate_tenant", should_not_run)
+    register_reserved_tenant_slugs({"billing"})
+
+    with Session(ctrl_engine) as cs:
+        with pytest.raises(ValueError, match="reserved|not.*claimable|slug"):
+            P.provision_tenant(cs, "Billing", slug="billing")
 
 
 def test_provision_hook_runs_before_activate(

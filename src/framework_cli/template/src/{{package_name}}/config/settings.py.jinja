@@ -120,12 +120,18 @@ class Settings(BaseSettings):
     max_cached_engines: int = Field(default=12, ge=1)
     control_pool_size: int = Field(default=5, ge=1)
     control_max_overflow: int = Field(default=10, ge=0)
+    # Driver-level tenant DB connect timeout. This bounds first-touch validation against an
+    # unreachable tenant endpoint so one dead database cannot consume request threads for the
+    # OS TCP timeout.
+    tenant_connect_timeout_seconds: int = Field(default=5, ge=1)
     # Fraction of a server's live max_connections the app is allowed to plan for (fail-closed budget).
     # Bound to (0, 1] (Layer-2 P3, I-BUDGET): a value > 1 would inflate the budget past the live
     # ceiling so BudgetExceeded never fires — the budget must not be defeasible by a config value.
     db_pool_safety_factor: float = Field(default=0.8, gt=0.0, le=1.0)
     # DSN cache TTL: a backstop only — the per-tenant DSN is immutable in SP1.
     tenant_dsn_cache_ttl_seconds: int = 300
+    # Bound async consumer resource-grant resolvers. Timeout denies the resource leaf fail-closed.
+    authz_resource_grant_timeout_ms: int = Field(default=250, ge=1)
     # Physical DB name = "<prefix>_<tenant_id>" on the app instance (co-located default).
     tenant_db_name_prefix: str = "{{ package_name }}_tenant"
     # Cooling window: how long (days) a renamed slug is reserved for redirect + squat protection.

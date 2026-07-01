@@ -17,8 +17,13 @@ def _perms_for_roles(s: Session, role_ids: set[uuid.UUID]) -> set[str]:
         return set()
     return set(
         s.scalars(
-            select(m.RolePermission.permission_name).where(
-                m.RolePermission.role_id.in_(role_ids)
+            select(m.RolePermission.permission_name)
+            .join(m.Role, m.Role.id == m.RolePermission.role_id)
+            .join(m.Permission, m.Permission.name == m.RolePermission.permission_name)
+            .where(
+                m.RolePermission.role_id.in_(role_ids),
+                m.Role.is_active,
+                m.Permission.is_active,
             )
         )
     )

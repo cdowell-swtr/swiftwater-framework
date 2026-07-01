@@ -10,6 +10,7 @@ avoid triggering the ``role_permission.permission_name`` FK before the guard fir
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import Engine, create_engine, make_url, select, text
@@ -17,7 +18,8 @@ from sqlalchemy.orm import Session
 
 from {{ package_name }}.db.control import models as m
 from {{ package_name }}.db.control.base import ControlBase
-from {{ package_name }}.multitenantauth.authz.permissions import ALL_NAMES
+from {{ package_name }}.multitenantauth.authz.permissions import ALL_NAMES, CATALOG, PermDef
+from {{ package_name }}.multitenantauth.authz.roles import BUILTIN_BUNDLES, BUILTIN_DOMAINS
 from {{ package_name }}.multitenantauth.authz.seed import reconcile_authz, seed_authz
 
 
@@ -148,6 +150,94 @@ def test_reconcile_passes_after_seed(control_engine: Engine) -> None:
         seed_authz(s)
         s.commit()
         reconcile_authz(s)  # must not raise
+
+
+def test_seed_deactivates_absent_catalog_entries_without_deleting_history(
+    control_engine: Engine,
+) -> None:
+    """A catalog shrink marks absent permissions/roles inactive, preserving history rows."""
+    from unittest.mock import patch
+
+    from {{ package_name }}.multitenantauth.authz import seed as seed_mod
+
+    legacy_permission = PermDef(
+        "tenant:legacy",
+        "tenant",
+        "Legacy tenant permission",
+        True,
+    )
+    prior_catalog = (*CATALOG, legacy_permission)
+    prior_bundles = {
+        **BUILTIN_BUNDLES,
+        "tenant.legacy": {"tenant:legacy"},
+    }
+    prior_domains = {**BUILTIN_DOMAINS, "tenant.legacy": "tenant"}
+
+    with Session(control_engine) as s:
+        with (
+            patch.object(seed_mod, "CATALOG", prior_catalog),
+            patch.object(seed_mod, "BUILTIN_BUNDLES", prior_bundles),
+            patch.object(seed_mod, "BUILTIN_DOMAINS", prior_domains),
+            patch.object(seed_mod, "CUSTOM_DB_ROLES", {}),
+        ):
+            seed_authz(s)
+        tenant = m.Tenant(
+            id="seedreaptenant",
+            name="Seed Reap Tenant",
+            slug="seed-reap",
+            dsn="postgresql+psycopg://x/seed_reap",
+        )
+        user = m.AppUser(
+            email="legacy@example.com",
+            email_canonical="legacy@example.com",
+            born="signup",
+            signed_up_at=datetime.now(timezone.utc),
+        )
+        s.add_all([tenant, user])
+        s.flush()
+        membership = m.TenantMembership(user_id=user.id, tenant_id=tenant.id)
+        legacy_role = s.scalar(select(m.Role).where(m.Role.name == "tenant.legacy"))
+        assert legacy_role is not None
+        s.add(membership)
+        s.flush()
+        s.add(
+            m.TenantRoleAssignment(
+                membership_id=membership.id,
+                role_id=legacy_role.id,
+                role_domain="tenant",
+            )
+        )
+        s.commit()
+
+        seed_authz(s)
+        s.commit()
+        seed_authz(s)
+        s.commit()
+
+        legacy_perm = s.get(m.Permission, "tenant:legacy")
+        legacy_role = s.scalar(select(m.Role).where(m.Role.name == "tenant.legacy"))
+        assert legacy_perm is not None
+        assert legacy_perm.is_active is False
+        assert legacy_role is not None
+        assert legacy_role.is_active is False
+        assert s.scalar(select(m.TenantRoleAssignment)) is not None
+        assert (
+            s.scalar(
+                select(m.RolePermission).where(
+                    m.RolePermission.role_id == legacy_role.id
+                )
+            )
+            is not None
+        )
+
+        current_perm = s.get(m.Permission, "tenant:read")
+        current_role = s.scalar(select(m.Role).where(m.Role.name == "tenant.admin"))
+        assert current_perm is not None
+        assert current_perm.is_active is True
+        assert current_role is not None
+        assert current_role.is_active is True
+        assert s.query(m.Permission).filter_by(name="tenant:legacy").count() == 1
+        assert s.query(m.Role).filter_by(name="tenant.legacy").count() == 1
 
 
 # ── Reconciliation guard: unknown/inactive permission ─────────────────────────

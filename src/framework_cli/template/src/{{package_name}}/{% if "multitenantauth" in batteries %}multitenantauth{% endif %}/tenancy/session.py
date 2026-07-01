@@ -61,11 +61,14 @@ def register_tenant_dsn_resolver(resolver: DsnResolver | None) -> None:
 # control connection per request. DSN is immutable in SP1, so the TTL is a backstop only.
 _dsn_cache: dict[str, tuple[str, float]] = {}
 _dsn_lock = threading.Lock()
+_dsn_cache_epoch = 0
 
 
 def invalidate_dsn_cache(tenant_id: str | None = None) -> None:
     """Drop a tenant's cached DSN (None = all). Called after provisioning + on test reset."""
+    global _dsn_cache_epoch
     with _dsn_lock:
+        _dsn_cache_epoch += 1
         if tenant_id is None:
             _dsn_cache.clear()
         else:
@@ -81,6 +84,7 @@ def _resolve_dsn(tenant_id: str, control_session: Session | None) -> str:
         if cached is not None and cached[1] > now:
             tenant_engine_metrics.record_dsn_hit()
             return cached[0]
+        cache_epoch = _dsn_cache_epoch
     tenant_engine_metrics.record_dsn_miss()
 
     def _call(cs: Session) -> str:
@@ -111,7 +115,8 @@ def _resolve_dsn(tenant_id: str, control_session: Session | None) -> str:
             dsn = _call(cs)
     ttl = get_settings().tenant_dsn_cache_ttl_seconds
     with _dsn_lock:
-        _dsn_cache[tenant_id] = (dsn, now + ttl)
+        if _dsn_cache_epoch == cache_epoch:
+            _dsn_cache[tenant_id] = (dsn, now + ttl)
     return dsn
 
 

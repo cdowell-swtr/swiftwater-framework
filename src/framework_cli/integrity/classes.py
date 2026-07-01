@@ -216,6 +216,7 @@ BATTERY_LOCKED_SRC: dict[str, tuple[str, ...]] = {
         "multitenantauth",
     ),
     "migrations_control/versions/c0005_tenant_lifecycle_event.py": ("multitenantauth",),
+    "migrations_control/versions/c0006_role_is_active.py": ("multitenantauth",),
 }
 
 # Gitignored + existence-only: a framework-managed file legitimately absent from a fresh

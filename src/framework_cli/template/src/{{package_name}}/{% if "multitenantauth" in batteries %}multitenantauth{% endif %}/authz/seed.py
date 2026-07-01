@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -74,8 +74,16 @@ def _seed_role(
             domain=domain,
             description=description,
             is_builtin=is_builtin,
+            is_active=True,
         )
-        .on_conflict_do_nothing(index_elements=["name"])
+        .on_conflict_do_update(
+            index_elements=["name"],
+            set_={
+                "description": description,
+                "is_builtin": is_builtin,
+                "is_active": True,
+            },
+        )
     )
     role_id = session.scalar(select(m.Role.id).where(m.Role.name == name))
     for perm in grants:
@@ -156,6 +164,9 @@ def seed_authz(session: Session) -> None:
     if shadowed:
         raise ValueError(f"custom DB roles shadow built-in roles: {shadowed}")
 
+    active_permission_names = {perm.name for perm in CATALOG}
+    active_role_names = set(BUILTIN_BUNDLES) | set(CUSTOM_DB_ROLES)
+
     # Permissions — DO UPDATE so the table stays synced with the code catalog.
     for perm in CATALOG:
         session.execute(
@@ -177,6 +188,11 @@ def seed_authz(session: Session) -> None:
                 },
             )
         )
+    session.execute(
+        update(m.Permission)
+        .where(m.Permission.name.not_in(active_permission_names))
+        .values(is_active=False)
+    )
 
     # Built-in roles (seeded from code; edit/shadow-protected).
     for name, domain in BUILTIN_DOMAINS.items():
@@ -199,6 +215,11 @@ def seed_authz(session: Session) -> None:
             is_builtin=False,
             grants=spec["grants"],
         )
+    session.execute(
+        update(m.Role)
+        .where(m.Role.name.not_in(active_role_names))
+        .values(is_active=False)
+    )
 
     _log.info(
         "authz.seed.complete",
