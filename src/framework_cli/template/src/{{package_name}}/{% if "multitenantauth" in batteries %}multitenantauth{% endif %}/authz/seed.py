@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -189,7 +189,7 @@ def seed_authz(session: Session) -> None:
             )
         )
     session.execute(
-        m.Permission.__table__.update()
+        update(m.Permission)
         .where(m.Permission.name.not_in(active_permission_names))
         .values(is_active=False)
     )
@@ -216,7 +216,7 @@ def seed_authz(session: Session) -> None:
             grants=spec["grants"],
         )
     session.execute(
-        m.Role.__table__.update()
+        update(m.Role)
         .where(m.Role.name.not_in(active_role_names))
         .values(is_active=False)
     )
