@@ -23,11 +23,13 @@ from ..errors import DomainMismatchError, LastAdminError
 from ..metrics import auth_metrics
 
 
-def _resolve_role(s: Session, role_name: str) -> m.Role:
-    """Look up a role by name; raise ValueError for an unknown role."""
+def _resolve_role(s: Session, role_name: str, *, require_active: bool = True) -> m.Role:
+    """Look up a role by name; raise ValueError for an unknown or inactive role."""
     role = s.scalar(select(m.Role).where(m.Role.name == role_name))
     if role is None:
         raise ValueError(f"unknown role: {role_name!r}")
+    if require_active and not role.is_active:
+        raise ValueError(f"inactive role: {role_name!r}")
     return role
 
 
@@ -81,7 +83,12 @@ def _assert_not_last_admin(
     which would orphan the tenant.
     """
     admin_role_name = get_settings().admin_role_name
-    admin_role_id = s.scalar(select(m.Role.id).where(m.Role.name == admin_role_name))
+    admin_role_id = s.scalar(
+        select(m.Role.id).where(
+            m.Role.name == admin_role_name,
+            m.Role.is_active,
+        )
+    )
     if admin_role_id is None:
         # Fail CLOSED: if the configured admin role does not resolve to a seeded role, we
         # cannot evaluate the invariant — refuse rather than degrade to a vacuous count.
@@ -157,7 +164,7 @@ def revoke_role(
     If the role is the configured admin role, the ≥1-admin invariant is enforced FIRST
     (TOCTOU-safe).
     """
-    role = _resolve_role(s, role_name)
+    role = _resolve_role(s, role_name, require_active=False)
     _require_domain(role, "tenant")
     membership = _get_membership(s, membership_id)
 
@@ -369,7 +376,7 @@ def revoke_resource_role(
     actor_id: uuid.UUID | None,
 ) -> None:
     """Revoke a resource-domain role on a resource (idempotent); audit on real change."""
-    role = _resolve_role(s, role_name)
+    role = _resolve_role(s, role_name, require_active=False)
     _require_domain(role, "resource")
     membership = _get_membership(s, membership_id)
 

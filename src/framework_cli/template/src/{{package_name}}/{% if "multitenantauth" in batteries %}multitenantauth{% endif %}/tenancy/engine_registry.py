@@ -64,7 +64,9 @@ def validate_endpoint_budget(
         )
 
 
-def _default_builder(dsn: str, *, pool_size: int, max_overflow: int) -> Engine:
+def _default_builder(
+    dsn: str, *, pool_size: int, max_overflow: int, connect_timeout_seconds: int
+) -> Engine:
     """Build a pooled tenant engine. Uses create_engine directly (NOT the baseline
     db.engine.build_engine) so the tenant plane owns its pool sizing without coupling the
     baseline engine to multitenantauth-only settings."""
@@ -75,6 +77,7 @@ def _default_builder(dsn: str, *, pool_size: int, max_overflow: int) -> Engine:
         pool_size=pool_size,
         max_overflow=max_overflow,
         pool_timeout=30,
+        connect_args={"connect_timeout": connect_timeout_seconds},
     )
 
 
@@ -107,26 +110,37 @@ class TenantEngineRegistry:
                 self._engines.move_to_end(dsn)
                 return eng
             endpoint = endpoint_of(dsn)
-            self._evict_if_full(endpoint)
-            settings = self._settings()
-            eng = self._builder(
-                dsn,
-                pool_size=settings.tenant_pool_size,
-                max_overflow=settings.tenant_max_overflow,
-            )
-            # Validate BEFORE caching so a fail-closed BudgetExceeded leaks no engine and the
-            # next first-touch re-checks (fail-closed must stay closed).
-            if endpoint not in self._validated:
-                includes_control = endpoint == endpoint_of(
-                    settings.control_database_url
+            needs_validation = endpoint not in self._validated
+
+        settings = self._settings()
+        eng = self._builder(
+            dsn,
+            pool_size=settings.tenant_pool_size,
+            max_overflow=settings.tenant_max_overflow,
+            connect_timeout_seconds=settings.tenant_connect_timeout_seconds,
+        )
+        # Validate BEFORE caching so a fail-closed BudgetExceeded leaks no engine and the
+        # next first-touch re-checks (fail-closed must stay closed). Validation may connect
+        # to an unreachable tenant DB, so it must never hold the shared registry lock.
+        if needs_validation:
+            includes_control = endpoint == endpoint_of(settings.control_database_url)
+            try:
+                self._validate(
+                    eng, settings=settings, includes_control=includes_control
                 )
-                try:
-                    self._validate(
-                        eng, settings=settings, includes_control=includes_control
-                    )
-                except BaseException:
-                    eng.dispose()
-                    raise
+            except BaseException:
+                eng.dispose()
+                raise
+
+        with self._lock:
+            existing = self._engines.get(dsn)
+            if existing is not None:
+                eng.dispose()
+                self._engines.move_to_end(dsn)
+                return existing
+
+            self._evict_if_full(endpoint)
+            if needs_validation:
                 self._validated.add(endpoint)
             self._engines[dsn] = eng
             self._endpoints[dsn] = endpoint

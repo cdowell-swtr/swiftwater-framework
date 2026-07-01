@@ -19,6 +19,7 @@ the single-pass request efficiency are co-located here on purpose. Keep them tog
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from collections.abc import Awaitable, Callable, Iterator
@@ -145,7 +146,17 @@ def _close_awaitable(value: object) -> None:
             pass
 
 
-def _adapt_resource_grant(resolver: Callable[..., object]) -> Callable[..., object]:
+def _safe_resource_type(resource_type: str) -> str:
+    if resource_type and all(
+        ch.isalnum() or ch in {"_", "-", ".", ":"} for ch in resource_type
+    ):
+        return resource_type
+    return "resource"
+
+
+def _adapt_resource_grant(
+    resolver: Callable[..., object], *, timeout_ms: int, resource_type: str
+) -> Callable[..., object]:
     """Adapt a consumer resolver — ``resource_grant(perm_name, resource_id) -> bool`` — to the
     evaluator's ctx call ``(name, path)``. The battery owns the ``resource:{resource_id}`` route
     convention, so it extracts the BARE resource id HERE and hands the consumer only
@@ -160,7 +171,19 @@ def _adapt_resource_grant(resolver: Callable[..., object]) -> Callable[..., obje
         try:
             result = await run_in_threadpool(resolver, name, resource_id)
             if _is_awaitable(result):
-                result = await cast(Awaitable[object], result)
+                try:
+                    result = await asyncio.wait_for(
+                        cast(Awaitable[object], result),
+                        timeout=timeout_ms / 1000,
+                    )
+                except TimeoutError:
+                    logger.warning(
+                        "authz resource_grant resolver timed out; "
+                        "denying (fail-closed) resource_type=%s timeout_ms=%s",
+                        resource_type,
+                        timeout_ms,
+                    )
+                    return False
                 if _is_awaitable(result):
                     _close_awaitable(result)
                     return False
@@ -243,7 +266,7 @@ def tenant_db(
         raise HTTPException(status_code=404, detail="Not found") from None
 
 
-def guard(expr: Expr):
+def guard(expr: Expr, *, resource_type: str = "resource"):
     """Build a route-guard dependency from a permission expression.
 
     For a tenant-scoped expression it enforces the membership 404 precondition *inside*
@@ -257,6 +280,13 @@ def guard(expr: Expr):
     """
     authorized = Authorized(expr)
     needs_tenant = "tenant_id" in authorized.resource_params()
+    has_resource_leaf = any(
+        "/resource:" in leaf.on for leaf in authorized.perm_leaves()
+    )
+    metric_domain = (
+        "resource" if has_resource_leaf else ("tenant" if needs_tenant else "platform")
+    )
+    safe_resource_type = _safe_resource_type(resource_type)
 
     async def _dep(
         request: Request,
@@ -311,11 +341,18 @@ def guard(expr: Expr):
                     m.RolePermission,
                     m.RolePermission.role_id == m.ResourceRoleAssignment.role_id,
                 )
+                .join(m.Role, m.Role.id == m.ResourceRoleAssignment.role_id)
+                .join(
+                    m.Permission,
+                    m.Permission.name == m.RolePermission.permission_name,
+                )
                 .where(
                     m.ResourceRoleAssignment.membership_id
                     == membership_id,  # (membership, resource) TOGETHER
                     m.ResourceRoleAssignment.resource_id == rid,
                     m.RolePermission.permission_name == name,
+                    m.Role.is_active,
+                    m.Permission.is_active,
                 )
                 .limit(1)
             )
@@ -352,7 +389,12 @@ def guard(expr: Expr):
                 )
             else:
                 if consumer_grant is not None:
-                    resource_grant = _adapt_resource_grant(consumer_grant)
+                    timeout_ms = get_settings().authz_resource_grant_timeout_ms
+                    resource_grant = _adapt_resource_grant(
+                        consumer_grant,
+                        timeout_ms=timeout_ms,
+                        resource_type=safe_resource_type,
+                    )
 
         ctx = {
             "tenant_perms": tenant_perms,
@@ -363,11 +405,10 @@ def guard(expr: Expr):
             "subtree_exists": _deny,
             "resource_grant": resource_grant,
         }
-        _authz_domain = "tenant" if needs_tenant else "platform"
         if not await authorized.satisfied_async(ctx):
-            auth_metrics.record_authz("deny", _authz_domain)
+            auth_metrics.record_authz("deny", metric_domain)
             raise HTTPException(status_code=403, detail=AUTHZ_FORBIDDEN_DETAIL)
-        auth_metrics.record_authz("allow", _authz_domain)
+        auth_metrics.record_authz("allow", metric_domain)
 
     _dep.__authorized__ = authorized  # type: ignore[attr-defined]  # fitness-test introspection hook
     return _dep

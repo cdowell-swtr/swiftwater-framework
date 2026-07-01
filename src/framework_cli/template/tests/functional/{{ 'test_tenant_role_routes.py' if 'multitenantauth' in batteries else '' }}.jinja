@@ -25,7 +25,7 @@ import uuid
 from collections.abc import Iterator
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, make_url, text
 from sqlalchemy.orm import Session
@@ -33,8 +33,14 @@ from sqlalchemy.orm import Session
 from {{ package_name }}.db.control.base import ControlBase
 from {{ package_name }}.multitenantauth.deps import control_session
 from {{ package_name }}.multitenantauth.routes.auth import router as auth_router
-from {{ package_name }}.multitenantauth.routes.roles import router as roles_router
+from {{ package_name }}.multitenantauth.routes.roles import (
+    register_resource_target_validator,
+    router as roles_router,
+)
 from {{ package_name }}.multitenantauth.routes.tenants import router as tenants_router
+from {{ package_name }}.multitenantauth.tenancy.registry import (
+    register_reserved_tenant_slugs,
+)
 
 pytestmark = pytest.mark.usefixtures("_clean_tr")
 
@@ -155,6 +161,8 @@ def probe(tr_engine: Engine, monkeypatch) -> Iterator[TestClient]:
         yield client
     finally:
         client.close()
+        register_resource_target_validator(None)
+        register_reserved_tenant_slugs(None)
         from {{ package_name }}.config.settings import get_settings
 
         get_settings.cache_clear()
@@ -228,6 +236,21 @@ def _latest_authz_event(tr_engine: Engine) -> dict:
         )
     assert row is not None, "no authz_event recorded"
     return dict(row)
+
+
+def _resource_assignment_count(
+    tr_engine: Engine, membership_id: str, resource_id: str
+) -> int:
+    with Session(tr_engine) as s:
+        return int(
+            s.execute(
+                text(
+                    "SELECT count(*) FROM resource_role_assignment "
+                    "WHERE membership_id=:mid AND resource_id=:rid"
+                ),
+                {"mid": membership_id, "rid": resource_id},
+            ).scalar_one()
+        )
 
 
 def _make_plain_member(
@@ -649,6 +672,25 @@ def test_provision_tenant_duplicate_slug_is_generic_409(
     assert r2.json()["detail"] == "Tenant slug unavailable"
 
 
+def test_provision_tenant_configured_reserved_slug_is_generic_409_without_write(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    _, cookie = _signup_and_login(probe, "reservedadmin@prov.com", "reservedadmin")
+    _grant_platform_admin(tr_engine, "reservedadmin@prov.com")
+    register_reserved_tenant_slugs({"billing"})
+
+    r = probe.post(
+        "/tenants",
+        headers=_headers(cookie),
+        json={"name": "Billing", "slug": "billing"},
+    )
+
+    assert r.status_code == 409
+    assert r.json()["detail"] == "Tenant slug unavailable"
+    with Session(tr_engine) as s:
+        assert s.scalar(text("SELECT count(*) FROM tenant WHERE slug='billing'")) == 0
+
+
 def test_provision_tenant_bad_charset_slug_is_400(
     probe: TestClient, tr_engine: Engine
 ) -> None:
@@ -724,6 +766,100 @@ def test_tenant_admin_bootstraps_resource_grant(
     assert ev["role_domain"] == "resource"
 
 
+def test_resource_target_validator_defaults_permissive(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """No registered target validator preserves the bootstrap behavior shipped today."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@resdef.com", "resdef")
+    _, _ = _signup_and_login(probe, "target@resdeft.com", "resdeft")
+    target_uid = _user_id(tr_engine, "target@resdeft.com")
+    membership_id = _make_plain_member(probe, admin_cookie, admin_tid, target_uid)
+
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{membership_id}/resources/phantom/roles",
+        headers=_headers(admin_cookie),
+        json={"role_name": "resource.admin"},
+    )
+
+    assert r.status_code == 204, r.text
+    assert _resource_assignment_count(tr_engine, membership_id, "phantom") == 1
+
+
+def test_resource_target_validator_denies_without_writing_grant(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """A consumer validator can reject a phantom resource before the service writes a grant."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@resdeny.com", "resdeny")
+    _, _ = _signup_and_login(probe, "target@resdenyt.com", "resdenyt")
+    target_uid = _user_id(tr_engine, "target@resdenyt.com")
+    membership_id = _make_plain_member(probe, admin_cookie, admin_tid, target_uid)
+    calls: list[tuple[str, str]] = []
+
+    def validator(s, user, tenant_id: str, resource_id: str) -> bool:  # type: ignore[no-untyped-def]
+        calls.append((tenant_id, resource_id))
+        return resource_id == "known-doc"
+
+    register_resource_target_validator(validator)
+
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{membership_id}/resources/phantom/roles",
+        headers=_headers(admin_cookie),
+        json={"role_name": "resource.admin"},
+    )
+
+    assert r.status_code == 404
+    assert calls == [(admin_tid, "phantom")]
+    assert _resource_assignment_count(tr_engine, membership_id, "phantom") == 0
+
+
+def test_resource_target_validator_can_return_forbidden_without_writing_grant(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """A consumer validator can surface an invisible-resource denial as 403."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@resvis.com", "resvis")
+    _, _ = _signup_and_login(probe, "target@resvist.com", "resvist")
+    target_uid = _user_id(tr_engine, "target@resvist.com")
+    membership_id = _make_plain_member(probe, admin_cookie, admin_tid, target_uid)
+
+    def validator(s, user, tenant_id: str, resource_id: str) -> bool:  # type: ignore[no-untyped-def]
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    register_resource_target_validator(validator)
+
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{membership_id}/resources/hidden-doc/roles",
+        headers=_headers(admin_cookie),
+        json={"role_name": "resource.admin"},
+    )
+
+    assert r.status_code == 403
+    assert _resource_assignment_count(tr_engine, membership_id, "hidden-doc") == 0
+
+
+def test_resource_target_validator_permits_known_resource(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """A true validator result permits the existing resource-role write."""
+    admin_tid, admin_cookie = _signup_and_login(probe, "admin@resallow.com", "resallow")
+    _, _ = _signup_and_login(probe, "target@resallowt.com", "resallowt")
+    target_uid = _user_id(tr_engine, "target@resallowt.com")
+    membership_id = _make_plain_member(probe, admin_cookie, admin_tid, target_uid)
+
+    def validator(s, user, tenant_id: str, resource_id: str) -> bool:  # type: ignore[no-untyped-def]
+        return tenant_id == admin_tid and resource_id == "known-doc"
+
+    register_resource_target_validator(validator)
+
+    r = probe.post(
+        f"/tenants/{admin_tid}/members/{membership_id}/resources/known-doc/roles",
+        headers=_headers(admin_cookie),
+        json={"role_name": "resource.admin"},
+    )
+
+    assert r.status_code == 204, r.text
+    assert _resource_assignment_count(tr_engine, membership_id, "known-doc") == 1
+
+
 def test_cross_tenant_membership_is_404(probe: TestClient, tr_engine: Engine) -> None:
     """A membership from tenant B submitted under tenant A's URL → 404.
     The guard passes (admin-of-A has manage-members on A), but the membership.tenant_id
@@ -743,6 +879,37 @@ def test_cross_tenant_membership_is_404(probe: TestClient, tr_engine: Engine) ->
         json={"role_name": "resource.admin"},
     )
     assert r.status_code == 404
+
+
+def test_resource_target_validator_does_not_bypass_cross_tenant_membership_404(
+    probe: TestClient, tr_engine: Engine
+) -> None:
+    """The route still rejects a membership from another tenant before target validation."""
+    admin_a_tid, admin_a_cookie = _signup_and_login(
+        probe, "admin@resisoa.com", "resisoa"
+    )
+    admin_b_tid, _ = _signup_and_login(probe, "admin@resisob.com", "resisob")
+    with Session(tr_engine) as s:
+        membership_b = s.execute(
+            text("SELECT id FROM tenant_membership WHERE tenant_id=:tid"),
+            {"tid": admin_b_tid},
+        ).scalar_one()
+    calls: list[tuple[str, str]] = []
+
+    def validator(s, user, tenant_id: str, resource_id: str) -> bool:  # type: ignore[no-untyped-def]
+        calls.append((tenant_id, resource_id))
+        return True
+
+    register_resource_target_validator(validator)
+
+    r = probe.post(
+        f"/tenants/{admin_a_tid}/members/{membership_b}/resources/doc-42/roles",
+        headers=_headers(admin_a_cookie),
+        json={"role_name": "resource.admin"},
+    )
+
+    assert r.status_code == 404
+    assert calls == []
 
 
 def test_revoke_resource_role(probe: TestClient, tr_engine: Engine) -> None:

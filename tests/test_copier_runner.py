@@ -3636,6 +3636,52 @@ def test_render_react_frontend_scaffold(tmp_path):
     assert not (base / "frontend").exists()
 
 
+def test_render_react_lockfile_has_audit_fixed_dev_transitives(tmp_path):
+    dest = tmp_path / "r"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    lock = json.loads((dest / "frontend" / "package-lock.json").read_text())
+    packages = lock["packages"]
+
+    assert packages["node_modules/form-data"]["version"] == "4.0.6"
+    assert packages["node_modules/hasown"]["version"] == "2.0.4"
+    assert packages["node_modules/js-yaml"]["version"] == "4.3.0"
+    for package_name in ("form-data", "hasown", "js-yaml"):
+        assert packages[f"node_modules/{package_name}"]["dev"] is True
+    root = packages[""]
+    assert not ({"form-data", "hasown", "js-yaml"} & set(root.get("dependencies", {})))
+
+
+def test_render_react_frontend_toolchain_uses_audited_vite_major(tmp_path):
+    dest = tmp_path / "r"
+    render_project(dest, {**DATA, "batteries": ["react"]})
+    package_json = json.loads((dest / "frontend" / "package.json").read_text())
+    lock = json.loads((dest / "frontend" / "package-lock.json").read_text())
+
+    root = lock["packages"][""]
+    assert package_json["dependencies"] == {
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "web-vitals": "^4.2.4",
+    }
+    assert package_json["devDependencies"]["vite"] == "^8.1.2"
+    assert package_json["devDependencies"]["vitest"] == "^4.1.9"
+    assert package_json["devDependencies"]["@vitest/coverage-v8"] == "^4.1.9"
+    assert package_json["devDependencies"]["@vitejs/plugin-react"] == "^6.0.3"
+    assert root["devDependencies"]["vite"] == "^8.1.2"
+    assert lock["packages"]["node_modules/vite"]["version"] == "8.1.2"
+    assert lock["packages"]["node_modules/vitest"]["version"] == "4.1.9"
+    assert lock["packages"]["node_modules/@vitest/coverage-v8"]["version"] == "4.1.9"
+    assert lock["packages"]["node_modules/@vitejs/plugin-react"]["version"] == "6.0.3"
+    for package_name in (
+        "@vitejs/plugin-react",
+        "@vitest/coverage-v8",
+        "vite",
+        "vitest",
+    ):
+        assert lock["packages"][f"node_modules/{package_name}"]["dev"] is True
+    assert "node_modules/vite-node" not in lock["packages"]
+
+
 def test_render_react_serving_wiring(tmp_path):
     dest = tmp_path / "r"
     render_project(dest, {**DATA, "batteries": ["react"]})
@@ -4616,13 +4662,54 @@ def test_ci_security_job_can_read_pull_requests(tmp_path: Path):
     assert perms.get("pull-requests") == "read"
 
 
-def test_render_base_compose_sets_per_project_name(tmp_path: Path):
+def test_render_framework_owned_compose_files_set_per_project_name(tmp_path: Path):
     dest = tmp_path / "demo"
     render_project(dest, DATA)
-    base = (dest / "infra" / "compose" / "base.yml").read_text()
+    compose_dir = dest / "infra" / "compose"
     # A per-project compose name isolates container/network/volume namespaces from any
-    # other stack on the host (FWK31). DATA's project_slug is "demo".
-    assert "name: demo" in base
+    # other stack on the host (FWK31/FWK157). DATA's project_slug is "demo".
+    for filename in ("base.yml", "prod.yml", "staging.yml", "app-host.yml"):
+        data = yaml.safe_load((compose_dir / filename).read_text())
+        assert data["name"] == "demo", f"{filename} must default to project_slug"
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker required for compose config"
+)
+def test_standalone_compose_project_name_override_still_wins(tmp_path: Path):
+    """FWK157: standalone compose files default to the slug, while an explicit
+    COMPOSE_PROJECT_NAME still overrides the file-level name for acceptance/transient use."""
+    dest = tmp_path / "demo"
+    render_project(dest, DATA)
+    comp = dest / "infra" / "compose"
+
+    def resolved_name(filename: str, extra_env: dict[str, str] | None = None) -> str:
+        env = {**os.environ}
+        env.pop("COMPOSE_PROJECT_NAME", None)
+        env.update(
+            {
+                "APP_IMAGE": "example/demo:sha",
+                "APP_DATABASE_URL": "postgresql+psycopg://app:app@db/app",
+                "POSTGRES_PASSWORD": "app",
+            }
+        )
+        env.update(extra_env or {})
+        r = subprocess.run(
+            ["docker", "compose", "-f", str(comp / filename), "config"],
+            cwd=dest,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert r.returncode == 0, f"{filename} config failed:\n{r.stderr}"
+        return yaml.safe_load(r.stdout)["name"]
+
+    for filename in ("prod.yml", "staging.yml", "app-host.yml"):
+        assert resolved_name(filename) == "demo"
+        assert (
+            resolved_name(filename, {"COMPOSE_PROJECT_NAME": "demo-acceptance-t-123"})
+            == "demo-acceptance-t-123"
+        )
 
 
 def test_render_dev_compose_parameterizes_host_ports(tmp_path: Path):

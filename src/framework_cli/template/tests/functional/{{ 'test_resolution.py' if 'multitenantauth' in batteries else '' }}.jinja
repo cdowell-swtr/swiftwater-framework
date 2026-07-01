@@ -12,7 +12,7 @@ RolePermission + the relevant assignment table.
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import Engine, create_engine, make_url, text
+from sqlalchemy import Engine, create_engine, make_url, select, text
 from sqlalchemy.orm import Session
 
 from {{ package_name }}.db.control import models as m
@@ -265,6 +265,40 @@ def test_platform_grant_cannot_satisfy_tenant_leaf(control_engine: Engine) -> No
         # No tenant membership → tenant grants are always empty
         assert tenant_permissions(s, uid, "acme") == set()
         assert tenant_permissions(s, uid, "other") == set()
+
+
+def test_inactive_permission_and_role_rows_do_not_grant(
+    control_engine: Engine,
+) -> None:
+    """Soft-deactivated catalog rows remain in the DB but no longer grant permissions."""
+    with Session(control_engine) as s:
+        roles = _setup(s)
+        u = _user(s, "inactive@y.com")
+        mem = m.TenantMembership(user_id=u.id, tenant_id="acme")
+        s.add(mem)
+        s.flush()
+        s.add(
+            m.TenantRoleAssignment(
+                membership_id=mem.id,
+                role_id=roles["tenant.viewer"].id,
+                role_domain="tenant",
+            )
+        )
+        s.commit()
+        uid = u.id
+
+    with Session(control_engine) as s:
+        assert tenant_permissions(s, uid, "acme") == {"tenant:read"}
+        s.get(m.Permission, "tenant:read").is_active = False  # type: ignore[union-attr]
+        s.commit()
+        assert tenant_permissions(s, uid, "acme") == set()
+
+        s.get(m.Permission, "tenant:read").is_active = True  # type: ignore[union-attr]
+        role = s.scalar(select(m.Role).where(m.Role.name == "tenant.viewer"))
+        assert role is not None
+        role.is_active = False
+        s.commit()
+        assert tenant_permissions(s, uid, "acme") == set()
 
 
 def test_no_grants_returns_empty_sets(control_engine: Engine) -> None:

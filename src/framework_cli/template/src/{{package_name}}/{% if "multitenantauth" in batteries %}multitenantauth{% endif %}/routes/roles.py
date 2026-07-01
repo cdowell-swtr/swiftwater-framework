@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 
+from collections.abc import Callable
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
@@ -34,6 +35,44 @@ from ..deps import control_session, current_user, guard
 from ..errors import DomainMismatchError, LastAdminError
 
 router = APIRouter(prefix="/tenants")
+
+ResourceTargetValidator = Callable[[Session, m.AppUser, str, str], bool]
+
+_resource_target_validator: ResourceTargetValidator | None = None
+
+
+def register_resource_target_validator(
+    validator: ResourceTargetValidator | None,
+) -> None:
+    """Register a resource existence/visibility validator for resource-role grants.
+
+    The validator runs after the authz guard and membership tenant check, but before
+    ``assign_resource_role`` writes the grant. Return ``True`` to allow, ``False`` to
+    hide/deny as 404, or raise ``HTTPException`` for a consumer-owned status such as 403.
+    Passing ``None`` restores the compatibility default: permit all resource ids.
+    """
+    global _resource_target_validator
+    _resource_target_validator = validator
+
+
+def _validate_resource_target(
+    s: Session,
+    user: m.AppUser,
+    tenant_id: str,
+    resource_id: str,
+) -> None:
+    validator = _resource_target_validator
+    if validator is None:
+        return
+    try:
+        allowed = validator(s, user, tenant_id, resource_id)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=404, detail="Resource not found") from None
+    if allowed is not True:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
 
 # ── request models ─────────────────────────────────────────────────────────────
 
@@ -154,6 +193,7 @@ def grant_resource_role(
     membership = s.get(m.TenantMembership, membership_id)
     if membership is None or membership.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Membership not found")
+    _validate_resource_target(s, user, tenant_id, resource_id)
     try:
         assign_resource_role(
             s,

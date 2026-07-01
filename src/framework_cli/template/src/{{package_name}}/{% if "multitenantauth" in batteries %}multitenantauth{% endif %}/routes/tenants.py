@@ -34,6 +34,7 @@ from ..errors import DomainMismatchError, LastAdminError
 from ..tenancy.registry import (
     activate_tenant,
     deactivate_tenant,
+    is_reserved_tenant_slug,
     reactivate_tenant,
     record_lifecycle_event,
     register_tenant,
@@ -104,7 +105,7 @@ def provision_tenant(
     # Pre-check the slug collision (live OR cooling) → a generic 409 that never reveals the
     # colliding tenant's opaque id (Layer-2 finding A). This leaves register_tenant's only
     # residual ValueError the bad-charset case → a deterministic 400 below (Layer-2 finding C).
-    if resolve_slug(s, body.slug) is not None:
+    if is_reserved_tenant_slug(body.slug) or resolve_slug(s, body.slug) is not None:
         raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN)
     try:
         tenant = register_tenant(s, body.name, slug=body.slug, dsn=_PLACEHOLDER_DSN)
@@ -213,7 +214,7 @@ def rename_slug_route(
 ) -> dict:
     """Rename the tenant's slug (tenant-admin). Old slug retires into a cooling window."""
     # Generic-409 pre-check (live OR cooling → taken); never echo the colliding tenant's id (Layer-2 A).
-    if resolve_slug(s, body.slug) is not None:
+    if is_reserved_tenant_slug(body.slug) or resolve_slug(s, body.slug) is not None:
         raise HTTPException(status_code=409, detail=_GENERIC_SLUG_TAKEN)
     # Fetch BEFORE mutating so a missing tenant is a clean 404, not an AttributeError 500.
     tenant = s.get(m.Tenant, tenant_id)

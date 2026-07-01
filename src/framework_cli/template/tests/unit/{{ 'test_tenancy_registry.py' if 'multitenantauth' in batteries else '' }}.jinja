@@ -60,7 +60,9 @@ def registry_engine(pg_url: str) -> Engine:  # type: ignore[return]
 @pytest.fixture(autouse=True)
 def _clean(registry_engine: Engine) -> None:  # type: ignore[return]
     """Truncate tenancy tables after each test."""
+    registry.register_reserved_tenant_slugs(None)
     yield
+    registry.register_reserved_tenant_slugs(None)
     with registry_engine.begin() as conn:
         conn.execute(text("TRUNCATE TABLE tenant_slug_history, tenant CASCADE"))
 
@@ -164,6 +166,72 @@ def test_register_tenant_rejects_cooling_slug(registry_engine: Engine) -> None:
         with pytest.raises(ValueError, match="cooling|reserved|not.*claimable|slug"):
             registry.register_tenant(
                 s, name="Squatter", slug="cooling-slug", dsn="postgresql+psycopg://x/y"
+            )
+
+
+def test_register_tenant_rejects_configured_reserved_slug(
+    registry_engine: Engine,
+) -> None:
+    registry.register_reserved_tenant_slugs({"admin", "billing"})
+
+    with Session(registry_engine) as s:
+        with pytest.raises(ValueError, match="reserved|not.*claimable|slug"):
+            registry.register_tenant(
+                s, name="Admin", slug="admin", dsn="postgresql+psycopg://x/admin"
+            )
+
+        assert control_repo.live_slug_tenant_id(s, "admin") is None
+
+
+def test_register_tenant_allows_non_reserved_slug_with_reserved_set(
+    registry_engine: Engine,
+) -> None:
+    registry.register_reserved_tenant_slugs({"admin", "billing"})
+
+    with Session(registry_engine) as s:
+        tenant = registry.register_tenant(
+            s,
+            name="Acme",
+            slug="acme",
+            dsn="postgresql+psycopg://x/acme",
+        )
+        s.commit()
+        slug = tenant.slug
+
+    assert slug == "acme"
+
+
+def test_register_reserved_tenant_slugs_reset_restores_default_claimability(
+    registry_engine: Engine,
+) -> None:
+    registry.register_reserved_tenant_slugs({"admin"})
+    registry.register_reserved_tenant_slugs(None)
+
+    with Session(registry_engine) as s:
+        tenant = registry.register_tenant(
+            s,
+            name="Admin",
+            slug="admin",
+            dsn="postgresql+psycopg://x/admin",
+        )
+        s.commit()
+        slug = tenant.slug
+
+    assert slug == "admin"
+
+
+def test_invalid_slug_shape_remains_separate_from_reserved_set(
+    registry_engine: Engine,
+) -> None:
+    registry.register_reserved_tenant_slugs({"uppercase"})
+
+    with Session(registry_engine) as s:
+        with pytest.raises(ValueError, match="invalid slug"):
+            registry.register_tenant(
+                s,
+                name="Bad",
+                slug="UPPERCASE",
+                dsn="postgresql+psycopg://x/bad",
             )
 
 
@@ -351,6 +419,25 @@ def test_rename_slug_rejects_still_cooling_target(registry_engine: Engine) -> No
     with Session(registry_engine) as s:
         with pytest.raises(ValueError, match="cooling|reserved|not.*claimable|slug"):
             registry.rename_slug(s, t2_id, "t1-slug")
+
+
+def test_rename_slug_rejects_configured_reserved_slug(registry_engine: Engine) -> None:
+    registry.register_reserved_tenant_slugs({"billing"})
+
+    with Session(registry_engine) as s:
+        tenant = registry.register_tenant(
+            s, name="Acme", slug="acme", dsn="postgresql+psycopg://x/acme"
+        )
+        s.commit()
+        tenant_id = tenant.id
+
+    with Session(registry_engine) as s:
+        with pytest.raises(ValueError, match="reserved|not.*claimable|slug"):
+            registry.rename_slug(s, tenant_id, "billing")
+
+        row = s.get(m.Tenant, tenant_id)
+        assert row is not None
+        assert row.slug == "acme"
 
 
 def test_rename_slug_allows_expired_history_slug(registry_engine: Engine) -> None:

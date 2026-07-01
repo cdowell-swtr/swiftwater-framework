@@ -198,9 +198,17 @@ def test_tenant_routing_settings_defaults() -> None:
     assert s.max_cached_engines == 12
     assert s.control_pool_size == 5
     assert s.control_max_overflow == 10
+    assert s.tenant_connect_timeout_seconds == 5
     assert s.db_pool_safety_factor == 0.8
     assert s.tenant_dsn_cache_ttl_seconds == 300
     assert s.tenant_db_name_prefix  # non-empty; defaults to "<package>_tenant"
+
+
+def test_tenant_connect_timeout_env_override(monkeypatch) -> None:
+    from {{ package_name }}.config.settings import Settings
+
+    monkeypatch.setenv("APP_TENANT_CONNECT_TIMEOUT_SECONDS", "9")
+    assert Settings().tenant_connect_timeout_seconds == 9
 
 
 def test_tenant_db_name_prefix_env_override(monkeypatch) -> None:
@@ -228,6 +236,13 @@ def test_db_pool_safety_factor_bounded_to_unit_interval() -> None:
         Settings(db_pool_safety_factor=1.5)
     with pytest.raises(ValidationError):
         Settings(db_pool_safety_factor=0.0)
+
+
+def test_tenant_connect_timeout_rejects_zero() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Settings(tenant_connect_timeout_seconds=0)
 
 
 def test_pool_and_overflow_knobs_reject_unlimited_sentinels() -> None:

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -33,6 +34,10 @@ _TENANT_ID_RE = re.compile(r"^[a-z0-9_]+$")
 
 # DNS-label: [a-z0-9], may contain hyphens (not leading/trailing), ≤63 chars (RFC 1123).
 _SLUG_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+
+# Consumer-configured denylist for public tenant slugs. Default is empty to preserve
+# pre-seam behavior; existing live-slug and cooling-history reservations stay below.
+_reserved_tenant_slugs: frozenset[str] = frozenset()
 
 
 # ── input validators ──────────────────────────────────────────────────────────
@@ -56,6 +61,25 @@ def _validate_slug(slug: str) -> None:
         )
 
 
+def register_reserved_tenant_slugs(slugs: Iterable[str] | None) -> None:
+    """Register consumer-reserved tenant slugs (pass None to reset to the default).
+
+    Values are normalized to lowercase DNS-label form. Invalid slug shapes are still
+    rejected separately by ``_validate_slug`` when a caller attempts to claim them.
+    """
+    global _reserved_tenant_slugs
+    if slugs is None:
+        _reserved_tenant_slugs = frozenset()
+        return
+    normalized = {str(slug).strip().lower() for slug in slugs}
+    _reserved_tenant_slugs = frozenset(slug for slug in normalized if slug)
+
+
+def is_reserved_tenant_slug(slug: str) -> bool:
+    """Return True when ``slug`` is in the consumer-configured reserved set."""
+    return slug in _reserved_tenant_slugs
+
+
 def _assert_slug_claimable(session: Session, slug: str) -> None:
     """Raise ValueError if the slug is NOT claimable.
 
@@ -63,6 +87,8 @@ def _assert_slug_claimable(session: Session, slug: str) -> None:
     - not a live tenant.slug (no current tenant owns it), AND
     - not in TenantSlugHistory with reserved_until > now (cooling window).
     """
+    if is_reserved_tenant_slug(slug):
+        raise ValueError(f"slug {slug!r} is reserved and is not claimable")
     live_id = control_repo.live_slug_tenant_id(session, slug)
     if live_id is not None:
         raise ValueError(f"slug {slug!r} is already taken by tenant {live_id!r}")

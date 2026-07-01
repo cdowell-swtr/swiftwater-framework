@@ -39,6 +39,9 @@ class Role(ControlBase):
     )  # 'tenant'|'platform'|'resource'
     description: Mapped[str] = mapped_column(Text, nullable=False)
     is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

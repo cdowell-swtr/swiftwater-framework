@@ -61,6 +61,23 @@ def test_dsn_cache_hit_skips_resolver(monkeypatch):
     assert len(calls) == 1  # second call served from cache
 
 
+def test_dsn_invalidation_during_resolve_prevents_stale_cache_writeback():
+    calls = []
+
+    def resolver(tid, *, control_session):
+        calls.append(tid)
+        if len(calls) == 1:
+            S.invalidate_dsn_cache(tid)
+            return "postgresql+psycopg://x/stale"
+        return "postgresql+psycopg://x/fresh"
+
+    S.register_tenant_dsn_resolver(resolver)
+
+    assert S._resolve_dsn("abc", object()) == "postgresql+psycopg://x/stale"
+    assert S._resolve_dsn("abc", object()) == "postgresql+psycopg://x/fresh"
+    assert calls == ["abc", "abc"]
+
+
 def test_resolver_exception_never_logs_or_chains_the_dsn(caplog):
     import logging
 

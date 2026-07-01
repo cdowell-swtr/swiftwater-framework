@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import queue
+import threading
+import time
+
 import pytest
 from {{ package_name }}.multitenantauth.tenancy.engine_registry import (
     TenantEngineRegistry,
@@ -88,6 +92,109 @@ def test_budget_exceeded_disposes_engine_and_does_not_cache():
         reg.get("postgresql+psycopg://u:p@h/t1")
     assert built[0].disposed is True
     assert reg.cached_count("h:5432") == 0
+
+
+def test_slow_validation_for_one_endpoint_does_not_block_another_endpoint():
+    entered_validation = threading.Event()
+    release_validation = threading.Event()
+    finished: queue.Queue[str] = queue.Queue()
+
+    def builder(dsn, **kw):
+        return _FakeEngine(dsn)
+
+    def validator(engine, *, settings, includes_control):
+        if endpoint_of(str(engine.url)) == "slow-host:5432":
+            entered_validation.set()
+            assert release_validation.wait(timeout=2), "slow validator was not released"
+
+    reg = TenantEngineRegistry(
+        builder=builder,
+        budget_validator=validator,
+        settings_provider=lambda: Settings(),
+    )
+
+    slow = threading.Thread(
+        target=lambda: finished.put(
+            str(reg.get("postgresql+psycopg://u:p@slow-host:5432/t1").url)
+        )
+    )
+    slow.start()
+    assert entered_validation.wait(timeout=1), "slow lookup did not enter validation"
+
+    started = time.monotonic()
+    fast = reg.get("postgresql+psycopg://u:p@fast-host:5432/t1")
+    elapsed = time.monotonic() - started
+
+    release_validation.set()
+    slow.join(timeout=2)
+    assert fast.url == "postgresql+psycopg://u:p@fast-host:5432/t1"
+    assert elapsed < 0.5
+    assert finished.get_nowait() == "postgresql+psycopg://u:p@slow-host:5432/t1"
+
+
+def test_concurrent_same_dsn_race_discards_losing_engine():
+    first_can_insert = threading.Event()
+    first_built = threading.Event()
+    second_built = threading.Event()
+    built: queue.Queue[_FakeEngine] = queue.Queue()
+    results: queue.Queue[_FakeEngine] = queue.Queue()
+
+    def builder(dsn, **kw):
+        engine = _FakeEngine(dsn)
+        built.put(engine)
+        if built.qsize() == 1:
+            first_built.set()
+            assert second_built.wait(timeout=2), "second builder did not run"
+            assert first_can_insert.wait(timeout=2), "first insert was not released"
+        else:
+            second_built.set()
+        return engine
+
+    reg = TenantEngineRegistry(
+        builder=builder,
+        budget_validator=lambda engine, *, settings, includes_control: None,
+        settings_provider=lambda: Settings(),
+    )
+    dsn = "postgresql+psycopg://u:p@race-host:5432/t1"
+
+    t1 = threading.Thread(target=lambda: results.put(reg.get(dsn)))
+    t2 = threading.Thread(target=lambda: results.put(reg.get(dsn)))
+    t1.start()
+    assert first_built.wait(timeout=1), "first builder did not run"
+    t2.start()
+    assert second_built.wait(timeout=1), "second builder did not run"
+    first_can_insert.set()
+    t1.join(timeout=2)
+    t2.join(timeout=2)
+
+    engines = [built.get_nowait(), built.get_nowait()]
+    returned = [results.get_nowait(), results.get_nowait()]
+    assert returned[0] is returned[1]
+    assert sum(engine.disposed for engine in engines) == 1
+    assert reg.cached_count("race-host:5432") == 1
+
+
+def test_default_builder_sets_connect_timeout(monkeypatch):
+    from {{ package_name }}.multitenantauth.tenancy import engine_registry
+
+    captured = {}
+
+    def fake_create_engine(dsn, **kwargs):
+        captured["dsn"] = dsn
+        captured["kwargs"] = kwargs
+        return _FakeEngine(dsn)
+
+    monkeypatch.setattr(engine_registry, "create_engine", fake_create_engine)
+
+    engine = engine_registry._default_builder(
+        "postgresql+psycopg://u:p@tenant-host:5432/t1",
+        pool_size=2,
+        max_overflow=3,
+        connect_timeout_seconds=7,
+    )
+
+    assert engine.url == "postgresql+psycopg://u:p@tenant-host:5432/t1"
+    assert captured["kwargs"]["connect_args"] == {"connect_timeout": 7}
 
 
 def test_required_connections_includes_control_when_colocated():

@@ -4,6 +4,7 @@
 # health-draining are the builder-provided load balancer's job. Plain HTTP on the private
 # port the LB targets. The app does NOT self-migrate — the deploy migrates ONCE against the
 # shared DB (APP_RUN_MIGRATIONS=false). See infra/deploy/README.md.
+name: {{ project_slug }}
 services:
   app:
     image: ${APP_IMAGE:?set APP_IMAGE to the pushed registry tag}

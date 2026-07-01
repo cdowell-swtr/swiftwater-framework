@@ -12,8 +12,10 @@ Security properties asserted:
 - A single control_session is shared across the dep chain (FastAPI caches it per-request).
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 import threading
+import time
 
 import pytest
 from fastapi import Depends, FastAPI
@@ -30,6 +32,7 @@ from {{ package_name }}.multitenantauth.deps import (
     guard,
     register_authz_resolver_factory,
 )
+from {{ package_name }}.multitenantauth.metrics import auth_metrics
 
 pytestmark = pytest.mark.usefixtures("_clean_control")
 
@@ -218,6 +221,23 @@ def probe_app(control_engine, monkeypatch):  # type: ignore[no-untyped-def]
         ],
     )
     def _resource_view() -> dict:
+        return {"ok": True}
+
+    @app.get(
+        "/t/{tenant_id}/product/{resource_id}/view",
+        dependencies=[
+            Depends(
+                guard(
+                    Perm(
+                        "resource:view",
+                        on="tenant:{tenant_id}/resource:{resource_id}",
+                    ),
+                    resource_type="product",
+                )
+            )
+        ],
+    )
+    def _product_view() -> dict:
         return {"ok": True}
 
     @app.get(
@@ -843,6 +863,40 @@ def test_async_resolver_exception_fails_closed_403_not_500(  # type: ignore[no-u
 
     register_authz_resolver_factory(factory)
     assert _status(probe_app, token, "/t/acme/resource/widget-1/view") == 403
+
+
+def test_async_resolver_timeout_fails_closed_logs_resource_type_and_records_resource_deny(  # type: ignore[no-untyped-def]
+    probe_app, control_engine, monkeypatch, caplog
+):
+    """A hung async resource resolver must be bounded, fail closed, and remain operable."""
+    monkeypatch.setenv("APP_AUTHZ_RESOURCE_GRANT_TIMEOUT_MS", "10")
+    from {{ package_name }}.config.settings import get_settings
+
+    get_settings.cache_clear()
+    auth_metrics.reset()
+    with Session(control_engine) as s:
+        token = _seed_acme_member(s, "timeout-resolver@x.com", resource_role=True)
+
+    def factory(cs, user, active_tenant_id):  # type: ignore[no-untyped-def]
+        async def grant(name, resource_id):  # type: ignore[no-untyped-def]
+            await asyncio.sleep(1)
+            return True
+
+        return {"resource_grant": grant}
+
+    register_authz_resolver_factory(factory)
+    started = time.monotonic()
+    with caplog.at_level("WARNING"):
+        assert _status(probe_app, token, "/t/acme/product/widget-1/view") == 403
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.5
+    assert "resource_type=product" in caplog.text
+    assert "timeout_ms=10" in caplog.text
+    assert "widget-1" not in caplog.text
+    metrics = auth_metrics.render_prometheus()
+    assert 'app_authz_decisions_total{decision="deny",domain="resource"} 1' in metrics
+    assert 'app_authz_decisions_total{decision="deny",domain="tenant"} 0' in metrics
 
 
 def test_resolver_exception_log_omits_exception_message(  # type: ignore[no-untyped-def]
