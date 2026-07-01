@@ -1,0 +1,2077 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="An opinionated Python scaffold framework with TDD, quality gates, observability, and environment parity built in.">
+      
+      
+      
+      
+        <link rel="prev" href="../api/">
+      
+      
+        <link rel="next" href="../../contributing/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Review agents - swiftwater-framework</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#review-agents-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="swiftwater-framework" class="md-header__button md-logo" aria-label="swiftwater-framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            swiftwater-framework
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Review agents
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/cdowell-swtr/swiftwater-framework" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="swiftwater-framework" class="md-nav__button md-logo" aria-label="swiftwater-framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    swiftwater-framework
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/cdowell-swtr/swiftwater-framework" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Overview
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/why/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why this framework
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/what-you-get/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    What you get
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using the framework
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Using the framework
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/new-and-batteries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    New project & batteries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/batteries-add-remove/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add/remove batteries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/upgrading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upgrading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/the-cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working in your project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Working in your project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../working/structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../working/run-locally/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run locally
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../working/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../working/quality-gates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quality gates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../working/deploy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deploy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../working/services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../working/secrets-and-env-parity/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets & environment parity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../working/interfaces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your project's interfaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../working/review-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The review system
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../working/design-principles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Review agents
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Review agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        At a glance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agents
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Agents">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#review-accessibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-accessibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-api-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-api-design
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-application-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-application-logic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-compliance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-compliance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-contracts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-contracts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-coverage-gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-coverage-gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-data-integrity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-data-integrity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-data-lineage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-data-lineage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-dependency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-dependency
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-env-parity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-env-parity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-observability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-observability-db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-observability-db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-observability-fe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-observability-fe
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-observability-infra" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-observability-infra
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-privacy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-privacy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-security
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-test-quality" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-test-quality
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-usability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-usability
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Contributing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/reviewer-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auditing the review agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        At a glance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agents
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Agents">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#review-accessibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-accessibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-api-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-api-design
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-application-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-application-logic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-compliance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-compliance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-contracts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-contracts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-coverage-gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-coverage-gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-data-integrity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-data-integrity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-data-lineage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-data-lineage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-dependency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-dependency
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-env-parity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-env-parity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-observability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-observability-db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-observability-db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-observability-fe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-observability-fe
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-observability-infra" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-observability-infra
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-privacy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-privacy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-security
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-test-quality" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-test-quality
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-usability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review-usability
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="review-agents-reference">Review agents — reference</h1>
+<blockquote>
+<p>Generated from <code>src/framework_cli/review/registry.py</code> by
+<code>scripts/gen_reviewer_reference.py</code>. Do not edit by hand — change the registry (mechanical
+facts) or <code>reference_doc._BLURBS</code> (prose) and regenerate
+(<code>uv run python scripts/gen_reviewer_reference.py</code>); a test keeps this page in sync.</p>
+</blockquote>
+<p>The review system runs a panel of single-concern AI agents over a change — see
+<a href="../../working/review-system/">The review system</a> for the architecture and why. Each agent below
+owns one lens. <strong>Blocks</strong> is the severity at/above which a finding fails the gate (<em>advisory</em>
+agents surface findings but never block). <strong>Context</strong> is how the agent sees the change (<code>diff</code> /
+<code>bundle</code> / <code>agentic</code> tool-loop) and its model tier.</p>
+<h2 id="at-a-glance">At a glance</h2>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Blocks</th>
+<th>Triggers on</th>
+<th>Context</th>
+<th>Review scope</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>review-accessibility</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-api-design</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>agentic · opus</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-application-logic</code></td>
+<td>info</td>
+<td>all changed files</td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-architecture</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>agentic · opus</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-compliance</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-contracts</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>agentic · opus</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-coverage-gap</code></td>
+<td>advisory</td>
+<td><code>src/framework_cli/template/**</code>, <code>tests/runtime_coverage/**</code></td>
+<td>agentic · opus</td>
+<td>framework self-review</td>
+</tr>
+<tr>
+<td><code>review-data-integrity</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-data-lineage</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>agentic · opus</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-dependency</code></td>
+<td>advisory</td>
+<td><code>pyproject.toml</code>, <code>uv.lock</code>, <code>package.json</code>, <code>package-lock.json</code></td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-documentation</code></td>
+<td>advisory</td>
+<td>all changed files</td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-env-parity</code></td>
+<td>high</td>
+<td><code>infra/*</code>, <code>.env.example</code>, <code>src/*/config/settings.py</code></td>
+<td>agentic · opus</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-observability</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-observability-db</code></td>
+<td>advisory</td>
+<td><code>*/db/*</code>, <code>*/vectors/*</code>, <code>*/mongo/*</code>, <code>*/cache/*</code>, <code>*/timeseries/*</code>, <code>*/graph/*</code>, <code>migrations/*</code></td>
+<td>agentic · opus</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-observability-fe</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>agentic · opus</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-observability-infra</code></td>
+<td>high</td>
+<td><code>infra/*</code></td>
+<td>agentic · opus</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-performance</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-privacy</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>agentic · opus</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-security</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-test-quality</code></td>
+<td>high</td>
+<td>all changed files</td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+<tr>
+<td><code>review-usability</code></td>
+<td>advisory</td>
+<td>all changed files</td>
+<td>bundle · sonnet</td>
+<td>project + framework</td>
+</tr>
+</tbody>
+</table>
+<h2 id="agents">Agents</h2>
+<h3 id="review-accessibility"><code>review-accessibility</code></h3>
+<p>React/TSX accessibility (WCAG-class) review: non-semantic interactive elements (a div acting as a button with no role), missing accessible names (img without alt, icon-only buttons without aria-label), keyboard traps, and ARIA/contrast smells on changed lines. Does not flag backend/Python changes or stylistic CSS with no a11y impact.</p>
+<h3 id="review-api-design"><code>review-api-design</code></h3>
+<p>GraphQL schema and resolver design (Strawberry, code-first) — exclusively: N+1 resolvers, uncompensated breaking schema changes, unbounded list fields without pagination, nullability mistakes, and mutation error design. REST/OpenAPI is out of scope (defers to contracts); raw query cost defers to performance.</p>
+<h3 id="review-application-logic"><code>review-application-logic</code></h3>
+<p>Correctness review of changed lines only: unhandled edge cases (empty/null/boundary/concurrent), wrong conditionals, missing or swallowed error handling, and recovery paths that don't actually recover. Not style; structural concerns defer to architecture, query cost to performance.</p>
+<h3 id="review-architecture"><code>review-architecture</code></h3>
+<p>Module boundaries and the handler/worker seam: layering violations (a route bypassing the repository layer, duplicate data-access modules), circular dependencies, and heavy synchronous work (external HTTP, large DB writes, loops over remote I/O) run inline in a request handler. Defers edge-case correctness to application-logic, query cost to performance.</p>
+<h3 id="review-compliance"><code>review-compliance</code></h3>
+<p>Audit / retention / right-to-erasure obligations: privileged or destructive record operations (delete, purge, export, bulk-modify) that emit no structured audit entry, personal data persisted with no retention or deletion path, and uncovered erasure obligations. Does not flag PII logging or over-collection (privacy) or write atomicity (data-integrity).</p>
+<h3 id="review-contracts"><code>review-contracts</code></h3>
+<p>Consumer-driven contract testing via Pact: a provider change that breaks a committed consumer pact, incompatible response changes, weakened consumer assertions, and hard reads of undeclared fields (KeyError risk). Additive backward-compatible changes and optional <code>.get()</code> reads are not flagged; GraphQL design defers to api-design.</p>
+<h3 id="review-coverage-gap"><code>review-coverage-gap</code></h3>
+<p>Framework-native, agentic: whether a newly provisioned operational surface in the template is exercised by a test that drives it on its real runtime path (not just render-checked or mock-patched). Flags surfaces of a kind <code>enumerate.py</code> doesn't recognize, and in-app lifecycle/route/worker paths the change adds but no test drives live. Diff-anchored; defers to anything already classified in the FWK29 <code>registry.py</code> (EXERCISED/EXEMPT/KNOWN_GAP).</p>
+<h3 id="review-data-integrity"><code>review-data-integrity</code></h3>
+<p>Atomicity and store-invariant review: non-atomic writes (e.g. per-row commits that break batch atomicity), nullability/constraint mistakes that corrupt the model, and data-losing or backward-incompatible migrations. Doesn't flag optional safeguards the codebase already omits; PII → privacy, audit/retention → compliance, unbounded scans → performance.</p>
+<h3 id="review-data-lineage"><code>review-data-lineage</code></h3>
+<p>Data-flow tracing: PII reaching an undocumented sink, an erasure path that clears one store but misses another (index, cache, second table), stale derived/denormalized fields whose write path updates only one side, and cross-store writes with no consistency strategy. Atomicity defers to data-integrity; PII-logging severity to privacy.</p>
+<h3 id="review-dependency"><code>review-dependency</code></h3>
+<p>Manifest-only review (pyproject / uv.lock / package*.json): unjustified or redundant dependencies, maintenance/supply-chain health, pin floors below the project's <code>&gt;=</code> convention, and concrete supply-chain compromise (malicious/typosquatted/yanked — not speculative). Does not reason about runtime behavior or call sites.</p>
+<h3 id="review-documentation"><code>review-documentation</code></h3>
+<p>Docs accuracy: missing docstrings only where sibling public interfaces in the same diff are documented, new config vars absent from <code>.env.example</code>, READMEs/specs that now contradict the change, and genuinely uncommented complex logic. Not correctness, typing/schema shape, or performance.</p>
+<h3 id="review-env-parity"><code>review-env-parity</code></h3>
+<p>Dev→CI→staging→prod parity: tracing how each environment composes its overlays, it flags services added only to dev-scoped overlays that won't reach staging/prod, env vars consumed in <code>settings.py</code> but absent from <code>.env.example</code>, and compose interpolations with no <code>.env.example</code> declaration. Biased to over-flag service parity; excludes observability wiring, secret/PII content, and per-env value divergence (expected).</p>
+<h3 id="review-observability"><code>review-observability</code></h3>
+<p>App-layer instrumentation on changed business logic and routes: state-changing operations that emit no structured log, paths that bypass the FastAPI auto-instrumented seam (raw ASGI, background tasks outside the request lifecycle), and active signal suppression. Auto-instrumented routes are the clean baseline; the data-access seam is observability-db.</p>
+<h3 id="review-observability-db"><code>review-observability-db</code></h3>
+<p>Datastore-seam instrumentation in db/, cache/, vectors/, mongo/, timeseries/, graph/, migrations/: queries through a second engine or raw DBAPI connection that bypass SQLAlchemyInstrumentor, new datastore clients with no <code>/health</code> signal, and data-layer errors swallowed off the structlog path. Ordinary queries through the app's instrumented engine are auto-observed and not flagged.</p>
+<h3 id="review-observability-fe"><code>review-observability-fe</code></h3>
+<p>Frontend observability in the React/TS SPA against the RUM beacon (<code>POST /internal/rum</code>): local handlers that swallow exceptions before the global window error/unhandledrejection handler, and unbounded/high-cardinality labels on promoted beacon fields. New components aren't flagged merely for lacking their own RUM; beacon PII defers to privacy.</p>
+<h3 id="review-observability-infra"><code>review-observability-infra</code></h3>
+<p>Monitoring wiring in Compose overlays, Prometheus, Grafana, and Alertmanager: scrape jobs with no backing exporter (and exporters never scraped), prod-reaching services with no alert rule or dashboard, and obs wiring confined to dev.yml that never reaches prod. App-level auto-instrumentation belongs to observability.</p>
+<h3 id="review-performance"><code>review-performance</code></h3>
+<p>Query efficiency and algorithmic cost on changed lines: unbounded scans, N+1 queries, connection-pool exhaustion, hot-path allocation, and accidentally super-linear work. Bounded reads capped by <code>MAX_PAGE_SIZE</code> and full ORM-row hydration matching the repo idiom are not flagged; correctness defers to application-logic.</p>
+<h3 id="review-privacy"><code>review-privacy</code></h3>
+<p>PII exposure: personal data logged or echoed back in a response, collection of PII not needed for the stated purpose, and retention beyond purpose — on changed lines. Security defects defer to security; audit/retention obligations to compliance.</p>
+<h3 id="review-security"><code>review-security</code></h3>
+<p>Application-security review: injection, broken authn/z, hardcoded secret values, verified CVEs, and OWASP-Top-10 failures on changed lines. Flags concrete, demonstrable defects — not absent hardening the template baseline itself omits. PII handling defers to privacy; audit/retention to compliance.</p>
+<h3 id="review-test-quality"><code>review-test-quality</code></h3>
+<p>Tests that cannot fail regardless of behavior: assertions only against mocks, tautologies, missing assertions, mocks that don't match the real interface, and unhappy paths that don't assert the failure behavior. Scoped to the test diff.</p>
+<h3 id="review-usability"><code>review-usability</code></h3>
+<p>React/TSX UX review: unhandled async states (no loading/error/empty handling), mutations with no user feedback, and destructive actions without a confirmation step. Wiring completeness (unimported components) and accessibility defer to their own agents.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

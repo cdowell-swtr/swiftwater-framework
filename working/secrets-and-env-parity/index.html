@@ -1,0 +1,1688 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="An opinionated Python scaffold framework with TDD, quality gates, observability, and environment parity built in.">
+      
+      
+      
+      
+        <link rel="prev" href="../services/">
+      
+      
+        <link rel="next" href="../interfaces/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Secrets & environment parity - swiftwater-framework</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#secrets-environment-parity" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="swiftwater-framework" class="md-header__button md-logo" aria-label="swiftwater-framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            swiftwater-framework
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Secrets & environment parity
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/cdowell-swtr/swiftwater-framework" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="swiftwater-framework" class="md-nav__button md-logo" aria-label="swiftwater-framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    swiftwater-framework
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/cdowell-swtr/swiftwater-framework" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Overview
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/why/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why this framework
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/what-you-get/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    What you get
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using the framework
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Using the framework
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/new-and-batteries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    New project & batteries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/batteries-add-remove/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add/remove batteries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/upgrading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upgrading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/the-cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working in your project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Working in your project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../run-locally/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run locally
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quality-gates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quality gates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deploy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets & environment parity
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets & environment parity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-parity-chain-same-definitions-environment-specific-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The parity chain: same definitions, environment-specific values
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The parity chain: same definitions, environment-specific values">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-config-is-layered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How config is layered
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-app_-prefix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The APP_ prefix
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#secrets-never-committed-injected-at-the-edge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Secrets: never committed, injected at the edge
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-secret-naming-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The secret naming convention
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The secret naming convention">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#scope-specific-keys-never-one-shared-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope-specific keys, never one shared key
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#two-tier-naming-a-descriptive-label-vs-a-boring-consumed-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two-tier naming: a descriptive label vs. a boring consumed name
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-short" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In short
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../interfaces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your project's interfaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../review-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The review system
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design-principles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/review-agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Review agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Contributing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/reviewer-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auditing the review agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-parity-chain-same-definitions-environment-specific-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The parity chain: same definitions, environment-specific values
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The parity chain: same definitions, environment-specific values">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-config-is-layered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How config is layered
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-app_-prefix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The APP_ prefix
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#secrets-never-committed-injected-at-the-edge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Secrets: never committed, injected at the edge
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-secret-naming-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The secret naming convention
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The secret naming convention">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#scope-specific-keys-never-one-shared-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope-specific keys, never one shared key
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#two-tier-naming-a-descriptive-label-vs-a-boring-consumed-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two-tier naming: a descriptive label vs. a boring consumed name
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-short" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In short
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="secrets-environment-parity">Secrets &amp; environment parity</h1>
+<p>This is the canonical home for two related ideas the framework takes a firm stance on: how configuration stays consistent across every environment (the <strong>parity chain</strong>), and how secrets are <strong>named and handled</strong> so they're auditable and never committed. Your generated project also ships a <code>SECRETS.md</code> listing its specific secrets and values; everything you need to understand the model is here.</p>
+<h2 id="the-parity-chain-same-definitions-environment-specific-values">The parity chain: same definitions, environment-specific values</h2>
+<p>A scaffolded project runs in a chain of environments — <strong>dev → ci → staging → prod</strong> — that share one set of <em>definitions</em> and differ only in <em>values</em>. Nothing is bespoke to production. The mechanisms that hold the line:</p>
+<ul>
+<li><strong>One config surface.</strong> Every configuration value is read through <code>config/settings.py</code> (a <code>pydantic-settings</code> <code>Settings</code> class). There are no hardcoded values scattered through the code and no <code>os.getenv</code> calls in business logic — config has exactly one door.</li>
+<li><strong>One contract file.</strong> <code>.env.example</code> is committed and documents <em>every</em> variable the app reads. Each environment supplies its own values against that same contract; staging and prod don't invent new variables, they fill in the documented ones with environment-appropriate values.</li>
+<li><strong>One image, layered overlays.</strong> The same registry image runs in staging and prod (promoted, not rebuilt — see <a href="../deploy/">Deploy</a>), and the same Compose overlays compose each environment (see <a href="../services/">Services</a>). The environment is selected by <code>APP_ENVIRONMENT</code> (<code>dev | test | staging | prod</code>), which in turn drives derived behaviour — log level, the GraphQL IDE toggle, and so on — rather than separate code paths.</li>
+</ul>
+<p>Because dev brings up the <em>same</em> observability stack and the <em>same</em> service topology as production, the behaviour you see locally is the behaviour you get deployed. The chain is "same definitions, different values" all the way through.</p>
+<h3 id="how-config-is-layered">How config is layered</h3>
+<p>A value's source depends on where it runs, but the <em>name</em> and the <em>reader</em> never change:</p>
+<table>
+<thead>
+<tr>
+<th>Environment</th>
+<th>Where values come from</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>dev</strong></td>
+<td><code>.env</code> (gitignored), with the dev Compose overlay injecting in-network URLs (e.g. <code>APP_DATABASE_URL</code> pointing at the <code>postgres</code> service)</td>
+</tr>
+<tr>
+<td><strong>test / ci</strong></td>
+<td>environment variables / CI secrets; an ephemeral test database the tiers spin up</td>
+</tr>
+<tr>
+<td><strong>staging / prod</strong></td>
+<td>the target's environment + GitHub Environment secrets, injected at runtime; <strong>never baked into the image</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>settings.py</code> reads them all the same way, because every setting is <code>APP_</code>-prefixed and <code>pydantic-settings</code> resolves it from the process environment (falling back to <code>.env</code> locally).</p>
+<h2 id="the-app_-prefix">The <code>APP_</code> prefix</h2>
+<p>The <code>Settings</code> class is configured with <code>env_prefix="APP_"</code>, so a field named <code>database_url</code> is read from the environment variable <code>APP_DATABASE_URL</code>, <code>environment</code> from <code>APP_ENVIRONMENT</code>, and so on. This namespacing is deliberate: it keeps the application's configuration cleanly separated from the dozens of unrelated variables present in any shell or CI runner, and it makes "is this ours?" answerable at a glance. A representative slice:</p>
+<table>
+<thead>
+<tr>
+<th>Setting field</th>
+<th>Env var</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>environment</code></td>
+<td><code>APP_ENVIRONMENT</code></td>
+<td><code>dev</code> / <code>test</code> / <code>staging</code> / <code>prod</code> — drives derived config</td>
+</tr>
+<tr>
+<td><code>database_url</code></td>
+<td><code>APP_DATABASE_URL</code></td>
+<td>SQLAlchemy URL; in-network in Compose, localhost for host tooling</td>
+</tr>
+<tr>
+<td><code>slo_request_latency_p99_ms</code></td>
+<td><code>APP_SLO_REQUEST_LATENCY_P99_MS</code></td>
+<td>SLO threshold feeding <code>/health</code></td>
+</tr>
+<tr>
+<td><code>redis_url</code></td>
+<td><code>APP_REDIS_URL</code></td>
+<td>present with the redis/workers battery</td>
+</tr>
+<tr>
+<td><code>mongo_url</code></td>
+<td><code>APP_MONGO_URL</code></td>
+<td>present with the mongodb battery</td>
+</tr>
+<tr>
+<td><code>webhook_signing_secret</code></td>
+<td><code>APP_WEBHOOK_SIGNING_SECRET</code></td>
+<td>present with the webhooks battery</td>
+</tr>
+</tbody>
+</table>
+<p>Battery-specific settings appear only when the battery is active, but they all follow the same <code>APP_</code>-prefixed rule.</p>
+<h2 id="secrets-never-committed-injected-at-the-edge">Secrets: never committed, injected at the edge</h2>
+<p>The framework's secrets posture is simple and enforced:</p>
+<ul>
+<li><strong><code>.env.example</code> is committed; <code>.env</code> is not.</strong> <code>.env</code> is gitignored. You copy the example, fill in real values locally, and that file never leaves your machine.</li>
+<li><strong>Deploy-time secrets live in the platform.</strong> Staging and prod read secrets from the target's environment and from <strong>GitHub Environment secrets</strong>, injected at runtime. The image carries none of them.</li>
+<li><strong>Two guards stop accidents.</strong> <code>gitleaks</code> runs in pre-commit <em>and</em> in CI (full-history scan) to catch a credential before it's committed; CI secrets are referenced as <code>${{ secrets.* }}</code> and never echoed into logs or env output.</li>
+<li><strong>Set CI/deploy secrets via the platform.</strong> Use <code>gh secret set &lt;NAME&gt;</code> (or <strong>Settings → Secrets and variables → Actions</strong>) to register them; map each into the boring env var its consumer reads, in the workflow.</li>
+</ul>
+<h2 id="the-secret-naming-convention">The secret naming convention</h2>
+<p>This is where the framework is opinionated, and it's the canonical statement of the rule. Two principles:</p>
+<h3 id="scope-specific-keys-never-one-shared-key">Scope-specific keys, never one shared key</h3>
+<p>The framework does <strong>not</strong> use a single catch-all <code>ANTHROPIC_API_KEY</code>. It uses <strong>separate, scope-specific</strong> environment variables so each consumer holds the narrowest credential it needs, and a leak or rotation is contained to one path. The review system is the worked example — two distinct keys for two distinct paths:</p>
+<table>
+<thead>
+<tr>
+<th>Env var the code reads</th>
+<th>Path</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ANTHROPIC_EVAL_API_KEY</code></td>
+<td>the eval / scoring path (measuring the review agents)</td>
+<td><code>src/framework_cli/review/runner.py</code></td>
+</tr>
+<tr>
+<td><code>ANTHROPIC_RUNTIME_API_KEY</code></td>
+<td>the runtime review path (agents reviewing your diff)</td>
+<td><code>src/framework_cli/review/runner.py</code></td>
+</tr>
+</tbody>
+</table>
+<p>These are the real, verified names — defined as <code>EVAL_KEY_ENV = "ANTHROPIC_EVAL_API_KEY"</code> and <code>RUNTIME_KEY_ENV = "ANTHROPIC_RUNTIME_API_KEY"</code> in the review runner. The principle generalizes: give each scope (<code>runtime</code>, <code>eval</code>, read-only, read-write, …) its own variable rather than overloading one.</p>
+<h3 id="two-tier-naming-a-descriptive-label-vs-a-boring-consumed-name">Two-tier naming: a descriptive label vs. a boring consumed name</h3>
+<p>Every secret effectively has <strong>two</strong> names, serving two different audiences:</p>
+<ol>
+<li>A <strong>descriptive label</strong> in the provider console (Anthropic, GitHub, …) — rich metadata for audit and rotation, encoding things like service, owner, environment, scope, and issue date. It identifies <em>who owns this and why it exists</em>; it is never the token value.</li>
+<li>A <strong>stable, boring name</strong> where the secret is <em>consumed</em> — the environment variable the code reads (e.g. <code>ANTHROPIC_RUNTIME_API_KEY</code>), and, in GitHub Actions, a GH-legal secret name (uppercase, underscores) that the workflow maps into that env var. The consuming name stays stable as the underlying token rotates in place.</li>
+</ol>
+<p>The framework's own CI demonstrates the mapping exactly:</p>
+<table>
+<thead>
+<tr>
+<th>GitHub secret (the slot)</th>
+<th>Mapped into (the consumed env var)</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ANTHROPIC_FRAMEWORK_CI_RUNTIME</code></td>
+<td><code>ANTHROPIC_RUNTIME_API_KEY</code></td>
+<td>runtime review</td>
+</tr>
+<tr>
+<td><code>ANTHROPIC_FRAMEWORK_CI_EVAL</code></td>
+<td><code>ANTHROPIC_EVAL_API_KEY</code></td>
+<td>eval scoring</td>
+</tr>
+</tbody>
+</table>
+<p>A generated project follows the same shape: its review job maps the GitHub secret <code>ANTHROPIC_&lt;PKG&gt;_CI_RUNTIME</code> (where <code>&lt;PKG&gt;</code> is your uppercased package name) into the <code>ANTHROPIC_RUNTIME_API_KEY</code> env var the CLI reads. The console label says everything an auditor wants; the consumed name stays boring and stable so code and workflows never churn when a key rotates.</p>
+<p>If a consumer's key is simply unset, the review agents <strong>skip neutral</strong> rather than fail — opt-in by design, so no spend happens without an explicit key in place.</p>
+<h2 id="in-short">In short</h2>
+<p>Configuration has one door (<code>settings.py</code>, <code>APP_</code>-prefixed), one contract (<code>.env.example</code>), and one image promoted across environments — that's the parity chain. Secrets stay out of the repo (gitignored <code>.env</code>, gitleaks, GitHub Environment secrets) and follow a two-tier, scope-specific naming convention: a descriptive console label for humans, a boring stable env var for the code. See <a href="../deploy/">Deploy</a> for where deploy-time secrets are injected and <a href="../services/">Services</a> for which services consume which <code>APP_*</code> URLs.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
